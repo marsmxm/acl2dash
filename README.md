@@ -1,2 +1,2 @@
 # acl2dash
-ACL2 docset for Dash
+ACL2 docset for Dash (http://kapeli.com/dash/)
