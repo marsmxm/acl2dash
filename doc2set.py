@@ -1,5 +1,6 @@
-#!/usr/local/bin/python
-import os, re, sqlite3
+#!/usr/local/bin/python3
+import os, sqlite3
+from boltons.fileutils import iter_find_files
 from bs4 import BeautifulSoup
 
 RES_PATH = 'ACL2.docset/Contents/Resources'
@@ -16,19 +17,26 @@ cur.execute('CREATE TABLE searchIndex(id INTEGER PRIMARY KEY, name TEXT, type TE
 cur.execute('CREATE UNIQUE INDEX anchor ON searchIndex (name, type, path);')
 
 docpath = RES_PATH + '/Documents'
+os.chdir(docpath)
 
-with open(os.path.join(docpath, 'index.html')) as page:
-    soup = BeautifulSoup(page, 'lxml')
+pages = iter_find_files('HTML', '*.html')
+failed_pages = []
 
-    any = re.compile('.*')
-    links = soup.find_all('a', {'href': any})
-    for link in links:
-        name = link.text.strip()
-        if len(name) > 1:
-            path = link.attrs['href'].strip()
-            if path != 'index.html':
-                cur.execute('INSERT OR IGNORE INTO searchIndex(name, type, path) VALUES (?,?,?)', (name, 'func', path))
-                print('name: %s, path: %s' % (name, path))
+for filename in pages:
+    try:
+        with open(filename) as page:
+            soup = BeautifulSoup(page, 'lxml')
+            name = soup.title.text.strip()
+            type = 'Entry'
+            paths = soup.h3.a.attrs['href'].strip().split('/')
+            path = paths[len(paths) - 1]
+            cur.execute(
+                'INSERT OR IGNORE INTO searchIndex(name, type, path) VALUES (?,?,?)', (name, type, path))
+            print('name: %s, path: %s' % (name, path))
+    except:
+        failed_pages.append(filename)
+
+print('Failed pages: %s' % failed_pages)
 
 conn.commit()
 conn.close()
