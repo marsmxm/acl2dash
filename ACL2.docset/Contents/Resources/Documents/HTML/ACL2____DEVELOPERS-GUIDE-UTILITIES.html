@@ -1,0 +1,269 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Developers-guide-utilities</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____DEVELOPERS-GUIDE-UTILITIES">Click for Developers-guide-utilities in the Full Manual</a></h3>
+
+<p>Data Structures and Utilities</p><p>This topic introduces some of the data structures and utilities 
+ built into ACL2.  Also see <a href="ACL2____SYSTEM-UTILITIES.html">system-utilities</a> and <a href="ACL2____PROGRAMMING-WITH-STATE.html">programming-with-state</a>.  Those topics have lots of useful information not 
+ covered in this overview topic.  Just to give one example: someone once needed 
+ a utility to print clauses nicely, so the utility <span class="v">prettyify-clause</span>, not 
+ mentioned below, was added to the list of utilities in <a href="ACL2____SYSTEM-UTILITIES.html">system-utilities</a>.</p> 
+ 
+ <h3>
+<a href="ACL2____STATE.html">State</a> and the logical <a href="ACL2____WORLD.html">world</a>.</h3> 
+ 
+ <font color="#800080"> 
+ <p>Much of this is covered in <a href="ACL2____DEVELOPERS-GUIDE-BACKGROUND.html">developers-guide-background</a>.</p> 
+ </font> 
+ 
+ <p>The <span class="v">state</span> is, logically, a data structure with many fields.  However, 
+ it is represented in ACL2 by a symbol, which is the value of 
+ <span class="v">*the-live-state*</span>:</p> 
+ 
+ <pre class="code">ACL2 !&gt;:q
+
+Exiting the ACL2 read-eval-print loop.  To re-enter, execute (<a href="ACL2____LP.html">LP</a>).
+? state
+ACL2_INVISIBLE::|The Live State Itself|
+? *the-live-state*
+ACL2_INVISIBLE::|The Live State Itself|
+?</pre> 
+ 
+ <p>For technical reasons involving (as best recalled at this writing) tail 
+ recursion removal in some host Lisps, <span class="v">state</span> is not declared as a Common 
+ Lisp special variable.  So raw Lisp code (say, conditioned by 
+ <span class="v">#-acl2-loop-only</span>) should reference <span class="v">*the-live-state*</span> when <span class="v">state</span> 
+ is not lexically bound, to avoid compiler warnings.</p> 
+ 
+ <pre class="code">? (<a href="COMMON-LISP____DEFUN.html">defun</a> foo () state)
+;Compiler warnings :
+;   In FOO: Undeclared free variable STATE
+FOO
+? (<a href="COMMON-LISP____DEFUN.html">defun</a> foo () *the-live-state*)
+FOO
+?</pre> 
+ 
+ <p>As discussed in an earlier chapter of this Guide (see <a href="ACL2____DEVELOPERS-GUIDE-BACKGROUND.html">developers-guide-background</a>), a key logical field of <span class="v">state</span> is the 
+ <span class="v">global-table</span>, which is an alist associating state global variables with 
+ their values.  Also see <a href="ACL2____PROGRAMMING-WITH-STATE.html">programming-with-state</a>, which explains this 
+ idea further along with many other key data structures and programming idioms 
+ that pertain to <span class="v">state</span>.</p> 
+ 
+ <p>The logical world is the value of state global variable 
+ <span class="v">current-acl2-world</span>, but is normally accessed using the function, 
+ <span class="v">w</span>.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____F-GET-GLOBAL.html">f-get-global</a> 'current-acl2-world state)
+              (<a href="ACL2____W.html">w</a> state))
+T
+ACL2 !&gt;(<a href="ACL2____SET-GUARD-CHECKING.html">set-guard-checking</a> nil)
+
+Masking guard violations but still checking guards except for self-
+recursive calls.  To avoid guard checking entirely, :SET-GUARD-CHECKING
+:NONE.  See :DOC set-guard-checking.
+
+ACL2 &gt;(<a href="COMMON-LISP____EQ.html">eq</a> (<a href="ACL2____F-GET-GLOBAL.html">f-get-global</a> 'current-acl2-world state)
+          (<a href="ACL2____W.html">w</a> state))
+T
+ACL2 &gt;</pre> 
+ 
+ <h3>Enabled structures</h3> 
+ 
+ <font color="#800080"> 
+ <p>THIS SECTION IS WORTH COVERING IN ITS ENTIRETY.</p> 
+ </font> 
+ 
+ <p>ACL2 handles <a href="ACL2____THEORIES.html">theories</a> using <i>enabled structures</i>.  Ideally you 
+ could learn about enabled structures by visiting the <span class="tt"><a href="ACL2____DEFREC.html">defrec</a></span> form for 
+ <span class="v">enabled-structure</span>.  As of this writing, there are virtually no comments 
+ in that <span class="v">defrec</span> form!  Fortunately, the field names are suggestive of 
+ their meaning; but that is not really adequate documentation.  This is one of 
+ those place in the ACL2 sources where additional comments would be useful.  In 
+ the meantime, you can learn about enabled structures by seeing how they are 
+ used, by doing an Emacs tags-search for ``<span class="v">enabled-structure</span>'' or perhaps 
+ ``<span class="v">(<a href="ACL2____ACCESS.html">access</a> enabled-structure</span>''.  Another option is to follow the 
+ definition of <span class="v">disabledp</span> to find the definition of <span class="v">enabled-runep</span>, 
+ where you'll see that <span class="v">(<a href="ACL2____ENABLED-RUNEP.html">enabled-runep</a> rune ens wrld)</span> is 
+ <span class="v">(<a href="ACL2____ENABLED-NUMEP.html">enabled-numep</a> (fnume rune wrld) ens)</span>.  Note that <span class="v">ens</span> is a variable 
+ that is commonly used for enabled structures, and <span class="v">fnume</span> returns the 
+ <i>nume</i> of a <a href="ACL2____RUNE.html">rune</a>, which is a unique number corresponding to the 
+ rune.  The definition of <span class="v">enabled-numep</span> helps to explain the fields of an 
+ enabled structure.</p> 
+ 
+ <p><b>Function: </b>enabled-numep</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> enabled-numep (nume ens)
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____TYPE.html">type</a> (<a href="COMMON-LISP____OR.html">or</a> null (integer 0 *)) nume)
+                (<a href="ACL2____XARGS.html">xargs</a> :guard (enabled-structure-p ens)))
+       (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____NULL.html">null</a> nume) t)
+             ((<a href="COMMON-LISP_____E3.html">&gt;</a> nume
+                 (the-fixnum (<a href="ACL2____ACCESS.html">access</a> enabled-structure
+                                     ens :index-of-last-enabling)))
+              t)
+             (t (<a href="ACL2____AREF1.html">aref1</a> (<a href="ACL2____ACCESS.html">access</a> enabled-structure ens :array-name)
+                       (<a href="ACL2____ACCESS.html">access</a> enabled-structure ens :theory-array)
+                       (the-fixnum nume)))))</pre> 
+ 
+ <p>An ACL2 developer sometimes needs to be able to follow definitions like 
+ this to learn about ACL2 data structures  sad, but true.</p> 
+ 
+ <h3>Tag trees</h3> 
+ 
+ <font color="#800080"> 
+ <p>PERHAPS WE'LL JUST LOOK AT A CALL OF PUSH-LEMMA IN REWRITE.</p> 
+ </font> 
+ 
+ <p>A <i>tag tree</i>, or <i>ttree</i> (pronounced ``tee-tree''), is a 
+ structure that is used for recording information generated by the prover. 
+ There is no <span class="v">defrec</span> form for tag trees, but fortunately, there is a long 
+ comment in the ACL2 sources labeled ``; Essay on Tag-Trees''.  Here is a 
+ high-level introduction that may be helpful before you read that Essay.</p> 
+ 
+ <p>Abstractly a tag-tree represents a list of sets, each member set having a 
+ name given by one of the ``tags'' (which are symbols) of the ttree.  The 
+ elements of the set named <span class="v">tag</span> are all of the objects tagged <span class="v">tag</span> in 
+ the tree.  Definitions of primitives in the source code for manipulating tag 
+ trees are labeled with the comment ``; Note: Tag-tree primitive''.</p> 
+ 
+ <p>Many ACL2 prover functions take and return tag trees.  The function 
+ <span class="v">rewrite</span>, for example, takes a <a href="ACL2____TERM.html">term</a> and a ttree (among other 
+ things), and returns a new term, <span class="v">term'</span>, and new ttree, <span class="v">ttree'</span>. 
+ <span class="v">Term'</span> is provably equivalent to the input term (under the current 
+ assumptions) and <span class="v">ttree'</span> is an extension of the input ttree.  If we focus 
+ just on the set associated with the tag <span class="v">LEMMA</span> in the ttrees, then the set 
+ for <span class="v">ttree'</span> is the extension of that for the input ttree, which is 
+ obtained by unioning into it all the <a href="ACL2____RUNE.html">rune</a>s used by the rewriter.  The 
+ set associated with tag <span class="v">LEMMA</span> can be obtained by <span class="v">(tagged-objects
+ 'LEMMA ttree)</span>.  Tag trees contain useful prover information based not only 
+ on lemmas used but also on hints, assumptions generated by <span class="tt"><a href="ACL2____FORCE.html">force</a></span>, 
+ <a href="ACL2____FORWARD-CHAINING.html">forward-chaining</a>, and so on.  It is critical not to avoid tag trees 
+ that contain assumptions (see <a href="ACL2____DEVELOPERS-GUIDE-PITFALLS.html">developers-guide-pitfalls</a>).</p> 
+ 
+ <p>The Essay on Tag-Trees describes some of the legal tags for a ttree, but 
+ the definitive list is the one enforced by function 
+ <span class="v">all-runes-in-ttree</span>.  Here for example is an interesting clause from a 
+ <span class="tt"><a href="COMMON-LISP____CASE.html">case</a></span> expression in the body of that definition.</p> 
+ 
+ <pre class="code">           (assumption
+; Shape: assumption record
+            ans)</pre> 
+ 
+ <p>If you see this, then you might be curious about the notion of an 
+ ``assumption record''.  Then you can simply go to the definition of 
+ <span class="v">assumption</span> (typically, using the Emacs command, <span class="v">meta-.</span>).  You'll see 
+ quite a few lines of comments in that vicinity, which may help to get your 
+ head around these records.</p> 
+ 
+ <h3>Macros</h3> 
+ 
+ <p>Many macros that are useful in the ACL2 source code are also helpful to 
+ users, and hence are documented.  Among these are <span class="tt"><a href="ACL2____DEFREC.html">defrec</a></span> (already 
+ discussed in the chapter, <a href="ACL2____DEVELOPERS-GUIDE-BACKGROUND.html">developers-guide-background</a>)), <span class="tt"><a href="ACL2____DEFABBREV.html">defabbrev</a></span>, <span class="tt"><a href="ACL2____ER-PROGN.html">er-progn</a></span>, <span class="tt"><a href="ACL2____PPROGN.html">pprogn</a></span>, <span class="tt"><a href="ACL2____STATE-GLOBAL-LET_A2.html">state-global-let*</a></span>, and 
+ <span class="tt"><a href="ACL2____REVERT-WORLD.html">revert-world</a></span>.  Others could reasonably have their own documentation 
+ topics but are discussed in other topics; for example, see <a href="ACL2____PROGRAMMING-WITH-STATE.html">programming-with-state</a> for a discussion of <span class="tt"><a href="ACL2____ER-LET_A2.html">er-let*</a></span>.  Still others are 
+ not mentioned in the xdoc documentation but have Lisp comments in the source 
+ code, for example, <span class="v">revert-world-on-error</span>, <span class="v">with-ctx-summarized</span>, 
+ <span class="v">io?</span>, and <span class="v">acl2-unwind-protect</span>.  Perhaps the best way to learn about 
+ the variety of available macros for ACL2 system programming is to notice their 
+ usage in existing ACL2 source code, then looking them up in the xdoc 
+ documentation and/or in the source code (typically with the Emacs command, 
+ <span class="v">meta-.</span>).</p> 
+ 
+ <h3>Evaluators</h3> 
+ 
+ <p>Source code often contains calls that evaluate terms.  A prime example is 
+ the implementation of the read-eval-print loop, as explained in the chapter, 
+ <a href="ACL2____DEVELOPERS-GUIDE-BACKGROUND.html">developers-guide-background</a>.  There are several evaluators available. 
+ The most familiar to users may be <span class="tt"><a href="ACL2____TRANS-EVAL.html">trans-eval</a></span>, which is actually a 
+ combination of translation and evaluation.  If you look at the source code and 
+ drill down (following definitions) from <span class="v">trans-eval</span>, you'll see that there 
+ are several optimizations, in part to support lazy treatment of <span class="v">if</span> calls: 
+ based on the test, perhaps only one of the two branches will need to be 
+ translated, let alone evaluated.  If you keep drilling down, you may 
+ ultimately see a call of <span class="v">ev</span>, which is an evaluator for (translated) 
+ terms.  In a sense <span class="v">ev</span> is the most basic term evaluator.  Note that 
+ <span class="v">ev</span> takes and returns <span class="v">state</span>.  A related evaluator, <span class="v">ev-w</span>, may be 
+ used if <span class="v">state</span> and <span class="v">stobjs</span> are not involved.</p> 
+ 
+ <p>There is more to evaluation, such as the handling of stobjs via so-called 
+ ``latches'' and the <span class="v">user-stobj-alist</span>, which pertain to the subtle notion 
+ that user-defined stobjs are actually part of the ACL2 state; you can read 
+ comments in the sources to learn more about that when the need arises.  Also 
+ see the chapter, <a href="ACL2____DEVELOPERS-GUIDE-EVALUATION.html">developers-guide-evaluation</a>.</p> 
+ 
+ <h3>Using <span class="tt"><a href="ACL2____RETURN-LAST.html">return-last</a></span>
+</h3> 
+ 
+ <font color="#800080"> 
+ <p>THIS SECTION IS WORTH COVERING IN ITS ENTIRETY.</p> 
+ </font> 
+ 
+ <p>There are occasions in which a utility is naturally defined as a function 
+ in ACL2 but as a macro in Common Lisp.  Consider <span class="tt"><a href="ACL2____MBE.html">mbe</a></span>.  Even though 
+ <span class="v">mbe</span> is itself a macro, it must expand to a function call involving its 
+ <span class="v">:logic</span> and <span class="v">:exec</span> arguments, so that a suitable <a href="ACL2____GUARD.html">guard</a> proof 
+ obligation can be generated.  However, in raw Lisp we want an <span class="v">mbe</span> call to 
+ be fast, by simply running the <span class="v">:exec</span> argument.  Let's see how this is all 
+ arranged.</p> 
+ 
+ <pre class="code">ACL2 !&gt;:trans (<a href="ACL2____MBE.html">mbe</a> :logic (<a href="ACL2____ZP.html">zp</a> n) :exec (<a href="COMMON-LISP_____D3.html">=</a> n 0))
+
+(<a href="ACL2____RETURN-LAST.html">RETURN-LAST</a> 'MBE1-RAW (<a href="COMMON-LISP_____D3.html">=</a> N '0) (<a href="ACL2____ZP.html">ZP</a> N))
+
+=&gt; *
+
+ACL2 !&gt;:q
+
+Exiting the ACL2 read-eval-print loop.  To re-enter, execute (<a href="ACL2____LP.html">LP</a>).
+? (macroexpand '(<a href="ACL2____MBE.html">mbe</a> :logic (<a href="ACL2____ZP.html">zp</a> n) :exec (<a href="COMMON-LISP_____D3.html">=</a> n 0)))
+(<a href="COMMON-LISP_____D3.html">=</a> N 0)
+T
+?</pre> 
+ 
+ <p>The key, obviously, is to use <span class="tt"><a href="ACL2____RETURN-LAST.html">return-last</a></span>, which is the <i>only</i> 
+ ACL2 utility that is defined to be a function in the ACL2 loop but is defined 
+ to be a macro in raw Lisp.  Before you add a new utility that, like <span class="v">mbe</span>, 
+ needs to operate as a function in the ACL2 loop but as a macro in raw Lisp, 
+ commit yourself to defining it using <span class="v">return-last</span>.  The reason is that 
+ handling any such utility is tricky (see for example the definition of 
+ <span class="v">ev-rec-return-last</span>), so it would be ill-advised to replicate all the work 
+ done already for <span class="v">return-last</span> in handling any additional such utility.  Of 
+ course, the first step then is to become familiar with <span class="v">return-last</span>.  The 
+ xdoc documentation on <a href="ACL2____RETURN-LAST.html">return-last</a> is quite extensive, and may suffice; 
+ of course, it is also advisable to read the comments in the source code 
+ definition of <span class="v">return-last</span>.</p> 
+ 
+ <p>The use of <span class="v">return-last</span> provides an example of the suggestion to use 
+ precedents (see <a href="ACL2____DEVELOPERS-GUIDE-MAINTENANCE.html">developers-guide-maintenance</a>).  Imagine that you want 
+ to add a function to ACL2 that is implemented under-the-hood as a macro in raw 
+ Lisp.  Ideally, you would look at an existing such utility, such as <span class="v">mbe</span>, 
+ to see how it is implemented.  This would lead you to <span class="v">return-last</span>, which 
+ you would then use similarly to implement your new utility.</p> 
+ 
+ <h3>Type-alists</h3> 
+ 
+ <p>A fundamental data structure in the ACL2 prover is the <i>type-alist</i>. 
+ Since some user-level utilities display the type-alist, there is user-level 
+ documentation for this data structure; see <a href="ACL2____TYPE-ALIST.html">type-alist</a>, which contains 
+ important system-level background.  Perusal of the source code will reveal 
+ utilities for computing with type-alists.  Two key such utilities are 
+ <span class="v">type-set</span>, which computes the type-set of a term with respect to a given 
+ type-alist, and which again has user-level documentation (see <a href="ACL2____TYPE-SET.html">type-set</a>) 
+ that also serves to provide important system-level background; and 
+ <span class="v">assume-true-false</span>, which extends a type-alist as one dives into the true 
+ or false branch of a call of <span class="v">IF</span>.  Before creating type-alists with 
+ lower-level or new utilities, be sure to <font color="#c00000">read the ``Essay 
+ on the Invariants on Type-alists, and Canonicality</font>.''  In general, 
+ look for essays on any topic that is relevant to changes that you are making, 
+ unless you are reasonably confident that the essay is at a lower level than 
+ you need.  For example, <font color="#c00000">if you call 
+ <span class="v">assume-true-false</span> to extend an existing type-alist, then you are using a 
+ well-worn interface and you needn't be concerned about the well-formedness of 
+ the resulting type-alists</font>.</p> 
+ 
+ <p>NEXT SECTION: <a href="ACL2____DEVELOPERS-GUIDE-LOGIC.html">developers-guide-logic</a></p>
+</body>
+</html>

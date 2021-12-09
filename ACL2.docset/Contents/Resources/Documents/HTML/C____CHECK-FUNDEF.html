@@ -1,0 +1,102 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Check-fundef</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=C____CHECK-FUNDEF">Click for Check-fundef in the Full Manual</a></h3>
+
+<p>Check a function definition.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(check-fundef fundef funtab)  new-funtab</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">fundef</span>  <font color="#606060">Guard <span class="v">(<a href="C____FUNDEFP.html">fundefp</a> fundef)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">funtab</span>  <font color="#606060">Guard <span class="v">(<a href="C____FUN-TABLEP.html">fun-tablep</a> funtab)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">new-funtab</span>  <font color="#606060">Type <span class="v">(<a href="C____FUN-TABLE-RESULTP.html">fun-table-resultp</a> new-funtab)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>Starting with an initial variable table, 
+     we process the parameter declarations and obtain the variable table 
+     in which the function body must be checked. 
+     Critically, the block items are checked in the initial variable table, 
+     which has the types for the function parameters, 
+     without creating a new scope for the block (i.e. the compound statement): 
+     the reason is that the scope of function parameters 
+     terminates at the end of the associated block [C:6.2.1/4].</p><p>We ensure that the return types of the body 
+     match the return types of the function. 
+     Currently, this means that the set of return types 
+     must be a singleton with the function's return type; 
+     this may be relaxed in the future.</p><p>We also extend the function table with the new function. 
+     It is an error if a function with the same name is already in the table. 
+     In general, this must be done before checking the body: 
+     the function is in scope, in its own body.</p><p>The scope of a function identifier goes from its declaration 
+     to the end of the translation unit [C:6.2.1/4]. 
+     Thus, as we go through 
+     the function definitions in the translation unit in order, 
+     we extend the function table.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>check-fundef</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ check-fundef (<a href="C____FUNDEF.html">fundef</a> funtab)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="C____FUNDEFP.html">fundefp</a> fundef)
+                             (<a href="C____FUN-TABLEP.html">fun-tablep</a> funtab))))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'check-fundef))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+    (((<a href="C____FUNDEF.html">fundef</a> fundef) fundef)
+     (in-types (<a href="C____TYPE-NAME-LIST-TO-TYPE-LIST.html">type-name-list-to-type-list</a>
+                    (<a href="C____PARAM-DECLON-LIST-_E3TYNAME-LIST.html">param-declon-list-&gt;tyname-list</a> fundef.params)))
+     (out-type (<a href="C____TYPE-NAME-TO-TYPE.html">type-name-to-type</a> (<a href="C____MAKE-TYNAME.html">make-tyname</a> :specs fundef.result
+                                               :pointerp nil)))
+     (ftype (<a href="C____MAKE-FUN-TYPE.html">make-fun-type</a> :inputs in-types
+                           :output out-type))
+     (funtab (<a href="C____FUN-TABLE-ADD-FUN.html">fun-table-add-fun</a> fundef.name ftype funtab))
+     ((when (<a href="C____ERRORP.html">errorp</a> funtab))
+      (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :fundef funtab)))
+     (wf (<a href="C____CHECK-IDENT.html">check-ident</a> fundef.name))
+     ((when (<a href="C____ERRORP.html">errorp</a> wf))
+      (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :fundef-name-error wf)))
+     (vartab (<a href="C____VAR-TABLE-INIT.html">var-table-init</a>))
+     (vartab (<a href="C____CHECK-PARAM-DECLON-LIST.html">check-param-declon-list</a> fundef.params vartab))
+     ((when (<a href="C____ERRORP.html">errorp</a> vartab))
+      (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :fundef-param-error vartab)))
+     (stype (<a href="C____CHECK-BLOCK-ITEM-LIST.html">check-block-item-list</a> fundef.body funtab vartab))
+     ((when (<a href="C____ERRORP.html">errorp</a> stype))
+      (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :fundef-body-error stype)))
+     ((unless (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____STMT-TYPE-_E3RETURN-TYPES.html">stmt-type-&gt;return-types</a> stype)
+                     (<a href="SET____INSERT.html">insert</a> out-type nil)))
+      (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :fundef-return-mistype fundef.name
+                   :required out-type
+                   :inferred (<a href="C____STMT-TYPE-_E3RETURN-TYPES.html">stmt-type-&gt;return-types</a> stype)))))
+    funtab)))</pre> 
+<p><b>Theorem: </b>fun-table-resultp-of-check-fundef</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> fun-table-resultp-of-check-fundef
+        (<a href="ACL2____B_A2.html">b*</a> ((new-funtab (<a href="C____CHECK-FUNDEF.html">check-fundef</a> fundef funtab)))
+            (<a href="C____FUN-TABLE-RESULTP.html">fun-table-resultp</a> new-funtab))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>check-fundef-of-fundef-fix-fundef</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> check-fundef-of-fundef-fix-fundef
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____CHECK-FUNDEF.html">check-fundef</a> (<a href="C____FUNDEF-FIX.html">fundef-fix</a> fundef)
+                             funtab)
+               (<a href="C____CHECK-FUNDEF.html">check-fundef</a> fundef funtab)))</pre> 
+<p><b>Theorem: </b>check-fundef-fundef-equiv-congruence-on-fundef</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> check-fundef-fundef-equiv-congruence-on-fundef
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="C____FUNDEF-EQUIV.html">fundef-equiv</a> fundef fundef-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____CHECK-FUNDEF.html">check-fundef</a> fundef funtab)
+                        (<a href="C____CHECK-FUNDEF.html">check-fundef</a> fundef-equiv funtab)))
+        :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>check-fundef-of-fun-table-fix-funtab</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> check-fundef-of-fun-table-fix-funtab
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____CHECK-FUNDEF.html">check-fundef</a> fundef (<a href="C____FUN-TABLE-FIX.html">fun-table-fix</a> funtab))
+               (<a href="C____CHECK-FUNDEF.html">check-fundef</a> fundef funtab)))</pre> 
+<p><b>Theorem: </b>check-fundef-fun-table-equiv-congruence-on-funtab</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> check-fundef-fun-table-equiv-congruence-on-funtab
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="C____FUN-TABLE-EQUIV.html">fun-table-equiv</a> funtab funtab-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____CHECK-FUNDEF.html">check-fundef</a> fundef funtab)
+                        (<a href="C____CHECK-FUNDEF.html">check-fundef</a> fundef funtab-equiv)))
+        :rule-classes :congruence)</pre> 
+
+</body>
+</html>

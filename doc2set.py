@@ -17,17 +17,18 @@ cur.execute('CREATE UNIQUE INDEX anchor ON searchIndex (name, type, path);')
 
 docpath = RES_PATH + '/Documents'
 
-page = open(os.path.join(docpath, 'index.html')).read()
-soup = BeautifulSoup(page)
+with open(os.path.join(docpath, 'index.html')) as page:
+    soup = BeautifulSoup(page, 'lxml')
 
-any = re.compile('.*')
-for tag in soup.find_all('a', {'href':any}):
-    name = tag.text.strip()
-    if len(name) > 1:
-        path = tag.attrs['href'].strip()
-        if path != 'index.html':
-            cur.execute('INSERT OR IGNORE INTO searchIndex(name, type, path) VALUES (?,?,?)', (name, 'func', path))
-            print('name: %s, path: %s' % (name, path))
+    any = re.compile('.*')
+    links = soup.find_all('a', {'href': any})
+    for link in links:
+        name = link.text.strip()
+        if len(name) > 1:
+            path = link.attrs['href'].strip()
+            if path != 'index.html':
+                cur.execute('INSERT OR IGNORE INTO searchIndex(name, type, path) VALUES (?,?,?)', (name, 'func', path))
+                print('name: %s, path: %s' % (name, path))
 
 conn.commit()
 conn.close()

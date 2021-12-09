@@ -1,0 +1,109 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Next-key</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=HDWALLET____NEXT-KEY">Click for Next-key in the Full Manual</a></h3>
+
+<p>Address key generation in the wallet.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(next-key stat)  (mv error? index address stat)</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">stat</span>  <font color="#606060">Guard <span class="v">(<a href="HDWALLET____STATP.html">statp</a> stat)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">error?</span>  <font color="#606060">Type <span class="v">(<a href="HDWALLET____MAYBE-COMMAND-ERROR-P.html">maybe-command-error-p</a> error?)</span>.</font>
+</dd> 
+<dd>
+<span class="tt">index</span>  <font color="#606060">Type <span class="v">(<a href="ACL2____NATP.html">natp</a> index)</span>.</font>
+</dd> 
+<dd>
+<span class="tt">address</span>  <font color="#606060">Type <span class="v">(<a href="ACL2____BYTE-LIST20P.html">byte-list20p</a> address)</span>.</font>
+</dd> 
+<dd>
+<span class="tt">stat</span>  <font color="#606060">Type <span class="v">(<a href="HDWALLET____STATP.html">statp</a> stat)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>This models the command used 
+     to generate the next address key in the wallet.</p><p>We attempt to derive the address key whose index is 
+     the state component that counts the number of 
+     (attempted) address key derivations so far.</p><p>This may fail in two rare cases. 
+     One is the case in which key derivation fails, 
+     as discussed in [BIP32]. 
+     The other is the case in which 
+     the index of the next address key is 2^{31}: 
+     since according to [BIP44] address keys are not hardened, 
+     their indices are limited to the set [0,2^{31}). 
+     In the first case, 
+     this function returns <span class="v">:address-key-derivation-failed</span> 
+     as the error flag. 
+     In the second case, 
+     this function returns <span class="v">:address-key-index-too-large</span> 
+     as the error flag. 
+     In all the other cases, the error flag is <span class="v">nil</span>, i.e. success. 
+     If key derivation fails, the state is updated 
+     by increasing the number of (attempted) address keys nonetheless, 
+     so that the next instance of this command will not re-try 
+     to derive the same key (which would fail again). 
+     If instead the command fails due to the index being 2^{31}, 
+     no state change happens.</p><p>Besides the updated state, 
+     we also return the address index of the key just derived, 
+     as well as the account address derived from the key.</p><p>The guard proofs of this operation need some of the constraints 
+     formalized in <span class="tt"><a href="HDWALLET____STAT-WFP.html">stat-wfp</a></span>.</p><p>This operation preserves 
+     the constraints formalized by <span class="tt"><a href="HDWALLET____STAT-WFP.html">stat-wfp</a></span>.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>next-key</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+    next-key (<a href="HDWALLET____STAT.html">stat</a>)
+    (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="HDWALLET____STATP.html">statp</a> stat)))
+    (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="HDWALLET____STAT-WFP.html">stat-wfp</a> stat)))
+    (<a href="ACL2____B_A2.html">b*</a> ((next-index (<a href="HDWALLET____STAT-_E3ADDRESSES.html">stat-&gt;addresses</a> stat))
+         ((when (<a href="COMMON-LISP_____D3.html">=</a> next-index (<a href="COMMON-LISP____EXPT.html">expt</a> 2 31)))
+          (<a href="ACL2____MV.html">mv</a> (<a href="HDWALLET____COMMAND-ERROR-ADDRESS-KEY-INDEX-LIMIT.html">command-error-address-key-index-limit</a>)
+              next-index (<a href="ACL2____REPEAT.html">repeat</a> 20 0)
+              (<a href="HDWALLET____STAT-FIX.html">stat-fix</a> stat)))
+         (key-tree (<a href="HDWALLET____STAT-_E3KEYS.html">stat-&gt;keys</a> stat))
+         ((<a href="ACL2____MV.html">mv</a> error? new-key-tree)
+          (<a href="BITCOIN____BIP32-EXTEND-TREE.html">bip32-extend-tree</a> key-tree *key-path-prefix* next-index))
+         ((when error?)
+          (<a href="ACL2____MV.html">mv</a> (<a href="HDWALLET____COMMAND-ERROR-ADDRESS-KEY-DERIVATION-FAIL.html">command-error-address-key-derivation-fail</a> next-index)
+              next-index (<a href="ACL2____REPEAT.html">repeat</a> 20 0)
+              (<a href="HDWALLET____CHANGE-STAT.html">change-stat</a> stat
+                           :addresses (<a href="COMMON-LISP____1_B2.html">1+</a> next-index))))
+         (address (<a href="ETHEREUM____PRIVATE-KEY-TO-ADDRESS.html">private-key-to-address</a>
+                       (<a href="BITCOIN____BIP32-GET-PRIV-KEY-AT-PATH.html">bip32-get-priv-key-at-path</a>
+                            new-key-tree
+                            (<a href="ACL2____RCONS.html">rcons</a> next-index *key-path-prefix*)))))
+        (<a href="ACL2____MV.html">mv</a> nil next-index address
+            (<a href="HDWALLET____CHANGE-STAT.html">change-stat</a> stat
+                         :keys new-key-tree
+                         :addresses (<a href="COMMON-LISP____1_B2.html">1+</a> next-index)))))</pre> 
+<p><b>Theorem: </b>maybe-command-error-p-of-next-key.error?</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> maybe-command-error-p-of-next-key.error?
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?error? ?index ?address ?stat)
+              (<a href="HDWALLET____NEXT-KEY.html">next-key</a> stat)))
+            (<a href="HDWALLET____MAYBE-COMMAND-ERROR-P.html">maybe-command-error-p</a> error?))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>natp-of-next-key.index</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> natp-of-next-key.index
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?error? ?index ?address ?stat)
+              (<a href="HDWALLET____NEXT-KEY.html">next-key</a> stat)))
+            (<a href="ACL2____NATP.html">natp</a> index))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>byte-list20p-of-next-key.address</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> byte-list20p-of-next-key.address
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?error? ?index ?address ?stat)
+              (<a href="HDWALLET____NEXT-KEY.html">next-key</a> stat)))
+            (<a href="ACL2____BYTE-LIST20P.html">byte-list20p</a> address))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>statp-of-next-key.stat</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> statp-of-next-key.stat
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?error? ?index ?address ?stat)
+              (<a href="HDWALLET____NEXT-KEY.html">next-key</a> stat)))
+            (<a href="HDWALLET____STATP.html">statp</a> stat))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>stat-wfp-of-next-key</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> stat-wfp-of-next-key
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="HDWALLET____STATP.html">statp</a> stat) (<a href="HDWALLET____STAT-WFP.html">stat-wfp</a> stat))
+                 (<a href="HDWALLET____STAT-WFP.html">stat-wfp</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 3 (<a href="HDWALLET____NEXT-KEY.html">next-key</a> stat)))))</pre> 
+
+</body>
+</html>

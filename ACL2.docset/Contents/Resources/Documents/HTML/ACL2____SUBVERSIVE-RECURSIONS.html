@@ -1,0 +1,158 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Subversive-recursions</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____SUBVERSIVE-RECURSIONS">Click for Subversive-recursions in the Full Manual</a></h3>
+
+<p>Why we restrict <a href="ACL2____ENCAPSULATE.html">encapsulate</a>d recursive functions</p><p>Subtleties arise when one of the ``constrained'' functions, <span class="v">f</span>, 
+ introduced in the <a href="ACL2____SIGNATURE.html">signature</a> of an <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span> event, is 
+ involved in the termination argument for a non-local recursively defined 
+ function, <span class="v">g</span>, in that <span class="v">encapsulate</span>.  During the processing of the 
+ encapsulated events, <span class="v">f</span> is locally defined to be some witness function, 
+ <span class="v">f'</span>.  Properties of <span class="v">f'</span> are explicitly proved and exported from the 
+ encapsulate as the constraints on the undefined function <span class="v">f</span>.  But if 
+ <span class="v">f</span> is used in a recursive <span class="v">g</span> defined within the encapsulate, then the 
+ termination proof for <span class="v">g</span> may use properties of <span class="v">f'</span>  the witness 
+  that are not explicitly set forth in the constraints stated for 
+ <span class="v">f</span>.</p> 
+ 
+ <p>Such recursive <span class="v">g</span> are said be ``subversive'' because if naively treated 
+ they give rise to unsound induction schemes or (via functional instantiation) 
+ recurrence equations that are impossible to satisfy.  We illustrate what could 
+ go wrong below.</p> 
+ 
+ <p>Subversive recursions are not banned outright.  Instead, they are treated 
+ as part of the constraint.  That is, in the case above, the definitional 
+ equation for <span class="v">g</span> becomes one of the constraints on <span class="v">f</span>.  This is 
+ generally a severe restriction on future functional instantiations of <span class="v">f</span>. 
+ In addition, ACL2 removes from its knowledge of <span class="v">g</span> any suggestions about 
+ legal inductions to ``unwind'' its recursion.</p> 
+ 
+ <p>What should you do?  Often, the simplest response is to move the offending 
+ recursive definition, e.g., <span class="v">g</span>, out of the encapsulate.  That is, 
+ introduce <span class="v">f</span> by constraint and then define <span class="v">g</span> as an ``independent'' 
+ event.  You may need to constrain ``additional'' properties of <span class="v">f</span> in order 
+ to admit <span class="v">g</span>, e.g., constrain it to reduce some ordinal measure.  However, 
+ by separating the introduction of <span class="v">f</span> from the admission of <span class="v">g</span> you will 
+ clearly identify the necessary constraints on <span class="v">f</span>, functional 
+ instantiations of <span class="v">f</span> will be simpler, and <span class="v">g</span> will be a useful function 
+ which suggests inductions to the theorem prover.</p> 
+ 
+ <p>Note that the functions introduced in the <a href="ACL2____SIGNATURE.html">signature</a> should not even 
+ occur ancestrally in the termination proofs for non-local recursive functions 
+ in the encapsulate.  That is, the constrained functions of an encapsulate 
+ should not be reachable in the dependency graph of the functions used in the 
+ termination arguments of recursive functions in encapsulate.  If they are 
+ reachable, their definitions become part of the constraints.</p> 
+ 
+ <p>The following event illustrates the problem posed by subversive 
+ recursions.</p> 
+ 
+ <pre class="code">(<a href="ACL2____ENCAPSULATE.html">encapsulate</a>
+  (((f *) =&gt; *))
+  (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> f (x) (<a href="COMMON-LISP____CDR.html">cdr</a> x)))
+  (<a href="COMMON-LISP____DEFUN.html">defun</a> g (x)
+    (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x) (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____G.html">g</a> (f x))) t)))</pre> 
+ 
+ <p>Suppose, contrary to how ACL2 works, that the encapsulate above were to 
+ introduce no constraints on <span class="v">f</span> on the bogus grounds that the only use of 
+ <span class="v">f</span> in the encapsulate is in an admissible function.  We discuss the 
+ plausibility of this bogus argument in a moment.</p> 
+ 
+ <p>Then it would be possible to prove the theorem:</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> f-not-identity
+  (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (f '(a . b)) '(a . b)))
+  :rule-classes nil
+  :hints (("Goal" :use (:instance g (x '(a . b))))))</pre> 
+ 
+ <p>simply by observing that if <span class="v">(f '(a . b))</span> were <span class="v">'(a . b)</span>, then 
+ <span class="v">(<a href="ACL2____G.html">g</a> '(a . b))</span> would be <span class="v">(<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____G.html">g</a> '(a . b)))</span>, which is impossible.</p> 
+ 
+ <p>But then we could functionally instantiate <span class="v">f-not-identity</span>, replacing 
+ <span class="v">f</span> by the identity function, to prove <span class="v">nil</span>!  This is bad.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> bad
+  nil
+  :rule-classes nil
+  :hints
+  (("Goal" :use (:functional-instance f-not-identity (f identity)))))</pre> 
+ 
+ <p>This sequence of events was legal in versions of ACL2 prior to Version 1.5. 
+ When we realized the problem we took steps to make it illegal.  However, our 
+ steps were insufficient and it was possible to sneak in a subversive function 
+ (via mutual recursion) as late as Version 2.3.</p> 
+ 
+ <p>We now turn to the plausibility of the bogus argument above.  Why might one 
+ even be tempted to think that the definition of <span class="v">g</span> above poses no 
+ constraint on <span class="v">f</span>?  Here is a very similar encapsulate.</p> 
+ 
+ <pre class="code">(<a href="ACL2____ENCAPSULATE.html">encapsulate</a> (((f *) =&gt; *))
+  (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> f (x) (<a href="COMMON-LISP____CDR.html">cdr</a> x)))
+  (<a href="COMMON-LISP____DEFUN.html">defun</a> map (x)
+    (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x)
+        (<a href="COMMON-LISP____CONS.html">cons</a> (f x) (map (<a href="COMMON-LISP____CDR.html">cdr</a> x)))
+      nil)))</pre> 
+ 
+ <p>Here <span class="v">map</span> plays the role of <span class="v">g</span> above.  Like <span class="v">g</span>, <span class="v">map</span> calls 
+ the constrained function <span class="v">f</span>.  But <span class="v">map</span> truly does not constrain 
+ <span class="v">f</span>.  In particular, the definition of <span class="v">map</span> could be moved ``out'' of 
+ the encapsulate so that <span class="v">map</span> is introduced afterwards.  The difference 
+ between <span class="v">map</span> and <span class="v">g</span> is that the constrained function plays no role in 
+ the termination argument for the one but does for the other.</p> 
+ 
+ <p>As a ``user-friendly'' gesture, ACL2 implicitly moves <span class="v">map</span>-like 
+ functions out of encapsulations; logically speaking, they are introduced after 
+ the encapsulation.  This simplifies the constraint.  When the constraint 
+ cannot be thus simplified the user is advised, via the ``infected'' warning, 
+ to phrase the encapsulation in the simplest way possible.  See <a href="ACL2____INFECTED-CONSTRAINTS.html">infected-constraints</a>.</p> 
+ 
+ <p>The lingering bug between Versions 1.5 and 2.3 mentioned above was due to 
+ our failure to detect the <span class="v">g</span>-like nature of some functions when they were 
+ defined in mutually recursively cliques with other functions.  The singly 
+ recursive case was recognized.  The bug arose because our detection 
+ ``algorithm'' was based on the ``suggested inductions'' left behind by 
+ successful definitions.  We failed to recall that mutually-recursive 
+ definitions do not, as of this writing, make any suggestions about inductions 
+ and so did not leave any traces of their subversive natures.</p> 
+ 
+ <p>We conclude by elaborating on the criterion ``involved in the termination 
+ argument'' mentioned at the outset.  Suppose that function <span class="v">f</span> is 
+ recursively defined in an <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span>, where the body of <span class="v">f</span> has no 
+ ``ancestor'' among the functions introduced in the signature of that <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span>, i.e.: the body contains no call of a signature function, no call 
+ of a function whose body calls a signature function, and so on.  Then ACL2 
+ treats <span class="v">f</span> as though it is defined in front of that <span class="v">encapsulate</span> form; 
+ so <span class="v">f</span> is not <span class="v">constrained</span> by the encapsulate, and its definition is 
+ hence certainly not subversive in the sense discussed above.  But suppose to 
+ the contrary that some function introduced in the signature is an ancestor of 
+ the body of <span class="v">f</span>.  Then the definition of <span class="v">f</span> is subversive if moreover, 
+ its termination proof obligation has an ancestor among the signature 
+ functions.  Now, that proof obligation involves terms from the first argument 
+ of selected calls of <span class="v">IF</span>, as well as recursive calls; for a detailed 
+ discussion, see <a href="ACL2____RULERS.html">rulers</a>.  The important point here is that for the 
+ recursive calls, only the arguments in ``measured'' positions are relevant to 
+ the termination proof obligation.  Consider the following example.</p> 
+ 
+ <pre class="code">(<a href="ACL2____ENCAPSULATE.html">encapsulate</a>
+ (((h *) =&gt; *))
+ (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> h (n) n))
+ (<a href="COMMON-LISP____DEFUN.html">defun</a> f (i n)
+   (<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2____ZP.html">zp</a> i)
+       n
+     (f (<a href="COMMON-LISP____1-.html">1-</a> i) (h n)))))</pre> 
+ 
+ <p>ACL2 heuristically picks the measure <span class="v">(<a href="ACL2____ACL2-COUNT.html">acl2-count</a> i)</span> for the definition 
+ of <span class="v">f</span>; thus, <span class="v">i</span> is the only ``measured formal'' of <span class="v">f</span>.  Since 
+ <span class="v">i</span> is the first formal of <span class="v">f</span>, then for the recursive call of <span class="v">f</span>, 
+ only the first argument contributes to the termination proof obligation: in 
+ this case, <span class="v">(<a href="COMMON-LISP____1-.html">1-</a> i)</span> but not <span class="v">(h n)</span>.  Thus, even though <span class="v">h</span> is a 
+ signature function, the definition of <span class="v">f</span> is not considered to be 
+ subversive; an induction scheme is thus stored for <span class="v">f</span>.  (This restriction 
+ to measured formal positions of recursive calls, for determining subversive 
+ definitions, is new in Version_3.5 of ACL2.)</p>
+</body>
+</html>

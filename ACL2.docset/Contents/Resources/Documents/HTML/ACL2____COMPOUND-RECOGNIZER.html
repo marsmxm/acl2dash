@@ -1,0 +1,220 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Compound-recognizer</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____COMPOUND-RECOGNIZER">Click for Compound-recognizer in the Full Manual</a></h3>
+
+<p>Make a rule used by the typing mechanism</p><p>See <a href="ACL2____RULE-CLASSES.html">rule-classes</a> for a general discussion of rule classes, 
+ including how they are used to build rules from formulas and a discussion of 
+ the various keywords in a rule class description.</p> 
+ 
+ <pre class="code">Examples:
+(<a href="ACL2____DEFTHM.html">defthm</a> alistp-implies-true-listp-compound-recognizer
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____ALISTP.html">alistp</a> x)                 ; When (<a href="ACL2____ALISTP.html">alistp</a> x) is assumed true, add
+           (<a href="ACL2____TRUE-LISTP.html">true-listp</a> x))            ; the additional hypothesis that x is
+  :rule-classes :compound-recognizer) ; of primitive type true-listp.
+
+(<a href="ACL2____DEFTHM.html">defthm</a> natp-compound-recognizer      ; See discussion below.
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____NATP.html">natp</a> x)
+         (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> x)
+              (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> 0 x)))
+  :rule-classes :compound-recognizer)</pre> 
+ 
+ <p>Before presenting the General Forms, we start with a motivating example: 
+ the second <span class="tt"><a href="ACL2____DEFTHM.html">defthm</a></span> form above, which provides a nice example of a 
+ <span class="v">:compound-recognizer</span> rule that is built into ACL2.  To see how this rule 
+ might be useful, consider the following (admittedly very simple) <a href="ACL2____EVENTS.html">events</a>.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> triple (x)
+  (<a href="COMMON-LISP_____A2.html">*</a> 3 x))
+
+(<a href="ACL2____DEFTHM.html">defthm</a> triple-preserves-integerp
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> x)
+           (<a href="COMMON-LISP____INTEGERP.html">integerp</a> (triple x))))
+
+(<a href="ACL2____IN-THEORY.html">in-theory</a> (<a href="ACL2____DISABLE.html">disable</a> triple natp))</pre> 
+ 
+ <p>If the above <span class="v">:compound-recognizer</span> rule is disabled, then the following 
+ trivial theorem fails as shown; we explain below.</p> 
+ 
+ <pre class="code">(<a href="ACL2____THM.html">thm</a> (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____NATP.html">natp</a> x)
+              (<a href="COMMON-LISP____INTEGERP.html">integerp</a> (triple x)))
+  :hints (("Goal" :in-theory (<a href="ACL2____DISABLE.html">disable</a> natp-compound-recognizer))))</pre> 
+ 
+ <p>The problem is that when ACL2 tries to rewrite the term <span class="v">(<a href="COMMON-LISP____INTEGERP.html">integerp</a>
+ (triple x))</span> using the <span class="v">:</span><span class="tt"><a href="ACL2____REWRITE.html">rewrite</a></span> rule 
+ <span class="v">triple-preserves-integerp</span>, it needs to rewrite the hypothesis 
+ <span class="v">(<a href="COMMON-LISP____INTEGERP.html">integerp</a> x)</span> to <span class="v">t</span>, but instead what is known is <span class="v">(<a href="ACL2____NATP.html">natp</a> x)</span>.  If 
+ we remove the hint, then the proof succeeds because the above 
+ <span class="v">:compound-recognizer</span> rule tells ACL2 that when assuming <span class="v">(<a href="ACL2____NATP.html">natp</a> x)</span> to 
+ be true, it should actually assume both <span class="v">(<a href="COMMON-LISP____INTEGERP.html">integerp</a> x)</span> and <span class="v">(<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> 0 x)</span> to 
+ be true.</p> 
+ 
+ <pre class="code">General Forms:
+(<a href="ACL2____IMPLIES.html">implies</a> (fn x) concl)               ; (1)
+(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____NOT.html">not</a> (fn x)) concl)         ; (2)
+(<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____IMPLIES.html">implies</a> (fn x) concl1)         ; (3)
+     (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____NOT.html">not</a> (fn x)) concl2))
+(<a href="COMMON-LISP____IF.html">if</a> (fn x) concl1 concl2)            ; (4)
+(<a href="ACL2____IFF.html">iff</a> (fn x) concl)                   ; (5)
+(<a href="COMMON-LISP____EQUAL.html">equal</a> (fn x) concl)                 ; (6)</pre> 
+ 
+ <p>where <span class="v">fn</span> is a Boolean valued function of one argument, <span class="v">x</span> is a 
+ variable symbol, and the system can deduce some restriction on the primitive 
+ type of <span class="v">x</span> from the assumption that <span class="v">concl</span> holds.  The last 
+ restriction is vague but one way to understand it is to strengthen it a little 
+ to ``and <span class="v">concl</span> is a non-tautological disjunction of the primitive type 
+ recognizers listed below.''</p> 
+ 
+ <p>The primitive ACL2 types and a suitable primitive recognizing expression 
+ for each are listed below.</p> 
+ 
+ <pre class="code">type                suitable primitive recognizer
+
+zero                    (<a href="COMMON-LISP____EQUAL.html">equal</a> x 0)
+one                     (<a href="COMMON-LISP____EQUAL.html">equal</a> x 1)
+negative integers       (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> x) (<a href="COMMON-LISP_____C3.html">&lt;</a> x 0))
+positive integers &gt; 1   (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> x) (<a href="COMMON-LISP_____E3.html">&gt;</a> x 1))
+negative ratio          (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____RATIONALP.html">rationalp</a> x)
+                             (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> x))
+                             (<a href="COMMON-LISP_____C3.html">&lt;</a> x 0))
+positive ratio          (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____RATIONALP.html">rationalp</a> x)
+                             (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> x))
+                             (<a href="COMMON-LISP_____E3.html">&gt;</a> x 0))
+complex rational        (<a href="ACL2____COMPLEX-RATIONALP.html">complex-rationalp</a> x)
+nil                     (<a href="COMMON-LISP____EQUAL.html">equal</a> x nil)
+t                       (<a href="COMMON-LISP____EQUAL.html">equal</a> x t)
+other symbols           (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> x)
+                             (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> x nil))
+                             (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> x t)))
+proper conses           (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x)
+                             (<a href="ACL2____TRUE-LISTP.html">true-listp</a> x))
+improper conses         (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x)
+                             (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____TRUE-LISTP.html">true-listp</a> x)))
+strings                 (<a href="COMMON-LISP____STRINGP.html">stringp</a> x)
+characters              (<a href="COMMON-LISP____CHARACTERP.html">characterp</a> x)</pre> 
+ 
+ <p>Thus, since the naturals comprise the types <span class="v">zero</span>, <span class="v">one</span>, and 
+ <span class="v">positive integers &gt; 1</span>, a suitable <span class="v">concl</span> to recognize the naturals 
+ would be</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> x 0)
+    (<a href="COMMON-LISP____EQUAL.html">equal</a> x 1)
+    (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> x) (<a href="COMMON-LISP_____E3.html">&gt;</a> x 1)))</pre> 
+ 
+ <p>However, it turns out that we also permit <span class="v">(<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> x) (<a href="COMMON-LISP_____E3_D3.html">&gt;=</a> x 0))</span>, 
+ i.e. <span class="v">concl</span> doesn't literally need to be formed as a direct disjunction of 
+ terms from the table above.</p> 
+ 
+ <p>Similarly, the true-lists could be specified by</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> x nil)
+    (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x)
+         (<a href="ACL2____TRUE-LISTP.html">true-listp</a> x)))</pre> 
+ 
+ <p>but we in fact allow <span class="v">(<a href="ACL2____TRUE-LISTP.html">true-listp</a> x)</span> as well.  When time permits we 
+ may document more fully what is allowed or implement a macro that permits 
+ direct specification of the desired type in terms of the primitives.</p> 
+ 
+ <p>There are essentially four forms of <span class="v">:compound-recognizer</span> rules, as the 
+ forms labeled (3) and (4) above are equivalent, as are those labeled (5) and 
+ (6).  We explain how such rules are used by considering the individual 
+ forms.</p> 
+ 
+ <p>Consider form (1), <span class="v">(<a href="ACL2____IMPLIES.html">implies</a> (fn x) concl)</span>.  The effect of such a rule 
+ is that when the rewriter assumes <span class="v">(fn x)</span> true, as it would while diving 
+ through <span class="v">(<a href="COMMON-LISP____IF.html">if</a> (fn x) xxx ...)</span> to rewrite <span class="v">xxx</span>, it restricts the type of 
+ <span class="v">x</span> as specified by <span class="v">concl</span>.  For example, if <span class="v">concl</span> is the term 
+ <span class="v">(<a href="COMMON-LISP____INTEGERP.html">integerp</a> x)</span>, then when rewriting <span class="v">xxx</span>, <span class="v">x</span> will be assumed to be 
+ an integer.  However, when assuming <span class="v">(fn x)</span> false, as necessary in <span class="v">(<a href="COMMON-LISP____IF.html">if</a>
+ (fn x) ... xxx)</span>, the rule permits no additional assumptions about the type 
+ of <span class="v">x</span>.  For example, if <span class="v">fn</span> is <span class="v">primep</span>, i.e., the predicate that 
+ recognizes prime numbers, then <span class="v">(<a href="ACL2____IMPLIES.html">implies</a> (primep x) (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> x) (<a href="COMMON-LISP_____E3_D3.html">&gt;=</a> x
+ 0)))</span> is a compound recognizer rule of the first form.  When <span class="v">(primep x)</span> 
+ is assumed true, the rewriter gains the additional information that <span class="v">x</span> is 
+ a natural number.  When <span class="v">(primep x)</span> is assumed false, no additional 
+ information is gained  since <span class="v">x</span> may be a non-prime natural or may 
+ not even be a natural.</p> 
+ 
+ <p>Form (2) is the symmetric case, when assuming <span class="v">(fn x)</span> false permits 
+ type restrictions on <span class="v">x</span> but assuming <span class="v">(fn x)</span> true permits no such 
+ restrictions.  For example, if we defined <span class="v">exprp</span> to be the recognizer for 
+ well-formed expressions for some language in which all symbols, numbers, 
+ character objects and strings were well-formed  e.g., the 
+ well-formedness rules only put restrictions on expressions represented by 
+ <span class="tt"><a href="COMMON-LISP____CONSP.html">consp</a></span>s  then the theorem <span class="v">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____NOT.html">not</a> (exprp x)) (<a href="COMMON-LISP____CONSP.html">consp</a>
+ x))</span> is a rule of the second form.  Assuming <span class="v">(exprp x)</span> true tells us 
+ nothing about the type of <span class="v">x</span>; assuming it false tells us <span class="v">x</span> is a 
+ <span class="tt"><a href="COMMON-LISP____CONSP.html">consp</a></span>.</p> 
+ 
+ <p>Forms (3) and (4), which are really equivalent, address themselves to the 
+ case where one type may be deduced from <span class="v">(fn x)</span> and a generally unrelated 
+ type may be deduced from its negation.  If we modified the expression 
+ recognizer above so that character objects are illegal, then rules of the 
+ forms (3) and (4) are</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____IMPLIES.html">implies</a> (exprp x) (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____CHARACTERP.html">characterp</a> x)))
+     (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____NOT.html">not</a> (exprp x)) (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x) (<a href="COMMON-LISP____CHARACTERP.html">characterp</a> x)))).
+(<a href="COMMON-LISP____IF.html">if</a> (exprp x)
+    (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____CHARACTERP.html">characterp</a> x))
+  (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x) (<a href="COMMON-LISP____CHARACTERP.html">characterp</a> x)))</pre> 
+ 
+ <p>Finally, rules of forms (5) and (6) address the case where <span class="v">fn</span> 
+ recognizes all and only the objects whose type is described.  In these cases, 
+ <span class="v">fn</span> is really just a new name for some ``compound recognizers.''  The 
+ classic example is <span class="v">(<a href="ACL2____BOOLEANP.html">booleanp</a> x)</span>, which is just a handy combination of two 
+ primitive types:</p> 
+ 
+ <pre class="code">(<a href="ACL2____IFF.html">iff</a> (<a href="ACL2____BOOLEANP.html">booleanp</a> x) (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> x t) (<a href="COMMON-LISP____EQUAL.html">equal</a> x nil))).</pre> 
+ 
+ <p>Often it is best to disable <span class="v">fn</span> after proving that it is a compound 
+ recognizer, since otherwise the term <span class="v">(fn x)</span> will be expanded and thus 
+ disappear.</p> 
+ 
+ <p>Every time you prove a new compound recognizer rule about <span class="v">fn</span> it 
+ overrides all previously proved compound recognizer rules about <span class="v">fn</span>. 
+ Thus, if you want to establish the type implied by <span class="v">(fn x)</span> and you want to 
+ establish the type implied by <span class="v">(<a href="COMMON-LISP____NOT.html">not</a> (fn x))</span>, you must prove a compound 
+ recognizer rule of the third, fourth, fifth, or sixth forms.  Proving a rule 
+ of the first form followed by one of the second only leaves the second fact in 
+ the database.</p> 
+ 
+ <p>Compound recognizer rules can be disabled with the effect that older rules 
+ about <span class="v">fn</span>, if any, are exposed.</p> 
+ 
+ <p>If you prove more than one compound recognizer rule for a function, you may 
+ see a <b>warning</b> message to the effect that the new rule is not as 
+ ``restrictive'' as the old.  That is, the new rules do not give the rewriter 
+ strictly more type information than it already had.  The new rule is stored 
+ anyway, overriding the old, if enabled.  You may be playing subtle games with 
+ enabling or rewriting.  But two other interpretations are more likely, we 
+ think.  One is that you have forgotten about an earlier rule and should merely 
+ print it out to make sure it says what you intend, and then discard your new 
+ rule.  The other is that you meant to give the system more information and the 
+ system has simply been unable to extract the intended type information from 
+ the term you placed in the conclusion of the new rule.  Given our lack of 
+ specificity in saying how type information is extracted from rules, you can 
+ hardly blame yourself for this problem.  Sorry.  If you suspect you've been 
+ burned this way, you should rephrase the new rule in terms of the primitive 
+ recognizing expressions above and see if the warning is still given.  It would 
+ also be helpful to let us see your example so we can consider it as we 
+ redesign this stuff.</p> 
+ 
+ <p>Compound recognizer rules are similar to <span class="v">:</span><span class="tt"><a href="ACL2____FORWARD-CHAINING.html">forward-chaining</a></span> 
+ rules in that the system deduces new information from the act of assuming 
+ something true or false.  If a compound recognizer rule were stored as a 
+ forward chaining rule it would have essentially the same effect as described, 
+ when it has any effect at all.  The important point is that <span class="v">:</span><span class="tt"><a href="ACL2____FORWARD-CHAINING.html">forward-chaining</a></span> rules, because of their more general and expensive form, are 
+ used ``at the top level'' of the simplification process: we forward chain from 
+ assumptions in the goal being proved.  But compound recognizer rules are built 
+ in at the bottom-most level of the simplifier, where type reasoning is 
+ done.</p> 
+ 
+ <p>All that said, compound recognizer rules are a rather fancy, specialized 
+ mechanism.  It may be more appropriate to create <span class="v">:</span><span class="tt"><a href="ACL2____FORWARD-CHAINING.html">forward-chaining</a></span> rules instead of <span class="v">:compound-recognizer</span> rules.</p>
+</body>
+</html>

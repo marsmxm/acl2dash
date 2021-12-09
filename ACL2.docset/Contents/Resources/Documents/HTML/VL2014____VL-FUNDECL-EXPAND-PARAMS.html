@@ -1,0 +1,97 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Vl-fundecl-expand-params</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL2014____VL-FUNDECL-EXPAND-PARAMS">Click for Vl-fundecl-expand-params in the Full Manual</a></h3>
+
+<p>Eliminate parameters from a function.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(vl-fundecl-expand-params x warnings) 
+   
+(mv successp warnings new-x)</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">x</span>  A function that may have parameters.<br><font color="#606060">Guard <span class="v">(<a href="VL2014____VL-FUNDECL-P.html">vl-fundecl-p</a> x)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">warnings</span>  Ordinary <a href="VL2014____WARNINGS.html">warnings</a> accumulator.<br><font color="#606060">Guard <span class="v">(<a href="VL2014____VL-WARNINGLIST-P.html">vl-warninglist-p</a> warnings)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">successp</span>  <font color="#606060">Type <span class="v">(<a href="ACL2____BOOLEANP.html">booleanp</a> successp)</span>.</font>
+</dd> 
+<dd>
+<span class="tt">warnings</span>  <font color="#606060">Type <span class="v">(<a href="VL2014____VL-WARNINGLIST-P.html">vl-warninglist-p</a> warnings)</span>.</font>
+</dd> 
+<dd>
+<span class="tt">new-x</span>  <font color="#606060">Type <span class="v">(<a href="VL2014____VL-FUNDECL-P.html">vl-fundecl-p</a> new-x)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>We try to rewrite <span class="v">x</span> to eliminate any parameters.  There 
+doesn't seem to be any way to actually provide values for the parameters of a 
+function, so function parameters seem to just be a way to use named constants 
+within a function.</p> 
+ 
+<p>The basic idea is to just construct a substitution list from the parameters 
+and apply it throughout the function.  But we do a lot of sanity checking to 
+make sure that the parameters are very simple, aren't shadowing other things, 
+and are defined before they are used (as some Verilog tools require).  While 
+we're at it, we also check the function's local namespace to make sure it is 
+okay (since eliminating parameters changes the function's namespace).</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>vl-fundecl-expand-params</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ vl-fundecl-expand-params (x warnings)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="VL2014____VL-FUNDECL-P.html">vl-fundecl-p</a> x)
+                             (<a href="VL2014____VL-WARNINGLIST-P.html">vl-warninglist-p</a> warnings))))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'vl-fundecl-expand-params))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+   ((x (<a href="VL2014____VL-FUNDECL-FIX.html">vl-fundecl-fix</a> x))
+    ((<a href="VL2014____VL-FUNDECL.html">vl-fundecl</a> x) x)
+    (real-vardecls (<a href="VL2014____VL-REMOVE-FAKE-FUNCTION-VARDECLS.html">vl-remove-fake-function-vardecls</a> x.vardecls))
+    ((unless x.paramdecls) (<a href="ACL2____MV.html">mv</a> t (<a href="VL2014____OK.html">ok</a>) x))
+    (param-names (<a href="VL2014____VL-PARAMDECLLIST-_E3NAMES.html">vl-paramdecllist-&gt;names</a> x.paramdecls))
+    (local-namespace (<a href="COMMON-LISP____APPEND.html">append</a> (<a href="COMMON-LISP____LIST.html">list</a> x.name)
+                             (<a href="VL2014____VL-VARDECLLIST-_E3NAMES.html">vl-vardecllist-&gt;names</a> real-vardecls)
+                             param-names))
+    (dupes (duplicated-members local-namespace))
+    ((when dupes)
+     (<a href="ACL2____MV.html">mv</a>
+      nil
+      (<a href="VL2014____FATAL.html">fatal</a> :type :vl-bad-function-namespace
+             :msg "In ~a0, there are multiple declarations for ~&amp;1."
+             :args (<a href="COMMON-LISP____LIST.html">list</a> x dupes))
+      x))
+    ((<a href="ACL2____MV.html">mv</a> okp warnings)
+     (<a href="VL2014____VL-FUN-PARAMDECLLIST-TYPES-OKP.html">vl-fun-paramdecllist-types-okp</a> x.paramdecls warnings x))
+    ((unless okp) (<a href="ACL2____MV.html">mv</a> nil warnings x))
+    (sigma (<a href="VL2014____VL-FUNDECL-PARAM-SIGMA.html">vl-fundecl-param-sigma</a> x.paramdecls))
+    ((with-fast sigma))
+    (vardecls (<a href="VL2014____VL-VARDECLLIST-SUBST.html">vl-vardecllist-subst</a> x.vardecls sigma))
+    (body (<a href="VL2014____VL-STMT-SUBST.html">vl-stmt-subst</a> x.body sigma))
+    (new-x (<a href="VL2014____CHANGE-VL-FUNDECL.html">change-vl-fundecl</a> x
+                              :vardecls vardecls
+                              :body body)))
+   (<a href="ACL2____MV.html">mv</a> t warnings new-x))))</pre> 
+<p><b>Theorem: </b>booleanp-of-vl-fundecl-expand-params.successp</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> booleanp-of-vl-fundecl-expand-params.successp
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?successp ?warnings ?new-x)
+              (<a href="VL2014____VL-FUNDECL-EXPAND-PARAMS.html">vl-fundecl-expand-params</a> x warnings)))
+            (<a href="ACL2____BOOLEANP.html">booleanp</a> successp))
+        :rule-classes :type-prescription)</pre> 
+<p><b>Theorem: </b>vl-warninglist-p-of-vl-fundecl-expand-params.warnings</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-warninglist-p-of-vl-fundecl-expand-params.warnings
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?successp ?warnings ?new-x)
+              (<a href="VL2014____VL-FUNDECL-EXPAND-PARAMS.html">vl-fundecl-expand-params</a> x warnings)))
+            (<a href="VL2014____VL-WARNINGLIST-P.html">vl-warninglist-p</a> warnings))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>vl-fundecl-p-of-vl-fundecl-expand-params.new-x</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-fundecl-p-of-vl-fundecl-expand-params.new-x
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?successp ?warnings ?new-x)
+              (<a href="VL2014____VL-FUNDECL-EXPAND-PARAMS.html">vl-fundecl-expand-params</a> x warnings)))
+            (<a href="VL2014____VL-FUNDECL-P.html">vl-fundecl-p</a> new-x))
+        :rule-classes :rewrite)</pre> 
+
+</body>
+</html>

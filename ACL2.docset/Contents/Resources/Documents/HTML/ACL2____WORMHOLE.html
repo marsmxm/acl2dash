@@ -1,0 +1,444 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Wormhole</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____WORMHOLE">Click for Wormhole in the Full Manual</a></h3>
+
+<p><span class="tt"><a href="ACL2____LD.html">ld</a></span> without <span class="tt"><a href="ACL2____STATE.html">state</a></span>  a short-cut to a parallel universe</p><pre class="code">Example Form: 
+; The following form enters a recursive read-eval-print loop on a 
+; copy of the current state, allowing you to interact with that loop. 
+; Note that the form does not mention the ACL2 state variable! 
+; Evaluate the form below. Inside the resulting loop, define some function, 
+; e.g., with <span class="v">(<a href="COMMON-LISP____DEFUN.html">defun</a> foo (x) x)</span>.  Then exit with <span class="v">:q</span> and observe, 
+; e.g., with <span class="v">:pe foo</span>, that the external state did not change. 
+ 
+(wormhole 'foo 
+          '(lambda (whs) (set-wormhole-entry-code whs :ENTER)) 
+          nil 
+          '(list 'hello 'there)) 
+</pre> 
+ 
+ <pre class="code">General Form:
+(<a href="ACL2____WORMHOLE.html">wormhole</a> name entry-lambda input form
+  :current-package    ...  ; known package name
+  :ld-skip-proofsp    ...  ; nil, t or 'include-book
+  :ld-redefinition-action  ; nil or '(:a . :b)
+  :ld-prompt          ...  ; nil, t, or some prompt printer fn
+  :ld-missing-input-ok ... ; nil, t, :warn, or warning message
+  :ld-pre-eval-filter ...  ; :all, :query, or some new name
+  :ld-pre-eval-print  ...  ; nil, t, or :never
+  :ld-post-eval-print ...  ; nil, t, or :command-conventions
+  :ld-evisc-tuple     ...  ; nil or '(alist level length hiding-cars)
+  :ld-error-triples   ...  ; nil or t
+  :ld-error-action    ...  ; :return!, :return, :continue, :error,
+                           ;   or (:exit N)
+  :ld-query-control-alist  ; alist supplying default responses
+  :ld-verbose         ...) ; nil or t</pre> 
+ 
+ <p>The keyword arguments above are exactly those of <span class="tt"><a href="ACL2____LD.html">ld</a></span> (see <a href="ACL2____LD.html">ld</a>) 
+ except that three of <span class="tt"><a href="ACL2____LD.html">ld</a></span>'s keyword arguments are missing: the three 
+ that specify the channels <span class="tt"><a href="ACL2____STANDARD-OI.html">standard-oi</a></span>, <span class="tt"><a href="ACL2____STANDARD-CO.html">standard-co</a></span> and <span class="tt"><a href="ACL2____PROOFS-CO.html">proofs-co</a></span>, which default in <span class="v">wormhole</span> to ACL2's comment window.</p> 
+ 
+ <p>There are two ways to create and enter a wormhole: <span class="v">wormhole</span> as 
+ described here and the simpler <span class="tt"><a href="ACL2____WORMHOLE-EVAL.html">wormhole-eval</a></span>.  We recommend you read 
+ this full account of wormholes before using <span class="v">wormhole-eval</span>.</p> 
+ 
+ <p>Ignoring the use of <span class="v">entry-lambda</span>, <span class="v">wormhole</span> manufactures a named 
+ ``wormhole <a href="ACL2____STATE.html">state</a>'' and calls the general-purpose ACL2 read-eval-print 
+ loop <span class="tt"><a href="ACL2____LD.html">ld</a></span> on it.  However, when <span class="v">ld</span> exits, the wormhole evaporates 
+ and the function <span class="v">wormhole</span> returns <span class="v">nil</span>.  The manufactured state is 
+ like the ``current'' ACL2 <a href="ACL2____STATE.html">state</a> except for two things.  First, some 
+ information from the last wormhole state of this name is transferred into the 
+ new state; this allows a wormhole to maintain some state from one call to the 
+ next.  Second, some information from the wormhole call itself is transferred 
+ into the new state; this allows the wormhole to be sensitive to context. 
+ These two changes to the current state are reflected in the settings <span class="v">(<a href="ACL2_____04.html">@</a>
+ wormhole-status)</span> and <span class="v">(<a href="ACL2_____04.html">@</a> wormhole-input)</span> discussed in detail below.</p> 
+ 
+ <p>Note that <span class="v">wormhole</span> may be called from environments in which <span class="tt"><a href="ACL2____STATE.html">state</a></span> is not bound.  It is still applicative because it always returns 
+ <span class="v">nil</span>.</p> 
+ 
+ <p>There are some restrictions about what can be done inside a wormhole.  As 
+ you may imagine, we really do not ``copy the current state'' but rather just 
+ keep track of how we modified it and undo those modifications upon exit.  In 
+ particular, when exiting a wormhole, values of state globals (see <a href="ACL2____PROGRAMMING-WITH-STATE.html">programming-with-state</a>) are restored to their values at the time the wormhole 
+ was entered.  Note that information about traced functions is stored in state 
+ globals (see <a href="ACL2____TRACE_42.html">trace$</a>); accordingly, all tracing and untracing done 
+ inside a wormhole is undone upon exit from the wormhole.</p> 
+ 
+ <p>An error is signaled if you try to modify state in an unsupported way. 
+ For this same reason, wormholes do not allow updating of any user-defined 
+ single-threaded objects.  See <a href="ACL2____STOBJ.html">stobj</a>.</p> 
+ 
+ <p>One example wormhole is the implementation of the ACL2 <span class="tt"><a href="ACL2____ACCUMULATED-PERSISTENCE.html">accumulated-persistence</a></span> facility for tracking the frequency with which rules 
+ are tried.  To implement this feature directly the theorem prover would have 
+ to take the tracking data as an argument and pass it around so that updates 
+ could be accumulated.  This would greatly clutter the code.  Instead, the 
+ tracking data is maintained in a wormhole.  The theorem prover enters the 
+ wormhole to update the data as rules are tried.  When you request a display of 
+ the data, <span class="tt"><a href="ACL2____SHOW-ACCUMULATED-PERSISTENCE.html">show-accumulated-persistence</a></span> enters the wormhole and prints 
+ the data.  But the data is never available outside that wormhole.  The ACL2 
+ system uses a second wormhole to implement the <span class="tt"><a href="ACL2____BRR.html">brr</a></span> facility, allowing 
+ the user to interact with the rewriter as rules are applied.</p> 
+ 
+ <p>We now specify the arguments and behavior of <span class="v">wormhole</span>.</p> 
+ 
+ <p>The <span class="v">name</span> argument must be a quoted constant and is typically a symbol. 
+ It will be the ``name'' of the wormhole.  A wormhole of that name will be 
+ created the first time either <span class="v">wormhole</span> or <span class="tt"><a href="ACL2____WORMHOLE-EVAL.html">wormhole-eval</a></span> is 
+ called.</p> 
+ 
+ <p>Every wormhole name has a ``status.''  The status of a wormhole is stored 
+ outside of ACL2; it is inaccessible to the ACL2 user except when in the named 
+ wormhole.  But the status of a wormhole may be set by the user from within the 
+ wormhole.</p> 
+ 
+ <p>Upon the first call of <span class="v">wormhole</span> or <span class="v">wormhole-eval</span> on a name, the 
+ status of that name is <span class="v">nil</span>.  But in general you should arrange for the 
+ status to be a cons.  The status is set by the quoted <span class="v">lambda</span> every time 
+ <span class="v">wormhole</span> is called; but it may also be set in the <span class="v">form</span> argument (the 
+ first form evaluated in the interactive loop) by assigning to the state global 
+ variable <span class="v">wormhole-status</span>, as with</p> 
+ 
+ <pre class="code">(<a href="ACL2____ASSIGN.html">assign</a> wormhole-status ...)</pre> 
+ 
+ <p>or even by the user interacting with the loop if you do not exit the loop 
+ with the first form.  The <span class="v">car</span> of the cons should be either <span class="v">:ENTER</span> or 
+ <span class="v">:SKIP</span> and is called the wormhole's ``entry code.''  The entry code of 
+ <span class="v">nil</span> or an unexpectedly shaped status is <span class="v">:ENTER</span>.  The <span class="v">cdr</span> of the 
+ cons is arbitrary data maintained by you.</p> 
+ 
+ <p>When <span class="v">wormhole</span> is invoked, the status of the specified name is 
+ incorporated into the manufactured wormhole state.  In particular, inside the 
+ wormhole, the status is the value of the state global variable 
+ <span class="v">wormhole-status</span>.  That is, inside the wormhole, the status may be 
+ accessed by <span class="v">(<a href="ACL2_____04.html">@</a> wormhole-status)</span> and set by <span class="v">(<a href="ACL2____ASSIGN.html">assign</a> wormhole-status
+ ...)</span>, <span class="v">f-get-global</span> and <span class="v">f-put-global</span>.  When <span class="v">ld</span> exits  
+ typically because the form <span class="v">:q</span> was read by <span class="v">ld</span>  the 
+ then-current value of wormhole-status is hidden away so that it can be 
+ restored when this wormhole is entered again.  The rest of the wormhole state 
+ is lost.</p> 
+ 
+ <p>This allows a sequence of entries and exits to a wormhole to maintain some 
+ history in the status and this information can be manipulated by ACL2 
+ functions executing inside the wormhole.</p> 
+ 
+ <p>The second argument to <span class="v">wormhole</span> must be a quoted lambda expression. 
+ We explain it later.</p> 
+ 
+ <p>The third argument, <span class="v">input</span>, may be any term.  The value of the term is 
+ passed into the manufactured wormhole state, allowing you to pass in 
+ information about the calling context.  Inside the wormhole, the <span class="v">input</span> is 
+ available via <span class="v">(<a href="ACL2_____04.html">@</a> wormhole-input)</span>.  It could be reassigned via <span class="v">(<a href="ACL2____ASSIGN.html">assign</a>
+ wormhole-input ...)</span>, but there is no reason to do that.</p> 
+ 
+ <p>The fourth argument, <span class="v">form</span>, may be any term; when <span class="tt"><a href="ACL2____LD.html">ld</a></span> is called 
+ on the manufactured wormhole state, the first form evaluated by <span class="v">ld</span> will 
+ be the value of <span class="v">form</span>.  Note that <span class="v">form</span> will be translated by <span class="v">ld</span>. 
+ Errors, including guard violations, in the translation or execution of that 
+ first form will leave you in the interactive loop of the wormhole state.</p> 
+ 
+ <p>When used properly, the first form allows you to greet your user before 
+ reading the first interactive command or simply to do whatever computation you 
+ want to do inside the wormhole and exit silently.  We give examples below.</p> 
+ 
+ <p>Manufacturing a wormhole state is relatively expensive; in addition, the 
+ forms executed by <span class="v">ld</span> must be read, translated, and interpreted as with 
+ any user type-in.  The <span class="v">entry-lambda</span> offers a way to avoid this or, at 
+ least, to decide whether to incur that expense.</p> 
+ 
+ <p>Before the wormhole state is manufactured and entered, the 
+ <span class="v">entry-lambda</span> is applied to the current wormhole status with <span class="tt"><a href="ACL2____WORMHOLE-EVAL.html">wormhole-eval</a></span>.  That <span class="v">lambda</span> application must produce a new wormhole 
+ status, which is stored as the wormhole's status.  The entry code for the new 
+ status determines whether <span class="v">wormhole</span> actually manufactures a wormhole state 
+ and calls <span class="v">ld</span>.</p> 
+ 
+ <p>If the entry code for that new status is <span class="v">:ENTER</span> the wormhole state is 
+ manufactured and entered; otherwise, the new status is simply saved as the 
+ most recent status but the wormhole state is not manufactured or entered. 
+ Note therefore that the <span class="v">entry-lambda</span> may be used to perform two 
+ functions: (a) to determine if it is really necessary to manufacture a state 
+ and (b) to update the data in the wormhole status as a function of the old 
+ status without invoking <span class="v">ld</span>.</p> 
+ 
+ <p>The <span class="v">entry-lambda</span> must be a quoted lambda expression of at most one 
+ argument.  Thus, the argument must be either</p> 
+ 
+ <pre class="code">'(<a href="COMMON-LISP____LAMBDA.html">lambda</a> (whs) &lt;body&gt;)</pre> 
+ 
+ <p>or</p> 
+ 
+ <pre class="code">'(<a href="COMMON-LISP____LAMBDA.html">lambda</a> () &lt;body&gt;)</pre> 
+ 
+ <p>Note the quote.  If a formal, e.g., <span class="v">whs</span>, is provided, it must be used 
+ as a variable in the <span class="v">lambda</span> body.  The <span class="v">lambda</span>-expression may contain 
+ free variables, that is, the body may mention variables other than the 
+ <span class="v">lambda</span> formal.  These free variables are understood in the caller's 
+ environment.  These conventions allow us to compile the <span class="v">entry-lambda</span> 
+ application very efficiently when the guard has been verified.</p> 
+ 
+ <p>The guard on a call of <span class="v">wormhole</span> is the conjunction of the guards on 
+ the arguments conjoined with the guard on the body of the <span class="v">entry-lambda</span>. 
+ See <a href="ACL2____WORMHOLE-EVAL.html">wormhole-eval</a> for a discussion of the guard on the 
+ <span class="v">lambda</span>-expression.</p> 
+ 
+ <p>The functions <span class="tt"><a href="ACL2____WORMHOLE-STATUSP.html">wormhole-statusp</a></span>, <span class="tt"><a href="ACL2____WORMHOLE-ENTRY-CODE.html">wormhole-entry-code</a></span>, <span class="tt"><a href="ACL2____WORMHOLE-DATA.html">wormhole-data</a></span>, <span class="tt"><a href="ACL2____SET-WORMHOLE-ENTRY-CODE.html">set-wormhole-entry-code</a></span>, <span class="tt"><a href="ACL2____SET-WORMHOLE-DATA.html">set-wormhole-data</a></span>, 
+ and <span class="tt"><a href="ACL2____MAKE-WORMHOLE-STATUS.html">make-wormhole-status</a></span> may be useful in manipulating entry codes and 
+ data in the <span class="v">entry-lambda</span>.</p> 
+ 
+ <p>Note that you access and manipulate the wormhole's status in two different 
+ ways depending on whether you're ``outside'' of the wormhole applying the 
+ quoted <span class="v">lambda</span> or ``inside'' the read-eval-print loop of the wormhole.</p> 
+ 
+ <p>OUTSIDE (<span class="v">wormhole-eval</span>): access via the value of the <span class="v">lambda</span> 
+ formal and set by returning the new status as the value of the <span class="v">lambda</span> 
+ body.</p> 
+ 
+ <p>INSIDE (<span class="v">ld</span> phase of <span class="v">wormhole</span>): access via <span class="v">(<a href="ACL2_____04.html">@</a>
+ wormhole-status)</span>, and set via <span class="v">(<a href="ACL2____ASSIGN.html">assign</a> wormhole-status ...)</span>.</p> 
+ 
+ <p>Pragmatic Advice on Designing a Wormhole: Suppose you are using wormholes 
+ to implement some extra-logical utility.  You must contemplate how you will 
+ use your wormhole's status to store hidden information.  You might be tempted 
+ to exploit the entry code as part of the status.  For example, you may think 
+ of <span class="v">:ENTER</span> as indicating that your utility is ``turned on'' and <span class="v">:SKIP</span> 
+ as indicating that your utility is ``turned off.''  We advise against such a 
+ design.  We recommend you base your decisions on the wormhole data.  We 
+ recommend that you set but not read the wormhole entry code to signal whether 
+ you wish to enter a full-fledged wormhole.  To use the entry code as a flag 
+ overloads it and invites confusion when your facility is ``turned off'' but 
+ you have to enter the wormhole for some reason.</p> 
+ 
+ <p>For a behind-the-scenes description of how wormholes work, See <a href="ACL2____WORMHOLE-IMPLEMENTATION.html">wormhole-implementation</a>.</p> 
+ 
+ <p>Here are some sample situations handled by <span class="v">wormhole-eval</span> and 
+ <span class="v">wormhole</span>.  Let the wormhole in question be named <span class="v">DEMO</span>.  Initially 
+ its status is <span class="v">NIL</span>.  The functions below all maintain the convention that 
+ the status is either <span class="v">nil</span> or of the form <span class="v">(:key . lst)</span>, where 
+ <span class="v">:key</span> is either <span class="v">:SKIP</span> or <span class="v">:ENTER</span> and <span class="v">lst</span> is a true-list of 
+ arbitrary objects.  But since there is no way to prevent the user from 
+ entering the <span class="v">DEMO</span> wormhole interactively and doing something to the 
+ status, this convention cannot be enforced.  Thus, the functions below do what 
+ we say they do, e.g., remember all the values of <span class="v">x</span> ever seen, only if 
+ they're the only functions messing with the <span class="v">DEMO</span> status.  On the other 
+ hand, the guards of all the functions below can be verified.  We have 
+ explicitly declared that the guards on the functions below are to be verified, 
+ to confirm that they can be.  Guard verification is optional but wormholes 
+ (and <span class="v">wormhole-eval</span> in particular) are more efficient when guards have 
+ been verified.  All of the functions defined below return <span class="v">nil</span>.</p> 
+ 
+ <p>The examples below build on each other.  If you really want to understand 
+ wormholes we recommend that you evaluate each of the forms below, in the order 
+ they are discussed.</p> 
+ 
+ <p><b>Q.</b> How do I create a wormhole that prints its status to the comment 
+ window?</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> demo-status ()
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :verify-guards t))
+  (<a href="ACL2____WORMHOLE-EVAL.html">wormhole-eval</a> 'demo
+                 '(<a href="COMMON-LISP____LAMBDA.html">lambda</a> (whs)
+                    (<a href="ACL2____PROG2_42.html">prog2$</a> (<a href="ACL2____CW.html">cw</a> "DEMO status:~%~x0~%" whs)
+                            whs))
+                 nil))</pre> 
+ 
+ <p>Note above that after printing the status to the comment window we return 
+ the new (unchanged) status <span class="v">whs</span>.  Had we just written the call of <span class="v">cw</span>, 
+ which returns <span class="v">nil</span>, the function would print the status and then set it to 
+ <span class="v">nil</span>!</p> 
+ 
+ <p><b>Q.</b> How do I use a wormhole to collect every symbol, <span class="v">x</span>, passed 
+ to the function?</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> demo-collect (x)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :verify-guards t))
+  (<a href="ACL2____WORMHOLE-EVAL.html">wormhole-eval</a> 'demo
+                 '(<a href="COMMON-LISP____LAMBDA.html">lambda</a> (whs)
+                    (<a href="ACL2____MAKE-WORMHOLE-STATUS.html">make-wormhole-status</a> whs
+                                          (<a href="ACL2____WORMHOLE-ENTRY-CODE.html">wormhole-entry-code</a> whs)
+                                          (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> x)
+                                              (<a href="COMMON-LISP____CONS.html">cons</a> x (<a href="ACL2____WORMHOLE-DATA.html">wormhole-data</a> whs))
+                                              (<a href="ACL2____WORMHOLE-DATA.html">wormhole-data</a> whs))))
+                 nil))</pre> 
+ 
+ <p>We could have also defined this function this way:</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> demo-collect (x)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :verify-guards t))
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> x)
+      (<a href="ACL2____WORMHOLE-EVAL.html">wormhole-eval</a> 'demo
+                     '(<a href="COMMON-LISP____LAMBDA.html">lambda</a> (whs)
+                        (<a href="ACL2____SET-WORMHOLE-DATA.html">set-wormhole-data</a> whs
+                                           (<a href="COMMON-LISP____CONS.html">cons</a> x (<a href="ACL2____WORMHOLE-DATA.html">wormhole-data</a> whs))))
+                     nil)
+      nil))</pre> 
+ 
+ <p>Both versions always return <span class="v">nil</span> and both versions collect into the 
+ wormhole data field just the symbols <span class="v">x</span> upon which <span class="v">demo-collect</span> is 
+ called.</p> 
+ 
+ <p><b>Q.</b> How do I use <span class="v">demo-collect</span>?  Below is a function that maps 
+ over a list and computes its length.  But it has been annotated with a call to 
+ <span class="v">demo-collect</span> on every element.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> my-len (lst)
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ENDP.html">endp</a> lst)
+      0
+      (<a href="COMMON-LISP_____B2.html">+</a> 1
+         (<a href="ACL2____PROG2_42.html">prog2$</a> (demo-collect (<a href="COMMON-LISP____CAR.html">car</a> lst))
+                 (my-len (<a href="COMMON-LISP____CDR.html">cdr</a> lst))))))</pre> 
+ 
+ <p>Thus, for example:</p> 
+ 
+ <pre class="code">ACL2 !&gt;(my-len '(4 temp car "Hi" rfix))
+5
+ACL2 !&gt;(demo-status)
+DEMO status:
+(:ENTER RFIX CAR TEMP)
+NIL
+ACL2 !&gt;</pre> 
+ 
+ <p><b>Q.</b> How do I set the entry code to <span class="v">:ENTER</span> or <span class="v">:SKIP</span> 
+ according to whether <span class="v">name</span> is a <span class="v">member-equal</span> of the list of things 
+ seen so far?  Note that we cannot check this condition outside the wormhole, 
+ because it depends on the list of things collected so far.  We make the 
+ decision inside the <span class="v">lambda</span>-expression.  Note that we explicitly check 
+ that the guard of <span class="v">member-equal</span> is satisfied by the current wormhole 
+ status, since we cannot rely on the invariant that no other function 
+ interferes with the status of the <span class="v">DEMO</span> wormhole.  In the case that the 
+ status is ``unexpected'' we act like the status is <span class="v">nil</span> and set it to 
+ <span class="v">(:SKIP . NIL)</span>.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> demo-set-entry-code (<a href="ACL2____NAME.html">name</a>)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :verify-guards t))
+  (<a href="ACL2____WORMHOLE-EVAL.html">wormhole-eval</a> 'demo
+                 '(<a href="COMMON-LISP____LAMBDA.html">lambda</a> (whs)
+                    (<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2____TRUE-LISTP.html">true-listp</a> (<a href="ACL2____WORMHOLE-DATA.html">wormhole-data</a> whs))
+                        (<a href="ACL2____SET-WORMHOLE-ENTRY-CODE.html">set-wormhole-entry-code</a>
+                         whs
+                         (<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> name (<a href="ACL2____WORMHOLE-DATA.html">wormhole-data</a> whs))
+                             :ENTER
+                             :SKIP))
+                        '(:SKIP . NIL)))
+                 nil))</pre> 
+ 
+ <p>Thus</p> 
+ 
+ <pre class="code">ACL2 !&gt;(demo-set-entry-code 'monday)
+NIL
+ACL2 !&gt;(demo-status)
+DEMO status:
+(:SKIP RFIX CAR TEMP)
+NIL
+ACL2 !&gt;(demo-set-entry-code 'rfix)
+NIL
+ACL2 !&gt;(demo-status)
+DEMO status:
+(:ENTER RFIX CAR TEMP)
+NIL
+ACL2 !&gt;</pre> 
+ 
+ <p><b>Q.</b> Suppose I want to collect every symbol and then, if the symbol 
+ has an <span class="v">ABSOLUTE-EVENT-NUMBER</span> property in the ACL2 logical world, print 
+ the defining event with <span class="v">:pe</span> and then enter an interactive loop; but if 
+ the symbol does not have an <span class="v">ABSOLUTE-EVENT-NUMBER</span>, don't print anything 
+ and don't enter an interactive loop.</p> 
+ 
+ <p>Here it is not important to know what <span class="v">ABSOLUTE-EVENT-NUMBER</span> is; this 
+ example just shows that we can use a wormhole to access the ACL2 logical 
+ world, even in a function that does not take the state as an argument.</p> 
+ 
+ <p>In the code below, we use <span class="v">wormhole</span> instead of <span class="v">wormhole-eval</span>, 
+ because we might have to access the logical world and enter an interactive 
+ loop.  But for efficiency we do as much as we can inside the entry 
+ <span class="v">lambda</span>, where we can check whether <span class="v">x</span> is symbol and collect it into 
+ the data field of the wormhole status.  Note that if we collect <span class="v">x</span>, we 
+ also set the entry code to <span class="v">:ENTER</span>.  If we don't collect <span class="v">x</span>, we set 
+ the entry code to <span class="v">:SKIP</span>.</p> 
+ 
+ <pre class="code">(defun collect-symbols-and-print-events (x) 
+  (declare (xargs :guard t)) 
+  (wormhole 'demo 
+            '(lambda (whs) 
+               (if (symbolp x) 
+                   (make-wormhole-status whs 
+                                         :ENTER 
+                                         (cons x (wormhole-data whs))) 
+                   (set-wormhole-entry-code whs :SKIP))) 
+ 
+; The wormhole will not get past here is unless the entry code is 
+; :ENTER.  If we get past here, we manufacture a state, put 
+; x into <span class="v">(<a href="ACL2_____04.html">@</a> wormhole-input)</span> and call ld in such a way that the 
+; first form executed is the quoted if-expression below. 
+ 
+            x 
+            '(if (getpropc (@ wormhole-input) 'absolute-event-number) 
+                 (er-progn 
+                  (mv-let (col state) 
+                          (fmt "~%Entering a wormhole on the event name ~x0~%" 
+                               (list (cons #\0 (@ wormhole-input))) 
+                               *standard-co* state nil) 
+                          (declare (ignore col)) 
+                          (value nil)) 
+                  (pe (@ wormhole-input)) 
+                  (set-ld-prompt 'wormhole-prompt state) 
+                  (value :invisible)) 
+                 (value :q)) 
+            :ld-verbose nil 
+            :ld-prompt nil)) 
+</pre> 
+ 
+ <p>The ``first form'' (the <span class="v">if</span>) asks whether the <span class="v">wormhole-input</span> 
+ (i.e., <span class="v">x</span>) has an <span class="v">ABSOLUTE-EVENT-NUMBER</span> property.  If so, it enters 
+ an <span class="tt"><a href="ACL2____ER-PROGN.html">er-progn</a></span> to perform a sequence of commands, each of which returns 
+ an ACL2 error triple (see <a href="ACL2____PROGRAMMING-WITH-STATE.html">programming-with-state</a>).  The first form uses 
+ <span class="tt"><a href="ACL2____FMT.html">fmt</a></span> to print a greeting.  Since <span class="v">fmt</span> returns <span class="v">(<a href="ACL2____MV.html">mv</a> col state)</span> 
+ and we must return an error triple, we embed the <span class="v">fmt</span> term in an 
+ <span class="v">(<a href="ACL2____MV-LET.html">mv-let</a> (col state) ... (<a href="ACL2____VALUE.html">value</a> nil))</span>.  The macro <span class="v">value</span> takes an 
+ object and returns a ``normal return'' error triple.  The second form in the 
+ <span class="v">er-progn</span> uses the ACL2 history macro <span class="v">pe</span> (see <a href="ACL2____PE.html">pe</a>) to print the 
+ defining event for a name.  The third form sets the prompt of this 
+ read-eval-print loop to the standard function for printing the wormhole 
+ prompt.  We silenced the printing of the prompt when we called <span class="v">ld</span>, thanks 
+ to the <span class="v">:ld-prompt nil</span> keyword option.  More on this below.  The fourth 
+ form returns the error triple value <span class="v">:invisible</span> as the value of the first 
+ form.  This prevents <span class="v">ld</span> from printing the value of the first form.  Since 
+ we have not exited <span class="v">ld</span>, that function just continues by reading the next 
+ form from the comment window.  The user perceives this as entering a 
+ read-eval-print loop.  We continue in the loop until the user types 
+ <span class="v">:q</span>.</p> 
+ 
+ <p>On the other branch of the <span class="v">if</span>, if the symbol has no 
+ <span class="v">ABSOLUTE-EVENT-NUMBER</span> property, we execute the form <span class="v">(<a href="ACL2____VALUE.html">value</a> :q)</span>, 
+ which is the programming equivalent of typing <span class="v">:q</span>.  That causes the 
+ <span class="v">ld</span> to exit.</p> 
+ 
+ <p>The <span class="v">ld</span> special variables set in the call to <span class="v">wormhole</span> and further 
+ manipulated inside the first form to <span class="v">ld</span> may require explanation.  By 
+ setting <span class="v">:</span><span class="tt"><a href="ACL2____LD-VERBOSE.html">ld-verbose</a></span> to <span class="v">nil</span>, we prevent <span class="v">ld</span> from printing 
+ the familiar ACL2 banner when <span class="v">ld</span> is called.  If <span class="v">:ld-verbose nil</span> is 
+ deleted, then you would see something like</p> 
+ 
+ <pre class="code">ACL2 Version  4.0.  Level 2.
+...
+Type (<a href="ACL2____GOOD-BYE.html">good-bye</a>) to quit completely out of ACL2.</pre> 
+ 
+ <p>before the first form is read and evaluated.</p> 
+ 
+ <p>By setting <span class="v">:</span><span class="tt"><a href="ACL2____LD-PROMPT.html">ld-prompt</a></span> to <span class="v">nil</span> we prevent <span class="v">ld</span> from 
+ printing the prompt before reading and evaluating the first form.</p> 
+ 
+ <p>As this example shows, to use full-blown wormholes you must understand the 
+ protocol for using wormhole status to control whether a wormhole state is 
+ manufactured for <span class="v">ld</span> and you must also understand programming with <span class="tt"><a href="ACL2____STATE.html">state</a></span> and the effects of the various <span class="tt"><a href="ACL2____LD.html">ld</a></span> ``special variables.''</p> 
+ 
+ <p>From the discussion above we see that wormholes can be used to create 
+ formatted output without passing in the ACL2 <span class="tt"><a href="ACL2____STATE.html">state</a></span>.  For examples see 
+ <a href="ACL2____CW.html">cw</a>, in particular the discussion at the end of that documentation 
+ topic.</p>
+</body>
+</html>

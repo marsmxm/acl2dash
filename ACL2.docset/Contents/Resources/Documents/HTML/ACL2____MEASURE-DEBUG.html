@@ -1,0 +1,130 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Measure-debug</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____MEASURE-DEBUG">Click for Measure-debug in the Full Manual</a></h3>
+
+<p>Generate markers to indicate sources of <a href="ACL2____MEASURE.html">measure</a> proof obligations</p><p>When ACL2 is asked to accept a recursive (or mutually recursive) 
+ function definition, it generates a goal often called the ``measure 
+ conjecture.''  That goal can split into numerous goals, some of which may not 
+ be theorems if the definition being processed has bugs.  This <a href="COMMON-LISP____DOCUMENTATION.html">documentation</a> topic explains a capability provided by ACL2 to help find such 
+ bugs.  For a similar utility appropriate for <a href="ACL2____GUARD.html">guard</a> verification, see 
+ <a href="ACL2____GUARD-DEBUG.html">guard-debug</a>.</p> 
+ 
+ <p>We begin with the following simple, admittedly artificial, example.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> f (x)
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x)
+      (f (<a href="COMMON-LISP____CONS.html">cons</a> x x))
+    x))</pre> 
+ 
+ <p>ACL2 generates the following proof obligation..</p> 
+ 
+ <pre class="code">(<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____CONSP.html">CONSP</a> X)
+         (<a href="ACL2____O_C3.html">O&lt;</a> (<a href="ACL2____ACL2-COUNT.html">ACL2-COUNT</a> (<a href="COMMON-LISP____CONS.html">CONS</a> X X))
+             (<a href="ACL2____ACL2-COUNT.html">ACL2-COUNT</a> X)))</pre> 
+ 
+ <p>In this simple example, it is obvious that ACL2 cannot prove the goal 
+ because in fact, <span class="v">(<a href="COMMON-LISP____CONS.html">CONS</a> X X)</span> does not have a smaller <span class="tt"><a href="ACL2____ACL2-COUNT.html">ACL2-count</a></span> 
+ than <span class="v">X</span>, even assuming <span class="v">(<a href="COMMON-LISP____CONSP.html">CONSP</a> X)</span>.  But you can get ACL2 to show 
+ explicitly the source of this proof obligation by specifying <span class="v">:measure-debug
+ t</span> in an <span class="tt"><a href="ACL2____XARGS.html">xargs</a></span> <span class="tt"><a href="COMMON-LISP____DECLARE.html">declare</a></span> form, as follows.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="COMMON-LISP____DEFUN.html">defun</a> f (x)
+         (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :measure-debug t))
+         (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x)
+             (f (<a href="COMMON-LISP____CONS.html">cons</a> x x))
+           x))
+
+For the admission of F we will use the relation O&lt; (which is known
+to be well-founded on the domain recognized by O-P) and the measure
+(<a href="ACL2____ACL2-COUNT.html">ACL2-COUNT</a> X).  The non-trivial part of the measure conjecture is
+
+Goal
+(<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____AND.html">AND</a> (<a href="ACL2____EXTRA-INFO.html">EXTRA-INFO</a> '(:MEASURE (:RELATION F))
+                          '(F (<a href="COMMON-LISP____CONS.html">CONS</a> X X)))
+              (<a href="COMMON-LISP____CONSP.html">CONSP</a> X))
+         (<a href="ACL2____O_C3.html">O&lt;</a> (<a href="ACL2____ACL2-COUNT.html">ACL2-COUNT</a> (<a href="COMMON-LISP____CONS.html">CONS</a> X X))
+             (<a href="ACL2____ACL2-COUNT.html">ACL2-COUNT</a> X))).</pre> 
+ 
+ <p>The <span class="v">extra-info</span> call is telling us the following about the 
+ <b>measure</b> conjecture:</p> 
+ 
+ <blockquote>The appropriate well-founded <b>relation</b> (typically <span class="tt"><a href="ACL2____O_C3.html">o&lt;</a></span>) holds between appropriate terms, because of the indicated recursive call, 
+ <span class="v">(F (<a href="COMMON-LISP____CONS.html">CONS</a> X X))</span>.</blockquote> 
+ 
+ <p>We now describe the measure-debug utility in some detail.</p> 
+ 
+ <p><span class="v">(<a href="ACL2____EXTRA-INFO.html">Extra-info</a> x y)</span> always returns <span class="v">t</span> by definition.  However, if the 
+ measure conjecture takes place with a non-<span class="v">nil</span> value for the <span class="tt"><a href="ACL2____XARGS.html">xargs</a></span> 
+ keyword <span class="v">:measure-debug</span>, then the goals generated will include hypotheses 
+ that are calls of <span class="v">extra-info</span>.  Such a hypothesis has one of the following 
+ forms.</p> 
+ 
+ <pre class="code">(<a href="ACL2____EXTRA-INFO.html">extra-info</a> '(:MEASURE (:RELATION function-name))
+            'recursive-call)
+
+(<a href="ACL2____EXTRA-INFO.html">extra-info</a> '(:MEASURE (:DOMAIN function-name))
+            '(D (M term)))</pre> 
+ 
+ <p>The first form says that the goal is to show that the measure decreases for 
+ the indicated recursive call in the body of the function named 
+ <span class="v">function-name</span>.  The second form says that the goal is to show that the 
+ measure always returns a suitable value.</p> 
+ 
+ <p>We illustrate with a slightly more elaborate, but still contrived, example, 
+ which we hope clearly illustrates the points above.  Notice that 
+ <span class="v">:measure-debug t</span> need only be specified for a single <span class="tt"><a href="COMMON-LISP____DEFUN.html">defun</a></span> form 
+ in a call of <span class="tt"><a href="ACL2____MUTUAL-RECURSION.html">mutual-recursion</a></span>.  Also notice in the output that when 
+ there is more than one source for a goal, each source is indicated by its own 
+ call of <span class="v">extra-info</span>.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____DEFSTUB.html">defstub</a> my-measure (x) t) ; for the contrived example below
+[[ .. output omitted here .. ]]
+ACL2 !&gt;(<a href="ACL2____MUTUAL-RECURSION.html">mutual-recursion</a>
+         (<a href="COMMON-LISP____DEFUN.html">defun</a> f1 (x)
+           (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :measure (my-measure x) :measure-debug t))
+           (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x)
+               (f2 (<a href="COMMON-LISP____CONS.html">cons</a> x (<a href="COMMON-LISP____CDR.html">cdr</a> x)))
+             t))
+         (<a href="COMMON-LISP____DEFUN.html">defun</a> f2 (x)
+           (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :measure (my-measure x)))
+           (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x)
+               (f1 (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____MAKE-LIST.html">make-list</a> (<a href="COMMON-LISP____CAR.html">car</a> x)) (<a href="COMMON-LISP____CDR.html">cdr</a> x)))
+             nil)))
+
+For the admission of F1 and F2 we will use the relation O&lt; (which is
+known to be well-founded on the domain recognized by O-P) and the measure
+(MY-MEASURE X) for F1 and (MY-MEASURE X) for F2.  The non-trivial part
+of the measure conjecture is
+
+Goal
+(<a href="COMMON-LISP____AND.html">AND</a> (<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____AND.html">AND</a> (<a href="ACL2____EXTRA-INFO.html">EXTRA-INFO</a> '(:MEASURE (:RELATION F1))
+                               '(F2 (<a href="COMMON-LISP____CONS.html">CONS</a> X (<a href="COMMON-LISP____CDR.html">CDR</a> X))))
+                   (<a href="COMMON-LISP____CONSP.html">CONSP</a> X))
+              (<a href="ACL2____O_C3.html">O&lt;</a> (MY-MEASURE (<a href="COMMON-LISP____CONS.html">CONS</a> X (<a href="COMMON-LISP____CDR.html">CDR</a> X)))
+                  (MY-MEASURE X)))
+     (<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____AND.html">AND</a> (<a href="ACL2____EXTRA-INFO.html">EXTRA-INFO</a> '(:MEASURE (:RELATION F2))
+                               '(F1 (<a href="COMMON-LISP____CONS.html">CONS</a> (<a href="ACL2____MAKE-LIST-AC.html">MAKE-LIST-AC</a> (<a href="COMMON-LISP____CAR.html">CAR</a> X) NIL NIL)
+                                          (<a href="COMMON-LISP____CDR.html">CDR</a> X))))
+                   (<a href="COMMON-LISP____CONSP.html">CONSP</a> X))
+              (<a href="ACL2____O_C3.html">O&lt;</a> (MY-MEASURE (<a href="COMMON-LISP____CONS.html">CONS</a> (<a href="ACL2____MAKE-LIST-AC.html">MAKE-LIST-AC</a> (<a href="COMMON-LISP____CAR.html">CAR</a> X) NIL NIL)
+                                    (<a href="COMMON-LISP____CDR.html">CDR</a> X)))
+                  (MY-MEASURE X)))
+     (<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____AND.html">AND</a> (<a href="ACL2____EXTRA-INFO.html">EXTRA-INFO</a> '(:MEASURE (:DOMAIN F2))
+                               '(<a href="ACL2____O-P.html">O-P</a> (MY-MEASURE X)))
+                   (<a href="ACL2____EXTRA-INFO.html">EXTRA-INFO</a> '(:MEASURE (:DOMAIN F1))
+                               '(<a href="ACL2____O-P.html">O-P</a> (MY-MEASURE X))))
+              (<a href="ACL2____O-P.html">O-P</a> (MY-MEASURE X)))).</pre> 
+ 
+ <p>All rules (see <a href="ACL2____RUNE.html">rune</a>) associated with <span class="v">extra-info</span> are <a href="ACL2____DISABLE.html">disable</a>d by default, so that hypotheses of the form described above are not 
+ simplified to <span class="v">t</span>.  These hypotheses are intended to ride along for free: 
+ you can generally expect the proof to have the same structure whether or not 
+ the <span class="v">:measure-debug</span> option is supplied, though on rare occasions the 
+ proofs may diverge.</p>
+</body>
+</html>

@@ -1,0 +1,195 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Vl-lex-time-or-real-number</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL____VL-LEX-TIME-OR-REAL-NUMBER">Click for Vl-lex-time-or-real-number in the Full Manual</a></h3>
+
+<p>Match <span class="v">real_number</span> or <span class="v">time_literal</span>.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(vl-lex-time-or-real-number echars breakp st) 
+   
+(mv token? remainder)</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">echars</span>  Characters we're lexing.<br><font color="#606060">Guard <span class="v">(<a href="VL____VL-ECHARLIST-P.html">vl-echarlist-p</a> echars)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">breakp</span>  <font color="#606060">Guard <span class="v">(<a href="ACL2____BOOLEANP.html">booleanp</a> breakp)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">st</span>  Governs whether <span class="v">time_literal</span>s are valid.<br><font color="#606060">Guard <span class="v">(<a href="VL____VL-LEXSTATE-P.html">vl-lexstate-p</a> st)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>Verilog-2005 has no <span class="v">time_literal</span>s and the syntax for real 
+numbers is just:</p> 
+ 
+<pre class="code">sign ::= + | -
+exp ::= e | E
+real_number ::=                        // no embedded spaces
+   unsigned_number . unsigned_number
+ | unsigned_number [ . unsigned_number ] exp [ sign ] unsigned_number</pre> 
+ 
+<p>SystemVerilog-2012 slightly tweaks <span class="v">real_number</span>, but it is exactly 
+equivalent to the above:</p> 
+ 
+<pre class="code">real_number ::=                       // no embedded spaces
+   fixed_point_number
+ | unsigned_number [ . unsigned_number ] exp [ sign ] unsigned_number
+
+fixed_point_number ::= unsigned_number . unsigned_number</pre> 
+ 
+<p>However, this new <span class="v">fixed_point_number</span> is also used in 
+<span class="v">time_literal</span>s:</p> 
+ 
+<pre class="code">time_literal ::=                      // no embedded spaces
+     unsigned_number time_unit
+   | fixed_point_number time_unit
+
+time_unit ::= s | ms | us | ns | ps | fs</pre> 
+ 
+<p>And lexing these is slightly subtle because we now need to check for these 
+extra possibilities, e.g., <span class="v">37.45us</span> is a time literal whereas <span class="v">37.45</span> 
+followed by something else is a real number.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>vl-lex-time-or-real-number</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ vl-lex-time-or-real-number
+ (echars breakp st)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="VL____VL-ECHARLIST-P.html">vl-echarlist-p</a> echars)
+                             (<a href="ACL2____BOOLEANP.html">booleanp</a> breakp)
+                             (<a href="VL____VL-LEXSTATE-P.html">vl-lexstate-p</a> st))))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'vl-lex-time-or-real-number))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+   ((breakp (<a href="COMMON-LISP____AND.html">and</a> breakp t))
+    ((<a href="ACL2____MV.html">mv</a> ipart ipart-rest)
+     (<a href="VL____VL-READ-UNSIGNED-NUMBER.html">vl-read-unsigned-number</a> echars))
+    ((unless ipart) (<a href="ACL2____MV.html">mv</a> nil echars))
+    ((<a href="ACL2____MV.html">mv</a> tail tail-rest)
+     (<a href="VL____VL-READ-REAL-TAIL.html">vl-read-real-tail</a> ipart-rest))
+    ((when tail)
+     (<a href="ACL2____MV.html">mv</a> (<a href="VL____MAKE-VL-REALTOKEN.html">make-vl-realtoken</a> :etext (<a href="COMMON-LISP____APPEND.html">append</a> ipart tail)
+                            :breakp breakp)
+         tail-rest))
+    ((<a href="VL____VL-LEXSTATE.html">vl-lexstate</a> st) st)
+    ((<a href="ACL2____MV.html">mv</a> units units-rest)
+     (<a href="COMMON-LISP____IF.html">if</a> st.timelitsp
+         (<a href="VL____VL-READ-TIME-UNIT.html">vl-read-time-unit</a> ipart-rest)
+         (<a href="ACL2____MV.html">mv</a> nil ipart-rest)))
+    ((when units)
+     (<a href="ACL2____MV.html">mv</a>
+       (<a href="VL____MAKE-VL-TIMETOKEN.html">make-vl-timetoken</a>
+            :etext (<a href="COMMON-LISP____APPEND.html">append</a> ipart units)
+            :quantity (<a href="VL____VL-ECHARLIST-_E3STRING.html">vl-echarlist-&gt;string</a> ipart)
+            :units (<a href="VL____VL-TIMEUNIT-LOOKUP.html">vl-timeunit-lookup</a> (<a href="VL____VL-ECHARLIST-_E3STRING.html">vl-echarlist-&gt;string</a> units))
+            :breakp breakp)
+       units-rest))
+    ((<a href="ACL2____MV.html">mv</a> dot dot-rest)
+     (<a href="VL____VL-READ-LITERAL.html">vl-read-literal</a> "." ipart-rest))
+    ((unless dot) (<a href="ACL2____MV.html">mv</a> nil echars))
+    ((<a href="ACL2____MV.html">mv</a> fpart fpart-rest)
+     (<a href="VL____VL-READ-UNSIGNED-NUMBER.html">vl-read-unsigned-number</a> dot-rest))
+    ((unless fpart) (<a href="ACL2____MV.html">mv</a> nil echars))
+    ((<a href="ACL2____MV.html">mv</a> tail tail-rest)
+     (<a href="VL____VL-READ-REAL-TAIL.html">vl-read-real-tail</a> fpart-rest))
+    ((when tail)
+     (<a href="ACL2____MV.html">mv</a> (<a href="VL____MAKE-VL-REALTOKEN.html">make-vl-realtoken</a> :etext (<a href="COMMON-LISP____APPEND.html">append</a> ipart dot fpart tail)
+                            :breakp breakp)
+         tail-rest))
+    ((<a href="ACL2____MV.html">mv</a> units units-rest)
+     (<a href="COMMON-LISP____IF.html">if</a> st.timelitsp
+         (<a href="VL____VL-READ-TIME-UNIT.html">vl-read-time-unit</a> fpart-rest)
+         (<a href="ACL2____MV.html">mv</a> nil fpart-rest)))
+    ((when units)
+     (<a href="ACL2____MV.html">mv</a>
+      (<a href="VL____MAKE-VL-TIMETOKEN.html">make-vl-timetoken</a>
+           :etext (<a href="COMMON-LISP____APPEND.html">append</a> ipart dot fpart units)
+           :quantity (<a href="VL____VL-ECHARLIST-_E3STRING.html">vl-echarlist-&gt;string</a> (<a href="COMMON-LISP____APPEND.html">append</a> ipart dot fpart))
+           :units (<a href="VL____VL-TIMEUNIT-LOOKUP.html">vl-timeunit-lookup</a> (<a href="VL____VL-ECHARLIST-_E3STRING.html">vl-echarlist-&gt;string</a> units))
+           :breakp breakp)
+      units-rest)))
+   (<a href="ACL2____MV.html">mv</a> (<a href="VL____MAKE-VL-REALTOKEN.html">make-vl-realtoken</a> :etext (<a href="COMMON-LISP____APPEND.html">append</a> ipart dot fpart)
+                          :breakp breakp)
+       fpart-rest))))</pre> 
+<p><b>Theorem: </b>vl-token-p-of-vl-lex-time-or-real-number</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-token-p-of-vl-lex-time-or-real-number
+ (<a href="ACL2____IMPLIES.html">implies</a>
+   (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____FORCE.html">force</a> (<a href="VL____VL-ECHARLIST-P.html">vl-echarlist-p</a> echars)) t)
+   (<a href="COMMON-LISP____EQUAL.html">equal</a>
+        (<a href="VL____VL-TOKEN-P.html">vl-token-p</a>
+             (<a href="ACL2____MV-NTH.html">mv-nth</a> 0
+                     (<a href="VL____VL-LEX-TIME-OR-REAL-NUMBER.html">vl-lex-time-or-real-number</a> echars breakp st)))
+        (<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 0
+                    (<a href="VL____VL-LEX-TIME-OR-REAL-NUMBER.html">vl-lex-time-or-real-number</a> echars breakp st))
+            t nil))))</pre> 
+<p><b>Theorem: </b>true-listp-of-vl-lex-time-or-real-number</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ true-listp-of-vl-lex-time-or-real-number
+ (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____TRUE-LISTP.html">true-listp</a>
+             (<a href="ACL2____MV-NTH.html">mv-nth</a> 1
+                     (<a href="VL____VL-LEX-TIME-OR-REAL-NUMBER.html">vl-lex-time-or-real-number</a> echars breakp st)))
+        (<a href="ACL2____TRUE-LISTP.html">true-listp</a> echars))
+ :rule-classes
+ ((:rewrite)
+  (:type-prescription
+   :corollary
+   (<a href="ACL2____IMPLIES.html">implies</a>
+    (<a href="ACL2____TRUE-LISTP.html">true-listp</a> echars)
+    (<a href="ACL2____TRUE-LISTP.html">true-listp</a>
+         (<a href="ACL2____MV-NTH.html">mv-nth</a> 1
+                 (<a href="VL____VL-LEX-TIME-OR-REAL-NUMBER.html">vl-lex-time-or-real-number</a> echars breakp st)))))))</pre> 
+<p><b>Theorem: </b>vl-echarlist-p-of-vl-lex-time-or-real-number</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-echarlist-p-of-vl-lex-time-or-real-number
+ (<a href="ACL2____IMPLIES.html">implies</a>
+   (<a href="ACL2____FORCE.html">force</a> (<a href="VL____VL-ECHARLIST-P.html">vl-echarlist-p</a> echars))
+   (<a href="COMMON-LISP____EQUAL.html">equal</a>
+        (<a href="VL____VL-ECHARLIST-P.html">vl-echarlist-p</a>
+             (<a href="ACL2____MV-NTH.html">mv-nth</a> 1
+                     (<a href="VL____VL-LEX-TIME-OR-REAL-NUMBER.html">vl-lex-time-or-real-number</a> echars breakp st)))
+        t)))</pre> 
+<p><b>Theorem: </b>append-of-vl-lex-time-or-real-number</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ append-of-vl-lex-time-or-real-number
+ (<a href="ACL2____IMPLIES.html">implies</a>
+  (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 0
+               (<a href="VL____VL-LEX-TIME-OR-REAL-NUMBER.html">vl-lex-time-or-real-number</a> echars breakp st))
+       (<a href="ACL2____FORCE.html">force</a> (<a href="VL____VL-ECHARLIST-P.html">vl-echarlist-p</a> echars))
+       t)
+  (<a href="COMMON-LISP____EQUAL.html">equal</a>
+   (<a href="COMMON-LISP____APPEND.html">append</a>
+        (<a href="VL____VL-TOKEN-_E3ETEXT.html">vl-token-&gt;etext</a>
+             (<a href="ACL2____MV-NTH.html">mv-nth</a> 0
+                     (<a href="VL____VL-LEX-TIME-OR-REAL-NUMBER.html">vl-lex-time-or-real-number</a> echars breakp st)))
+        (<a href="ACL2____MV-NTH.html">mv-nth</a> 1
+                (<a href="VL____VL-LEX-TIME-OR-REAL-NUMBER.html">vl-lex-time-or-real-number</a> echars breakp st)))
+   echars)))</pre> 
+<p><b>Theorem: </b>no-change-loser-of-vl-lex-time-or-real-number</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+  no-change-loser-of-vl-lex-time-or-real-number
+  (<a href="ACL2____IMPLIES.html">implies</a>
+       (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 0
+                    (<a href="VL____VL-LEX-TIME-OR-REAL-NUMBER.html">vl-lex-time-or-real-number</a> echars breakp st)))
+       (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 1
+                      (<a href="VL____VL-LEX-TIME-OR-REAL-NUMBER.html">vl-lex-time-or-real-number</a> echars breakp st))
+              echars)))</pre> 
+<p><b>Theorem: </b>acl2-count-of-vl-lex-time-or-real-number-weak</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+    acl2-count-of-vl-lex-time-or-real-number-weak
+    (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> (<a href="ACL2____ACL2-COUNT.html">acl2-count</a>
+             (<a href="ACL2____MV-NTH.html">mv-nth</a> 1
+                     (<a href="VL____VL-LEX-TIME-OR-REAL-NUMBER.html">vl-lex-time-or-real-number</a> echars breakp st)))
+        (<a href="ACL2____ACL2-COUNT.html">acl2-count</a> echars))
+    :rule-classes ((:rewrite) (:linear)))</pre> 
+<p><b>Theorem: </b>acl2-count-of-vl-lex-time-or-real-number-strong</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ acl2-count-of-vl-lex-time-or-real-number-strong
+ (<a href="ACL2____IMPLIES.html">implies</a>
+     (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 0
+                  (<a href="VL____VL-LEX-TIME-OR-REAL-NUMBER.html">vl-lex-time-or-real-number</a> echars breakp st))
+          t)
+     (<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="ACL2____ACL2-COUNT.html">acl2-count</a>
+             (<a href="ACL2____MV-NTH.html">mv-nth</a> 1
+                     (<a href="VL____VL-LEX-TIME-OR-REAL-NUMBER.html">vl-lex-time-or-real-number</a> echars breakp st)))
+        (<a href="ACL2____ACL2-COUNT.html">acl2-count</a> echars)))
+ :rule-classes ((:rewrite) (:linear)))</pre> 
+
+</body>
+</html>

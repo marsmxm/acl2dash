@@ -1,0 +1,111 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Redo-flat</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____REDO-FLAT">Click for Redo-flat in the Full Manual</a></h3>
+
+<p>Redo on failure of a <span class="tt"><a href="COMMON-LISP____PROGN.html">progn</a></span>, <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span>, or <span class="tt"><a href="ACL2____CERTIFY-BOOK.html">certify-book</a></span></p><p>When one submits an <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span>, <span class="tt"><a href="COMMON-LISP____PROGN.html">progn</a></span>, or <span class="tt"><a href="ACL2____CERTIFY-BOOK.html">certify-book</a></span> command and there is a failure, ACL2 restores its logical <a href="ACL2____WORLD.html">world</a> as though the command had not been run.  But sometimes one would like 
+ to debug the failure by re-executing all sub-events that succeeded up to the 
+ point of failure, and then re-executing the failed sub-event.  Said 
+ differently, imagine that the <a href="ACL2____EVENTS.html">events</a> under an <span class="v">encapsulate</span>, 
+ <span class="v">progn</span>, or <span class="v">certify-book</span> form were flattened into a list of events 
+ that were then submitted to ACL2 up to the point of failure.  This would put 
+ us in the state in which the original failed event had failed, so we could now 
+ replay that failed event and try modifying it, or first proving additional 
+ events, in order to get it admitted.</p> 
+ 
+ <p><span class="v">Redo-flat</span> is provided for this purpose.  Consider the following 
+ (rather nonsensical) example, in which the <span class="tt"><a href="COMMON-LISP____DEFUN.html">defun</a></span> of <span class="v">f3</span> fails (the 
+ body is <span class="v">y</span> but the formal parameter list is <span class="v">(x)</span>).</p> 
+ 
+ <pre class="code">(<a href="ACL2____ENCAPSULATE.html">encapsulate</a>
+ ()
+ (<a href="COMMON-LISP____DEFUN.html">defun</a> f1 (x) x)
+ (<a href="ACL2____ENCAPSULATE.html">encapsulate</a> ()
+              (<a href="ACL2____LOCAL.html">local</a> (<a href="ACL2____DEFTHM.html">defthm</a> hack (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____CAR.html">car</a> (<a href="COMMON-LISP____CONS.html">cons</a> x y)) x))))
+ (<a href="ACL2____ENCAPSULATE.html">encapsulate</a> ()
+              (<a href="ACL2____LOCAL.html">local</a> (<a href="ACL2____DEFTHM.html">defthm</a> hack (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP_____B2.html">+</a> x y) (<a href="COMMON-LISP_____B2.html">+</a> y x)))))
+ (<a href="ACL2____ENCAPSULATE.html">encapsulate</a> ()
+              (<a href="ACL2____MAKE-EVENT.html">make-event</a> '(<a href="COMMON-LISP____DEFUN.html">defun</a> f2 (x) x))
+              (<a href="COMMON-LISP____PROGN.html">progn</a> (<a href="ACL2____DEFTHM.html">defthm</a> foo (<a href="COMMON-LISP____EQUAL.html">equal</a> x x) :rule-classes nil)
+                     (<a href="COMMON-LISP____DEFUN.html">defun</a> f3 (x) y)))
+ (<a href="COMMON-LISP____DEFUN.html">defun</a> f4 (x) x)
+ (<a href="COMMON-LISP____DEFUN.html">defun</a> f5 (x) y))</pre> 
+ 
+ <p>After this attempt fails, you can evaluate the following form.</p> 
+ 
+ <pre class="code">(<a href="ACL2____REDO-FLAT.html">redo-flat</a>)</pre> 
+ 
+ <p>This will first lay down a <span class="tt"><a href="ACL2____DEFLABEL.html">deflabel</a></span> event, <span class="v">(<a href="ACL2____DEFLABEL.html">deflabel</a> r)</span>, so 
+ that you can eventually remove your debugging work with <span class="v">(:ubt! r)</span>.  Then 
+ the successful sub-events that preceded the failure will be executed with 
+ proofs skipped (so that this execution is fast).  Then, the failed event will 
+ be executed.  Finally, a <span class="v">:</span><span class="tt"><a href="ACL2____PBT.html">pbt</a></span> command is executed so that you can 
+ see a summary of the events that executed successfully.</p> 
+ 
+ <p>You can eliminate some of the steps above by supplying keyword values, as 
+ follows, where those arguments are not evaluated.</p> 
+ 
+ <pre class="code">(<a href="ACL2____REDO-FLAT.html">redo-flat</a>
+ :succ  succ ; Skip the successful sub-events if val is nil.
+ :fail  fail ; Skip the failed sub-event if val is nil.
+ :label lab  ; Skip deflabel if lab or succ is nil, else use (<a href="ACL2____DEFLABEL.html">deflabel</a> lab).
+ :pbt   val  ; Skip the final :pbt if val, lab, or succ is nil.
+ )</pre> 
+ 
+ <p>Also, you can avoid skipping proofs for the successful sub-events by 
+ supplying keyword <span class="v">:succ-ld-skip-proofsp</span> with a valid value for 
+ <span class="v">ld-skip-proofsp</span>; see <a href="ACL2____LD-SKIP-PROOFSP.html">ld-skip-proofsp</a>.  For example, you might want 
+ to execute <span class="v">(<a href="ACL2____REDO-FLAT.html">redo-flat</a> :succ-ld-skip-proofsp nil)</span> if you use the 
+ <span class="v">must-fail</span> utility from community book <span class="v">make-event/eval.lisp</span>, since 
+ for example <span class="v">(<a href="ACL2____MUST-FAIL.html">must-fail</a> (<a href="ACL2____THM.html">thm</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> x y)))</span> normally succeeds but would 
+ cause an error if proofs are skipped.  For another example: you may wish to do 
+ proofs when re-running certain <span class="tt"><a href="ACL2____MAKE-EVENT.html">make-event</a></span> forms, for example, when the 
+ expansion is <span class="v">(:OR expr1 expr2)</span> and the proof initially succeeds for 
+ <span class="v">expr2</span> rather than <span class="v">expr1</span> (see <a href="ACL2____MAKE-EVENT.html">make-event</a>).</p> 
+ 
+ <p>If you prefer only to see the successful and failed sub-events, without any 
+ events being re-executed, you may evaluate the following form instead.</p> 
+ 
+ <pre class="code">(<a href="ACL2____REDO-FLAT.html">redo-flat</a> :show t)</pre> 
+ 
+ <p>For the example above, this command produces the following output.</p> 
+ 
+ <pre class="code">List of events preceding the failure:
+
+((<a href="COMMON-LISP____DEFUN.html">DEFUN</a> F1 (X) X)
+ (<a href="ACL2____ENCAPSULATE.html">ENCAPSULATE</a> NIL
+              (<a href="ACL2____LOCAL.html">LOCAL</a> (<a href="ACL2____DEFTHM.html">DEFTHM</a> HACK (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (<a href="COMMON-LISP____CAR.html">CAR</a> (<a href="COMMON-LISP____CONS.html">CONS</a> X Y)) X))))
+ (<a href="ACL2____ENCAPSULATE.html">ENCAPSULATE</a> NIL
+              (<a href="ACL2____LOCAL.html">LOCAL</a> (<a href="ACL2____DEFTHM.html">DEFTHM</a> HACK (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (<a href="COMMON-LISP_____B2.html">+</a> X Y) (<a href="COMMON-LISP_____B2.html">+</a> Y X)))))
+ (<a href="ACL2____MAKE-EVENT.html">MAKE-EVENT</a> '(<a href="COMMON-LISP____DEFUN.html">DEFUN</a> F2 (X) X))
+ (<a href="ACL2____DEFTHM.html">DEFTHM</a> FOO (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> X X)
+         :RULE-CLASSES NIL))
+
+Failed event:
+
+(<a href="COMMON-LISP____DEFUN.html">DEFUN</a> F3 (X) Y)
+ACL2 !&gt;</pre> 
+ 
+ <p><span class="v">Redo-flat</span> uses a scheme that should not cause spurious name conflicts 
+ for <span class="tt"><a href="ACL2____LOCAL.html">local</a></span> events.  Above, it is mentioned that events are 
+ ``flattened''; now we clarify this notion.  Each sub-event that succeeds and 
+ is an <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span> or <span class="tt"><a href="COMMON-LISP____PROGN.html">progn</a></span> is left intact.  Only such events 
+ that fail are replaced by their component events.  Thus, in the example above, 
+ there is no conflict between the two <span class="tt"><a href="ACL2____LOCAL.html">local</a></span> sub-events named 
+ ``<span class="v">hack</span>,'' because these are contained in successful <span class="v">encapsulate</span> 
+ sub-events, which are therefore not flattened.  The <span class="tt"><a href="COMMON-LISP____PROGN.html">progn</a></span> and two 
+ <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span> events surrounding the definition of <span class="v">f3</span> are, however, 
+ flattened, because that definition failed to be admitted.</p> 
+ 
+ <p>Normally, <span class="v">redo-flat</span> will have the desired effect even if you 
+ interrupted a proof (with control-c).  However, <span class="v">redo-flat</span> will not 
+ produce the desired result after an interrupt if you have enabled the debugger 
+ using <span class="v">(<a href="ACL2____SET-DEBUGGER-ENABLE.html">set-debugger-enable</a> t)</span> or if you have disabled the default 
+ ``soft'' interrupt behavior (see <a href="ACL2____ABORT-SOFT.html">abort-soft</a>).</p>
+</body>
+</html>

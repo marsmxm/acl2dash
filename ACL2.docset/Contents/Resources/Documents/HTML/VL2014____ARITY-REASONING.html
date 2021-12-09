@@ -1,0 +1,89 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Arity-reasoning</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL2014____ARITY-REASONING">Click for Arity-reasoning in the Full Manual</a></h3>
+
+<p>Rules for reasoning about how many arguments an expression has.</p><p>These rules have evolved a lot over time.  The current iteration 
+seems to be fairly good and fixes some problems with previous versions.</p> 
+ 
+<p>One previous approach was just to separately recognize each unary, binary, 
+and ternary operator, e.g.,</p> 
+ 
+<pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL2014____VL-NONATOM-_E3OP.html">vl-nonatom-&gt;op</a> x) :vl-unary-plus)
+                  (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL2014____VL-NONATOM-_E3OP.html">vl-nonatom-&gt;op</a> x) :vl-unary-minus)
+                  ...)
+             ...)
+         (<a href="COMMON-LISP____AND.html">and</a> (<a href="VL2014____VL-NONATOM-_E3ARGS.html">vl-nonatom-&gt;args</a> x)
+              ...))</pre> 
+ 
+<p>These rules seemed to be pretty effective, but they were slow.  To fix the 
+slowness, I tried using a free variable to only apply the rule when the op was 
+exactly known, e.g.,</p> 
+ 
+<pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL2014____VL-NONATOM-_E3OP.html">vl-nonatom-&gt;op</a> x) op)
+              (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> (<a href="VL2014____VL-OP-ARITY.html">vl-op-arity</a> op) 1)
+              ...)
+         (<a href="COMMON-LISP____AND.html">and</a> (<a href="VL2014____VL-NONATOM-_E3ARGS.html">vl-nonatom-&gt;args</a> x)
+              ...))</pre> 
+ 
+<p>This did seem to be quite a bit faster and also seemed to wrok well when the 
+operands were known precisely.  But it did not handle cases like VL-HIDEXPR-P 
+very well, where if we know</p> 
+ 
+<pre class="code">(<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL2014____VL-NONATOM-_E3OP.html">vl-nonatom-&gt;op</a> x) :vl-hid-dot))</pre> 
+ 
+<p>then we should be able to infer that this is a <span class="v">:vl-hid-arraydot</span>.  I had 
+trouble getting ACL2 to always canonicalize such things the "positive" 
+form.</p> 
+ 
+<p>The new rules don't have a free variable, but still avoid the big case 
+split.  We don't ask about particular operands, but instead just ask whether 
+the arity is known.  This works and should be pretty efficient when a direct 
+equality is known, e.g., if we know</p> 
+ 
+<pre class="code">(<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL2014____VL-NONATOM-_E3OP.html">vl-nonatom-&gt;op</a> x) :vl-binary-times),</pre> 
+ 
+<p>then we'll backchain to <span class="v">(<a href="VL2014____VL-OP-ARITY.html">vl-op-arity</a> (<a href="VL2014____VL-NONATOM-_E3OP.html">vl-nonatom-&gt;op</a> x))</span>, which 
+type-set should settle to <span class="v">(<a href="VL2014____VL-OP-ARITY.html">vl-op-arity</a> :vl-binary-times)</span> and which we 
+should then get by evaluation.</p> 
+ 
+<p>But since there isn't a free variable, we'll also get a chance to apply any 
+rules that tell us what the arity is in some other way, which allows us to 
+fairly easily solve the HIDEXPR problem.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Theorem: </b>arg1-exists-by-arity</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> arg1-exists-by-arity
+        (<a href="COMMON-LISP____LET.html">let</a> ((<a href="ACL2____ARITY.html">arity</a> (<a href="VL2014____VL-OP-ARITY.html">vl-op-arity</a> (<a href="VL2014____VL-NONATOM-_E3OP.html">vl-nonatom-&gt;op</a> x))))
+             (<a href="ACL2____IMPLIES.html">implies</a> arity
+                      (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> 1 arity)
+                                    (<a href="VL2014____VL-NONATOM-_E3ARGS.html">vl-nonatom-&gt;args</a> x))
+                           (<a href="ACL2____IFF.html">iff</a> (<a href="COMMON-LISP____FIRST.html">first</a> (<a href="VL2014____VL-NONATOM-_E3ARGS.html">vl-nonatom-&gt;args</a> x))
+                                (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> 1 arity))
+                           (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____CONSP.html">consp</a> (<a href="VL2014____VL-NONATOM-_E3ARGS.html">vl-nonatom-&gt;args</a> x))
+                                  (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> 1 arity))))))</pre> 
+<p><b>Theorem: </b>arg2-exists-by-arity</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> arg2-exists-by-arity
+        (<a href="COMMON-LISP____LET.html">let</a> ((<a href="ACL2____ARITY.html">arity</a> (<a href="VL2014____VL-OP-ARITY.html">vl-op-arity</a> (<a href="VL2014____VL-NONATOM-_E3OP.html">vl-nonatom-&gt;op</a> x))))
+             (<a href="ACL2____IMPLIES.html">implies</a> arity
+                      (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> 2 arity)
+                                    (<a href="COMMON-LISP____CDR.html">cdr</a> (<a href="VL2014____VL-NONATOM-_E3ARGS.html">vl-nonatom-&gt;args</a> x)))
+                           (<a href="ACL2____IFF.html">iff</a> (<a href="COMMON-LISP____SECOND.html">second</a> (<a href="VL2014____VL-NONATOM-_E3ARGS.html">vl-nonatom-&gt;args</a> x))
+                                (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> 2 arity))
+                           (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____CONSP.html">consp</a> (<a href="COMMON-LISP____CDR.html">cdr</a> (<a href="VL2014____VL-NONATOM-_E3ARGS.html">vl-nonatom-&gt;args</a> x)))
+                                  (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> 2 arity))))))</pre> 
+<p><b>Theorem: </b>arg3-exists-by-arity</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     arg3-exists-by-arity
+     (<a href="COMMON-LISP____LET.html">let</a> ((<a href="ACL2____ARITY.html">arity</a> (<a href="VL2014____VL-OP-ARITY.html">vl-op-arity</a> (<a href="VL2014____VL-NONATOM-_E3OP.html">vl-nonatom-&gt;op</a> x))))
+          (<a href="ACL2____IMPLIES.html">implies</a> arity
+                   (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> 3 arity)
+                                 (<a href="COMMON-LISP____CDDR.html">cddr</a> (<a href="VL2014____VL-NONATOM-_E3ARGS.html">vl-nonatom-&gt;args</a> x)))
+                        (<a href="ACL2____IFF.html">iff</a> (<a href="COMMON-LISP____THIRD.html">third</a> (<a href="VL2014____VL-NONATOM-_E3ARGS.html">vl-nonatom-&gt;args</a> x))
+                             (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> 3 arity))
+                        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____CONSP.html">consp</a> (<a href="COMMON-LISP____CDDR.html">cddr</a> (<a href="VL2014____VL-NONATOM-_E3ARGS.html">vl-nonatom-&gt;args</a> x)))
+                               (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> 3 arity))))))</pre> 
+
+</body>
+</html>

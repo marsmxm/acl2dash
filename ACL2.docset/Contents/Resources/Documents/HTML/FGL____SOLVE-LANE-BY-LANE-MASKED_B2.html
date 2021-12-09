@@ -1,0 +1,96 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Solve-lane-by-lane-masked+</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=FGL____SOLVE-LANE-BY-LANE-MASKED_B2">Click for Solve-lane-by-lane-masked+ in the Full Manual</a></h3>
+
+<p>Equality check that works around hard SAT/fraiging problems caused by 
+writemasking, solving each case separately.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(solve-lane-by-lane-masked+ x y mask width)  *</pre></dt> 
+</dl></div> 
+<p>See <a href="FGL____SOLVE-LANE-BY-LANE-MASKED.html">solve-lane-by-lane-masked</a> for a general discussion of 
+the problem this addresses.</p> 
+ 
+<p>The approach of this function differs from that of <a href="FGL____SOLVE-LANE-BY-LANE-MASKED.html">solve-lane-by-lane-masked</a> in that instead of using <span class="v">fgl-pathcond-fix</span> 
+to try to fold in the mask conditions, this function solves each case as a 
+separate SAT problem.  The AIGNET observability transform is often useful in 
+order to make the mask conditions yield comparable internal nodes.</p> 
+ 
+<p>The SAT checks use FGL SAT config objects produced by attachments to the 
+0-ary functions <span class="v">solve-lane-by-lane-masked+-config0</span> and 
+<span class="v">solve-lane-by-lane-masked+-config1</span>, which respectively determine how to check when 
+the mask bit is assumed to be 0 and when the mask bit is assumed 1.  Default 
+attachments assume that we want to use incremental SAT for the (typically easy) 
+mask 0 case and monolithic SAT, possibly with AIG simplification transforms, 
+for the (typically harder) mask 1 case.</p> 
+ 
+<p>Recommended transformations for the mask 1 case can be set up like this:</p> 
+<pre class="code">(<a href="ACL2____LOCAL.html">local</a> (<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "centaur/ipasir/ipasir-backend" :dir :system))
+(<a href="ACL2____LOCAL.html">local</a> (<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "centaur/aignet/transforms" :dir :system))
+(<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> transforms-config ()
+         (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">Xargs</a> :guard t))
+         #!aignet
+         (<a href="COMMON-LISP____LIST.html">list</a> (make-observability-config)
+               (make-balance-config :search-higher-levels t
+                                    :search-second-lit t)
+               (change-fraig-config *fraig-default-config*
+                                    :random-seed-name 'my-random-seed
+                                    :ctrex-queue-limit 32
+                                    :sim-words 1
+                                    :ctrex-force-resim nil
+                                    :ipasir-limit 1)
+
+               (change-fraig-config *fraig-default-config*
+                                    :random-seed-name 'my-random-seed2
+                                    :ctrex-queue-limit 32
+                                    :ipasir-limit 25))))
+(<a href="ACL2____LOCAL.html">local</a> (<a href="ACL2____DEFATTACH.html">defattach</a> fgl-aignet-transforms-config transforms-config))</pre> 
+ 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>solve-lane-by-lane-masked+</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> solve-lane-by-lane-masked+
+       (x y mask width)
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t))
+       (<a href="COMMON-LISP____LET.html">let</a> ((__function__ 'solve-lane-by-lane-masked+))
+            (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+            (<a href="COMMON-LISP____EQUAL.html">equal</a> x y)))</pre> 
+<p><b>Theorem: </b>solve-lane-by-lane-masked+-impl</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ solve-lane-by-lane-masked+-impl
+ (<a href="ACL2____IMPLIES.html">implies</a>
+  (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____SYNTAXP.html">syntaxp</a> (<a href="ACL2____POSP.html">posp</a> width))
+       (<a href="COMMON-LISP____INTEGERP.html">integerp</a> x)
+       (<a href="COMMON-LISP____INTEGERP.html">integerp</a> y))
+  (<a href="COMMON-LISP____EQUAL.html">equal</a>
+   (<a href="FGL____SOLVE-LANE-BY-LANE-MASKED_B2.html">solve-lane-by-lane-masked+</a> x y mask width)
+   (<a href="COMMON-LISP____IF.html">if</a>
+    (<a href="COMMON-LISP____AND.html">and</a> (<a href="FGL____CHECK-INT-ENDP.html">check-int-endp</a> x-endp x)
+         (<a href="FGL____CHECK-INT-ENDP.html">check-int-endp</a> y-endp y))
+    (<a href="COMMON-LISP____EQUAL.html">equal</a> x y)
+    (<a href="ACL2____B_A2.html">b*</a>
+     ((config0
+           (<a href="FGL____SYNTAX-BIND.html">syntax-bind</a>
+                config0
+                (<a href="FGL____G-CONCRETE.html">g-concrete</a> (solve-lane-by-lane-masked+-config0))))
+      (config1
+           (<a href="FGL____SYNTAX-BIND.html">syntax-bind</a>
+                config1
+                (<a href="FGL____G-CONCRETE.html">g-concrete</a> (solve-lane-by-lane-masked+-config1)))))
+     (<a href="ACL2____AND_A2.html">and*</a> (fgl-validity-check config1
+                               (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____LOGBITP.html">logbitp</a> 0 mask)
+                                        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____LOGHEAD.html">loghead</a> width x)
+                                               (<a href="ACL2____LOGHEAD.html">loghead</a> width y))))
+           (fgl-validity-check config0
+                               (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____LOGBITP.html">logbitp</a> 0 mask))
+                                        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____LOGHEAD.html">loghead</a> width x)
+                                               (<a href="ACL2____LOGHEAD.html">loghead</a> width y))))
+           (<a href="FGL____SOLVE-LANE-BY-LANE-MASKED_B2.html">solve-lane-by-lane-masked+</a> (<a href="ACL2____LOGTAIL.html">logtail</a> width x)
+                                       (<a href="ACL2____LOGTAIL.html">logtail</a> width y)
+                                       (<a href="ACL2____LOGCDR.html">logcdr</a> mask)
+                                       width)))))))</pre> 
+
+</body>
+</html>

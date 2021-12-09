@@ -1,0 +1,144 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Install-not-normalized</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____INSTALL-NOT-NORMALIZED">Click for Install-not-normalized in the Full Manual</a></h3>
+
+<p>Install an unnormalized definition</p><pre class="code">General Form:
+
+(<a href="ACL2____INSTALL-NOT-NORMALIZED.html">install-not-normalized</a> NAME :allp FLG :defthm-name DNAME-SPEC)</pre> 
+ 
+ <p>We explain the arguments of <span class="v">install-not-normalized</span> below, but first 
+ let us illustrate its use with an example.</p> 
+ 
+ <p>By default, ACL2 simplifies definitions by ``normalizing'' their bodies; 
+ see <a href="ACL2____NORMALIZE.html">normalize</a>.  If you prefer that ACL2 avoid such simplification when 
+ expanding a function call, then you can assign the value of <span class="v">nil</span> to <span class="tt"><a href="ACL2____XARGS.html">xargs</a></span> keyword <span class="v">:normalize</span> (see <a href="COMMON-LISP____DEFUN.html">defun</a>) instead of the default value 
+ of <span class="v">t</span>.  But that might not be a reasonable option, for example because the 
+ definition in question occurs in an included book that you prefer not to edit. 
+ An alternative is to call a macro, <span class="v">install-not-normalized</span>.</p> 
+ 
+ <p>Consider the following example from Eric Smith.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> return-nil (x) (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORE.html">ignore</a> x)) nil)
+(<a href="COMMON-LISP____DEFUN.html">defun</a> foo (x) (return-nil x))
+
+; Fails!
+(<a href="ACL2____THM.html">thm</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (foo x) (return-nil x))
+     :hints (("Goal" :in-theory '(foo))))
+
+; Also fails!
+(<a href="ACL2____THM.html">thm</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (foo x) (return-nil x))
+     :hints (("Goal" :expand ((foo x))
+                     :in-theory (<a href="ACL2____THEORY.html">theory</a> 'minimal-theory))))</pre> 
+ 
+ <p>The problem is that ACL2 stores <span class="v">nil</span> for the body of <span class="v">foo</span>, using 
+ ``type reasoning'' to deduce that <span class="v">return-nil</span> always returns the value, 
+ <span class="v">nil</span>.  So if <span class="v">foo</span> is the only enabled rule, then we are left trying to 
+ prove that <span class="v">nil</span> equals <span class="v">(return-nil x)</span>.  Of course, this example is 
+ trivial to fix by enabling <span class="v">return-nil</span>, or even just its <span class="v">:</span><span class="tt"><a href="ACL2____TYPE-PRESCRIPTION.html">type-prescription</a></span> rule, but we want to support development of robust tools 
+ that manipulate functions without needing to know anything about their callees. 
+ </p> 
+ 
+ <p>To solve this problem, we can invoke <span class="v">(<a href="ACL2____INSTALL-NOT-NORMALIZED.html">install-not-normalized</a> foo)</span>, 
+ which generates the following <span class="v">:</span><span class="tt"><a href="ACL2____DEFINITION.html">definition</a></span> rule.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">DEFTHM</a> FOO$NOT-NORMALIZED
+  (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (FOO X) (RETURN-NIL X))
+  :HINTS (("Goal" :BY FOO))
+  :RULE-CLASSES ((:DEFINITION :INSTALL-BODY T)))</pre> 
+ 
+ <p>Each of the following now succeeds.  For the second, note that the rule 
+ <span class="v">FOO$NOT-NORMALIZED</span> has installed a new body for <span class="v">FOO</span>.</p> 
+ 
+ <pre class="code">(<a href="ACL2____THM.html">thm</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (foo x) (return-nil x))
+     :hints (("Goal" :in-theory '(foo$not-normalized))))
+
+(<a href="ACL2____THM.html">thm</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (foo x) (return-nil x))
+     :hints (("Goal"
+              :expand ((foo x))
+              :in-theory (<a href="ACL2____THEORY.html">theory</a> 'minimal-theory))))</pre> 
+ 
+ <p>Let us see some more example forms; then, we discuss the general form.</p> 
+ 
+ <pre class="code">Example Forms:
+
+(<a href="ACL2____INSTALL-NOT-NORMALIZED.html">install-not-normalized</a> NAME)
+
+; Equivalent to the form above:
+(<a href="ACL2____INSTALL-NOT-NORMALIZED.html">install-not-normalized</a> NAME :allp t)
+
+; Generate a definition for NAME but not for others from its mutual-recursion:
+(<a href="ACL2____INSTALL-NOT-NORMALIZED.html">install-not-normalized</a> NAME :allp nil)
+
+; Give the name BAR to the new theorem:
+(<a href="ACL2____INSTALL-NOT-NORMALIZED.html">install-not-normalized</a> NAME :defthm-name 'BAR)
+
+; Give the name F1-DEF to the new theorem for F1 and
+; give the name F2-DEF to the new theorem for F2:
+(<a href="ACL2____INSTALL-NOT-NORMALIZED.html">install-not-normalized</a> NAME :defthm-name '((f1 f1-def) (f2 f1-def)))
+
+General Form:
+
+(<a href="ACL2____INSTALL-NOT-NORMALIZED.html">install-not-normalized</a> NAME :allp FLG :defthm-name DNAME-SPEC :enable E)</pre> 
+ 
+ <p>where the keyword arguments are evaluated, but not <span class="v">NAME</span>, and:</p> 
+ 
+ <ul> 
+ 
+ <li>
+<span class="v">NAME</span> is the name of a function introduced by <span class="tt"><a href="COMMON-LISP____DEFUN.html">defun</a></span> (or one of 
+ its variants, including <span class="tt"><a href="ACL2____DEFUND.html">defund</a></span> and <span class="tt"><a href="ACL2____DEFUN-NX.html">defun-nx</a></span>), possibly using 
+ <span class="tt"><a href="ACL2____MUTUAL-RECURSION.html">mutual-recursion</a></span>.</li> 
+ 
+ <li>
+<span class="v">FLG</span> (if supplied) is a Boolean that is relevant only in the case that 
+ <span class="v">NAME</span> was introduced using <span class="v">mutual-recursion</span>.  When <span class="v">FLG</span> is nil, a 
+ <span class="tt"><a href="ACL2____DEFTHM.html">defthm</a></span> event is to be introduced only for <span class="v">NAME</span>; otherwise, there 
+ will be a new <span class="v">defthm</span> for every function defined with the same 
+ <span class="v">mutual-recursion</span> as <span class="v">NAME</span>.</li> 
+ 
+ <li>
+<span class="v">DNAME-SPEC</span> (if supplied) is usually a symbol denoting the name of the 
+ <span class="v">defthm</span> event to be introduced for <span class="v">NAME</span>, which is 
+ <span class="v">NAME$NOT-NORMALIZED</span> by default  that is, the result of modifying 
+ the <span class="tt"><a href="COMMON-LISP____SYMBOL-NAME.html">symbol-name</a></span> of <span class="v">F</span> by adding the suffix 
+ <span class="v">"$NOT-NORMALIZED"</span>.  Otherwise, of special interest when <span class="v">NAME</span> was 
+ introduced with <span class="v">mutual-recursion</span>: <span class="v">DNAME-SPEC</span> is a list of doublets 
+ of the form <span class="v">(F G)</span>, where <span class="v">F</span> is a symbol as described for <span class="v">NAME</span> 
+ above, and the symbol <span class="v">G</span> is the name of the <span class="v">defthm</span> event generated 
+ for the symbol <span class="v">F</span>.</li> 
+ 
+ <li>
+<span class="v">E</span> is either <span class="v">:auto</span> (the default), <span class="v">t</span>, or <span class="v">nil</span>.  If <span class="v">E</span> 
+ is <span class="v">t</span> or <span class="v">nil</span> then the generated event is a call of <span class="v">defthm</span> or 
+ <span class="tt"><a href="ACL2____DEFTHMD.html">defthmd</a></span>, respectively.  If <span class="v">E</span> is omitted or is <span class="v">:auto</span>, then 
+ the generated event is a call of <span class="v">defthm</span> if the original <a href="ACL2____DEFINITION.html">definition</a> 
+ of <span class="v">NAME</span> is <a href="ACL2____ENABLE.html">enable</a>d at the time the <span class="v">install-not-normalized</span> 
+ event is submitted, and otherwise is a call of <span class="v">defthmd</span>.</li> 
+ 
+ </ul> 
+ 
+ <p>Any such <span class="v">defthm</span> event has <span class="v">:</span><span class="tt"><a href="ACL2____RULE-CLASSES.html">rule-classes</a></span> 
+ <span class="v">((:definition :install-body t))</span>, with suitable additional fields when 
+ appropriate for keywords <span class="v">:clique</span> and <span class="v">:controller-alist</span>.  To obtain 
+ its default name programmatically:</p> 
+ 
+ <pre class="code">ACL2 !&gt;(install-not-normalized-name 'foo)
+FOO$NOT-NORMALIZED
+ACL2 !&gt;</pre> 
+ 
+ <p>Remark.  Each definition installed by <span class="v">install-not-normalized</span> contains 
+ the original body, not a translated version.  (See <a href="ACL2____TERM.html">term</a> for a 
+ discussion of the the notion of ``translated term''.)</p> 
+ 
+ <p>For a somewhat related utility, see <a href="ACL2____FN-IS-BODY.html">fn-is-body</a>.</p> 
+ 
+ <p>For examples, see the Community Book 
+ <span class="v">misc/install-not-normalized-tests.lisp</span>.</p>
+</body>
+</html>

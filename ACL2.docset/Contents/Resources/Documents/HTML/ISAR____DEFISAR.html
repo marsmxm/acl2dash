@@ -1,0 +1,153 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Defisar</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ISAR____DEFISAR">Click for Defisar in the Full Manual</a></h3>
+
+<p>Prove a theorem in an Isar style.</p><h3>Introduction</h3><p>This macro is like <span class="tt"><a href="ACL2____DEFTHM.html">defthm</a></span>, 
+      but instead of <span class="v">:hints</span> or <span class="v">:instructions</span>, 
+      it accepts an <a href="ISAR____ISAR.html">Isar</a>-style proof script. 
+      The script, starting with the hypotheses of the theorem's formula, 
+      derives intermediate facts, provable via ACL2's <span class="v">:hints</span> mechanism, 
+      and eventually derives the conclusion of the theorem's formula, 
+      thus proving the theorem. 
+      It also provides the ability to introduce local variables 
+      to abbreviate terms and make the formulas more concise and readable.</p><p>See the file <span class="v">[books]/kestrel/isar/defisar-tests.lisp</span> 
+      for examples of use of this macro.</p><h3>General Form</h3><pre class="code">(<a href="ISAR____DEFISAR.html">defisar</a> name
+  formula
+  :proof   ...
+  :disable ...
+  :rule-classes ...)</pre><h3>Inputs</h3><p><span class="v">name</span></p><blockquote>
+<p>Name of the theorem to prove.</p>
+<p>This is the same as in <span class="tt"><a href="ACL2____DEFTHM.html">defthm</a></span>.</p>
+</blockquote><p><span class="v">formula</span></p><blockquote>
+<p>Formula of the theorem to prove.</p>
+<p>This is the same as in <span class="tt"><a href="ACL2____DEFTHM.html">defthm</a></span>.</p>
+<p>Let <span class="v">&lt;hyp1&gt;</span>, ..., <span class="v">&lt;hypn&gt;</span> be the hypotheses 
+       and <span class="v">concl</span> be the conclusion of the formula, 
+       defined as follows:</p>
+<ul>
+<li>If <span class="v">formula</span> is not an implication, 
+        i.e. it does not have the form <span class="v">(<a href="ACL2____IMPLIES.html">implies</a> ... ...)</span>, 
+        then <span class="v">n</span> is 0 (i.e. there are no <span class="v">hypi</span> hypotheses) 
+        and <span class="v">concl</span> is all of <span class="v">formula</span>.</li>
+<li>Otherwise, <span class="v">formula</span> has the form <span class="v">(<a href="ACL2____IMPLIES.html">implies</a> hyps concl)</span>. 
+        In this case, <span class="v">concl</span> is the conclusion of the implication. 
+        For the hypotheses, there are two cases.</li>
+<li>If <span class="v">hyps</span> is not a conjunction, 
+        i.e. it does not have the form <span class="v">(<a href="COMMON-LISP____AND.html">and</a> ...)</span>, 
+        then <span class="v">n</span> is 1 (i.e. there is just one hypothesis) 
+        and <span class="v">&lt;hyp1&gt;</span> is all of <span class="v">hyps</span>.</li>
+<li>Otherwise, <span class="v">hyps</span> has the form <span class="v">(<a href="COMMON-LISP____AND.html">and</a> &lt;hyp1&gt; ... &lt;hypn&gt;)</span>. 
+        In this case, <span class="v">&lt;hyp1&gt;</span>, ..., <span class="v">&lt;hypn&gt;</span> are the conjuncts.</li>
+</ul>
+</blockquote><p><span class="v">:proof</span>  no default</p><blockquote>
+<p>Isar-style proof to prove the theorem.</p>
+<p>It must be a non-empty list</p>
+<pre class="code">(cmd1 cmd2 ...)</pre>
+<p>of commands, where each command must be one of the following:</p>
+<ul>
+<li>
+<p>An assumption command of the form</p>
+<pre class="code">(:assume (&lt;id&gt; &lt;fact&gt;))</pre>
+<p>where:</p>
+<ul>
+<li>
+<span class="v">&lt;id&gt;</span> is a keyword that names the fact proved by this command.</li>
+<li>
+<span class="v">&lt;fact&gt;</span> is a formula that is the fact proved by this command. 
+          It must be one of <span class="v">&lt;hyp1&gt;</span>, ..., <span class="v">&lt;hypn&gt;</span>, 
+          or easily derivable from them in the empty ACL2 theory 
+          (i.e. minor, easily bridgeable differences are allowed); 
+          it may use variables introduced by preceding <span class="v">:let</span> commands.</li>
+</ul>
+<p>This command serves to give a name to one of the theorem's hypotheses 
+         so that the fact (i.e. hypothesis) can be referenced 
+         in subsequent commands.</p>
+</li>
+<li>
+<p>An abbreviation of the form</p>
+<pre class="code">(:let (&lt;var&gt; &lt;term&gt;))</pre>
+<p>where:</p>
+<ul>
+<li>
+<span class="v">&lt;var&gt;</span> is an ACL2 variable symbol 
+          that must not occur in <span class="v">formula</span> 
+          and that must be distinct from all the ones 
+          introduced by other instances of the <span class="v">:let</span> command in the proof.</li>
+<li>
+<span class="v">&lt;term&gt;</span> is an ACL2 term, to which <span class="v">&lt;var</span> is bound. 
+          This binding is local to the proof, 
+          and can make the proof steps more concise and readable. 
+          See below for more details on the generated events.</li>
+</ul>
+</li>
+<li>
+<p>A derivation command of the form</p>
+<pre class="code">(:derive (&lt;id&gt; &lt;fact&gt;)
+ :from (&lt;id1&gt; &lt;id2&gt; ...)
+ :hints &lt;hints&gt;) ; or other defrule options</pre>
+<p>where:</p>
+<ul>
+<li>
+<span class="v">&lt;name</span> is a keyword that names the fact proved by this command.</li>
+<li>
+<span class="v">&lt;fact&gt;</span> is a formula that is the fact proved by this command. 
+          It must be provable by ACL2 
+          from the facts referenced in <span class="v">:from</span> (see below) 
+          using the hints in <span class="v">:hints</span> (see below). 
+          It may use variables introduced by preceding <span class="v">:let</span> commands.</li>
+<li>
+<span class="v">&lt;id1&gt;</span>, <span class="v">&lt;id2&gt;</span>, ... are names of previously proved facts 
+          (via <span class="v">:assume</span> or <span class="v">:derive</span> commands). 
+          If there are no names, the whole  <span class="v">:from (...)</span> may be omitted.</li>
+<li>
+<span class="v">&lt;hints&gt;</span> are regular ACL2 hints, 
+          used to prove <span class="v">&lt;fact&gt;</span> from the names facts. 
+          This may be omitted, just like in <span class="tt"><a href="ACL2____DEFTHM.html">defthm</a></span>. 
+          In addition, any of the <span class="tt"><a href="ACL2____DEFRULE.html">defrule</a></span> options may be used.</li>
+</ul>
+</li>
+<li>
+<p>A proof-finishing command of the form</p>
+<pre class="code">(:qed)</pre>
+<p>It must be used when enough facts have been derived that, 
+         when put all together, suffice to prove the theorem's 
+         conclusion from the hypotheses without any additional hints. 
+         See below for more details on the generated events.</p>
+</li>
+</ul>
+<p>All the <span class="v">&lt;id&gt;</span> fact names must be distinct.</p>
+<p>There must be at most one <span class="v">:qed</span> command, 
+       and if there is one it must appear at the end. 
+       Its presence is necessary to complete the proof. 
+       However, while incrementally constructing the proof, 
+       it may be omitted and the <span class="v">defisar</span> event will still succeed, 
+       but it will not generate any permanent theorem 
+       (it will only check the commands present in the script).</p>
+</blockquote><p><span class="v">:disable</span>  default <span class="v">nil</span></p><blockquote><p>Specifies if the theorem is disabled.</p></blockquote><p><span class="v">:rule-classes</span>  default <span class="v">:rewrite</span></p><blockquote><p>Specifies the rule classes of the theorem.</p></blockquote><h3>Generated Events</h3><p>Each <span class="v">:assume</span> command generates a theorem</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> name&lt;id&gt;
+  (<a href="COMMON-LISP____LET_A2.html">let*</a> ((&lt;var1&gt; &lt;term1&gt;) (&lt;var2&gt; &lt;term2&gt;) ...)
+    (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> &lt;hyp1&gt; ... &lt;hypn&gt;)
+             &lt;fact&gt;))
+  :rule-classes nil
+  :hints (("Goal" :in-theory nil)))</pre><p>where the <span class="tt"><a href="COMMON-LISP____LET_A2.html">let*</a></span> bindings are from 
+      the <span class="v">:let</span> commands that precede the <span class="v">:assume</span> command.</p><p>Each <span class="v">:derive</span> command generates a theorem</p><pre class="code">(<a href="ACL2____DEFRULE.html">defrule</a> name&lt;id&gt;
+  (<a href="COMMON-LISP____LET_A2.html">let*</a> ((&lt;var1&gt; &lt;term1&gt;) (&lt;var2&gt; &lt;term2&gt;) ...)
+    (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> &lt;fact1&gt; &lt;fact2&gt; ...)
+             &lt;fact&gt;))
+  :rule-classes nil
+  :hints &lt;hints&gt;) ; or other defrule options</pre><p>where <span class="v">&lt;fact1&gt;</span>, <span class="v">&lt;fact2&gt;</span>, ... are the facts 
+      named by <span class="v">&lt;id1&gt;</span>, <span class="v">&lt;id2&gt;</span>, ... in <span class="v">:from</span>, and 
+      where the <span class="tt"><a href="COMMON-LISP____LET_A2.html">let*</a></span> bindings are from 
+      the <span class="v">:let</span> commands that precede the <span class="v">:derive</span> command.</p><p>The <span class="v">:qed</span> command generates a theorem</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> name
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> &lt;hyp1&gt; ... &lt;hypn&gt;)
+           &lt;concl&gt;)
+  :hints (("Goal" :use &lt;ids&gt;)))</pre><p>where <span class="v">&lt;ids&gt;</span> is a list of all the names of the facts 
+      proved by the script before the <span class="v">:qed</span>.</p><p>The <span class="v">:let</span> command does not generate any events. 
+      It introduces abbreviations that may be used in subsequent commands.</p>
+</body>
+</html>

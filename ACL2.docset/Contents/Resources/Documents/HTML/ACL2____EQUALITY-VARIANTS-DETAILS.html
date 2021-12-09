@@ -1,0 +1,194 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Equality-variants-details</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____EQUALITY-VARIANTS-DETAILS">Click for Equality-variants-details in the Full Manual</a></h3>
+
+<p>Details about <a href="ACL2____EQUALITY-VARIANTS.html">equality-variants</a></p><p>Here we present details about equality variants, none of which is 
+ likely to be important to the majority of ACL2 users.  Please see <a href="ACL2____EQUALITY-VARIANTS.html">equality-variants</a> for relevant background.</p> 
+ 
+ <p>We begin by presenting <a href="ACL2____EVENTS.html">events</a> that implement the equality variants 
+ for <span class="tt"><a href="COMMON-LISP____MEMBER.html">member</a></span>, as these illustrate the events introduced for all macros 
+ having equality variants.  The definition of <span class="tt"><a href="COMMON-LISP____MEMBER.html">member</a></span>, just below, calls 
+ the macro <span class="v">let-mbe</span>, which in turn is just an abbreviation for a 
+ combination of <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span> and <span class="tt"><a href="ACL2____MBE.html">mbe</a></span>.  Here is a simplified version of 
+ the definition of this macro.  For relevant background, see <span class="tt"><a href="ACL2____MBE.html">mbe</a></span>.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> let-mbe (bindings &amp;key logic exec)
+  `(<a href="COMMON-LISP____LET.html">let</a> ,bindings
+     (<a href="ACL2____MBE.html">mbe</a> :logic ,logic
+          :exec ,exec)))</pre> 
+ 
+ <p>This use of <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span> arranges that each argument of a call of 
+ <span class="v">member</span> is evaluated only once.</p> 
+ 
+ <p>The actual definition of the macro <span class="v">let-mbe</span> is a bit more complex, in 
+ order to guarantee that <a href="ACL2____GUARD.html">guard</a>s are appropriately checked.  For purposes 
+ of this discussion we ignore this simplification.  (You can find the 
+ definition of <span class="v">let-mbe</span> in ACL2 source file <span class="v">axioms.lisp</span>.)</p> 
+ 
+ <p>Consider the following definition from ACL2 source file <span class="v">axioms.lisp</span>. 
+ Notice that it invokes the macro <span class="v">let-mbe</span>, discussed above.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> member (x l &amp;key (test ''eql))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> test ''eq)
+                             (<a href="COMMON-LISP____EQUAL.html">equal</a> test ''eql)
+                             (<a href="COMMON-LISP____EQUAL.html">equal</a> test ''equal))))
+  (<a href="COMMON-LISP____COND.html">cond</a>
+   ((<a href="COMMON-LISP____EQUAL.html">equal</a> test ''eq)
+    `(<a href="ACL2____LET-MBE.html">let-mbe</a> ((x ,x) (l ,l))
+              :logic (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> x l)
+              :exec  (member-eq-exec x l)))
+   ((<a href="COMMON-LISP____EQUAL.html">equal</a> test ''eql)
+    `(<a href="ACL2____LET-MBE.html">let-mbe</a> ((x ,x) (l ,l))
+              :logic (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> x l)
+              :exec  (member-eql-exec x l)))
+   (t ; (<a href="COMMON-LISP____EQUAL.html">equal</a> test 'equal)
+    `(<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> ,x ,l))))</pre> 
+ 
+ <p>Inspection of the definition above shows that every call of <span class="tt"><a href="COMMON-LISP____MEMBER.html">member</a></span> 
+ expands to one that is logically equivalent to the corresponding call of 
+ <span class="tt"><a href="ACL2____MEMBER-EQUAL.html">member-equal</a></span>, which is defined as follows.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> member-equal (x lst)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____TRUE-LISTP.html">true-listp</a> lst)))
+  (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____ENDP.html">endp</a> lst) nil)
+        ((<a href="COMMON-LISP____EQUAL.html">equal</a> x (<a href="COMMON-LISP____CAR.html">car</a> lst)) lst)
+        (t (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> x (<a href="COMMON-LISP____CDR.html">cdr</a> lst)))))</pre> 
+ 
+ <p>The following two definitions model equality variants of <span class="tt"><a href="COMMON-LISP____MEMBER.html">member</a></span> for 
+ tests <span class="tt"><a href="COMMON-LISP____EQ.html">eq</a></span> and <span class="tt"><a href="COMMON-LISP____EQL.html">eql</a></span>, respectively.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> member-eq-exec (x lst)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> x)
+                             (<a href="ACL2____TRUE-LISTP.html">true-listp</a> lst)
+                           (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> lst))))
+  (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____ENDP.html">endp</a> lst) nil)
+        ((<a href="COMMON-LISP____EQ.html">eq</a> x (<a href="COMMON-LISP____CAR.html">car</a> lst)) lst)
+        (t (member-eq-exec x (<a href="COMMON-LISP____CDR.html">cdr</a> lst)))))
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> member-eql-exec (x lst)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2____EQLABLEP.html">eqlablep</a> x)
+                             (<a href="ACL2____TRUE-LISTP.html">true-listp</a> lst)
+                           (<a href="ACL2____EQLABLE-LISTP.html">eqlable-listp</a> lst))))
+  (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____ENDP.html">endp</a> lst) nil)
+        ((<a href="COMMON-LISP____EQL.html">eql</a> x (<a href="COMMON-LISP____CAR.html">car</a> lst)) lst)
+        (t (member-eql-exec x (<a href="COMMON-LISP____CDR.html">cdr</a> lst)))))</pre> 
+ 
+ <p>At this point the user can write <span class="v">(<a href="COMMON-LISP____MEMBER.html">member</a> x y)</span> or <span class="v">(<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> x
+ y)</span> to call equality variants of <span class="v">member</span> with test <span class="v">eql</span> or 
+ <span class="v">equal</span>, respectively.  We thus provide the following macro for the <span class="v">eq</span> 
+ variant.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> member-eq (x lst)
+  `(<a href="COMMON-LISP____MEMBER.html">member</a> ,x ,lst :test 'eq))</pre> 
+ 
+ <p><a href="ACL2____GUARD.html">Guard</a> proof obligations generated by calls of <span class="v">member</span> will 
+ include those based on its use of <span class="v">mbe</span>, and are supported by the following 
+ two lemmas.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> member-eq-exec-is-member-equal
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> (member-eq-exec x l)
+         (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> x l)))
+
+(<a href="ACL2____DEFTHM.html">defthm</a> member-eql-exec-is-member-equal
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> (member-eql-exec x l)
+         (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> x l)))</pre> 
+ 
+ <p>Finally, the following two events arrange that in certain contexts such as 
+ <a href="ACL2____THEORIES.html">theories</a> (including the use of <span class="tt"><a href="ACL2____IN-THEORY.html">in-theory</a></span> in <a href="ACL2____EVENTS.html">events</a> and 
+ <a href="ACL2____HINTS.html">hints</a>), <span class="tt"><a href="ACL2____MEMBER-EQ.html">member-eq</a></span> and <span class="tt"><a href="COMMON-LISP____MEMBER.html">member</a></span> are treated as references 
+ to <span class="tt"><a href="ACL2____MEMBER-EQUAL.html">member-equal</a></span>.</p> 
+ 
+ <pre class="code">(<a href="ACL2____ADD-MACRO-ALIAS.html">add-macro-alias</a> member-eq member-equal)
+(<a href="ACL2____ADD-MACRO-ALIAS.html">add-macro-alias</a> member member-equal)</pre> 
+ 
+ <p>Note however that these events do not affect printing of calls during 
+ proofs: calls of <span class="v">member</span> and <span class="v">member-eq</span> will be macroexpanded away, 
+ leaving you with calls of <span class="v">member-equal</span> that are displayed in proof 
+ output.  For a way to change this behavior, see <span class="tt"><a href="ACL2____ADD-MACRO-FN.html">add-macro-fn</a></span>.</p> 
+ 
+ <p>We conclude this topic by exploring the following recommendation made in 
+ the <a href="COMMON-LISP____DOCUMENTATION.html">documentation</a> for <a href="ACL2____EQUALITY-VARIANTS.html">equality-variants</a>.</p> 
+ 
+ <blockquote><p>For efficiency we recommend using the <span class="v">-equal</span> equality 
+ variant, for example <span class="tt"><a href="ACL2____MEMBER-EQUAL.html">member-equal</a></span> or <span class="v">(</span><span class="tt"><a href="COMMON-LISP____MEMBER.html">member</a></span><span class="v"> ... :TEST
+ 'equal)</span>, in certain contexts: <span class="tt"><a href="COMMON-LISP____DEFMACRO.html">defmacro</a></span>, <span class="tt"><a href="ACL2____DEFPKG.html">defpkg</a></span>, <span class="tt"><a href="ACL2____DEFCONST.html">defconst</a></span>, and <span class="tt"><a href="ACL2____VALUE-TRIPLE.html">value-triple</a></span> forms.</p></blockquote> 
+ 
+ <p>ACL2 relies on the underlying Common Lisp for evaluation.  It also 
+ processes events in the ACL2 logic.  In order to guarantee consistency of its 
+ logical and Common Lisp evaluations, ACL2 uses a ``safe mode'' to avoid 
+ ill-guarded calls.  In particular, consider the use of <span class="tt"><a href="ACL2____MBE.html">mbe</a></span> in 
+ execution of a call of an equality variant of a primitive, <span class="v">F</span>, other than 
+ its <span class="v">F-equal</span> variant.  The <span class="tt"><a href="ACL2____MBE.html">mbe</a></span> call discussed above requires a 
+ connection to be established between the <span class="v">:logic</span> and <span class="v">:exec</span> forms. 
+ For example, if <span class="v">F</span> is called with <span class="v">:TEST 'eql</span> (either explicitly or as 
+ the default), then ACL2 will call both <span class="v">F-eql-exec</span> and <span class="v">F-equal</span>, and 
+ check that the two results are equal.</p> 
+ 
+ <p>The following partial log illustrates the point above.  We define a macro 
+ that calls <span class="tt"><a href="COMMON-LISP____MEMBER.html">member</a></span>, and when a call of this macro is expanded during 
+ processing of a subsequent definition, we see that two membership functions 
+ are called on the same arguments.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> mac (lst)
+         (<a href="COMMON-LISP____LIST.html">list</a> 'quote (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____TRUE-LISTP.html">true-listp</a> lst)
+                           (<a href="COMMON-LISP____MEMBER.html">member</a> 'c lst :test 'eq))))
+
+Summary
+Form:  ( DEFMACRO MAC ...)
+Rules: NIL
+Time:  0.01 seconds (prove: 0.00, print: 0.00, other: 0.01)
+ MAC
+ACL2 !&gt;(<a href="ACL2____TRACE_42.html">trace$</a> member-equal member-eq-exec)
+ ((<a href="ACL2____MEMBER-EQUAL.html">MEMBER-EQUAL</a>) (MEMBER-EQ-EXEC))
+ACL2 !&gt;(<a href="COMMON-LISP____DEFUN.html">defun</a> f () (mac (a b c d)))
+1&gt; (ACL2_*1*_ACL2::MEMBER-EQ-EXEC C (A B C D))
+  2&gt; (MEMBER-EQ-EXEC C (A B C D))
+  &lt;2 (MEMBER-EQ-EXEC (C D))
+&lt;1 (ACL2_*1*_ACL2::MEMBER-EQ-EXEC (C D))
+1&gt; (ACL2_*1*_ACL2::MEMBER-EQUAL C (A B C D))
+  2&gt; (<a href="ACL2____MEMBER-EQUAL.html">MEMBER-EQUAL</a> C (A B C D))
+  &lt;2 (<a href="ACL2____MEMBER-EQUAL.html">MEMBER-EQUAL</a> (C D))
+&lt;1 (ACL2_*1*_ACL2::MEMBER-EQUAL (C D))
+
+Since F is non-recursive, its admission is trivial.</pre> 
+ 
+ <p>If performance is an issue then we can avoid such a problem, for example as 
+ follows.  In a fresh session, let us define a suitable wrapper for calling 
+ <span class="tt"><a href="COMMON-LISP____MEMBER.html">member</a></span> with <span class="v">:TEST 'eq</span>.  This time, the trace in our partial log 
+ shows that we have avoided calling two membership functions.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="COMMON-LISP____DEFUN.html">defun</a> mem-eq (x lst)
+         (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> x)
+                                    (<a href="ACL2____TRUE-LISTP.html">true-listp</a> lst)
+                                  (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> lst))))
+         (<a href="COMMON-LISP____MEMBER.html">member</a> x lst :test 'eq))
+[[ ... output omitted here ... ]]
+ MEM-EQ
+ACL2 !&gt;(<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> mac (lst)
+         (<a href="COMMON-LISP____LIST.html">list</a> 'quote (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____TRUE-LISTP.html">true-listp</a> lst)
+                           (mem-eq 'c lst))))
+
+Summary
+Form:  ( DEFMACRO MAC ...)
+Rules: NIL
+Time:  0.00 seconds (prove: 0.00, print: 0.00, other: 0.00)
+ MAC
+ACL2 !&gt;(<a href="ACL2____TRACE_42.html">trace$</a> member-equal member-eq-exec mem-eq)
+ ((<a href="ACL2____MEMBER-EQUAL.html">MEMBER-EQUAL</a>)
+  (MEMBER-EQ-EXEC)
+  (MEM-EQ))
+ACL2 !&gt;(<a href="COMMON-LISP____DEFUN.html">defun</a> f () (mac (a b c d)))
+1&gt; (ACL2_*1*_ACL2::MEM-EQ C (A B C D))
+  2&gt; (MEM-EQ C (A B C D))
+  &lt;2 (MEM-EQ (C D))
+&lt;1 (ACL2_*1*_ACL2::MEM-EQ (C D))
+
+Since F is non-recursive, its admission is trivial.</pre>
+</body>
+</html>

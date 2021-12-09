@@ -1,0 +1,312 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Atj-analyze-arrays-in-term</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=JAVA____ATJ-ANALYZE-ARRAYS-IN-TERM">Click for Atj-analyze-arrays-in-term in the Full Manual</a></h3>
+
+<p>Array analysis of ACL2 terms.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(atj-analyze-arrays-in-term term wrld)  (mv arrays types)</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">term</span>  <font color="#606060">Guard <span class="v">(<a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a> term)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">wrld</span>  <font color="#606060">Guard <span class="v">(<a href="ACL2____PLIST-WORLDP.html">plist-worldp</a> wrld)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">arrays</span>  <font color="#606060">Type <span class="v">(<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> arrays)</span>.</font>
+</dd> 
+<dd>
+<span class="tt">types</span>  <font color="#606060">Type <span class="v">(<a href="JAVA____ATJ-TYPE-LISTP.html">atj-type-listp</a> types)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>The array analysis assigns to each term a non-empty list of array names, 
+     corresponding to the array types returned by the term. 
+     Recall that the type annotation pre-translation step 
+     assigns a non-empty list of ATJ types to every term; 
+     the list is a singleton if the term is single-valued, 
+     otherwise the list's length is the number of results returned by the term. 
+     Some of these result types may be (Java primitive) arrays: 
+     in that case, the array analysis assigns 
+     array names to the corresponding results, 
+     while it assigns <span class="v">nil</span> to non-array results: 
+     the list of symbols inferred by the array analysis 
+     has always the same length as 
+     the list of types inferred by the type annotations, 
+     i.e. every term's result gets an array name. 
+     The array names are the names of the variables that hold the arrays. 
+     When a term returns a newly created array 
+     that is not yet bound to any variable, 
+     its array name, inferred by array analysis, is <span class="v">nil</span>. 
+     All of this is, of course, 
+     related to the array names that can be specified in 
+     <span class="tt"><a href="JAVA____ATJ-MAIN-FUNCTION-TYPE.html">atj-main-function-type</a></span> and <span class="tt"><a href="JAVA____ATJ-OTHER-FUNCTION-TYPE.html">atj-other-function-type</a></span>: 
+     see their documentation and implementation.</p><p>As the array analysis calculates these array names for terms, 
+     it also checks that arrays are treated single-threadedly, 
+     similarly to stobjs. 
+     The constraints to be satisfied are fairly draconian, like stobjs. 
+     Each modified array must be 
+     always bound to the same array name inside a function. 
+     Different functions may use different names, 
+     also because array variables are not global. 
+     A function that takes an array argument can only be passed an array name, 
+     not a term whose value is an array. 
+     The exact constraints are explained below. 
+     If any of these constraints is not satisfied, 
+     the array analysis fails, 
+     causing an error that stops the analysis and ATJ. 
+     Currently these are hard errors, 
+     but they are distinct from the `internal errors' 
+     that are so indicated in the error messages of some ATJ code. 
+     The internal errors are expected to never happen; 
+     if they do, the reason is an implementation bug. 
+     On the other hand, errors from the array analysis are expected to happen: 
+     they are a form of input validation, 
+     but one that is ``semantically deep'' and can only be performed 
+     during pre-translation, and not as part of input processing.</p><p>Recall that this array analysis takes place 
+     after the type annotations. 
+     Thus, terms are unwrapped as they are analyzed.</p><p>Besides the list of array names, 
+     the analysis of a term also returns the list of types of the term. 
+     This is simply obtained from the type annotations, 
+     but it is used by the array analysis, 
+     and so returning it explicitly is useful in the recursive calls 
+     of the analysis code.</p><p>If the term being analyzed is a variable, 
+     we look at its type. 
+     Since we handle <span class="tt"><a href="ACL2____MV-LET.html">mv-let</a></span> specially (see below), 
+     we expect that all the variables that we encounter ``directly'' 
+     (i.e. not the <span class="tt"><a href="ACL2____MV-LET.html">mv-let</a></span> variable <span class="v">mv</span>) 
+     will have singleton type lists: 
+     we use <span class="tt"><a href="JAVA____ATJ-TYPE-LIST-TO-TYPE.html">atj-type-list-to-type</a></span> 
+     to convert singletons to single types, 
+     which causes an error should the type list not be a singleton 
+     (this would be an implementation error). 
+     If the type of the variable is an array, 
+     the result of the array analysis is 
+     the singleton list with the name of the variable. 
+     Otherwise, the result of the array analysis is 
+     the singleton list with <span class="v">nil</span>.</p><p>If the term being analyzed is a quoted constant, 
+     we return the singleton list with <span class="v">nil</span>. 
+     A quoted constant is never an array: 
+     a quoted constant always has an <span class="v">:acl2</span> type, 
+     according to the type annotations.</p><p>If the term being analyzed is neither a variable nor a quoted constant, 
+     we check whether it is a (type-annotated) <span class="tt"><a href="ACL2____MV-LET.html">mv-let</a></span> call. 
+     This is handled by the separate function <span class="v">atj-analyze-arrays-in-mv-let</span>, 
+     whose first result is a boolean flag that indicates success of failure. 
+     In case of success, 
+     the calling function <span class="v">atj-analyze-arrays-in-term</span> 
+     forwards the second result of <span class="v">atj-analyze-arrays-in-mv-let</span>; 
+     in case of failure, <span class="v">atj-analyze-arrays-in-term</span> 
+     handles the other kinds of function calls, 
+     including calls of lambda expressions other than <span class="tt"><a href="ACL2____MV-LET.html">mv-let</a></span>s, 
+     which are already handled by <span class="v">atj-analyze-arrays-in-mv-let</span>. 
+     The handling of <span class="tt"><a href="ACL2____MV-LET.html">mv-let</a></span> calls is explained later; 
+     first we explain the handling of the other kinds of function calls.</p><p>If the term being analyzed is an <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span> call, 
+     we recursively analyze its three arguments. 
+     If the test returns an array, the analysis fails: 
+     we do not allow arrays as <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span> tests. 
+     The `then' and `else' branches must have the same inferred arrays, 
+     otherwise the analysis fails; 
+     that is, no matter which branch is taken, 
+     the same arrays must be returned.</p><p>If the term being analyzed is a call of a function other than <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span>, 
+     we recursively analyze all the arguments. 
+     We do so with a separate function, <span class="v">atj-analyze-arrays-in-args</span>, 
+     mutually recursive with <span class="v">atj-analyze-arrays-in-term</span>. 
+     Each of these arguments must be necessarily single-valued 
+     (see also <span class="tt"><a href="JAVA____ATJ-TYPE-ANNOTATE-TERM.html">atj-type-annotate-term</a></span>), 
+     so the two lists returned by <span class="v">atj-analyze-arrays-in-args</span> 
+     are interpreted differently from <span class="v">atj-analyze-arrays-in-term</span>: 
+     the former are the concatenations of the singleton lists 
+     inferred for each of the arguments, 
+     while the latter are lists that apply to the whole term. 
+     The array analysis fails if two of arguments have the same array name: 
+     this situation means that the same array is aliased (in Java) 
+     and possibly subjected to different modifications through the aliases. 
+     We pass a flag to <span class="v">atj-analyze-arrays-in-term</span> indicating whether 
+     the function called is a lambda expression or a named function: 
+     in the latter case, we also ensure that arguments of array types 
+     are variables, and not other function calls 
+     (note that they cannot be quoted constants). 
+     That is, we disallow ``nested'' calls of functions that return arrays. 
+     For example, 
+     if <span class="v">f</span> returns an array and <span class="v">g</span> takes an array of the same type, 
+     we disallow calls <span class="v">(g ... (f ...) ...)</span>. 
+     Instead, one must assign each array returned by a named function 
+     to some variable, and only pass such variables to names functions. 
+     In the example of <span class="v">f</span> and <span class="v">g</span> just above, 
+     one must have <span class="v">(<a href="COMMON-LISP____LET.html">let</a> (... (a (f ...)) ...) (g ... a ...))</span> 
+     for code generation to proceed. 
+     It is thus important that the restriction of being variables 
+     only applies to the array arguments of named functions, 
+     and not to the array arguments of lambda expressions; 
+     otherwise, the <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span> form would be illegal as well. 
+     Recall that we are dealing with annotated terms here: 
+     so, when we say `variable' here, we really mean 
+     a call of a (conversion) function on a variable. 
+     This constraint on array arguments of named functions being variables, 
+     is not needed for the safety of destructive array updates; 
+     however, it is useful to simplify 
+     the subsequent ``inlining'' of array writing functions 
+     done in ATJ's post-translation. 
+     Note that stobjs have similar restrictions in ACL2.</p><p>If the term being analyzed is an <span class="tt"><a href="ACL2____MV.html">mv</a></span> call, 
+     we just return the list of array arguments. 
+     This is a multi-valued term.</p><p>If the term being analyzed is a call of 
+     an array creation function in <span class="tt"><a href="JAVA_____A2ATJ-JPRIMARR-NEW-INIT-FNS_A2.html">*atj-jprimarr-new-init-fns*</a></span>, 
+     we return a singleton list with <span class="v">nil</span>, 
+     because it is a newly created, and thus still unnamed, array.</p><p>If the term being analyzed is a call 
+     of a function other than <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span> and <span class="tt"><a href="ACL2____MV.html">mv</a></span>, 
+     we look up its formals, function type, and output arrays. 
+     The function type is chosen based on the types of the arguments, 
+     in the same way as in <span class="tt"><a href="JAVA____ATJ-TYPE-ANNOTATE-TERM.html">atj-type-annotate-term</a></span>. 
+     We match the array formal parameters of the function 
+     to the array names inferred for the actual arguments 
+     (see the discussion in <span class="tt"><a href="JAVA____ATJ-PRE-TRANSLATION-ARRAY-ANALYSIS.html">atj-pre-translation-array-analysis</a></span>), 
+     creating an alist. 
+     Then we go through the function's output arrays 
+     (whose names match the array formal parameters 
+     that may be modified by the function and returned, 
+     and we use the alist mentioned just above 
+     to compute the output arrays of the call. 
+     For example, suppose that we have a call of <span class="v">f</span>, 
+     and that <span class="v">f</span> has two array formal parameters <span class="v">x</span> and <span class="v">y</span>. 
+     Suppose that the array names inferred 
+     for the corresponding actual arguments are <span class="v">a</span> and <span class="v">b</span>. 
+     Then we construct first the alist <span class="v">((x . a) (y. b))</span>, 
+     and then we go through the output arrays of $('f'), 
+     which may include <span class="v">x</span> and <span class="v">y</span> (not necessarily in that order), 
+     and for each element of the list we generate 
+     <span class="v">a</span> if the element is <span class="v">x</span>, 
+     <span class="v">b</span> if the element is <span class="v">y</span>, 
+     and <span class="v">nil</span> otherwise. 
+     The latter <span class="v">nil</span> may indicate 
+     either a non-array result 
+     or an array newly created by <span class="v">f</span> (directly or indirectly). 
+     Note that all of this works also when <span class="v">a</span> and/or <span class="v">b</span> is <span class="v">nil</span>, 
+     which means that we are passing newly created arrays to <span class="v">f</span>: 
+     the results corresponding to <span class="v">x</span> and <span class="v">y</span> may then be <span class="v">nil</span>, 
+     which indicates arrays that have been 
+     newly created, possibly modified, and not given names yet 
+     (names are given then they are bound to variables).</p><p>If the term being analyzed is a call of a lambda expression 
+     (but not of the <span class="tt"><a href="ACL2____MV-LET.html">mv-let</a></span> form, which is explained below), 
+     we ensure that each array argument with a non-<span class="v">nil</span> name 
+     is assigned (in the sense of <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span>) 
+     to a variable with the same name: 
+     the variables are the formal parameters of the lambda expression. 
+     That is, we go through argument arrays and lambda's formal parameters, 
+     and ensure that they match as just explained. 
+     This is an important constraint checked by the array analysis, 
+     namely that (within each function), each array has a unique name. 
+     One cannot ``rename'' an array, just like one cannot ``rename'' a stobj: 
+     a stobj has the same name everywhere (not only within each function). 
+     It is of course permitted to assign non-arrays to variables liberally. 
+     Then we return the result of recursively analyzing 
+     the body of the lambda expression. 
+     Note that, because of the array naming consistency checks explained above, 
+     in the body of the lambda expressions the arrays have 
+     the same names as they did outside the body. 
+     Some newly created arrays outside the body may have a name inside the body, 
+     so that their single-threaded use can be checked inside the body.</p><p>To handle <span class="tt"><a href="ACL2____MV-LET.html">mv-let</a></span>, we decompose it into its constituents. 
+     We recursively analyze the subterm that returns a multiple value, 
+     obtaining a list of output arrays. 
+     We ensure that all the non-<span class="v">nil</span> elements of this list 
+     are bound to some variable in the <span class="tt"><a href="ACL2____MV-LET.html">mv-let</a></span>; 
+     we ensure that by going through the list, 
+     with a variable that holds the current position in the list, 
+     and checking that for every non-<span class="v">nil</span> element 
+     its position is among the indices returned by 
+     the decomposition of the <span class="tt"><a href="ACL2____MV-LET.html">mv-let</a></span>. 
+     If some named array were modified and then dropped 
+     (i.e. not assigned to any variable by the <span class="tt"><a href="ACL2____MV-LET.html">mv-let</a></span>), 
+     then its modifications could not be returned 
+     and it would mean that it may not be used single-threadedly. 
+     As we perform the above check that no arrays are dropped, 
+     we also check that the arrays with non-<span class="v">nil</span> names 
+     are assigned to variables with the same names, 
+     as with other lambda expressions. 
+     Then, as with other lambda expressions, we return the result 
+     of recursively analyzing the body of the <span class="tt"><a href="ACL2____MV-LET.html">mv-let</a></span>.</p> 
+ 
+ 
+ 
+<p><b>Theorem: </b>return-type-of-atj-analyze-arrays-in-term.arrays</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> return-type-of-atj-analyze-arrays-in-term.arrays
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?arrays ?types)
+              (<a href="JAVA____ATJ-ANALYZE-ARRAYS-IN-TERM.html">atj-analyze-arrays-in-term</a> term wrld)))
+            (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> arrays))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>return-type-of-atj-analyze-arrays-in-term.types</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> return-type-of-atj-analyze-arrays-in-term.types
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?arrays ?types)
+              (<a href="JAVA____ATJ-ANALYZE-ARRAYS-IN-TERM.html">atj-analyze-arrays-in-term</a> term wrld)))
+            (<a href="JAVA____ATJ-TYPE-LISTP.html">atj-type-listp</a> types))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>return-type-of-atj-analyze-arrays-in-args.arrays</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> return-type-of-atj-analyze-arrays-in-args.arrays
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?arrays ?types)
+              (<a href="JAVA____ATJ-ANALYZE-ARRAYS-IN-ARGS.html">atj-analyze-arrays-in-args</a> args lambdap wrld)))
+            (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> arrays)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____LEN.html">len</a> arrays) (<a href="ACL2____LEN.html">len</a> args))))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>return-type-of-atj-analyze-arrays-in-args.types</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> return-type-of-atj-analyze-arrays-in-args.types
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?arrays ?types)
+              (<a href="JAVA____ATJ-ANALYZE-ARRAYS-IN-ARGS.html">atj-analyze-arrays-in-args</a> args lambdap wrld)))
+            (<a href="COMMON-LISP____AND.html">and</a> (<a href="JAVA____ATJ-TYPE-LISTP.html">atj-type-listp</a> types)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____LEN.html">len</a> types) (<a href="ACL2____LEN.html">len</a> args))))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>return-type-of-atj-analyze-arrays-in-mv-let.success</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> return-type-of-atj-analyze-arrays-in-mv-let.success
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?success ?arrays ?types)
+              (<a href="JAVA____ATJ-ANALYZE-ARRAYS-IN-MV-LET.html">atj-analyze-arrays-in-mv-let</a> term wrld)))
+            (<a href="ACL2____BOOLEANP.html">booleanp</a> success))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>return-type-of-atj-analyze-arrays-in-mv-let.arrays</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> return-type-of-atj-analyze-arrays-in-mv-let.arrays
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?success ?arrays ?types)
+              (<a href="JAVA____ATJ-ANALYZE-ARRAYS-IN-MV-LET.html">atj-analyze-arrays-in-mv-let</a> term wrld)))
+            (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> arrays))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>return-type-of-atj-analyze-arrays-in-mv-let.types</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> return-type-of-atj-analyze-arrays-in-mv-let.types
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?success ?arrays ?types)
+              (<a href="JAVA____ATJ-ANALYZE-ARRAYS-IN-MV-LET.html">atj-analyze-arrays-in-mv-let</a> term wrld)))
+            (<a href="JAVA____ATJ-TYPE-LISTP.html">atj-type-listp</a> types))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>consp-of-atj-analyze-arrays-in-term.arrays</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> consp-of-atj-analyze-arrays-in-term.arrays
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?arrays ?types)
+              (<a href="JAVA____ATJ-ANALYZE-ARRAYS-IN-TERM.html">atj-analyze-arrays-in-term</a> term wrld)))
+            (<a href="COMMON-LISP____CONSP.html">consp</a> arrays))
+        :rule-classes :type-prescription)</pre> 
+<p><b>Theorem: </b>consp-of-atj-analyze-arrays-in-args.arrays</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     consp-of-atj-analyze-arrays-in-args.arrays
+     (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____CONSP.html">consp</a> args)
+              (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?arrays ?types)
+                    (<a href="JAVA____ATJ-ANALYZE-ARRAYS-IN-ARGS.html">atj-analyze-arrays-in-args</a> args lambdap wrld)))
+                  (<a href="COMMON-LISP____CONSP.html">consp</a> arrays)))
+     :rule-classes :type-prescription)</pre> 
+<p><b>Theorem: </b>consp-of-atj-analyze-arrays-in-mv-let.arrays</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> consp-of-atj-analyze-arrays-in-mv-let.arrays
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 0
+                         (<a href="JAVA____ATJ-ANALYZE-ARRAYS-IN-MV-LET.html">atj-analyze-arrays-in-mv-let</a> term wrld))
+                 (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?success ?arrays ?types)
+                       (<a href="JAVA____ATJ-ANALYZE-ARRAYS-IN-MV-LET.html">atj-analyze-arrays-in-mv-let</a> term wrld)))
+                     (<a href="COMMON-LISP____CONSP.html">consp</a> arrays)))
+        :rule-classes :type-prescription)</pre> 
+<p><b>Theorem: </b>consp-of-atj-analyze-arrays-in-term.types</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> consp-of-atj-analyze-arrays-in-term.types
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?arrays ?types)
+              (<a href="JAVA____ATJ-ANALYZE-ARRAYS-IN-TERM.html">atj-analyze-arrays-in-term</a> term wrld)))
+            (<a href="COMMON-LISP____CONSP.html">consp</a> types))
+        :rule-classes :type-prescription)</pre> 
+<p><b>Theorem: </b>consp-of-atj-analyze-arrays-in-args.types</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     consp-of-atj-analyze-arrays-in-args.types
+     (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____CONSP.html">consp</a> args)
+              (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?arrays ?types)
+                    (<a href="JAVA____ATJ-ANALYZE-ARRAYS-IN-ARGS.html">atj-analyze-arrays-in-args</a> args lambdap wrld)))
+                  (<a href="COMMON-LISP____CONSP.html">consp</a> types)))
+     :rule-classes :type-prescription)</pre> 
+<p><b>Theorem: </b>consp-of-atj-analyze-arrays-in-mv-let.types</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> consp-of-atj-analyze-arrays-in-mv-let.types
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 0
+                         (<a href="JAVA____ATJ-ANALYZE-ARRAYS-IN-MV-LET.html">atj-analyze-arrays-in-mv-let</a> term wrld))
+                 (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?success ?arrays ?types)
+                       (<a href="JAVA____ATJ-ANALYZE-ARRAYS-IN-MV-LET.html">atj-analyze-arrays-in-mv-let</a> term wrld)))
+                     (<a href="COMMON-LISP____CONSP.html">consp</a> types)))
+        :rule-classes :type-prescription)</pre> 
+
+</body>
+</html>

@@ -1,0 +1,217 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Non-linear-arithmetic</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____NON-LINEAR-ARITHMETIC">Click for Non-linear-arithmetic in the Full Manual</a></h3>
+
+<p>Non-linear Arithmetic</p><p>This documentation topic is divided into two parts.  We first 
+ discuss the practical aspect of how to use the non-linear arithmetic extension 
+ to ACL2, and then the theory behind it.  We assume that the reader is familiar 
+ with the material in <span class="tt"><a href="ACL2____LINEAR-ARITHMETIC.html">linear-arithmetic</a></span> and that on <span class="v">:</span><span class="tt"><a href="ACL2____LINEAR.html">linear</a></span> rules.</p> 
+ 
+ <p>We begin our discussion of how to use non-linear arithmetic with a simple 
+ example.  Assume that we wish to prove:</p> 
+ 
+ <pre class="code">(<a href="ACL2____THM.html">thm</a>
+ (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____RATIONALP.html">rationalp</a> x)
+               (<a href="COMMON-LISP____RATIONALP.html">rationalp</a> y)
+               (<a href="COMMON-LISP____RATIONALP.html">rationalp</a> z)
+               (<a href="COMMON-LISP_____C3.html">&lt;</a> 0 y)
+               (<a href="COMMON-LISP_____C3.html">&lt;</a> x (<a href="COMMON-LISP_____A2.html">*</a> y z)))
+          (<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="COMMON-LISP____FLOOR.html">floor</a> x y) z)))</pre> 
+ 
+ <p>Note that <span class="v">(<a href="COMMON-LISP____FLOOR.html">floor</a> x y) &lt;= (<a href="COMMON-LISP_____F2.html">/</a> x y)</span>.  Note also that if we divide both 
+ sides of <span class="v">x &lt; (<a href="COMMON-LISP_____A2.html">*</a> y z)</span> by <span class="v">y</span>, since <span class="v">0 &lt; y</span>, we obtain <span class="v">(<a href="COMMON-LISP_____F2.html">/</a> x y) &lt;
+ z</span>.  By chaining these two inequalities together, we get the inequality we 
+ desired to prove.</p> 
+ 
+ <p>We now proceed with our example session:</p> 
+ 
+ <pre class="code">(skip-proofs 
+ (progn 
+ 
+; Since the truth of this theorem depends on the linear properties 
+; of floor, we will need the linear lemma: 
+ 
+   (defthm floor-bounds-1 
+       (implies (and (rationalp x) 
+                     (rationalp y)) 
+                (and (&lt; (+ (/ x y) -1) 
+                        (floor x y)) 
+                     (&lt;= (floor x y) 
+                         (/ x y)))) 
+       :rule-classes ((:linear :trigger-terms ((floor x y))))) 
+ 
+; We now disable floor, so that the linear lemma will be used. 
+ 
+   (in-theory (disable floor)) 
+ 
+; We create five rewrite rules which we will use during non-linear 
+; arithmetic.  The necessity for these is due to one of the differences in 
+; ACL2's behavior when non-linear arithmetic is turned on.  Although 
+; the conclusions of linear lemmas have always been rewritten before 
+; they are used, now, when non-linear arithmetic is turned on, the 
+; conclusions are rewritten under a different theory than under ``normal'' 
+; rewriting.  This theory is also used in other, similar, circumstances 
+; described below. 
+ 
+   (defthm |arith (* -1 x)| 
+       (equal (* -1 x) 
+              (- x))) 
+ 
+   (defthm |arith (* 1 x)| 
+       (equal (* 1 x) 
+              (fix x))) 
+ 
+   (defthm |arith (* x (/ x) y)| 
+       (equal (* x (/ x) y) 
+              (if (equal (fix x) 0) 
+                  0 
+                  (fix y)))) 
+ 
+   (defthm |arith (* y x)| 
+       (equal (* y x) 
+              (* x y))) 
+ 
+   (defthm |arith (fix x)| 
+       (implies (acl2-numberp x) 
+                (equal (fix x) 
+                       x)))) 
+ )  ; End skip-proofs. 
+ 
+; We disable the above rewrite rules from normal use. 
+ 
+(in-theory (disable |arith (* -1 x)| 
+                    |arith (* 1 x)| 
+                    |arith (* x (/ x) y)| 
+                    |arith (* y x)| 
+                    |arith (fix x)|)) 
+ 
+; We create an arithmetic-theory.  Note that we must give a quoted 
+; constant for the theory  none of the normal <span class="tt"><a href="ACL2____THEORY-FUNCTIONS.html">theory-functions</a></span> 
+; are applicable to in-arithmetic-theory. 
+ 
+(in-arithmetic-theory '(|arith (* -1 x)| 
+                        |arith (* 1 x)| 
+                        |arith (* x (/ x) y)| 
+                        |arith (* y x)| 
+                        |arith (fix x)|)) 
+ 
+; We turn non-linear arithmetic on. 
+ 
+(set-non-linearp t) 
+ 
+; We can now go ahead and prove our theorem. 
+ 
+(thm 
+ (implies (and (rationalp x) 
+               (rationalp y) 
+               (rationalp z) 
+               (&lt; 0 y) 
+               (&lt; x (* y z))) 
+          (&lt; (floor x y) z))) 
+</pre> 
+ 
+ <p>The above example illustrates the two practical requirements for using 
+ non-linear arithmetic in ACL2.  First, one must set up an arithmetic-theory. 
+ Usually, one would not set up an arithmetic-theory on one's own but would 
+ instead load a library book or books which do so.  Second, one must turn the 
+ non-linear arithmetic extension on.  This one must do explicitly  no 
+ book can do this for you.</p> 
+ 
+ <p>For a brief discussion of why this is so, even though <span class="v">(<a href="ACL2____SET-NON-LINEARP.html">set-non-linearp</a>
+ t)</span> is an embeddable event, see <a href="ACL2____ACL2-DEFAULTS-TABLE.html">ACL2-defaults-table</a> (in particular, 
+ the final paragraph).  (Note that <span class="v">(<a href="ACL2____SET-NON-LINEARP.html">set-non-linearp</a> t)</span> modifies the 
+ <span class="v">acl2-defaults-table</span>.)  Also see <a href="ACL2____SET-NON-LINEARP.html">set-non-linearp</a>, see <a href="ACL2____EMBEDDED-EVENT-FORM.html">embedded-event-form</a>, and see <a href="ACL2____EVENTS.html">events</a>.</p> 
+ 
+ <p>You can also enable non-linear arithmetic with the hint <span class="v">:nonlinearp t</span>. 
+ See <a href="ACL2____HINTS.html">hints</a>.  We, in fact, recommend the use of a hint which will enable 
+ nonlinear arithmetic only when the goal has stabilized under rewriting.  Using 
+ <span class="tt"><a href="ACL2____DEFAULT-HINTS.html">default-hints</a></span> can make this easier.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> nonlinearp-default-hint (<a href="ACL2____STABLE-UNDER-SIMPLIFICATIONP.html">stable-under-simplificationp</a> hist pspv)
+  (<a href="COMMON-LISP____COND.html">cond</a> (<a href="ACL2____STABLE-UNDER-SIMPLIFICATIONP.html">stable-under-simplificationp</a>
+         (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____ACCESS.html">access</a> rewrite-constant
+                          (<a href="ACL2____ACCESS.html">access</a> prove-spec-var pspv :rewrite-constant)
+                          :nonlinearp))
+             '(:computed-hint-replacement t :nonlinearp t)
+           nil))
+        ((<a href="ACL2____ACCESS.html">access</a> rewrite-constant
+                 (<a href="ACL2____ACCESS.html">access</a> prove-spec-var pspv :rewrite-constant)
+                 :nonlinearp)
+         (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____CAAR.html">caar</a> hist) 'SETTLED-DOWN-CLAUSE))
+             '(:computed-hint-replacement t :nonlinearp nil)
+           nil))
+        (t nil)))
+
+(<a href="ACL2____SET-DEFAULT-HINTS.html">set-default-hints</a> '((nonlinearp-default-hint stable-under-simplificationp
+                                              hist pspv)))</pre> 
+ 
+ <p>This has proven to be a helpful strategy which allows faster proof 
+ times.</p> 
+ 
+ <p>We now proceed to briefly describe the theory behind the non-linear 
+ extension to ACL2.  In <span class="tt"><a href="ACL2____LINEAR-ARITHMETIC.html">linear-arithmetic</a></span> it was stated that, 
+ ``[L]inear polynomial inequalities can be combined by cross-multiplication and 
+ addition to permit the deduction of a third inequality....''  That is, if</p> 
+ 
+ <pre class="code">0 &lt; poly1,
+0 &lt; poly2,</pre> 
+ 
+ <p>and <span class="v">c</span> and <span class="v">d</span> are positive rational constants, then</p> 
+ 
+ <pre class="code">0 &lt; c*poly1 + d*poly2.</pre> 
+ 
+ <p>Similarly, given the above,</p> 
+ 
+ <pre class="code">0 &lt; poly1*poly2.</pre> 
+ 
+ <p>In the linear arithmetic case, we are taking advantage of the facts that 
+ multiplication by a positive rational constant does not change the sign of a 
+ polynomial and that the sum of two positive polynomials is itself positive. 
+ In the non-linear arithmetic case, we are using the fact that the product of 
+ two positive polynomials is itself positive.</p> 
+ 
+ <p>For example, suppose we have the three assumptions:</p> 
+ 
+ <pre class="code">p1:  3*x*y + 7*a &lt; 4
+p2:            3 &lt; 2*x  or p2': 0 &lt; -3 + 2*x
+p3:            1 &lt; y    or p3': 0 &lt; -1 + y,</pre> 
+ 
+ <p>and we wish to prove that <span class="v">a &lt; 0</span>.  As described elsewhere (see <a href="ACL2____LINEAR-ARITHMETIC.html">linear-arithmetic</a>), we proceed by assuming the negation of our goal:</p> 
+ 
+ <pre class="code">p4:            0 &lt;= a,</pre> 
+ 
+ <p>and looking for a contradiction.</p> 
+ 
+ <p>There are no cancellations which can be performed by linear arithmetic in 
+ the above situation.  (Recall that two polynomials are canceled against each 
+ other only when they have the same largest unknown.)  However, <span class="v">p1</span> has a 
+ product as its largest unknown, and for each of the factors of that product 
+ there is a poly that has that factor as a largest unknown.  When non-linear 
+ arithmetic is enabled, ACL2 will therefore multiply <span class="v">p1'</span> and <span class="v">p2'</span> 
+ obtaining</p> 
+ 
+ <pre class="code">p5:            0 &lt; 3 + -2*x + -3*y + 2*x*y.</pre> 
+ 
+ <p>The addition of this polynomial will allow cancellation to continue and, in 
+ this case, we will prove our goal.  Thus, just as ACL2 adds two polynomials 
+ together when they have the same largest unknown of opposite signs in order to 
+ create a new ``smaller'' polynomial; so ACL2 multiplies polynomials together 
+ when the product of their largest unknowns is itself the largest unknown of 
+ another polynomial.  As the use of <span class="v">:</span><span class="tt"><a href="ACL2____LINEAR.html">linear</a></span> lemmas to further seed 
+ the arithmetic database may allow cancellation to proceed, so may the use of 
+ non-linear arithmetic.</p> 
+ 
+ <p>This multiplication of polynomials is the motivation for an 
+ arithmetic-theory distinct from than the normal one.  Because this may be done 
+ so often, and because the individual factors have presumably already been 
+ rewritten, it is important that this be done in an efficient way.  The use of 
+ a small, specialized, theory helps avoid the repeated application of rewrite 
+ rules to already stabilized terms.</p>
+</body>
+</html>

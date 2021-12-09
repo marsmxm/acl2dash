@@ -1,0 +1,86 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Wormhole-implementation</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____WORMHOLE-IMPLEMENTATION">Click for Wormhole-implementation in the Full Manual</a></h3>
+
+<p>Notes on how wormholes are implemented</p><p>What happens when you call <span class="tt"><a href="ACL2____WORMHOLE.html">wormhole</a></span>?  Recall that a typical 
+ call of the function looks like this:</p> 
+ 
+ <pre class="code">(<a href="ACL2____WORMHOLE.html">wormhole</a> 'name
+          '(<a href="COMMON-LISP____LAMBDA.html">lambda</a> (whs) ...)
+          input
+          form
+          :ld-verbose ...
+          ...)</pre> 
+ 
+ <p>A brief recap of the advertised semantics for <span class="v">wormhole</span> establishes our 
+ terminology: When the above <span class="v">wormhole</span> is evaluated, the 
+ <span class="v">lambda</span>-expression is applied to the wormhole's status and the result is 
+ stored as the new status.  Then, if the entry-code of the new status is 
+ <span class="v">:ENTER</span>, <span class="tt"><a href="ACL2____LD.html">ld</a></span> is invoked on a copy of the ``current state'' with the 
+ specified <span class="v">ld-</span> ``special variables;'' output is directed to the comment 
+ window.  In that copy of the state, the state-global variable 
+ <span class="v">wormhole-input</span> is set to the value of <span class="v">input</span> and the state-global 
+ variable <span class="v">wormhole-status</span> is set to the (new) status computed by the 
+ <span class="v">lambda</span>-expression.  Thus, inside the wormhole, <span class="v">(<a href="ACL2_____04.html">@</a> wormhole-input)</span> 
+ returns the list of inputs, <span class="v">(<a href="ACL2_____04.html">@</a> wormhole-status)</span> returns the current 
+ status, and <span class="v">(<a href="ACL2____ASSIGN.html">assign</a> wormhole-status ...)</span> sets the wormhole's status.  The 
+ first form executed by the <span class="v">ld</span> is the value of <span class="v">form</span> and unless that 
+ form returns <span class="v">(<a href="ACL2____VALUE.html">value</a> :q)</span>, causing the <span class="v">ld</span> to quit, the <span class="v">ld</span> 
+ proceeds to take subsequent input from the comment window.  Upon exiting from 
+ <span class="v">ld</span>, the wormhole state ``evaporates.''  The wormhole's status upon exit 
+ is remembered and restored the next time the wormhole is entered.</p> 
+ 
+ <p>Here is what really happens.</p> 
+ 
+ <p>Each wormhole's status is recorded in an alist stored in a Common Lisp 
+ global variable named <span class="v">*wormhole-status-alist*</span>.  This variable is not part 
+ of the ACL2 state.  If you exit the ACL2 loop with <span class="v">:q</span> you can inspect the 
+ value of <span class="v">*wormhole-status-alist*</span>.  When the <span class="v">lambda</span>-expression is 
+ evaluated it is applied to the value associated with <span class="v">name</span> in the alist 
+ and the result is stored back into that alist.  This step is performed by 
+ <span class="tt"><a href="ACL2____WORMHOLE-EVAL.html">wormhole-eval</a></span>.  To make things more efficient, <span class="v">wormhole-eval</span> is 
+ just a macro that expands into a <span class="v">let</span> that binds the <span class="v">lambda</span> formal to 
+ the current status and whose body is the <span class="v">lambda</span> body.  Guard clauses are 
+ generated from the body, with one exception: the <span class="v">lambda</span> formal is 
+ replaced by a new variable so that no prior assumptions are available about 
+ the value of the the wormhole status.</p> 
+ 
+ <p>If the newly computed status has an entry code of <span class="v">:ENTER</span> <span class="tt"><a href="ACL2____LD.html">ld</a></span> 
+ will be invoked.  But we don't really copy state, of course.  Instead we will 
+ invoke <span class="v">ld</span> on the live state, which is always available in the von Neumann 
+ world in which ACL2 is implemented.  To give the illusion of copying state, we 
+ will undo changes to the state upon exiting.  To support this, we do two 
+ things just before invoking <span class="v">ld</span>: we bind a Common Lisp special variable is 
+ to <span class="v">t</span> to record that ACL2 is in a wormhole, and we initialize an 
+ accumulator that will be used to record state changes made while in the 
+ wormhole.</p> 
+ 
+ <p>Then <span class="v">ld</span> is invoked, with first argument, <span class="v">standard-oi</span>, being set 
+ to <span class="v">(<a href="COMMON-LISP____CONS.html">cons</a> form *standard-oi*)</span>.  According to the standard semantics of 
+ <span class="v">ld</span>, this reads and evaluates <span class="v">form</span> and then the forms in the 
+ specified channel.  The standard channels are directed to and from the 
+ terminal, which is the physical realization of the comment window.</p> 
+ 
+ <p>All state modifying functions of ACL2 are sensitive to the special variable 
+ that indicates that evaluation is in a wormhole.  Some ACL2 state-modifying 
+ functions (e.g., those that modify the file system like <span class="tt"><a href="ACL2____WRITE-BYTE_42.html">write-byte$</a></span>) 
+ are made to cause an error if invoked inside a wormhole on a file other than 
+ the terminal.  Others, like <span class="v">f-put-global</span> (the function behind such 
+ features as <span class="v">assign</span> and maintenance of the ACL2 logical world by such 
+ events as <span class="tt"><a href="COMMON-LISP____DEFUN.html">defun</a></span> and <span class="tt"><a href="ACL2____DEFTHM.html">defthm</a></span>) are made to record the old value 
+ of the state component being changed; these records are kept in the 
+ accumulator initialized above.</p> 
+ 
+ <p>Upon exit from <span class="v">ld</span> for any reason, the final value of <span class="v">(<a href="ACL2_____04.html">@</a>
+ wormhole-status)</span> is stored in <span class="v">*wormhole-status-alist*</span> and then the 
+ accumulator is used to ``undo'' all the state changes.</p> 
+ 
+ <p><span class="v">Wormhole</span> always returns <span class="v">nil</span>.</p>
+</body>
+</html>

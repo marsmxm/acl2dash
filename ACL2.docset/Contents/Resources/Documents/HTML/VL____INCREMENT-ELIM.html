@@ -1,0 +1,59 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Increment-elim</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL____INCREMENT-ELIM">Click for Increment-elim in the Full Manual</a></h3>
+
+<p>Split increment, decrement, and assignment operators out of 
+expressions and into separate statements.</p><h3>Introduction</h3> 
+ 
+<p>SystemVerilog-2012 adds C-style increment, decrement, and intra-expression 
+assignment operators.  Per Section 11.4.1 and 11.4.2, these expressions are to 
+behave like blocking assignments.</p> 
+ 
+<p>In this transform, our basic goal is to eliminate these operators by 
+splitting them out into separate, explicit assignment statements.  For 
+instance, we want to do rewrites like this:</p> 
+ 
+<pre class="code">begin                           begin
+  a = (i++) + 2;         ---&gt;      a = i + 2;
+end                                i = i + 1; //  post increment
+                                end</pre> 
+ 
+<p>Something tricky is that these operators are permitted in <b>all</b> 
+expressions, but they only make sense in certain contexts like procedural 
+statements.  For instance, it doesn't make any sense to use an increment 
+operator in a continuous assignment statement like</p> 
+ 
+<pre class="code">assign w1 = w2++;</pre> 
+ 
+<p>because there's no notion of "before" or "after" this assignment and no 
+way to control when or how often a continuous assignment gets executed.  If 
+this sort of thing were legal, at best it would do something like increment 
+<span class="v">w2</span> by some unknown amount.  We find that tools such as NCVerilog and VCS 
+prohibit many such uses of <span class="v">++</span> and <span class="v">--</span>, and we do not want to permit 
+them either.</p> 
+ 
+<p>So our goal in this transform is actually to do two things.  First, we want 
+to translate any valid uses of these operators into ordinary blocking 
+assignments.  Second, we want to identify any invalid uses of these operators 
+and, if we find any, cause corresponding fatal warnings.</p> 
+ 
+<p>Even when these operators are used in valid contexts, SystemVerilog may not 
+guarantee what behavior is supposed to occur.  For instance, if we're in some 
+procedural block and we run across a statement like</p> 
+ 
+<pre class="code">i = 5;
+j = i++ + (i = i - 1);</pre> 
+ 
+<p>then we don't know what value will get assigned to <span class="v">j</span> because 
+SystemVerilog leaves undefined the relative ordering of the <span class="v">i++</span> and <span class="v">i =
+i - 1</span> expressions.  To reduce the possibility of different interpretations by 
+different tools, we try to recognize these sorts of situations and cause fatal 
+errors when there can be confusion.</p>
+</body>
+</html>

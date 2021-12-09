@@ -1,0 +1,200 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Expression-sizing-minutia</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL2014____EXPRESSION-SIZING-MINUTIA">Click for Expression-sizing-minutia in the Full Manual</a></h3>
+
+<p>Specific issues and questions related to the expression sizing and 
+typing of expressions.</p><p>There are several ways in which the spec seems unclear or seems to 
+contradict what Verilog implementations do.</p> 
+ 
+<h2>Q1.  Does a self-determined operand affect the types of the expressions in 
+which it is involved?</h2> 
+ 
+<p>I ask this question only about the shifting operators, power operator, and 
+conditional operators; the other operators that have self-determined operands 
+are: concatenation and multiple-concatenation operators (which are 
+unambiguously defined to be unsigned in 5.5.1), and logical/reduction 
+operations which are discussed below in Q2.</p> 
+ 
+<p>What does the spec say?  In 5.5.1, we are told The sign and size of any 
+self-determined operand are determined by the operand itself and independent of 
+the remainder of the expression..  From this, and from the discussion of 
+what it means to be a self-determined expression in 5.4.1, I think it is clear 
+that we are supposed to compute the size/type of the subexpression without 
+considering the sizes and types of other operands in the containing expression. 
+But what is <b>not</b> clear is: does the resulting size and type of the 
+subexpression have any bearing on the width/type of the containing 
+expression?</p> 
+ 
+<p>The width question is unambiguously answered "no" in all cases by Table 
+5-22.  The type question is unambiguously answered "no" by for shift 
+operators in Section 5.1.12, where we are told the right operand is always 
+treated as an unsigned number and has no effect on the signedness of the 
+result. But the type question is not addressed in 5.1.13 for the 
+conditional operator, and while there is some discussion in 5.1.5 about the 
+type of a power operator when its operands are real, the section just refers us 
+to 5.4.1 and 5.5.1 for the integer cases.</p> 
+ 
+<p>Well, 5.4.1 doesn't really say anything about types, except that it contains 
+Table 5-22 that says which operands are self-determined, and 5.5.1 is back 
+where we started.  So the only things we have to go on for the conditional 
+operator and power operator are:</p> 
+ 
+<ul> 
+ 
+<li>
+<b>R1.</b> The sign and size of any self-determined operand are determined by the operand 
+itself and independent of the remainder of the expression.</li> 
+ 
+<li>
+<b>R2.</b> For nonself-determined operands, the following rules apply: 
+<ul> 
+ <li>If any operand is real, the result is real</li> 
+ <li>If any operand is unsigned, the result is unsigned, regardless of the 
+     operator</li> 
+ <li>If all operands are signed, the result will be signed, regardless of operator, 
+     except when specified otherwise.</li> 
+</ul>
+</li> 
+ 
+</ul> 
+ 
+<p>We have already looked at the R1---indeed, we're trying to figure out just 
+what it means by independent.  So, we are left with R2, which 
+almost seems to provide a clear answer.  In particular, if any 
+operand really means any operand then it is clear that we should 
+include the types of these self-determined operands really do affect the results.</p> 
+ 
+<p>But there is this damn header, For nonself-determined operands, 
+which suggests this maybe any operand here only refers to any 
+nonself-determined operand.  And if this is the case, then we still have no 
+idea what we are supposed to do with conditional and power operations, which 
+have a mixture of self and nonself-determined operands.</p> 
+ 
+<p>We conclude that the spec is ambiguous and revert to testing with other 
+Verilog implementations to see what they seem to do.</p> 
+ 
+<h4>Conditional Operator</h4> 
+ 
+<p>Verilog-XL and NCVerilog agree that the answer for both of the following 
+expressions are <span class="v">1111101</span>.  This can only happen if the branch operands are 
+being sign-extended.  Hence, it seems that these implementations treat the sign 
+of the condition as irrelevant to the result type.</p> 
+ 
+<pre class="code">wire [6:0] y0 = 1'b0 ? 3'sb 100 : 3'sb 101;
+wire [6:0] y1 = 1'sb0 ? 3'sb 100 : 3'sb 101;</pre> 
+ 
+<h4>Power Operator</h4> 
+ 
+<p>Unfortunately Verilog-XL does not seem to support the power operator, so we 
+only are able to test with NCVerilog.  NCVerilog reports 1984 (-64) as the 
+result for both of the following,</p> 
+ 
+<pre class="code">wire [10:0] p2 = (3'sb100 ** 2'b11);
+wire [10:0] p3 = (3'sb100 ** 2'sb11);</pre> 
+ 
+<p>Hence it seems that the type of the exponent is not relevant to the result 
+type.  If it were, then in p2 we would have to zero-extend the base to 4, 
+rather than sign-extend it to -4, and the result for p2 would be 64 instead of 
+1984.</p> 
+ 
+<h4>Shift Operators</h4> 
+ 
+<p>For good measure we also tried a shift-operator, even though we think the 
+spec is clear here.</p> 
+ 
+<pre class="code">wire [4:0] v1 = 1'sd 1 &gt;&gt; 1'b0;</pre> 
+ 
+<p>Here, ignoring the sign of the right-hand side would produce <span class="v">11111</span>, 
+since the left-hand side would be sign-extended to 5 bits and then unchanged by 
+the shift.  On the other hand, if we allow the right-hand side to play a role, 
+then the result is unsigned and we would zero-extend the left-hand side 
+instead, producing a final result of 1.  Both Verilog-XL and NCVerilog get 
+<span class="v">11111</span>, which we think is correct.</p> 
+ 
+<h4>Conclusions</h4> 
+ 
+<p>The implementations seem to agree that the types of these operands should 
+not matter.  Since we think the spec is vague and does not say one way or 
+another, we mimick their behavior.  However, we also issue warnings when we 
+encounter one of these operands with an unsigned self-determined operand and 
+signed nonself-determined operands, since this is a case that other 
+implementations might be confused about.  See <a href="VL2014____VL-EXPR-TYPEDECIDE-AUX.html">vl-expr-typedecide-aux</a> for 
+details.</p> 
+ 
+ 
+<h3>Q2.  What is the type of a reduction or logical operation?</h3> 
+ 
+<p>The ambiguity in Q1 is also a problem for:</p> 
+<ul> 
+ 
+<li>the logical operators (<span class="v">&amp;&amp;</span>, <span class="v">||</span>, and <span class="v">!</span>) and</li> 
+ 
+<li>the reduction operators (<span class="v">&amp;</span>, <span class="v">~&amp;</span>, <span class="v">|</span>, <span class="v">~|</span>, <span class="v">^</span>, <span class="v">~^</span>, 
+and <span class="v">^~</span>).</li> 
+ 
+</ul> 
+ 
+<p>In these cases, there are no nonself-determined operators that R2 might 
+allow us to use to get an answer.  5.1.11 (reduction operators) doesn't provide 
+any help, and neither does 5.1.9 (logical operators).  So, we are again reduced 
+to testing.  Here are some simple cases:</p> 
+ 
+<pre class="code">wire [4:0] q0 = | 17;
+wire [4:0] q1 = ! 3'sd 0;
+wire [4:0] q2 = &amp; 5'sb11111;
+wire [4:0] q3 = 3 &amp;&amp; 5;</pre> 
+ 
+<p>In Verilog-XL and NCVerilog, all of these expressions produce <span class="v">00001</span>, 
+meaning that in each case they are being zero-extended instead of sign 
+extended.  This is somewhat further evidence that R2 is not supposed to apply 
+to self-determined operands.</p> 
+ 
+<p>Some internet searching revealed <a href="http://www.eda.org/svdb/bug_view_page.php?bug_id=0001072" target="_blank"><nobr>Issue 
+1072<img src="../Icon_External_Link.png" title="External link to http://www.eda.org/svdb/bug_view_page.php?bug_id=0001072"></nobr></a> at the EDA.org "mantis" site, which seems to suggests that the spec 
+is wrong and should say reduction operators and logical operators produce 
+unsigned 1-bit values.</p> 
+ 
+<p>We therefore treat these as unsigned 1-bit values, but we take special care 
+to generate warnings if this treatment affects the final signedness of an 
+expression.  See <a href="VL2014____VL-EXPR-TYPEDECIDE.html">vl-expr-typedecide</a> for details.</p> 
+ 
+ 
+<h3>Q3.  What does shifting by a negative number mean?</h3> 
+ 
+<p>This question is silly because it seems that the Verilog specification 
+somewhat clearly says in 5.1.12 that the right operand is always treated as 
+an unsigned number.</p> 
+ 
+<p>Unfortunately, Verilog-XL and NCVerilog produce different results for:</p> 
+ 
+<pre class="code">wire [9:0] v0 = 10'b 0000_11_0000 &gt;&gt; ( 2'sd 0 + 1'sd 1 );</pre> 
+ 
+<p>In Verilog-XL, the answer is <span class="v">0001_10_0000</span>, i.e., the result appears to 
+have been left-shifted by one place; in NCVerilog, the answer is 
+<span class="v">0000_00_0110</span>, i.e., the result appears to have been right-shifted by 3 
+places.</p> 
+ 
+<p>In both cases, the right-hand side seems to indeed be self-determined and 
+yields 2'sd 3.  And, since we are supposed to "treat the right-hand side as an 
+unsigned number," it seems like we should shift the left-hand side by 3 places 
+to the right like NCVerilog.</p> 
+ 
+<p>I found some discussion from the IEEE 1364 Behavioral Task Force Mailing 
+List Archives, specifically a <a href="http://www.boydtechinc.com/btf/archive/btf_1999/0642.html" target="_blank"><nobr>signed shift 
+errata?<img src="../Icon_External_Link.png" title="External link to http://www.boydtechinc.com/btf/archive/btf_1999/0642.html"></nobr></a> thread started by Stuart Sutherland on Monday, July 19, 1999, the 
+followup to which suggests that Verilog-XL is in the wrong and that this is one 
+area where NCVerilog was designed to match the Verilog-2005 standard instead of 
+Verilog-XL.</p> 
+ 
+<p>We follow NCVerilog's behavior, but issue a warning if we see a signed 
+right-hand side (unless it is a signed constant whose sign-bit is zero) so that 
+the difference does not matter.  See <a href="VL2014____VL-EXPR-TYPEDECIDE-AUX.html">vl-expr-typedecide-aux</a> for 
+details.</p>
+</body>
+</html>

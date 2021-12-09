@@ -1,0 +1,253 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Atj-check-marked-annotated-mv-let-call</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=JAVA____ATJ-CHECK-MARKED-ANNOTATED-MV-LET-CALL">Click for Atj-check-marked-annotated-mv-let-call in the Full Manual</a></h3>
+
+<p>Recognize translated <span class="tt"><a href="ACL2____MV-LET.html">mv-let</a></span>s after pre-translation.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(atj-check-marked-annotated-mv-let-call term) 
+   
+(mv yes/no mv-var mv-term vars indices body-term)</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">term</span>  <font color="#606060">Guard <span class="v">(<a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a> term)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">yes/no</span>  <font color="#606060">Type <span class="v">(<a href="ACL2____BOOLEANP.html">booleanp</a> yes/no)</span>.</font>
+</dd> 
+<dd>
+<span class="tt">mv-var</span>  <font color="#606060">Type <span class="v">(<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> mv-var)</span>.</font>
+</dd> 
+<dd>
+<span class="tt">mv-term</span>  <font color="#606060">Type <span class="v">(<a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a> mv-term)</span>.</font>
+</dd> 
+<dd>
+<span class="tt">vars</span>  <font color="#606060">Type <span class="v">(<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> vars)</span>.</font>
+</dd> 
+<dd>
+<span class="tt">indices</span>  <font color="#606060">Type <span class="v">(<a href="ACL2____NAT-LISTP.html">nat-listp</a> indices)</span>.</font>
+</dd> 
+<dd>
+<span class="tt">body-term</span>  <font color="#606060">Type <span class="v">(<a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a> body-term)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>The type annotation pre-translation step recognizes <span class="tt"><a href="ACL2____MV-LET.html">mv-let</a></span>s 
+     and transforms them as explained in <span class="tt"><a href="JAVA____ATJ-TYPE-ANNOTATE-TERM.html">atj-type-annotate-term</a></span>. 
+     the variable reuse pre-translation step additionally marks the variables, 
+     and the variable renaming pre-translation step 
+     may change their (unmarked, unannotated) names. 
+     So the resulting term should have the form</p><pre class="code">([reqinf&gt;reqinf]
+ ((<a href="COMMON-LISP____LAMBDA.html">lambda</a> ([m][types]mv)
+          ([reqinf&gt;reqinf]
+           ((<a href="COMMON-LISP____LAMBDA.html">lambda</a> ([m1][type1]var1 ... [mn][typen]varn)
+                    ([...&gt;reqinf] body-term))
+            ([AV&gt;type1] (<a href="ACL2____MV-NTH.html">mv-nth</a> ([AI&gt;AI] '0)
+                                ([types&gt;types] [m][types]mv)))
+            ...
+            ([AV&gt;typen] (<a href="ACL2____MV-NTH.html">mv-nth</a> ([AI&gt;AI] 'n-1)
+                                ([types&gt;types] [m][types]mv))))))
+  ([types&gt;types] mv-term)))</pre><p>where <span class="v">[m]</span>, <span class="v">[m1]</span>, ..., <span class="v">[mn]</span> are new/old markings, 
+     and where <span class="v">mv</span> may not be the symbol `<span class="v">mv</span>' but some other symbol. 
+     Because of the pre-translation steps that removes unused variables, 
+     the formals and arguments of the inner lambda 
+     may be fewer than the elements of <span class="v">types</span>; 
+     i.e. some <span class="tt"><a href="ACL2____MV-NTH.html">mv-nth</a></span> indices may be skipped.</p><p>This code recognizes terms of the form above, 
+     returning some of the constituents if successful. 
+     The <span class="v">mv-var</span> result is <span class="v">[m][types]mv</span>, 
+     i.e. the marked and annotated multi-value variable. 
+     The <span class="v">mv-term</span> result is <span class="v">([types&gt;types] mv-term)</span>, 
+     i.e. the wrapped multi-value term. 
+     The <span class="v">vars</span> result is <span class="v">([m1][type1]var1 ... [mn][typen]varn)</span> 
+     (possibly skipping some indices), 
+     i.e. the list of formals of the inner lambda expression, 
+     all marked and annotated. 
+     The <span class="v">indices</span> result is the ordered list of <span class="tt"><a href="ACL2____MV-NTH.html">mv-nth</a></span> indices 
+     actually present; these are 0-based. 
+     The <span class="v">body-term</span> result is <span class="v">([...&gt;reqinf] body-term)</span>, 
+     i.e. the wrapped body of the inner lambda expression. 
+     The term and variable results are marked/annotated/wrapped so that 
+     they can be treated uniformly by the code generation functions.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>atj-check-marked-annotated-mv-let-call-aux</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ atj-check-marked-annotated-mv-let-call-aux
+ (<a href="ACL2____ARGS.html">args</a> vars types mv-var)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____PSEUDO-TERM-LISTP.html">pseudo-term-listp</a> args)
+                             (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> vars)
+                             (<a href="JAVA____ATJ-TYPE-LISTP.html">atj-type-listp</a> types)
+                             (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> mv-var))))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP_____D3.html">=</a> (<a href="ACL2____LEN.html">len</a> vars) (<a href="ACL2____LEN.html">len</a> args))
+                             (<a href="COMMON-LISP____CONSP.html">consp</a> types))))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'atj-check-marked-annotated-mv-let-call-aux))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+   (((when (<a href="COMMON-LISP____ENDP.html">endp</a> args)) nil)
+    ((<a href="ACL2____MV.html">mv</a> arg arg-src arg-dst)
+     (<a href="JAVA____ATJ-TYPE-UNWRAP-TERM.html">atj-type-unwrap-term</a> (<a href="COMMON-LISP____CAR.html">car</a> args)))
+    ((unless (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____VARIABLEP.html">variablep</a> arg))
+                  (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____FQUOTEP.html">fquotep</a> arg))
+                  (<a href="COMMON-LISP____EQ.html">eq</a> (<a href="ACL2____FFN-SYMB.html">ffn-symb</a> arg) 'mv-nth)
+                  (<a href="COMMON-LISP_____D3.html">=</a> (<a href="ACL2____LEN.html">len</a> (<a href="ACL2____FARGS.html">fargs</a> arg)) 2)
+                  (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____FARGN.html">fargn</a> arg 2)
+                         (<a href="JAVA____ATJ-TYPE-WRAP-TERM.html">atj-type-wrap-term</a> mv-var types types))))
+     (<a href="ACL2____RAISE.html">raise</a> "Internal error: malformed term ~x0."
+            (<a href="COMMON-LISP____CAR.html">car</a> args))
+     (<a href="ACL2____REPEAT.html">repeat</a> (<a href="ACL2____LEN.html">len</a> args) 0))
+    ((<a href="ACL2____MV.html">mv</a> index index-src index-dst)
+     (<a href="JAVA____ATJ-TYPE-UNWRAP-TERM.html">atj-type-unwrap-term</a> (<a href="ACL2____FARGN.html">fargn</a> arg 1)))
+    ((unless
+          (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____QUOTEP.html">quotep</a> index)
+               (<a href="COMMON-LISP____EQUAL.html">equal</a> index-src
+                      (<a href="COMMON-LISP____LIST.html">list</a> (<a href="JAVA____ATJ-TYPE-ACL2.html">atj-type-acl2</a> (<a href="JAVA____ATJ-ATYPE-INTEGER.html">atj-atype-integer</a>))))
+               (<a href="COMMON-LISP____EQUAL.html">equal</a> index-dst
+                      (<a href="COMMON-LISP____LIST.html">list</a> (<a href="JAVA____ATJ-TYPE-ACL2.html">atj-type-acl2</a> (<a href="JAVA____ATJ-ATYPE-INTEGER.html">atj-atype-integer</a>))))))
+     (<a href="ACL2____RAISE.html">raise</a> "Internal error: malformed term ~x0."
+            (<a href="COMMON-LISP____CAR.html">car</a> args))
+     (<a href="ACL2____REPEAT.html">repeat</a> (<a href="ACL2____LEN.html">len</a> args) 0))
+    (index (<a href="ACL2____UNQUOTE-TERM.html">unquote-term</a> index))
+    ((unless (<a href="ACL2____INTEGER-RANGE-P.html">integer-range-p</a> 0 (<a href="ACL2____LEN.html">len</a> types) index))
+     (<a href="ACL2____RAISE.html">raise</a> "Internal error: malformed term ~x0."
+            (<a href="COMMON-LISP____CAR.html">car</a> args))
+     (<a href="ACL2____REPEAT.html">repeat</a> (<a href="ACL2____LEN.html">len</a> args) 0))
+    ((unless (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> arg-src
+                         (<a href="COMMON-LISP____LIST.html">list</a> (<a href="JAVA____ATJ-TYPE-ACL2.html">atj-type-acl2</a> (<a href="JAVA____ATJ-ATYPE-VALUE.html">atj-atype-value</a>))))
+                  (<a href="COMMON-LISP____EQUAL.html">equal</a> arg-dst (<a href="COMMON-LISP____LIST.html">list</a> (<a href="COMMON-LISP____NTH.html">nth</a> index types)))))
+     (<a href="ACL2____RAISE.html">raise</a> "Internal error: malformed term ~x0."
+            (<a href="COMMON-LISP____CAR.html">car</a> args))
+     (<a href="ACL2____REPEAT.html">repeat</a> (<a href="ACL2____LEN.html">len</a> args) 0))
+    ((<a href="ACL2____MV.html">mv</a> var &amp;) (<a href="JAVA____ATJ-UNMARK-VAR.html">atj-unmark-var</a> (<a href="COMMON-LISP____CAR.html">car</a> vars)))
+    ((<a href="ACL2____MV.html">mv</a> &amp; var-types)
+     (<a href="JAVA____ATJ-TYPE-UNANNOTATE-VAR.html">atj-type-unannotate-var</a> var))
+    ((unless (<a href="COMMON-LISP____EQUAL.html">equal</a> var-types (<a href="COMMON-LISP____LIST.html">list</a> (<a href="COMMON-LISP____NTH.html">nth</a> index types))))
+     (<a href="ACL2____RAISE.html">raise</a> "Internal error: malformed term ~x0."
+            (<a href="COMMON-LISP____CAR.html">car</a> args))
+     (<a href="ACL2____REPEAT.html">repeat</a> (<a href="ACL2____LEN.html">len</a> args) 0)))
+   (<a href="COMMON-LISP____CONS.html">cons</a>
+       index
+       (atj-check-marked-annotated-mv-let-call-aux (<a href="COMMON-LISP____CDR.html">cdr</a> args)
+                                                   (<a href="COMMON-LISP____CDR.html">cdr</a> vars)
+                                                   types mv-var)))))</pre> 
+<p><b>Theorem: </b>nat-listp-of-atj-check-marked-annotated-mv-let-call-aux</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> nat-listp-of-atj-check-marked-annotated-mv-let-call-aux
+        (<a href="ACL2____B_A2.html">b*</a> ((indices (atj-check-marked-annotated-mv-let-call-aux
+                           args vars types mv-var)))
+            (<a href="ACL2____NAT-LISTP.html">nat-listp</a> indices))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>len-of-atj-check-marked-annotated-mv-let-call-aux</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> len-of-atj-check-marked-annotated-mv-let-call-aux
+        (<a href="ACL2____B_A2.html">b*</a> ((?indices (atj-check-marked-annotated-mv-let-call-aux
+                            args vars types mv-var)))
+            (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____LEN.html">len</a> indices) (<a href="ACL2____LEN.html">len</a> args))))</pre> 
+<p><b>Function: </b>atj-check-marked-annotated-mv-let-call</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> atj-check-marked-annotated-mv-let-call
+       (term)
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a> term)))
+       (<a href="COMMON-LISP____LET.html">let</a> ((__function__ 'atj-check-marked-annotated-mv-let-call))
+            (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+            (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> outer-lambda-call reqinf reqinf2)
+                  (<a href="JAVA____ATJ-TYPE-UNWRAP-TERM.html">atj-type-unwrap-term</a> term))
+                 ((unless (<a href="COMMON-LISP____EQUAL.html">equal</a> reqinf reqinf2))
+                  (<a href="ACL2____MV.html">mv</a> nil nil nil nil nil nil))
+                 ((<a href="ACL2____MV.html">mv</a> okp mv-var
+                      wrapped-inner-lambda-call mv-term)
+                  (<a href="ACL2____CHECK-UNARY-LAMBDA-CALL.html">check-unary-lambda-call</a> outer-lambda-call))
+                 ((unless okp)
+                  (<a href="ACL2____MV.html">mv</a> nil nil nil nil nil nil))
+                 ((<a href="ACL2____MV.html">mv</a> mv-var-unmarked &amp;)
+                  (<a href="JAVA____ATJ-UNMARK-VAR.html">atj-unmark-var</a> mv-var))
+                 ((<a href="ACL2____MV.html">mv</a> &amp; types)
+                  (<a href="JAVA____ATJ-TYPE-UNANNOTATE-VAR.html">atj-type-unannotate-var</a> mv-var-unmarked))
+                 ((unless (<a href="COMMON-LISP_____E3.html">&gt;</a> (<a href="ACL2____LEN.html">len</a> types) 1))
+                  (<a href="ACL2____MV.html">mv</a> nil nil nil nil nil nil))
+                 ((<a href="ACL2____MV.html">mv</a> &amp; src-types dst-types)
+                  (<a href="JAVA____ATJ-TYPE-UNWRAP-TERM.html">atj-type-unwrap-term</a> mv-term))
+                 ((unless (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> src-types types)
+                               (<a href="COMMON-LISP____EQUAL.html">equal</a> dst-types types)))
+                  (<a href="ACL2____RAISE.html">raise</a> "Internal error: malformed term ~x0."
+                         term)
+                  (<a href="ACL2____MV.html">mv</a> nil nil nil nil nil nil))
+                 ((<a href="ACL2____MV.html">mv</a> inner-lambda-call src-types dst-types)
+                  (<a href="JAVA____ATJ-TYPE-UNWRAP-TERM.html">atj-type-unwrap-term</a> wrapped-inner-lambda-call))
+                 ((unless (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> src-types reqinf)
+                               (<a href="COMMON-LISP____EQUAL.html">equal</a> dst-types reqinf)))
+                  (<a href="ACL2____MV.html">mv</a> nil nil nil nil nil nil))
+                 ((<a href="ACL2____MV.html">mv</a> okp vars body-term args)
+                  (<a href="ACL2____CHECK-LAMBDA-CALL.html">check-lambda-call</a> inner-lambda-call))
+                 ((unless okp)
+                  (<a href="ACL2____RAISE.html">raise</a> "Internal error: malformed term ~x0."
+                         term)
+                  (<a href="ACL2____MV.html">mv</a> nil nil nil nil nil nil))
+                 ((<a href="ACL2____MV.html">mv</a> &amp; &amp; dst-types)
+                  (<a href="JAVA____ATJ-TYPE-UNWRAP-TERM.html">atj-type-unwrap-term</a> body-term))
+                 ((unless (<a href="COMMON-LISP____EQUAL.html">equal</a> dst-types reqinf))
+                  (<a href="ACL2____RAISE.html">raise</a> "Internal error: malformed term ~x0."
+                         term)
+                  (<a href="ACL2____MV.html">mv</a> nil nil nil nil nil nil))
+                 (indices (atj-check-marked-annotated-mv-let-call-aux
+                               args vars types mv-var)))
+                (<a href="ACL2____MV.html">mv</a> t mv-var
+                    mv-term vars indices body-term))))</pre> 
+<p><b>Theorem: </b>booleanp-of-atj-check-marked-annotated-mv-let-call.yes/no</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> booleanp-of-atj-check-marked-annotated-mv-let-call.yes/no
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?yes/no ?mv-var
+                  ?mv-term ?vars ?indices ?body-term)
+              (<a href="JAVA____ATJ-CHECK-MARKED-ANNOTATED-MV-LET-CALL.html">atj-check-marked-annotated-mv-let-call</a> term)))
+            (<a href="ACL2____BOOLEANP.html">booleanp</a> yes/no))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>symbolp-of-atj-check-marked-annotated-mv-let-call.mv-var</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> symbolp-of-atj-check-marked-annotated-mv-let-call.mv-var
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?yes/no ?mv-var
+                  ?mv-term ?vars ?indices ?body-term)
+              (<a href="JAVA____ATJ-CHECK-MARKED-ANNOTATED-MV-LET-CALL.html">atj-check-marked-annotated-mv-let-call</a> term)))
+            (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> mv-var))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>pseudo-termp-of-atj-check-marked-annotated-mv-let-call.mv-term</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     pseudo-termp-of-atj-check-marked-annotated-mv-let-call.mv-term
+     (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?yes/no ?mv-var
+               ?mv-term ?vars ?indices ?body-term)
+           (<a href="JAVA____ATJ-CHECK-MARKED-ANNOTATED-MV-LET-CALL.html">atj-check-marked-annotated-mv-let-call</a> term)))
+         (<a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a> mv-term))
+     :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>symbol-listp-of-atj-check-marked-annotated-mv-let-call.vars</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> symbol-listp-of-atj-check-marked-annotated-mv-let-call.vars
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?yes/no ?mv-var
+                  ?mv-term ?vars ?indices ?body-term)
+              (<a href="JAVA____ATJ-CHECK-MARKED-ANNOTATED-MV-LET-CALL.html">atj-check-marked-annotated-mv-let-call</a> term)))
+            (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> vars))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>nat-listp-of-atj-check-marked-annotated-mv-let-call.indices</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> nat-listp-of-atj-check-marked-annotated-mv-let-call.indices
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?yes/no ?mv-var
+                  ?mv-term ?vars ?indices ?body-term)
+              (<a href="JAVA____ATJ-CHECK-MARKED-ANNOTATED-MV-LET-CALL.html">atj-check-marked-annotated-mv-let-call</a> term)))
+            (<a href="ACL2____NAT-LISTP.html">nat-listp</a> indices))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>pseudo-termp-of-atj-check-marked-annotated-mv-let-call.body-term</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+    pseudo-termp-of-atj-check-marked-annotated-mv-let-call.body-term
+    (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?yes/no ?mv-var
+              ?mv-term ?vars ?indices ?body-term)
+          (<a href="JAVA____ATJ-CHECK-MARKED-ANNOTATED-MV-LET-CALL.html">atj-check-marked-annotated-mv-let-call</a> term)))
+        (<a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a> body-term))
+    :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>len-of-atj-check-marked-annotated-mv-let.vars/indices</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> len-of-atj-check-marked-annotated-mv-let.vars/indices
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?yes/no ?mv-var
+                  ?mv-term ?vars ?indices ?body-term)
+              (<a href="JAVA____ATJ-CHECK-MARKED-ANNOTATED-MV-LET-CALL.html">atj-check-marked-annotated-mv-let-call</a> term)))
+            (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____LEN.html">len</a> indices) (<a href="ACL2____LEN.html">len</a> vars))))</pre> 
+<p><b>Theorem: </b>atj-check-marked-annotated-mv-let-mv-term-smaller</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> atj-check-marked-annotated-mv-let-mv-term-smaller
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?yes/no ?mv-var
+                  ?mv-term ?vars ?indices ?body-term)
+              (<a href="JAVA____ATJ-CHECK-MARKED-ANNOTATED-MV-LET-CALL.html">atj-check-marked-annotated-mv-let-call</a> term)))
+            (<a href="ACL2____IMPLIES.html">implies</a> yes/no
+                     (<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="ACL2____ACL2-COUNT.html">acl2-count</a> mv-term)
+                        (<a href="ACL2____ACL2-COUNT.html">acl2-count</a> term))))
+        :rule-classes :linear)</pre> 
+<p><b>Theorem: </b>atj-check-marked-annotated-mv-let-body-term-smaller</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> atj-check-marked-annotated-mv-let-body-term-smaller
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?yes/no ?mv-var
+                  ?mv-term ?vars ?indices ?body-term)
+              (<a href="JAVA____ATJ-CHECK-MARKED-ANNOTATED-MV-LET-CALL.html">atj-check-marked-annotated-mv-let-call</a> term)))
+            (<a href="ACL2____IMPLIES.html">implies</a> yes/no
+                     (<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="ACL2____ACL2-COUNT.html">acl2-count</a> body-term)
+                        (<a href="ACL2____ACL2-COUNT.html">acl2-count</a> term))))
+        :rule-classes :linear)</pre> 
+
+</body>
+</html>

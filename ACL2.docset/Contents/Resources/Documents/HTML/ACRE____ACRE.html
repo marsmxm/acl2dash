@@ -1,0 +1,204 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Acre</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACRE____ACRE">Click for Acre in the Full Manual</a></h3>
+
+<p>ACL2 Centaur Regular Expressions</p><p>ACRE is a regular expression package with features somewhat similar 
+to Perl's regular expressions.</p> 
+ 
+<p>Important note for writing regular expressions: the Common Lisp string 
+reader treats backslashes as escape characters, so all backslashes in the parse 
+tree below need to be escaped.  A good way to work around this is to use the 
+<a href="ACL2____FANCY-STRING-READER.html">ACL2::fancy-string-reader</a> instead of regular double-quoted strings.  For 
+example, to match a whitespace character (\s in regex syntax) followed by a 
+backslash (\\ in regex syntax) followed by a double quote, you'd need to enter 
+the following double-quoted string:</p> 
+<pre class="code">"\\s\\\\\""</pre> 
+<p>or the following \"fancy string\":</p> 
+<pre class="code">#{"""\s\\""""} 
+</pre> 
+<p>If you print either of these out as follows, you'll see what the string's actual contents are:</p> 
+<pre class="code">(cw "'~s0'~%" "\\s\\\\\"")       (prints '\s\\"') 
+(cw "'~s0'~%" #{"""\s\\""""})    (prints '\s\\"') 
+</pre> 
+<p>So please either use fancy-strings or else keep in mind that, in regular 
+double-quoted strings, any backslash in the following grammar must really be 
+written as two backslashes.  It is best to debug your regular expressions by 
+printing them out as above to avoid this sort of confusion.</p> 
+ 
+<p>Here is the syntax for parsing regular expressions, and following it are descriptions of their semantics.</p> 
+ 
+<pre class="code">regex = concat
+        concat "|" regex              (Disjunction -- match either one)
+
+concat = ""                           (<a href="SET____EMPTY.html">Empty</a> string -- always matches)
+         repeat concat
+
+repeat = atom
+         atom repeatop
+
+atom = group
+       primitive
+
+group = "(" regex ")"                 (positional capture)
+        "(?:" regex ")"               (noncapturing)
+        "(?i:" regex ")"              (noncapturing, case insensitive)
+        "(?^i:" regex ")"             (noncapturing, case sensitive)
+        "(?&lt;" name "&gt;" regex ")"      (named capture)
+        "(?=" regex ")"               (zero-length lookahead)
+        "(?!" regex ")"               (zero-length lookahead, negated)
+        "(?&lt;=" regex ")"              (zero-length lookbehind, constant width)
+        "(?&lt;!" regex ")"              (zero-length lookbehind, constant width, negated)
+
+primitive = non_meta_character        (matches the given character)
+            "."                       (matches any character)
+            "[" characterset "]"      (matches any character in the class)
+            "[^" characterset "]"     (matches any character not in the class)
+            "^"                       (matches beginning of string)
+            "$"                       (matches end of string)
+            backref
+            "\" metacharacter         (escape)
+            "\" charsetchar           (character set abbreviations)
+            "\n"                      (<a href="ACL2____NEWLINE.html">newline</a>)
+            "\t"                      (tab)
+            "\r"                      (carriage return)
+            "\f"                      (form feed)
+            "\o" NNN                  (octal character code)
+            "\x" NN                   (hexadecimal character code)
+
+backref = "\" digit                   (matches nth capture group)
+          "\g" digit
+          "\g{" number "}"            (matches nth capture group -- may be greater than 9)
+          "\g{" name "}"              (matches named capture group)
+          "\k{" name "}"
+          "\k&lt;" name "&gt;"
+          "\k'" name "'"
+
+repeatop = repeatbase 
+           repeatbase repeatmod
+
+repeatbase = "*"                      (0 or more times)
+             "+"                      (1 or more times)
+             "?"                      (0 or 1 times)
+             "{" n "}"                (exactly n times)
+             "{" n ",}"               (n or more times)
+             "{" n "," m "}"          (minimum n and maximum m times)
+
+repeatmod = "?"                       (nongreedy)
+            "+"                       (nonbacktracking)
+
+characterset = ""
+               cset_elem characterset
+
+cset_elem = cset_set
+            cset_atom "-" cset_atom   (range -- second must have higher char code)
+            cset_atom
+
+cset_set = "\w"                       (word character -- alphanumeric or _)
+           "\d"                       (decimal digit)
+           "\s"                       (whitespace character)
+           "\h"                       (horizontal whitespace character)
+           "\v"                       (vertical whitespace character)
+
+cset_atom =  non_cset_metacharacter
+             "\\"                     (backslash)
+             "\]"                     (close bracket)
+             "\-"                     (dash)
+             "\n"                     (<a href="ACL2____NEWLINE.html">newline</a>)
+             "\t"                     (tab)
+             "\r"                     (carriage return)
+             "\f"                     (form feed)
+             "\o" NNN                 (octal character code)
+             "\x" NN                  (hexadecimal character code)</pre> 
+ 
+<h3>API</h3> 
+<p>The following types and functions make up the high-level regular expression API.</p> 
+ 
+<h4>Types</h4> 
+<ul> 
+<li>
+<span class="v">regex-p</span> -- internal representation of regular expression patterns</li> 
+<li>
+<span class="v">matchresult-p</span> -- result of matching against a string</li> 
+</ul> 
+ 
+<h4>Functions</h4> 
+<ul> 
+ 
+<li>
+<span class="v">(<a href="ACRE____PARSE.html">parse</a> pattern :legible t) --&gt; (<a href="ACL2____MV.html">mv</a> err regex)</span> -- Pattern is a string; 
+returns either an error or a regex.  If legible is nonnil (the default), then 
+the pattern string is preprocessed before parsing in a way that allows patterns 
+to be written more legibly: the preprocessing step removes non-escaped 
+whitespace and removes comments consisting of the rest of the line after (and 
+including) any non-escaped <span class="v">#</span> character.</li> 
+ 
+<li>
+<span class="v">(<a href="ACRE____MATCH-REGEX.html">match-regex</a> regex str :case-insens nil) --&gt; matchresult</span> -- Matches 
+the given regex against str, using case insensitive matching if case-insens is 
+set to nonnil.</li> 
+ 
+<li>
+<span class="v">(<a href="ACRE____PARSE-AND-MATCH-REGEX.html">parse-and-match-regex</a> pattern str :case-insens nil :legible t) --&gt; (<a href="ACL2____MV.html">mv</a>
+err matchresult)</span> -- Combines <span class="v">parse</span> and <span class="v">match-regex</span>.</li> 
+ 
+<li>
+<span class="v">(<a href="ACRE____MATCH.html">match</a> pattern str :case-insens nil :legible t) --&gt; matchresult</span> -- 
+Macro which parses the given pattern into a regex at macroexpansion time, 
+expanding to a call of <span class="v">match-regex</span> on the resulting regular expression. 
+Any parse error becomes an error at macroexpansion time.</li> 
+ 
+<li>
+<span class="v">(<a href="ACRE____MATCHRESULT-_E3MATCHEDP.html">matchresult-&gt;matchedp</a> matchresult) --&gt; boolean</span> -- returns T if the 
+regular expression matched the string and NIL otherwise.</li> 
+ 
+<li>
+<span class="v">(<a href="ACRE____MATCHRESULT-_E3MATCHED-SUBSTR.html">matchresult-&gt;matched-substr</a> matchresult) --&gt; substr-if-matched</span> -- 
+returns the matched substring of the input string if there was a match, else 
+NIL.</li> 
+ 
+<li>
+<span class="v">(<a href="ACRE____MATCHRESULT-_E3CAPTURED-SUBSTR.html">matchresult-&gt;captured-substr</a> name matchresult) --&gt; substr-if-matched</span> 
+-- returns the substring that was captured by the given capture group, or NIL 
+if the regex didn't match or the capture group was in part of the regex that 
+didn't match. (As an example of the latter, consider matching the pattern 
+"(aa)|bb" against the string "bb".)  <span class="v">Name</span> may be a positive number, 
+which accesses capture groups by position, or a string, which accesses named 
+capture groups (names are case sensitive).</li> 
+ 
+<li>
+<span class="v">(<a href="ACRE____MATCHRESULT-_E3CAPTURED-SUBSTR_12.html">matchresult-&gt;captured-substr!</a> name matchresult) --&gt; substr</span> -- Same as 
+the above, but simply returns the empty string if the above would return 
+NIL.</li> 
+</ul> 
+ 
+<h4>
+<span class="v">B*</span> binders for capture groups</h4> 
+ 
+<ul> 
+ 
+<li>
+<span class="v">((captures binding1 binding2 ...) matchresult)</span> binds variables to 
+captured substrings from the given matchresult.  A binding may be simply a 
+variable, in which case a positional capture group is accessed, or <span class="v">(var
+name)</span>, in which case <span class="v">var</span> will be bound to the result of looking up the 
+named capture group <span class="v">name</span>.  If a capture group doesn't exist, the variable 
+is bound to NIL.  The <span class="v">captures!</span>  binding does the same thing but instead 
+binds the variable to the empty string if the capture group doesn't exist.</li> 
+ 
+<li>
+<span class="v">((named-captures binding1 binding2 ...) matchresult)</span> is similar to 
+<span class="v">captures</span>, differing only when the binding is simply a variable.  Instead 
+of getting a capture group by position, this looks up the downcase of the name 
+of the variable.  <span class="v">Named-captures!</span> behaves analogously to 
+<span class="v">captures!</span>.</li> 
+ 
+</ul> 
+
+</body>
+</html>

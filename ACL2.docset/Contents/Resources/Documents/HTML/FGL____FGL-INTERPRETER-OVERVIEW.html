@@ -1,0 +1,299 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Fgl-interpreter-overview</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=FGL____FGL-INTERPRETER-OVERVIEW">Click for Fgl-interpreter-overview in the Full Manual</a></h3>
+
+<p>Outline of the way the FGL interpreter works.</p> 
+ 
+<p>The FGL interpreter is called by the FGL clause processor in order to try 
+and turn the theorem term into an equivalent Boolean formula, which then can 
+perhaps be solved by SAT.  In order to do this, it recursively interprets terms 
+turning them into symbolic objects (see <a href="FGL____FGL-OBJECT.html">fgl-object</a>) containing Boolean formula 
+objects.  In this doc topic we outline the operation of the interpreter.</p> 
+ 
+<p>The interpreter consists of a 31-way mutual recursion.  We won't detail each 
+of the functions in the mutual recursion, but we will try to cover in general 
+terms all of the things that happen in them.</p> 
+ 
+<h3>Interpreting Terms -- Overview</h3> 
+ 
+<p>The highest-level entry point into the interpreter when trying to compute a 
+Boolean formula from a term is <span class="v">fgl-interp-test</span>.  This first interprets the 
+term using another possible high-level entry point, <span class="v">fgl-interp-term-equivs</span>, 
+which calls <span class="v">fgl-interp-term</span> to produce a symbolic object (we'll cover its 
+operation shortly), then checks a database of equivalences that have been 
+assumed in the current path condition and replaces that symbolic object with an 
+equivalent if there are any that have been assumed (and which some heuristics 
+say are a good replacement).  Finally, it calls <span class="v">fgl-interp-simplify-if-test</span> 
+which is the subroutine for coercing a symbolic object into a Boolean 
+formula.</p> 
+ 
+<p><span class="v">fGl-interp-term</span> is very similar to a classical interpreter or rewriter. 
+It examines the term and treats different kinds of terms differently:</p> 
+<ul> 
+ 
+<li>When it is a constant (quote), it returns the quoted value, coerced to a <a href="FGL____G-CONCRETE.html">g-concrete</a> symbolic object.</li> 
+ 
+<li>When it is a variable, it looks up the variable in the current 
+bindings (alist).  There are actually two sets of bindings for our interpreter: 
+"minor" bindings, which come from lambdas, and "major" bindings, which come 
+from outermost contexts not inside any lambdas; these are checked in that 
+order.</li> 
+ 
+<li>When it is a lambda application, it processes the term into an equivalent 
+pair <span class="v">(bindinglist body)</span>.  The bindinglist is a list of pairs <span class="v">(<a href="ACL2____FORMALS.html">formals</a>
+actuals)</span> from the nest of lambdas, omitting formal/actual pairs that are the 
+same.  This may include the bindings of more than one lambda: if the body of a 
+lambda is itself a lambda application, it recursively adds that to the 
+bindinglist, stopping when it finds a lambda body that is not itself a lambda. 
+The interpreter interprets the bindinglist by recurring through the list, 
+recursively interpreting each of the actuals of each pair with 
+<span class="v">fgl-interp-term-equivs</span>.  When a pair is done it adds the bindings formed by 
+pairing the formals with the symbolic object results from the actuals to the 
+minor bindings of the interpreter.  When done with all the <span class="v">(<a href="ACL2____FORMALS.html">formals</a>
+actuals)</span> pairs, it then recursively interprets the body, then pops off the 
+bindings produced by the bindinglist, returning the symbolic object resulting 
+from interpreting the body.</li> 
+ 
+<li>When it is a function call, it deals with a few special cases, described 
+next, and then the generic function call case.  In the generic case, it first 
+recursively interprets the arguments of the function, then calls 
+<span class="v">fgl-interp-fncall</span>, described below, on the function and symbolic objects 
+resulting from the arguments.</li> 
+ 
+</ul> 
+ 
+<h3>Interpreting Function Calls -- Special Cases</h3> 
+ 
+<p>The special cases of function calls include <span class="v">if</span>, <span class="v">return-last</span>, 
+<span class="v">bind-var</span>, <span class="v">abort-rewrite</span>, <span class="v">fgl-sat-check</span>, <span class="v">syntax-interp-fn</span>, 
+<span class="v">assume</span>, <span class="v">narrow-equiv</span>, and <span class="v">fgl-interp-obj</span>. Each of these requires 
+special treatment of the arguments, rather than just recursively interpreting 
+them:</p> 
+ 
+<ul> 
+ 
+<li>For <span class="v">if</span> terms, the test is recursively interpreted and coerced to a 
+Boolean function using <span class="v">fgl-interp-test</span>.  Then, unless a syntactic analysis 
+shows that the path condition implies the test's negation, we recursively 
+interpret the "then" branch with <span class="v">fgl-interp-term-equivs</span> and with the test 
+conjoined to the path condition, and unless the syntactic analysis shows the 
+path condition implies the test, we recursively interpret the "else" branch 
+with the negated test conjoined to the path condition.  If both branches were 
+interpreted, we then attempt to merge the results from the two branches into a 
+single symbolic object using <span class="v">fgl-interp-merge-branches</span>, described 
+below.</li> 
+ 
+<li>For <span class="v">return-last</span>, we provide special support for <span class="v">time$</span>, allowing 
+it to time the symbolic interpretation of the enclosed term.  Otherwise, we 
+simply interpret the last argument.  Note this means that <span class="v">prog2$</span> might not 
+function as expected -- if you intend the first argument to <span class="v">prog2$</span> to be 
+interpreted in FGL for side effects, you should instead bind it to an ignored 
+variable or else use an equivalent two-argument function instead.</li> 
+ 
+<li>For <span class="v">bind-var</span>, we bind the first argument, which must be a variable 
+that is not yet bound in the current major or minor frame, to the result of 
+interpreting the second argument under the <span class="v">unequiv</span> equivalence relation. 
+Under this equivalence relation, every object is equivalent to every other 
+object; this is sort of an "anything goes" mode which allows certain behavior 
+that would normally be unsound.  This is allowable in this context because 
+<span class="v">bind-var</span> logically just returns its first argument (the variable), so the 
+second argument is irrelevant.  It is allowable to bind anything to the 
+variable if it is not yet bound **** </li> 
+ 
+<li>For <span class="v">binder</span>, the argument must be a function call whose first argument 
+is a variable, and that variable must be free in the current stack frame.  The 
+rest of that function's arguments are recursively interpreted, and then binder 
+rewrite/meta rules are applied to choose a binding for the free variable based 
+on the rest of the arguments.</li> 
+ 
+<li>For <span class="v">abort-rewrite</span>, the interpreter returns <span class="v">nil</span> and inserts a 
+special error keyword in the interpreter state's <span class="v">errmsg</span> field, which will 
+get caught when returning from the current major stack frame.</li> 
+ 
+<li>For <span class="v">fgl-sat-check</span>, we use <span class="v">fgl-interp-test</span> to coerce the second 
+argument (the condition to be tested) to a Boolean function, and 
+<span class="v">fgl-interp-term-equivs</span> to interpret the first argument (params).  We then 
+call <span class="v">interp-st-sat-check</span>, an attachable function which calls SAT and 
+returns NIL if the input Boolean formula is unsat.</li> 
+ 
+<li>For <span class="v">syntax-interp-fn</span>, we check that the second argument is a quoted 
+term (this is true for calls generated by the <span class="v">syntax-interp</span> and 
+<span class="v">syntax-bind</span> macros) and that we're in an <span class="v">unequiv</span> equivalence 
+context.  If so, we evaluate the first argument using <span class="v">fancy-ev</span>, with the 
+current variable bindings from the symbolic interpreter passed in as the 
+evaluation environment.  For example, if a variable <span class="v">x</span> is bound to a 
+symbolic integer in our current interpreter frame, then <span class="v">x</span> will be bound to 
+the <a href="FGL____FGL-OBJECT.html">fgl-object</a> representation of that symbolic integer when evaluating 
+the <span class="v">syntax-interp</span> term.  This is similar to ACL2's <a href="ACL2____SYNTAXP.html">syntaxp</a> 
+behavior, but the syntaxp term operates on FGL object syntax rather than ACL2 
+term syntax.</li> 
+ 
+<li>For <span class="v">assume</span>, we first check that we're in an <span class="v">unequiv</span> equivalence 
+context.  Then we interpret the first and second arguments as if they were the 
+<span class="v">test</span> and <span class="v">then</span> branches of an <span class="v">if</span>; in particular, the Boolean 
+formula resulting from the <span class="v">test</span> is conjoined onto the path condition (that 
+is, assumed) when symbolically executing the <span class="v">then</span> branch.  We then simply 
+return the result from the <span class="v">then</span> branch.</li> 
+ 
+<li>For <span class="v">narrow-equiv</span>, we interpret the first argument.  If its result is a 
+concrete object whose value satisfies <span class="v">equiv-contexts-p</span> and those 
+equivalence contexts are a refinement (narrowing) of the interpreter state's 
+current equiv-contexts, then we set the interpreter state's equiv-contexts 
+field to that object while interpreting the second argument.  This can be used 
+to (conditionally) exit an <span class="v">unequiv</span> context.</li> 
+ 
+<li>For <span class="v">fgl-time-fn</span>, we interpret the first argument and use that as a 
+<span class="v">time$</span> format specifier for timing the interpretation of the second 
+argument, returning the result from the second argument.</li> 
+ 
+<li>For <span class="v">fgl-prog2</span>, we interpret the first argument under the 
+<span class="v">unequiv</span> equivalence context, discarding the result; then interpret the 
+second argument under the current equivalence context and return its result.</li> 
+ 
+<li>For <span class="v">fgl-interp-obj</span>, we first check that we're in an <span class="v">unequiv</span> 
+equivalence context.  Then we interpret the first argument.  If its result is a 
+concrete object whose value satisfies <span class="v">pseudo-term-p</span>, then we interpret 
+that term and return its result.</li> 
+ 
+</ul> 
+ 
+<h3>Interpreting Function Calls -- Generic Case</h3> 
+ 
+<p>Generic function calls are run by <span class="v">fgl-interp-fncall</span> after reducing the 
+arguments to a list of symbolic objects.  This looks up the <a href="FGL____FGL-FUNCTION-MODE.html">function mode</a> of the function and, depending on the 
+restrictions encoded in that mode, may do some or all of the following:</p> 
+ 
+<ul> 
+ 
+<li>If all the arguments are explicit, i.e. symbolic objects of the <a href="FGL____G-CONCRETE.html">g-concrete</a> kind, then try to execute the function using <a href="ACL2____MAGIC-EV-FNCALL.html">magic-ev-fncall</a>.  If it runs successfuly, return the result as a 
+<span class="v">g-concrete</span> object.</li> 
+ 
+<li>Otherwise try applying each of the rules enabled for that function in the 
+<span class="v">fgl-rewrite-rules</span> table using <span class="v">fgl-rewrite-try-rule</span>.  These may be 
+rewrite, meta, or primitive rules. If any of those rules succeeds, return the 
+symbolic object produced by recursively interpreting the RHS of the rule under 
+the unifying substitution.</li> 
+ 
+<li>Otherwise try executing a primitive associated with that function; see 
+<a href="FGL____FGL-PRIMITIVE-AND-META-RULES.html">fgl-primitive-and-meta-rules</a>.  If successful, return the value from that primitive.</li> 
+ 
+<li>Otherwise, if there exists a rule with rune <span class="v">(:definition fnname)</span>, or 
+if there are rewrite/definition rules for that function listed in the 
+<span class="v">fgl-definition-rules</span> table, then try rewriting the call using those 
+rules.</li> 
+ 
+<li>Finally, if none of the above were successful, produce the object 
+<span class="v">(<a href="FGL____G-APPLY.html">g-apply</a> fnname args)</span>.</li> 
+ 
+</ul> 
+ 
+<p>This completes the overview of how a term is interpreted and turned into 
+either a symbolic object (<a href="FGL____FGL-OBJECT.html">fgl-object</a>) or Boolean formula.  Next we 
+describe three subroutines that we skipped describing above: 
+<span class="v">fgl-rewrite-try-rule</span>, which attempts to apply a rewrite rule; 
+<span class="v">fgl-interp-simplify-if-test</span>, which coerces a symbolic object into a Boolean 
+formula; and <span class="v">fgl-interp-merge-branches</span>, which merges two branches of an IF 
+test.  This will also lead us to discuss <span class="v">fgl-interp-add-constraints</span>, which 
+adds Boolean constraints according to a set of rules activated when introducing 
+a new Boolean variable representing some term.</p> 
+ 
+<h3>Applying Rewrite Rules</h3> 
+ 
+<p><span class="v">fgl-rewrite-try-rule</span> takes a rule, a function name, and a list of 
+arguments which are FGL symbolic objects.  The rule may be a rewrite, meta, or 
+primitive rule.  For a primitive rule, the primitive function indicated by the 
+rule is run on the function and arguments, and we return the object it produces 
+if successful.  For a meta rule, the metafunction indicated is run, and if 
+successful we recursively interpret the term returned under the bindings 
+returned.  For a rewrite rule, we first try to unify the LHS of the rule with 
+the input function/arguments.  If successful, we then try to relieve the hyps 
+of the rule by calling <span class="v">fgl-interp-test</span> on each one and checking that the 
+result is (syntactically) constant-true.  We also check <span class="v">syntaxp</span> and 
+<span class="v">bind-free</span> hyps, the latter of which might extend the unifying substitution 
+with some free variable bindings.</p> 
+ 
+<p>If the hypotheses are all relieved, then we recurs on the conclusion using 
+<span class="v">fgl-interp-term</span> and return the result unless there were errors recorded in 
+the interpreter state.  Errors are passed up to the caller except for the 
+special error produced by <span class="v">abort-rewrite</span>, which only causes the current 
+rule application to fail.</p> 
+ 
+<p>During this process, various helper functions are also called to support 
+tracing (see <a href="FGL____FGL-REWRITE-TRACING.html">fgl-rewrite-tracing</a>) and accumulated-persistence-style 
+profiling, but none of these are logically relevant.</p> 
+ 
+<p>Application of binder rules is similar, but with slightly different logical 
+contracts for the rules and very slightly different behavior.  For binder 
+rules, we unify the argument list with the argument list of the LHS of the 
+rule, omitting the initial argument of the LHS which must be the variable to be 
+bound.  Binder rules also specify the equivalence context under which the RHS 
+must be rewritten.</p> 
+ 
+ 
+<h3>Simplifying IF Tests</h3> 
+ 
+<p><span class="v">fgl-interp-simplify-if-test</span> takes a symbolic object and attempts to 
+reduce it to an IFF-equivalent Boolean formula.  For some varieties of symbolic 
+object, this is trivial: <span class="v">:g-concrete</span> objects' truth value is just the 
+truth value of the quoted value, <span class="v">g-integer</span> and <span class="v">g-cons</span> objects are 
+always nonnil, <span class="v">g-map</span> objects are nonnil unless their alist field is 
+exactly NIL, and <span class="v">g-boolean</span> objects' truth values are given by their 
+Boolean formulas.  This leaves <span class="v">g-var</span>, <span class="v">g-ite</span>, and <span class="v">g-apply</span> objects.</p> 
+ 
+<p>For <span class="v">g-ite</span> objects, we coerce the <span class="v">test</span> sub-object into a Boolean 
+formula using <span class="v">fgl-interp-simplify-if-test</span> recursively.  Then, similar to 
+symbolic interpretation of IF, we recur on the <span class="v">then</span> object unless the test 
+formula is syntactically falsified by the path condition, we recur on the 
+<span class="v">else</span> branch unless the test formula is syntactically true under the path 
+condition, and we then merge the branches by creating the if-then-else of the 
+Boolean formulas if both branches were run.</p> 
+ 
+<p>For <span class="v">g-var</span> objects, we assign a fresh Boolean variable to the object, 
+storing the association in the Boolean variable database (<span class="v">bvar-db</span>) of the 
+interpreter state, unless the object already has an associated Boolean 
+variable, in which case we return it.</p> 
+ 
+<p>For <span class="v">g-apply</span> objects, we first rewrite the function call under an IFF 
+context.  In many cases this is redundant, but in some cases it may produce 
+reductions.  If rewriting is successful, we recursively apply 
+<span class="v">fgl-simplify-if-test</span> to the result.  Otherwise, we look up the function 
+call object in the <span class="v">bvar-db</span> and return the associated Boolean variable, if 
+any, or else introduce a fresh one and record that association.  Finally, if a 
+new Boolean variable was introduced, we process the object with 
+<span class="v">fgl-interp-add-constraints</span> (see below) to record any constraints on the new 
+Boolean variable.</p> 
+ 
+<h3>Merging IF Branches</h3> 
+ 
+<p><span class="v">fgl-interp-merge-branches</span> takes a Boolean formula for an IF test and 
+symbolic objects for the then and else branch values, and returns a new 
+symbolic object encapsulating the if-then-else.</p> 
+ 
+<p>It first checks for trivial cases -- test constant true, test constant false, 
+or branches equal -- and returns the obvious results in those cases. 
+Otherwise, if either branch is a function call (<a href="FGL____G-APPLY.html">g-apply</a>) object, then it 
+tries applying branch merge rules for those functions using 
+<span class="v">fgl-rewrite-try-rule</span> applied to the IF.  If any of these are successful, it 
+returns the result.</p> 
+ 
+<p>Otherwise, if both branches are calls of the same function, it recursively 
+merges the argument lists and returns the function applied to the merged 
+arguments.  Otherwise, it calls helper function 
+<span class="v">interp-st-fgl-object-basic-merge</span>, which merges basic symbolic objects 
+together when their types match, otherwise either producing an 
+if-then-else (<a href="FGL____G-ITE.html">g-ite</a>) object or an error, depending on the configuration 
+setting of <span class="v">make-ites</span>.  (See also <a href="FGL____FGL-HANDLING-IF-THEN-ELSES.html">fgl-handling-if-then-elses</a>.)</p> 
+ 
+<h3>Introducing Boolean Constraints</h3> 
+ 
+<p>To do.</p> 
+ 
+
+</body>
+</html>

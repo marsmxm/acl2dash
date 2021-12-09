@@ -1,0 +1,105 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>The</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=COMMON-LISP____THE">Click for The in the Full Manual</a></h3>
+
+<p><span class="v">The</span> is a special form that can be used to optimize the execution 
+ efficiency of <a href="ACL2____GUARD.html">guard</a>-verified ACL2 definitions, or (less frequently) to 
+ carry out a low-level run-time type checks. (Advanced)</p><p><span class="v">The</span> is a special Common Lisp form.  It is usually used as a 
+ way to boost the performance of ACL2 definitions by telling the Common Lisp 
+ compiler that a certain expression will always produce a result of a certain 
+ type.  This information may allow the Common Lisp compiler to avoid certain 
+ run-time checks.  See <a href="COMMON-LISP____DECLARE.html">declare</a> and <a href="ACL2____TYPE-SPEC.html">type-spec</a> for general, related 
+ background.</p> 
+ 
+ <p>General form:</p> 
+ <pre class="code">(<a href="COMMON-LISP____THE.html">the</a> &lt;typ&gt; &lt;val&gt;)   ;; returns &lt;val&gt;, or causes a run-time error</pre> 
+ 
+ <ul> 
+ <li>
+<span class="v">&lt;typ&gt;</span> is a <a href="ACL2____TYPE-SPEC.html">type-spec</a>
+</li> 
+ <li>
+<span class="v">&lt;val&gt;</span> is some expression that should produce a value of that type.</li> 
+ </ul> 
+ 
+ <p>Typical example:</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> merge-bytes (b1 b2)
+  ;; Combine two 8-bit bytes into a 16-bit result.
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____TYPE.html">type</a> (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 8) b1 b2))
+  (<a href="COMMON-LISP____THE.html">the</a> (unsigned-byte 16)
+       (<a href="COMMON-LISP____LOGIOR.html">logior</a> (<a href="COMMON-LISP____THE.html">the</a> (unsigned-byte 16) (<a href="COMMON-LISP____ASH.html">ash</a> b1 8))
+               b2)))</pre> 
+ 
+ <p>On most Lisp implementations 16-bit numbers are fixnums.  The <span class="v">the</span> 
+ forms above are promises to the Lisp compiler that these <span class="v">ash</span> and 
+ <span class="v">logior</span> operations will always produce 16-bit numbers.  Ideally, the 
+ compiler could use this information to generate more efficient code, i.e., by 
+ omitting whatever code is normally required to handle bignum results.  (Of 
+ course, a sufficiently smart compiler could have figured this out on its own; 
+ in practice Lisp compilers vary in their reasoning abilities.)</p> 
+ 
+ 
+ <h3>Relation to Guards</h3> 
+ 
+ <p>To justify that type declarations are correct, <span class="v">the</span> is integrated into 
+ ACL2's <a href="ACL2____GUARD.html">guard</a> mechanism.  A call of <span class="v">(<a href="COMMON-LISP____THE.html">the</a> TYPE EXPR)</span> in the body of 
+ a function definition generates a guard proof obligation that the type, 
+ <span class="v">TYPE</span>, holds for the value of the expression, <span class="v">EXPR</span>.  Consider the 
+ following example.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> f (x)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (p1 x)))
+  (<a href="COMMON-LISP____IF.html">if</a> (p2 x)
+      (<a href="COMMON-LISP____THE.html">the</a> integer (h x))
+    17))</pre> 
+ 
+ <p>The <a href="ACL2____GUARD.html">guard</a> proof obligation generated for the <span class="v">THE</span> expression 
+ above is as follows.</p> 
+ 
+ <pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (p1 x) (p2 x))
+         (<a href="COMMON-LISP____LET.html">let</a> ((var (h x))) (<a href="COMMON-LISP____INTEGERP.html">integerp</a> var)))</pre> 
+ 
+ <p>For <span class="v">the</span> to provide any execution speed benefit, <a href="ACL2____GUARD.html">guard</a>s must be 
+ <a href="ACL2____VERIFY-GUARDS.html">verified</a>.</p> 
+ 
+ <p>In contexts where guards have <i>not</i> been verified, <span class="v">the</span> acts as a 
+ low-level, run-time type check that <span class="v">val</span> satisfies the type specification 
+ <span class="v">typ</span> (see <a href="ACL2____TYPE-SPEC.html">type-spec</a>).  An error is caused if the check fails; 
+ otherwise, <span class="v">val</span> is returned.  Here are some examples:</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____THE.html">the</a> integer 3)       ; returns 3
+(<a href="COMMON-LISP____THE.html">the</a> (integer 0 6) 3) ; returns 3
+(<a href="COMMON-LISP____THE.html">the</a> (integer 0 6) 7) ; causes an error (see below for exception)</pre> 
+ 
+ <p>There is an exception to the rule that failure of the type-check causes an 
+ error: there is no error when <a href="ACL2____GUARD.html">guard</a>-checking has been turned off, that 
+ is, in any of the following ways; also <a href="ACL2____SET-GUARD-CHECKING.html">set-guard-checking</a> and see <a href="ACL2____WITH-GUARD-CHECKING.html">with-guard-checking</a>.</p> 
+ 
+ <ul> 
+ <li><span class="v">:set-guard-checking nil</span></li> 
+ <li><span class="v">(<a href="ACL2____WITH-GUARD-CHECKING.html">with-guard-checking</a> nil ...)</span></li> 
+ <li><span class="v">:set-guard-checking :none</span></li> 
+ <li><span class="v">(<a href="ACL2____WITH-GUARD-CHECKING.html">with-guard-checking</a> :none ...)</span></li> 
+ </ul> 
+ 
+ 
+ <h3>Further resources</h3> 
+ 
+ <p>The <a href="ACL2____B_A2.html">b*</a> macro provides a special syntax that may make using <span class="v">the</span> 
+ forms more pleasant; see <a href="ACL2____PATBIND-THE.html">patbind-the</a> for more information.</p> 
+ 
+ <p>When optimizing functions with type declarations, you may wish to manually 
+ inspect the compiler's output with <a href="ACL2____DISASSEMBLE_42.html">disassemble$</a> or conduct experiments 
+ to measure the impact of your optimizations.</p> 
+ 
+ <p><span class="v">THE</span> is defined in Common Lisp.  See any Common Lisp documentation for 
+ more information.</p>
+</body>
+</html>

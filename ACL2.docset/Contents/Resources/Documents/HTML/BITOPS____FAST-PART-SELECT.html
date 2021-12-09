@@ -1,0 +1,82 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Fast-part-select</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=BITOPS____FAST-PART-SELECT">Click for Fast-part-select in the Full Manual</a></h3>
+
+<p>Optimized function for selecting a bit range from a big integer.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(fast-part-select x width low)  *</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">x</span>  <font color="#606060">Guard <span class="v">(<a href="COMMON-LISP____INTEGERP.html">integerp</a> x)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">width</span>  <font color="#606060">Guard <span class="v">(<a href="ACL2____NATP.html">natp</a> width)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">low</span>  <font color="#606060">Guard <span class="v">(<a href="ACL2____NATP.html">natp</a> low)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>Suppose you have a large (perhaps millions of bits) bignum, and you 
+want to extract a small range (maybe only a few thousand bits) from somewhere 
+in the middle.  Using regular ACL2 primitives like logand and ash, you don't 
+have any good options that don't require copying a much larger portion of the 
+number.  You either have to truncate the big number to the end of the range you 
+want (which may yield a large bignum) and then shift it into place, or else 
+shift the lowest bit into place (which may yield a large bignum) and then 
+truncate it to the width you want.  One option requires making a new bignum 
+that is <span class="v">lsb + width - 1</span> bits, the other requires making a new bignum that 
+is <span class="v">origwidth - lsb</span> bits.  Depending on what range you want to extract, 
+sometimes one or the other of these options is small enough, but in some cases 
+neither is palatable.</p> 
+ 
+<p>Fast-part-select is based on <a href="BITSETS____BIGNUM-EXTRACT.html">bitsets::bignum-extract</a>, which extracts 
+a 32-bit slice from a bignum.  It has an optimized implementation on CCL that 
+simply grabs the appropriate array element from within the bignum 
+representation.  Fast-part-select stitches together the required range from 
+these 32-bit slices.  It isn't particularly efficient if the width of the 
+selection is large, but it is independent of the width of the input integer 
+from which we're selecting and the bit offset at which we're selecting.</p> 
+ 
+<p>It's kind of a pity to have to use this; it would be nice if Lisps had 
+efficient implementations of the Common Lisp <span class="v">ldb</span> operator and we could 
+just use that instead.</p> 
+ 
+<p>Note: For good performance, it is important to use the raw Lisp definition 
+of bignum-extract, loaded by including the book 
+"std/bitsets/bignum-extract-opt".</p> 
+ 
+<p>See also <a href="BITOPS____FAST-PART-EXTEND.html">fast-part-extend</a>, which performs the same operation but 
+returns the range sign-extended instead of zero-extended.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>fast-part-select$inline</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ fast-part-select$inline (x width low)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____TYPE.html">type</a> integer x)
+          (<a href="COMMON-LISP____TYPE.html">type</a> (integer 0 *) width)
+          (<a href="COMMON-LISP____TYPE.html">type</a> (integer 0 *) low))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> x)
+                             (<a href="ACL2____NATP.html">natp</a> width)
+                             (<a href="ACL2____NATP.html">natp</a> low))))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :split-types t))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'fast-part-select))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____MBE.html">mbe</a> :logic (part-select-width-low x width low)
+       :exec (<a href="ACL2____B_A2.html">b*</a> ((width (<a href="ACL2____LNFIX.html">lnfix</a> width))
+                  (low (<a href="ACL2____LNFIX.html">lnfix</a> low))
+                  ((when (<a href="COMMON-LISP____EQL.html">eql</a> width 0)) 0)
+                  (low-slice (<a href="COMMON-LISP____ASH.html">ash</a> low -5))
+                  (low-omit (<a href="COMMON-LISP____LOGAND.html">logand</a> 31 low))
+                  (high (<a href="COMMON-LISP_____B2.html">+</a> -1 low width))
+                  (high-slice (<a href="COMMON-LISP____ASH.html">ash</a> high -5))
+                  (high-omit (<a href="COMMON-LISP____-.html">-</a> 31 (<a href="COMMON-LISP____LOGAND.html">logand</a> 31 high)))
+                  (slices (<a href="COMMON-LISP_____B2.html">+</a> 1 (<a href="COMMON-LISP____-.html">-</a> high-slice low-slice))))
+                 (fast-psel x
+                            low-slice slices low-omit high-omit)))))</pre> 
+
+</body>
+</html>

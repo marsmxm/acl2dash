@@ -1,0 +1,229 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Double-rewrite</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____DOUBLE-REWRITE">Click for Double-rewrite in the Full Manual</a></h3>
+
+<p>Cause a term to be rewritten twice</p><p>Logically, <span class="v">double-rewrite</span> is the <span class="tt"><a href="COMMON-LISP____IDENTITY.html">identity</a></span> function: 
+ <span class="v">(<a href="ACL2____DOUBLE-REWRITE.html">double-rewrite</a> x)</span> is equal to <span class="v">x</span>.  However, the ACL2 rewriter treats 
+ calls of <span class="v">double-rewrite</span> in the following special manner.  When it 
+ encounters a term <span class="v">(<a href="ACL2____DOUBLE-REWRITE.html">double-rewrite</a> u)</span>, it first rewrites <span class="v">u</span> in the 
+ current context, and then the rewriter rewrites the result.</p> 
+ 
+ <p>Such double-rewriting is rarely necessary, but it can be useful when 
+ rewriting under non-trivial equivalence relations (see <a href="ACL2____EQUIVALENCE.html">equivalence</a>). 
+ The following example will illustrate the issue.</p> 
+ 
+ <pre class="code">; Define an equivalence relation.
+(<a href="COMMON-LISP____DEFUN.html">defun</a> my-equiv (x y)
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> x y))
+(<a href="ACL2____DEFEQUIV.html">defequiv</a> my-equiv)
+
+; Define a unary function whose argument is preserved by my-equiv.
+(<a href="COMMON-LISP____DEFUN.html">defun</a> foo (x)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORE.html">ignore</a> x))
+  t)
+(<a href="ACL2____DEFCONG.html">defcong</a> my-equiv equal (foo x) 1)
+
+; Define some other unary functions.
+(<a href="COMMON-LISP____DEFUN.html">defun</a> g (x) x)
+(<a href="COMMON-LISP____DEFUN.html">defun</a> h1 (x) x)
+(<a href="COMMON-LISP____DEFUN.html">defun</a> h2 (x) x)
+
+; Prove some lemmas and then disable the functions above.
+(<a href="ACL2____DEFTHM.html">defthm</a> lemma-1
+  (my-equiv (h1 x) (h2 x)))
+(<a href="ACL2____DEFTHM.html">defthm</a> lemma-2
+  (foo (h2 x)))
+(<a href="ACL2____DEFTHM.html">defthm</a> lemma-3
+  (<a href="ACL2____IMPLIES.html">implies</a> (foo x)
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____G.html">g</a> x) x)))
+(<a href="ACL2____IN-THEORY.html">in-theory</a> (<a href="ACL2____UNION-THEORIES.html">union-theories</a> (<a href="ACL2____THEORY.html">theory</a> 'minimal-theory)
+                           '(lemma-1 lemma-2 lemma-3
+                             my-equiv-implies-equal-foo-1)))
+
+; Attempt to prove a simple theorem that follows ``obviously'' from the
+; events above.
+(<a href="ACL2____THM.html">thm</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____G.html">g</a> (h1 a)) (h1 a)))</pre> 
+ 
+ <p>We might expect the proof of this final <span class="v">thm</span> to succeed by the 
+ following reasoning.  It is immediate from <span class="v">lemma-3</span> provided we can 
+ establish <span class="v">(foo (h1 a))</span>.  By the <span class="v">defcong</span> event above, we know that 
+ <span class="v">(foo (h1 a))</span> equals <span class="v">(foo (h2 a))</span> provided <span class="v">(my-equiv (h1 a) (h2
+ a))</span>; but this is immediate from <span class="v">lemma-1</span>.  And finally, <span class="v">(foo (h2
+ a))</span> is true by <span class="v">lemma-2</span>.</p> 
+ 
+ <p>Unfortunately, the proof fails.  But fortunately, ACL2 gives the following 
+ useful warning when <span class="v">lemma-3</span> is submitted:</p> 
+ 
+ <pre class="code">ACL2 Warning [Double-rewrite] in ( DEFTHM LEMMA-3 ...):  In the :REWRITE
+rule generated from LEMMA-3, equivalence relation MY-EQUIV is maintained
+at one problematic occurrence of variable X in hypothesis (FOO X),
+but not at any binding occurrence of X.  Consider replacing that occurrence
+of X in this hypothesis with (<a href="ACL2____DOUBLE-REWRITE.html">DOUBLE-REWRITE</a> X).  See :doc double-
+rewrite for more information on this issue.</pre> 
+ 
+ <p>We can follow the warning's advice by changing <span class="v">lemma-3</span> to the 
+ following.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> lemma-3
+  (<a href="ACL2____IMPLIES.html">implies</a> (foo (<a href="ACL2____DOUBLE-REWRITE.html">double-rewrite</a> x))
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____G.html">g</a> x) x)))</pre> 
+ 
+ <p>With this change, the proof succeeds for the final <span class="v">thm</span> above.</p> 
+ 
+ <p>In practice, it should suffice for users to follow the advice given in the 
+ ``<span class="v">Double-rewrite</span>'' warnings, by adding calls of <span class="v">double-rewrite</span> 
+ around certain variable occurrences.  But this can cause inefficiency in large 
+ proof efforts.  For that reason, and for completeness, it seems prudent to 
+ explain more carefully what is going on; and that is what we do for the 
+ remainder of this <a href="COMMON-LISP____DOCUMENTATION.html">documentation</a> topic.  Optionally, also see the paper 
+ ``Double Rewriting for Equivalential Reasoning in ACL2'' by Matt Kaufmann and 
+ J Strother Moore, in the proceedings of the 2006 ACL2 Workshop (paper is 
+ published in the <a href="http://portal.acm.org/toc.cfm?id=1217975" target="_blank"><nobr>ACM 
+ Digital Library<img src="../Icon_External_Link.png" title="External link to http://portal.acm.org/toc.cfm?id=1217975"></nobr></a>); you might also find it for free <a href="http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.90.7190&amp;rep=rep1&amp;type=pdf" target="_blank"><nobr>here<img src="../Icon_External_Link.png" title="External link to http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.90.7190&amp;rep=rep1&amp;type=pdf"></nobr></a>.</p> 
+ 
+ <p><b>Suggesting congruence rules.</b></p> 
+ 
+ <p>Sometimes the best way to respond to a ``<span class="v">Double-rewrite</span>'' warning may 
+ be to prove a congruence rule.  Consider for example this rule.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> insert-sort-is-id
+  (perm (insert-sort x) x))</pre> 
+ 
+ <p>Assuming that <span class="v">perm</span> has been identified as an <a href="ACL2____EQUIVALENCE.html">equivalence</a> 
+ relation (see <a href="ACL2____DEFEQUIV.html">defequiv</a>), we will get the following warning.</p> 
+ 
+ <pre class="code">ACL2 Warning [Double-rewrite] in ( DEFTHM INSERT-SORT-IS-ID ...):
+In a :REWRITE rule generated from INSERT-SORT-IS-ID, equivalence relation
+PERM is maintained at one problematic occurrence of variable X in the
+right-hand side, but not at any binding occurrence of X.  Consider
+replacing that occurrence of X in the right-hand side with
+(<a href="ACL2____DOUBLE-REWRITE.html">DOUBLE-REWRITE</a> X).  See :doc double-rewrite for more information on
+this issue.</pre> 
+ 
+ <p>The problem is that the second occurrence of <span class="v">x</span> (the right-hand side of 
+ the rule <span class="v">insert-sort-is-id</span>) is in a context where <span class="v">perm</span> is to be 
+ maintained, yet in this example, the argument <span class="v">x</span> of <span class="v">insert-sort</span> on 
+ the left-hand side of that rule is in a context where <span class="v">perm</span> will not be 
+ maintained.  This can lead one to consider the possibility that <span class="v">perm</span> 
+ could be maintained in that left-hand side occurrence of <span class="v">x</span>, and if so, to 
+ prove the following congruence rule.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFCONG.html">defcong</a> perm perm (insert-sort x) 1)</pre> 
+ 
+ <p>This will eliminate the above warning for <span class="v">insert-sort-is-id</span>.  More 
+ important, this <span class="tt"><a href="ACL2____DEFCONG.html">defcong</a></span> event would probably be useful, since it would 
+ allow rewrite rules with equivalence relation <span class="v">perm</span> to operate on the 
+ first argument of any call of <span class="v">insert-sort</span> whose context calls for 
+ maintaining <span class="v">perm</span>.</p> 
+ 
+ <p><b>Details on double-rewrite.</b></p> 
+ 
+ <p>The reader who wants these details may first wish to see <a href="ACL2____EQUIVALENCE.html">equivalence</a> 
+ for relevant review.</p> 
+ 
+ <p>The ACL2 rewriter takes a number of contextual arguments, including the 
+ generated equivalence relation being maintained (see <a href="ACL2____CONGRUENCE.html">congruence</a>) and an 
+ association list that maps variables to terms.  We call the latter alist the 
+ <span class="v">unify-subst</span> because it is produced by unifying (actually matching) a 
+ pattern against a current term; let us explain this point by returning to the 
+ example above.  Consider what happens when the rewriter is given the top-level 
+ goal of the <span class="v">thm</span> above.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____G.html">g</a> (h1 a)) (h1 a))</pre> 
+ 
+ <p>This rewrite is performed with the empty alist (<span class="v">unify-subst</span>), and is 
+ begun by rewriting the first argument (in that same empty 
+ <span class="v">unify-subst</span>):</p> 
+ 
+ <pre class="code">(<a href="ACL2____G.html">g</a> (h1 a))</pre> 
+ 
+ <p>Note that the only equivalence relation being maintained at this point is 
+ <span class="v">equal</span>.  Now, the rewriter notices that the left-hand side of 
+ <span class="v">lemma-3</span>, which is <span class="v">(<a href="ACL2____G.html">g</a> x)</span>, matches <span class="v">(<a href="ACL2____G.html">g</a> (h1 a))</span>.  The rewriter thus 
+ creates a <span class="v">unify-subst</span> binding <span class="v">x</span> to <span class="v">(h1 a)</span>: <span class="v">((x . (h1 a)))</span>. 
+ It now attempts to rewrite the hypothesis of <span class="v">lemma-3</span> to <span class="v">t</span> under this 
+ <span class="v">unify-subst</span>.</p> 
+ 
+ <p>Consider what happens now if the hypothesis of <span class="v">lemma-3</span> is <span class="v">(foo
+ x)</span>.  To rewrite this hypothesis under a <span class="v">unify-subst</span> of <span class="v">((x . (h1
+ a)))</span>, it will first rewrite <span class="v">x</span> under this <span class="v">unify-subst</span>.  The key 
+ observation here is that this rewrite takes place simply by returning the 
+ value of <span class="v">x</span> in the <span class="v">unify-subst</span>, namely <span class="v">(h1 a)</span>.  No further 
+ rewriting is done!  The efficiency of the ACL2 rewriter depends on such 
+ caching of previous rewriting results.</p> 
+ 
+ <p>But suppose that, instead, the hypothesis of <span class="v">lemma-3</span> is <span class="v">(foo
+ (<a href="ACL2____DOUBLE-REWRITE.html">double-rewrite</a> x))</span>.  As before, the rewriter dives to the first argument of 
+ this call of <span class="v">foo</span>.  But this time the rewriter sees the call 
+ <span class="v">(<a href="ACL2____DOUBLE-REWRITE.html">double-rewrite</a> x)</span>, which it handles as follows.  First, <span class="v">x</span> is 
+ rewritten as before, yielding <span class="v">(h1 a)</span>.  But now, because of the call of 
+ <span class="v">double-rewrite</span>, the rewriter takes <span class="v">(h1 a)</span> and rewrites it under the 
+ empty <span class="v">unify-subst</span>.  What's more, because of the <span class="v">defcong</span> event above, 
+ this rewrite takes place in a context where it suffices to maintain the 
+ equivalence relation <span class="v">my-equiv</span>.  This allows for the application of 
+ <span class="v">lemma-1</span>, hence <span class="v">(h1 a)</span> is rewritten (under <span class="v">unify-subst</span> = 
+ <span class="v">nil</span>) to <span class="v">(h2 a)</span>.  Popping back up, the rewriter will now rewrite the 
+ call of <span class="v">foo</span> to <span class="v">t</span> using <span class="v">lemma-2</span>.</p> 
+ 
+ <p>The example above explains how the rewriter treats calls of 
+ <span class="v">double-rewrite</span>, but it may leave the unfortunate impression that the user 
+ needs to consider each <span class="v">:</span><span class="tt"><a href="ACL2____REWRITE.html">rewrite</a></span> or <span class="v">:</span><span class="tt"><a href="ACL2____LINEAR.html">linear</a></span> rule 
+ carefully, just in case a call of <span class="v">double-rewrite</span> may be appropriate. 
+ Fortunately, ACL2 provides a ``[Double-rewrite]'' warning to inform the user 
+ of just this sort of situation.  If you don't see this warning when you submit 
+ a (<span class="v">:</span><span class="tt"><a href="ACL2____REWRITE.html">rewrite</a></span> or <span class="v">:</span><span class="tt"><a href="ACL2____LINEAR.html">linear</a></span>) rule, then the issue 
+ described here shouldn't come up for that rule.  Such warnings may appear for 
+ hypotheses or right-hand side of a <span class="v">:</span><span class="tt"><a href="ACL2____REWRITE.html">rewrite</a></span> rule, and for 
+ hypotheses or full conclusion (as opposed to just the trigger term) of a 
+ <span class="v">:</span><span class="tt"><a href="ACL2____LINEAR.html">linear</a></span> rule.</p> 
+ 
+ <p>If you do see a ``[Double-rewrite]'' warning, then should you add the 
+ indicated call(s) of <span class="v">double-rewrite</span>?  At the time of writing this <a href="COMMON-LISP____DOCUMENTATION.html">documentation</a>, the answer is not clear.  Early experiments with double 
+ rewriting suggested that it may be too expensive to call <span class="v">double-rewrite</span> 
+ in every instance where a warning indicates that there could be an advantage 
+ to doing so.  And at the time of this writing, the ACL2 regression suite has 
+ about 1900 such warnings (but note that books were developed before 
+ <span class="v">double-rewrite</span> or the ``[Double-rewrite]'' warning were implemented), 
+ which suggests that one can often do fine just ignoring such warnings. 
+ However, it seems advisable to go ahead and add the calls of 
+ <span class="v">double-rewrite</span> indicated by the warnings unless you run across efficiency 
+ problems caused by doing so.  Of course, if you decide to ignore all such 
+ warnings you can execute the event:<br> 
+ 
+ <span class="v">(</span><span class="tt"><a href="ACL2____SET-INHIBIT-WARNINGS.html">set-inhibit-warnings</a></span><span class="v"> "Double-rewrite")</span>.</p> 
+ 
+ <p>Finally, we note that it is generally not necessary to call 
+ <span class="v">double-rewrite</span> in order to get its effect in the following case, where 
+ the discussion above might have led one to consider a call of 
+ <span class="v">double-rewrite</span>: a hypothesis is a variable, or more generally, we are 
+ considering a variable occurrence that is a branch of the top-level <span class="v">IF</span> 
+ structure of a hypothesis.  The automatic handling of this case, by a form of 
+ double rewriting, was instituted in ACL2 Version_2.9 and remains in place with 
+ the introduction of <span class="v">double-rewrite</span>.  Here is a simple illustrative 
+ example.  Notice that <span class="v">foo-holds</span> applies to prove the final <span class="tt"><a href="ACL2____THM.html">thm</a></span> 
+ below, even without a call of <span class="v">double-rewrite</span> in the hypothesis of 
+ <span class="v">foo-holds</span>, and that there is no ``[Double-rewrite]'' warning when 
+ submitting <span class="v">foo-holds</span>.</p> 
+ 
+ <pre class="code">(<a href="ACL2____ENCAPSULATE.html">encapsulate</a>
+ (((foo *) =&gt; *)
+  ((bar *) =&gt; *))
+
+ (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> foo (x) (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORE.html">ignore</a> x)) t))
+ (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> bar (x) (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORE.html">ignore</a> x)) t))
+
+ (<a href="ACL2____DEFTHM.html">defthm</a> foo-holds
+   (<a href="ACL2____IMPLIES.html">implies</a> x
+            (<a href="COMMON-LISP____EQUAL.html">equal</a> (foo x) t)))
+ (<a href="ACL2____DEFTHM.html">defthm</a> bar-holds-propositionally
+   (<a href="ACL2____IFF.html">iff</a> (bar x) t)))
+
+(<a href="ACL2____THM.html">thm</a> (foo (bar y)))</pre>
+</body>
+</html>

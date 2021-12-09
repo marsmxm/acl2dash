@@ -1,0 +1,93 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>With-prover-time-limit</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____WITH-PROVER-TIME-LIMIT">Click for With-prover-time-limit in the Full Manual</a></h3>
+
+<p>Limit the time for proofs</p><pre class="code">Examples:
+
+; Limit (mini-proveall) to about 1/4 second:
+(<a href="ACL2____WITH-PROVER-TIME-LIMIT.html">with-prover-time-limit</a> 1/4 (mini-proveall))
+
+; Limit (mini-proveall) to about 1/4 second, even if surrounding call of
+; with-prover-time-limit provides for a more restrictive bound:
+(<a href="ACL2____WITH-PROVER-TIME-LIMIT.html">with-prover-time-limit</a> '(1/4) (mini-proveall))
+
+; Limit the indicated theorem to about 1/50 second, and if the proof does not
+; complete or it fails, then put down a label instead.
+(<a href="ACL2____MV-LET.html">mv-let</a> (erp val state)
+        (<a href="ACL2____WITH-PROVER-TIME-LIMIT.html">with-prover-time-limit</a>
+         1/50
+         (<a href="ACL2____THM.html">thm</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____APPEND.html">append</a> (<a href="COMMON-LISP____APPEND.html">append</a> x x) x)
+                     (<a href="COMMON-LISP____APPEND.html">append</a> x x x))))
+        (<a href="COMMON-LISP____IF.html">if</a> erp
+            (<a href="ACL2____DEFLABEL.html">deflabel</a> foo :doc "Attempt failed.")
+          (<a href="ACL2____VALUE.html">value</a> (<a href="COMMON-LISP____LIST.html">list</a> :succeeded-with val))))
+
+General Form:
+(<a href="ACL2____WITH-PROVER-TIME-LIMIT.html">with-prover-time-limit</a> time form)</pre> 
+ 
+ <p>where <span class="v">time</span> evaluates to a positive rational number or to a list 
+ containing such, and <span class="v">form</span> is arbitrary.  Logically, 
+ <span class="v">(<a href="ACL2____WITH-PROVER-TIME-LIMIT.html">with-prover-time-limit</a> time form)</span> is equivalent to <span class="v">form</span>.  However, 
+ if the time for evaluation of <span class="v">form</span> exceeds the value specified by 
+ <span class="v">time</span>, and if ACL2 notices this fact during a proof, then that proof will 
+ abort, for example like this:</p> 
+ 
+ <pre class="code">ACL2 Error in ( DEFTHM PERM-REFLEXIVE ...):  Out of time in the rewriter.</pre> 
+ 
+ <p>If there is already a surrounding call of <span class="v">with-prover-time-limit</span> that 
+ has set up an expiration time, the inner <span class="v">with-prover-time-limit</span> call is 
+ not allowed to push that time further into the future unless the inner time is 
+ specified as a list containing a rational, rather than as a rational.</p> 
+ 
+ <p>Note that by default, the time used is runtime (cpu time); to switch to 
+ realtime (elapsed time), see <a href="ACL2____GET-INTERNAL-TIME.html">get-internal-time</a>.</p> 
+ 
+ <p>For a related utility based on prover steps instead of time, see <a href="ACL2____WITH-PROVER-STEP-LIMIT.html">with-prover-step-limit</a>; also see <a href="ACL2____SET-PROVER-STEP-LIMIT.html">set-prover-step-limit</a>.  Those 
+ utilities have the advantage of having platform-independent behavior, unlike 
+ time limits, which of course are generally less restrictive for faster 
+ processors.  But note that the prover steps counted need not correspond 
+ closely to prover time.  For other utilities that limit time, see <a href="ACL2____WITH-TIMEOUT.html">with-timeout</a> and <a href="ACL2____ORACLE-TIMELIMIT.html">oracle-timelimit</a>.</p> 
+ 
+ <p>Although <span class="v">with-prover-time-limit</span> behaves like an ACL2 function in the 
+ sense that it evaluates both its arguments, it is however actually a macro 
+ that behaves as follows.  (1) The value of its first (time limit) argument 
+ affects the evaluation of its second argument (by causing an error during that 
+ evaluation if the time for completion is insufficient).  (2) The second 
+ argument can return multiple values (see <a href="ACL2____MV.html">mv</a>), which are then returned 
+ by the call of <span class="v">with-prover-time-limit</span>.  (3) Thus, there is not a fixed 
+ number of values returned by <span class="v">with-prover-time-limit</span>.</p> 
+ 
+ <p>If you find that the time limit appears to be implemented too loosely, it 
+ may be because the prover only checks the time elapsed at certain points 
+ during the proof process, for example at entry to the rewriter.  For example, 
+ if you write your own <span class="tt"><a href="ACL2____CLAUSE-PROCESSOR.html">clause-processor</a></span> that does an expensive 
+ computation, the time is unlikely to be checked during its execution.  If 
+ however you find the time limit seems to be ignored even during ordinary 
+ prover operation, you are encouraged to email an example to the ACL2 
+ implementors with instructions on how to observe the undesirable behavior. 
+ This information can perhaps be used to improve ACL2 by the insertion of more 
+ checks for expiration of the time limit.</p> 
+ 
+ <p>The rest of this documentation topic explains the rather subtle logical 
+ story, and is not necessary for understanding how to use 
+ <span class="v">with-prover-time-limit</span>.  The ACL2 <span class="tt"><a href="ACL2____STATE.html">state</a></span> object logically contains 
+ a field called the <span class="v">acl2-oracle</span>, which is an arbitrary true list of 
+ objects; see <span class="tt"><a href="ACL2____READ-ACL2-ORACLE.html">read-ACL2-oracle</a></span>.  Our claim is that every ACL2 session 
+ makes sense for <b>some</b> value of <span class="v">acl2-oracle</span> in the initial 
+ <span class="v">state</span> for that session.  Logically, <span class="v">with-prover-time-limit</span> is a 
+ no-op, just returning its second value.  But under the hood, it provides a 
+ ``hint'' for the <span class="v">acl2-oracle</span>, so that (logically speaking) when its first 
+ element (<span class="tt"><a href="COMMON-LISP____CAR.html">car</a></span>) is consulted by ACL2's prover to see if the time limit 
+ has expired, it gets the ``right'' answer (specifically, either nil if all is 
+ well or else a message to print if the time limit has expired).  Logically, 
+ the <span class="v">acl2-oracle</span> is then <span class="tt"><a href="COMMON-LISP____CDR.html">cdr</a></span>'ed  that is, its first element 
+ is popped off  so that future results from <span class="v">read-acl2-oracle</span> are 
+ independent of the one just obtained.</p>
+</body>
+</html>

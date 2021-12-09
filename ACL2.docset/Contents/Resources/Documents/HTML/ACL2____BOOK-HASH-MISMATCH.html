@@ -1,0 +1,123 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Book-hash-mismatch</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____BOOK-HASH-MISMATCH">Click for Book-hash-mismatch in the Full Manual</a></h3>
+
+<p>Deeming a book uncertified because of a <a href="ACL2____BOOK-HASH.html">book-hash</a> mismatch</p><p>When <span class="tt"><a href="ACL2____INCLUDE-BOOK.html">include-book</a></span> is invoked, the specified book may be 
+ considered uncertified by ACL2 because its <a href="ACL2____BOOK-HASH.html">book-hash</a>  which by 
+ default is an alist specifying the book's size and write-date, but could be a 
+ checksum  does not match what was expected.  In that case you will 
+ typically see a warning such as the following, which instead will be an error 
+ if this occurs during certification.  In this topic, we explain how this 
+ warning can occur.</p> 
+ 
+ <pre class="code">ACL2 Warning [Uncertified] in ( INCLUDE-BOOK "foo" ...):
+The certificate for "/Users/kaufmann/temp/foo.lisp" lists the book-
+hash of that book as ((:BOOK-LENGTH . 38) (:BOOK-WRITE-DATE . 3674050905)).
+But its book-hash is now computed to be
+((:BOOK-LENGTH . 39) (:BOOK-WRITE-DATE . 3674050914)).
+See :DOC book-hash-mismatch.</pre> 
+ 
+ <p>Probably the simplest way for such a mismatch to occur is if you change the 
+ book after certifying it, and then try to include the book.  In the example 
+ message displayed above, the book-hash for <span class="v">foo.lisp</span> stored into 
+ <span class="v">foo.cert</span> was 516310554.  But then <span class="v">foo.lisp</span> was edited (in this case, 
+ by adding a single newline character), and ACL2 complained because at 
+ <span class="v">include-book</span> time it computed a different book-hash for that book.</p> 
+ 
+ <p>The mismatch might occur on a book that is being included while including a 
+ superior book.  For example, suppose that the act of evaluating 
+ <span class="v">(<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "bk1")</span> triggers evaluation of the event <span class="v">(<a href="ACL2____INCLUDE-BOOK.html">include-book</a>
+ "bk2")</span> from <span class="v">bk1.lisp</span>, which similarly in turn causes evaluation of 
+ the event <span class="v">(<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "bk3")</span> from <span class="v">bk2.lisp</span>.  Now certify 
+ <span class="v">bk3.lisp</span>, then <span class="v">bk2.lisp</span>, and finally <span class="v">bk1.lisp</span>.  So far, so 
+ good.  But now suppose we edit the lowest-level book, <span class="v">bk3.lisp</span>.  We will 
+ likely get a warning (or error, if during book certification) such as the 
+ one displayed above when evaluating <span class="v">(<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "bk1")</span>, complaining 
+ that the book-hash for <span class="v">bk3.lisp</span> has changed  followed by warnings 
+ complaining about inclusions of uncertified books by superior books.</p> 
+ 
+ <p>There are several ways for a book-hash in a <span class="v">.cert</span> file to become 
+ invalid, that is, to fail to match a recomputation of the book-hash when later 
+ including the book.  All such mismatches are due to a difference between the 
+ value of a book-hash at certification time and at later <span class="v">include-book</span> 
+ time; see <a href="ACL2____BOOK-HASH.html">book-hash</a>.</p> 
+ 
+ <p>Note that it is possible to mix alist and checksum book-hash values.  The 
+ key is to avoid conflicts between book-hash values stored for the same book in 
+ different <span class="v">.cert</span> files.  The following example works fine, because there 
+ is no such conflict: the book <span class="v">"sub"</span> is associated with a book-hash 
+ checksum in <span class="v">sub.cert</span>, which provides that same checksum as the book-hash 
+ value for <span class="v">"sub"</span> in <span class="v">top.cert</span>; and the book <span class="v">"top"</span> is 
+ associated with a book-hash alist in <span class="v">top.cert</span>.</p> 
+ 
+ <pre class="code">(<a href="ACL2____CERTIFY-BOOK.html">certify-book</a> "sub")
+(<a href="ACL2____U.html">u</a>)
+(<a href="ACL2____ASSIGN.html">assign</a> book-hash-alistp t)
+(<a href="ACL2____CERTIFY-BOOK.html">certify-book</a> "top") ; contains the event (<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "sub")
+(<a href="ACL2____U.html">u</a>)
+(<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "top") ; no problem!</pre> 
+ 
+ <p>However, if we instead evaluate the following forms in a fresh ACL2 
+ session, the last one causes an error, because a checksum serves as the 
+ book-hash for <span class="v">"sub"</span> in <span class="v">top.cert</span>, but at <span class="v">include-book</span> time the 
+ book-hash for <span class="v">"sub"</span> in <span class="v">sub.cert</span> is an alist, not a checksum.</p> 
+ 
+ <pre class="code">(<a href="ACL2____CERTIFY-BOOK.html">certify-book</a> "sub")
+:u
+(<a href="ACL2____CERTIFY-BOOK.html">certify-book</a> "top") ; contains the event (<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "sub")
+:u
+(<a href="ACL2____ASSIGN.html">assign</a> book-hash-alistp t)
+(<a href="ACL2____CERTIFY-BOOK.html">certify-book</a> "sub") ; now the book-hash for sub is an alist
+:u
+; Error: mismatch for book-hash values for "sub" in
+;        new sub.cert and earlier top.cert.
+(<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "top")</pre> 
+ 
+ <p>That said, ACL2 does not care about the current value of state global 
+ <span class="v">book-hash-alistp</span> at <span class="v">include-book</span> time.  For example, the following 
+ works without error: ACL2 sees the checksum stored in <span class="v">sub.cert</span>, so at 
+ <span class="v">include-book</span> time it computes a checksum for the book <span class="v">"sub"</span>, not 
+ an alist, even though <span class="v">'book-hash-alistp</span> has value <span class="v">t</span>.</p> 
+ 
+ <pre class="code">(<a href="ACL2____ASSIGN.html">assign</a> book-hash-alistp nil)
+(<a href="ACL2____CERTIFY-BOOK.html">certify-book</a> "foo")
+(<a href="ACL2____ASSIGN.html">assign</a> book-hash-alistp t)
+(<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "foo")</pre> 
+ 
+ <p>We conclude by discussing a rather insidious book-hash mismatch that can 
+ occur when including a book using an ACL2 executable that differs from the 
+ executable that was used when certified the book.  Here is an example. 
+ Consider a book, <span class="v">"foo.lisp"</span>, containing the event <span class="v">(<a href="ACL2____INCLUDE-BOOK.html">include-book</a>
+ "tools/remove-hyps" :dir :system)</span>.  Suppose we have ACL2 executables 
+ <span class="v">acl2-cksum</span> and <span class="v">acl2-alist</span>, in different ACL2 directories.  Also 
+ suppose that we have certified (disjoint copies of) the <a href="ACL2____COMMUNITY-BOOKS.html">community-books</a> 
+ with each of these ACL2 executables, where we used 
+ <span class="v">ACL2_BOOK_HASH_ALISTP=NIL</span> in our <span class="v">"make"</span> command with 
+ <span class="v">acl2-cksum</span> but not with <span class="v">acl2-alist</span>.  Now suppose we certify 
+ <span class="v">"foo.lisp"</span> using <span class="v">acl2-cksum</span> but then, in a session with 
+ <span class="v">acl2-alist</span>, we include that same book.  Then we will see a warning 
+ beginning as displayed below.  It complains that the book-hash required of 
+ <span class="v">books/tools/remove-hyps.cert</span> according to <span class="v">foo.cert</span>  which was 
+ created using <span class="v">acl2-cksum</span>  differs from the book-hash in the 
+ <span class="v">.cert</span> file of the copy of that book that is under the directory of the 
+ currently running ACL2, <span class="v">acl2-alist</span>.</p> 
+ 
+ <pre class="code">ACL2 Warning [Uncertified] in ( INCLUDE-BOOK "foo" ...):  After including
+the book "/Users/smith/temp/foo.lisp":
+
+-- its certificate requires the book "/Users/smith/acl2/books/tools/remove-
+hyps.lisp" with certificate annotations
+  ((:SKIPPED-PROOFSP) (:AXIOMSP) (:TTAGS))
+and book hash 1958615726, but we have included a version of "remove-hyps"
+with certificate annotations
+  ((:SKIPPED-PROOFSP) (:AXIOMSP) (:TTAGS))
+and book-hash ((:BOOK-LENGTH . 14650) (:BOOK-WRITE-DATE . 3656629263)),
+so book recertification is probably required;</pre>
+</body>
+</html>

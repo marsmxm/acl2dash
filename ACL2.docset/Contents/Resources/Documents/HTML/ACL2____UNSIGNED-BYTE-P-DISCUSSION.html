@@ -1,0 +1,104 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Unsigned-byte-p-discussion</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____UNSIGNED-BYTE-P-DISCUSSION">Click for Unsigned-byte-p-discussion in the Full Manual</a></h3>
+
+<p>Discussion on how to use unsigned-byte-p</p><p><a href="ACL2____UNSIGNED-BYTE-P.html">Unsigned-byte-p</a> (and <a href="ACL2____SIGNED-BYTE-P.html">signed-byte-p</a> for that matter) are 
+  tricky enough that there is no one-size-fits-all solution that everyone 
+  should use to reason about them.  Depending on your problem you might try any 
+  of these strategies:</p> 
+ 
+  <ol> 
+ 
+  <li>
+<i>Arithmetic</i> -- Leave unsigned-byte-p's regular definition enabled 
+  and try to reason about the resulting inequalities.  This sometimes works and 
+  may be a good approach if you have goals involving "non bit-vector 
+  functions" like +, *, /, etc.  I usually don't use this approach but I 
+  haven't done a lot of proofs about true arithmetic functions.</li> 
+ 
+  <li>
+<i>Induction</i> -- Disable unsigned-byte-p's regular definition but 
+  instead enable an alternate definition, e.g., the 
+  centaur/bitops/ihsext-basics book has unsigned-byte-p**, which is a recursive 
+  version that works well for induction.  This definition is in the 
+  ihsext-recursive-redefs ruleset and also works well with other ** definitions 
+  like logand**.  This is often a good strategy when proving lemmas about 
+  unsigned-byte-p but is probably mainly useful when reasoning about new 
+  recursive functions.</li> 
+ 
+  <li>
+<i>Vector</i> -- Leave <a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> disabled except to prove 
+  lemmas, and expect to reason about (unsigned-byte-p n x) via lemmas.  I think 
+  I usually prefer this strategy as it feels more reliable/less magical than 
+  reasoning about arithmetic inequalities.  Some useful books: 
+ 
+    <ol> 
+ 
+      <li>bitops/ihsext-basics proves the nice/obvious lemmas about 
+      signed/unsigned-byte-p on many bit-vector functions like logior, 
+      logand, etc.</li> 
+ 
+      <li>bitops/signed-byte-p has lemmas about signed/unsigned-byte-p for 
+      some arithmetic functions (+, -, *) and also extended lemmas about 
+      bit-vector stuff.  It's often very handy for the kinds of guard 
+      obligations that arise from things like (the (unsigned-byte 32) 
+      x).</li> 
+ 
+    </ol>
+</li> 
+  </ol> 
+ 
+  <p>We have occasionally written wrapper functions like <span class="v">u32p</span>, but, I 
+  think that perhaps the only reason we did this was for macros like <a href="ACL2____DEF-TYPED-RECORD.html">def-typed-record</a>, where we needed a unary predicate to introduce a fancier 
+  data structure.  Once we had the typed records in place, we just enabled 
+  these wrappers and did all our reasoning about <a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a>. 
+  (I don't think you'd want to reason about a each various u32p, u64p, etc., 
+  individually.)</p> 
+ 
+  <p>In the context of FTY, I don't think you need wrappers, but if for some 
+  reason you do want to use them then that is probably basically fine.  Note 
+  here that you have some choice for your fixing function.  You can fix to 0 as 
+  you've done in your examples, but you might instead prefer to fix to 
+  @'(loghead n x)').  Why?  When you use loghead, it preserves the lower <span class="v">N</span> 
+  bits, and this may interact much more nicely with rules about true bit-vector 
+  functions.  This approach is also good for GL, where loghead is supported in 
+  an especially good way.</p> 
+ 
+  <p>That said, it should be possible to get by without wrappers; see for 
+  instance the definition of sizednum in centaur/fty/deftypes-tests.lisp, or 
+  the definition of vl-constint in centaur/vl/expr.lisp, both of which use a 
+  loghead-based approach to do the fixing.  (The vl-constint example has 
+  a :require that is an inequality instead of an unsigned-byte-p term, but I 
+  don't think there's any particular reason to do it this way instead of the 
+  other.)</p> 
+ 
+  <p>In general there is good reason to expect it to sometimes be hard to work 
+  with unsigned-byte-p.  For instance, consider a theorem like the following, 
+  from <span class="v">centaur/bitops/signed-byte-p.lisp</span>:</p> 
+ 
+  <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> lousy-unsigned-byte-p-of-*-mixed
+  ;; Probably won't ever unify with anything.
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> n1 a)
+                (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> n2 b))
+           (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> (<a href="COMMON-LISP_____B2.html">+</a> n1 n2) (<a href="COMMON-LISP_____A2.html">*</a> a b)))
+  :hints(("Goal" :use ((:instance upper-bound)))))</pre> 
+ 
+  <p>This would be a good rule to try on goals like <span class="v">(<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 10 (<a href="COMMON-LISP_____A2.html">*</a> a
+  b))</span>, but without some insight into <span class="v">a</span> and <span class="v">b</span> it's hard to know how 
+  to successfully instantiate <span class="v">N1/N2</span>.  So you end up resorting to <span class="v">:use</span> 
+  hints, or special-case variants of this theorem (e.g., another theorem that 
+  says 7 bits * 3 bits --&gt; 10 bits), or you do something more sophisticated 
+  with bind-free or similar.</p> 
+ 
+  <p>If you find yourself going down this road, you might see in particular Dave 
+  Greve's "Parameterized Congruences" paper from the 2006 workshop, which is 
+  implemented in the coi/nary/nary.lisp book.  You could also look at Sol 
+  Swords' book to do something similar, see <a href="ACL2____CONTEXTUAL-REWRITING.html">contextual-rewriting</a>.</p>
+</body>
+</html>

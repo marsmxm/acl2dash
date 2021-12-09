@@ -1,0 +1,97 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Bfr-eval</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=FGL____BFR-EVAL">Click for Bfr-eval in the Full Manual</a></h3>
+
+<p>Evaluate a BFR under an appropriate BDD/AIG environment.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(bfr-eval x env &amp;optional (logicman 'logicman))  bool</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">x</span>  A Boolean function object.<br><font color="#606060">Guard <span class="v">(lbfr-p x)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">env</span>  The (Boolean) evaluation environment.</dd> 
+  <dd>
+<span class="tt">logicman</span>  The logic manager.</dd> 
+ 
+</dl></div> 
+<p><span class="v">Bfr-eval</span> is the evaluator for Boolean function objects in FGL.</p> 
+ 
+<p>Boolean function objects in FGL may be <a href="ACL2____UBDDS.html">UBDDs</a>, 
+<a href="ACL2____AIG.html">hons-AIGs</a>, or <a href="ACL2____AIGNET.html"> 
+aignet</a> literals (represented as natural numbers).  The <a href="FGL____BFR-MODE.html">bfr-mode</a> of 
+the logic manager (accessed as <span class="v">(logicman-&gt;mode logicman)</span>) determines how 
+the objects are interpreted.  Furthermore, in the aignet mode, literals must be 
+evaluated relative to an aignet, which is also stored in the logic manager as a 
+nested stobj, accessed using <span class="v">(logicman-&gt;aignet logicman)</span>.</p> 
+ 
+<p>The <span class="v">env</span> input determines the values of Boolean variables, but its form 
+also depends on the BFR mode.  In UBDD mode, it is an ordered list of Boolean 
+values, where <span class="v">(<a href="COMMON-LISP____NTH.html">nth</a> n env)</span> is the value of Boolean variable <span class="v">n</span>. 
+Otherwise, it is a fast alist mapping natural numbers to Boolean values, and 
+the value of the nth Boolean variable is <span class="v">(<a href="COMMON-LISP____CDR.html">cdr</a> (<a href="ACL2____HONS-GET.html">hons-get</a> n env))</span>.  In 
+aignet mode, the Boolean variable numbers map to primary inputs of the AIG -- 
+registers are not used.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>bfr-eval-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ bfr-eval-fn (x env logicman)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (logicman)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (lbfr-p x)))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'bfr-eval))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+   ((<a href="FGL____BFRSTATE.html">bfrstate</a> (logicman-&gt;bfrstate)))
+   (<a href="FGL____BFRSTATE-CASE.html">bfrstate-case</a>
+    :bdd (<a href="ACL2____EVAL-BDD.html">acl2::eval-bdd</a> (<a href="FGL____BFR-FIX.html">bfr-fix</a> x) env)
+    :aig (<a href="ACL2____AIG-EVAL.html">acl2::aig-eval</a> (<a href="FGL____BFR-FIX.html">bfr-fix</a> x) env)
+    :aignet
+    (<a href="ACL2____MBE.html">mbe</a>
+     :logic
+     (<a href="ACL2____NON-EXEC.html">non-exec</a>
+        (<a href="ACL2____BIT-_E3BOOL.html">bit-&gt;bool</a>
+             (aignet::lit-eval
+                  (<a href="FGL____BFR-_E3AIGNET-LIT.html">bfr-&gt;aignet-lit</a> x)
+                  (alist-to-bitarr
+                       (<a href="AIGNET____NUM-INS.html">aignet::num-ins</a> (logicman-&gt;aignet logicman))
+                       env nil)
+                  nil (logicman-&gt;aignet logicman))))
+     :exec
+     (<a href="ACL2____B_A2.html">b*</a>
+      ((x (<a href="FGL____BFR-_E3AIGNET-LIT.html">bfr-&gt;aignet-lit</a> x))
+       ((acl2::local-stobjs aignet::invals aignet::regvals)
+        (<a href="ACL2____MV.html">mv</a> ans aignet::invals aignet::regvals)))
+      (<a href="ACL2____STOBJ-LET.html">stobj-let</a>
+       ((<a href="ACL2____AIGNET.html">aignet</a> (logicman-&gt;aignet logicman)))
+       (ans aignet::invals aignet::regvals)
+       (<a href="ACL2____B_A2.html">b*</a>
+        ((<a href="AIGNET____INVALS.html">aignet::invals</a> (alist-to-bitarr (<a href="AIGNET____NUM-INS.html">aignet::num-ins</a> aignet)
+                                          env aignet::invals))
+         (aignet::regvals (alist-to-bitarr (<a href="AIGNET____NUM-REGS.html">aignet::num-regs</a> aignet)
+                                           nil aignet::regvals)))
+        (<a href="ACL2____MV.html">mv</a>
+         (<a href="ACL2____BIT-_E3BOOL.html">bit-&gt;bool</a>
+           (aignet::lit-eval x
+                             aignet::invals aignet::regvals aignet))
+         aignet::invals aignet::regvals))
+       (<a href="ACL2____MV.html">mv</a> ans
+           aignet::invals aignet::regvals))))))))</pre> 
+<p><b>Theorem: </b>bfr-eval-consts</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> bfr-eval-consts
+        (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="FGL____BFR-EVAL.html">bfr-eval</a> t env) t)
+             (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="FGL____BFR-EVAL.html">bfr-eval</a> nil env) nil)))</pre> 
+<p><b>Theorem: </b>bfr-eval-of-bfr-fix</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> bfr-eval-of-bfr-fix
+        (<a href="ACL2____B_A2.html">b*</a> ((<a href="FGL____BFRSTATE.html">bfrstate</a> (logicman-&gt;bfrstate logicman)))
+            (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="FGL____BFR-EVAL.html">bfr-eval</a> (<a href="FGL____BFR-FIX.html">bfr-fix</a> x) env)
+                   (<a href="FGL____BFR-EVAL.html">bfr-eval</a> x env))))</pre> 
+<p><b>Theorem: </b>bfr-eval-of-logicman-extension</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> bfr-eval-of-logicman-extension
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (bind-logicman-extension new old)
+                      (lbfr-p x old))
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="FGL____BFR-EVAL.html">bfr-eval</a> x env new)
+                        (<a href="FGL____BFR-EVAL.html">bfr-eval</a> x env old))))</pre> 
+
+</body>
+</html>

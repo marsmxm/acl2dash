@@ -1,0 +1,143 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Rp-rewriter/meta-rules</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=RP____RP-REWRITER_F2META-RULES">Click for Rp-rewriter/meta-rules in the Full Manual</a></h3>
+
+<p>The steps necessary to add meta rules to RP-Rewriter</p><p>Below are the steps users need to follow, and information they may 
+ use:</p> 
+ 
+<p> 
+1. Create your  meta function. 
+<pre class="code"><span class="v">(<a href="ACL2____DEFINE.html">define</a> &lt;meta-fnc&gt; (term)
+     :returns (<a href="ACL2____MV.html">mv</a> term dont-rw) OR (term)
+     ...)</span> 
+</pre> 
+Your meta function can return either two values:term and <a href="RP____DONT-RW.html">dont-rw</a>; or 
+only term. For best performance, it is recommended that you return dont-rw 
+structure as well. If you do not want the returned term to be rewritten at all, 
+you can return 't' for dont-rw. 
+</p> 
+ 
+<p> 
+2. Create formula-checks function. 
+<pre class="code"><span class="v">(def-formula-checks &lt;formula-check-name&gt;
+       (&lt;list-of-function-names&gt;))</span> 
+</pre> 
+This event submits a function with signature <span class="v">(&lt;formula-check-name&gt; state)</span>. When 
+you add this function to your correctness theorem for this meta function, the 
+evaluator of RP-Rewriter will recognize the functions you list. 
+</p> 
+ 
+<p> 
+3. Prove that evaluation of the function returns an equivalent term under the 
+evaluator. 
+<pre class="code"><span class="v">(<a href="ACL2____DEFTHM.html">defthm</a> rp-evlt-of-meta-fnc
+    (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="RP____VALID-SC.html">valid-sc</a> term a) ;;optional
+                  (<a href="RP____RP-TERMP.html">rp-termp</a> term) ;;optional
+                  (rp-evl-meta-extract-global-facts)
+                  (&lt;formula-check-name&gt; state))
+             (<a href="COMMON-LISP____EQUAL.html">equal</a> (rp-evlt (&lt;meta-fnc&gt; term) a)
+                    (rp-evlt term a))))</span> 
+</pre> 
+ 
+This is the correctness theorem of the meta rule. Optionally, you may have 
+(valid-sc term a), which states that the side-conditions in RP-Rewriter are 
+correct; and (rp-termp term), which states that some of the syntactic 
+invariances hold and the term is syntactically compatible with RP-Rewriter. See 
+discussions for <a href="RP____VALID-SC.html">valid-sc</a> and <a href="RP____RP-TERMP.html">rp-termp</a>. 
+</p> 
+ 
+<p> 
+If the meta function returns dont-rw, then you need to prove the same lemma for 
+<span class="v">(<a href="ACL2____MV-NTH.html">mv-nth</a> 0 (&lt;meta-fnc&gt; term))</span>. 
+</p> 
+ 
+<p> 
+4. Prove that meta-function retains the correctness of side-conditions. 
+<pre class="code"><span class="v">(<a href="ACL2____DEFTHM.html">defthm</a> valid-sc-of-meta-fnc
+   (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="RP____VALID-SC.html">valid-sc</a> term a)
+                 (<a href="RP____RP-TERMP.html">rp-termp</a> term) ;;optional
+                 (rp-evl-meta-extract-global-facts) ;;optional
+                 (&lt;formula-check-name&gt; state)) ;;optional
+            (<a href="RP____VALID-SC.html">valid-sc</a> (&lt;meta-fnc&gt; term) a)))</span> 
+</pre> 
+ 
+Meta functions can introduce or change side-conditions by manipulating 'rp' 
+instances. Therefore users need to prove that the invariance about side 
+conditions are maintained. 
+</p> 
+ 
+<p> 
+If the meta function returns dont-rw, then you need to prove the same lemma for 
+<span class="v">(<a href="ACL2____MV-NTH.html">mv-nth</a> 0 (&lt;meta-fnc&gt; term))</span>. 
+</p> 
+ 
+<p> 
+5. Optionally, prove that the meta function returns a valid syntax. 
+<pre class="code"><span class="v">(<a href="ACL2____DEFTHM.html">defthm</a> rp-termp-of-meta-fnc
+    (<a href="ACL2____IMPLIES.html">implies</a> (<a href="RP____RP-TERMP.html">rp-termp</a> term)
+             (<a href="RP____RP-TERMP.html">rp-termp</a> (&lt;meta-fnc&gt; term))))</span> 
+</pre> 
+ 
+Even though it is optional, it is recommended that you prove such a lemma for 
+your meta function. It prevents syntactic check on every term returned from 
+meta function. 
+</p> 
+<p> 
+If the meta function returns dont-rw, then you need to prove the same lemma for 
+<span class="v">(<a href="ACL2____MV-NTH.html">mv-nth</a> 0 (&lt;meta-fnc&gt; term))</span>. 
+</p> 
+ 
+<p> 
+6. If your function returns <a href="RP____DONT-RW.html">dont-rw</a>, then you also need to prove 
+that it is syntactically correct. Otherwise skip this step. 
+<pre class="code"><span class="v">(<a href="ACL2____DEFTHM.html">defthm</a> dont-rw-syntaxp-of-meta-fnc
+   (dont-rw-syntaxp (<a href="ACL2____MV-NTH.html">mv-nth</a> 1 (&lt;meta-fnc&gt; term))))</span> 
+</pre> 
+</p> 
+ 
+<p> 
+7. Save the meta rule in the rule-set of RP-Rewriter for meta rules. 
+<pre class="code"><span class="v">
+(<a href="RP____ADD-META-RULE.html">rp::add-meta-rule</a>
+ :meta-fnc &lt;meta-fnc&gt;
+ :trig-fnc &lt;trig-fnc&gt;
+ :returns &lt;return-signature&gt;
+ :outside-in &lt;t-if-the-meta-rule-should-apply-from-outside-in&gt;
+ :valid-syntaxp &lt;t-if-rp-termp-of-meta-fnc-is-proved&gt;)
+</span> 
+</pre> 
+ 
+See <a href="RP____ADD-META-RULE.html">add-meta-rule</a> for further discussion of the options. 
+ 
+</p> 
+ 
+<p> 
+8. Attach these newly created meta functions. 
+<pre class="code"><span class="v">(<a href="RP____ATTACH-META-FNCS.html">rp::attach-meta-fncs</a> &lt;a-unique-name-for-updated-clause-processor&gt;)</span> 
+</pre> 
+If you are going to include this book later when other meta rules for 
+RP-Rewriter is present, you may want to call this function when all the meta 
+rules are included. 
+</p> 
+ 
+<p> 
+You may look at examples of RP-Rewriter meta rules under 
+/books/projects/RP-Rewriter/meta/*. implies-meta.lisp is a very simple example 
+of an outside-in meta rule. 
+</p> 
+ 
+<p> 
+Some books under /books/projects/RP-Rewriter/proofs/* might be useful when 
+proving when proving meta rules correct, especially aux-function-lemmas and 
+eval-functions-lemmas. 
+</p> 
+ 
+
+</body>
+</html>

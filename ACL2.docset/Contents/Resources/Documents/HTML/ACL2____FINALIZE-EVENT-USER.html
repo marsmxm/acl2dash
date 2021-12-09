@@ -1,0 +1,127 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Finalize-event-user</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____FINALIZE-EVENT-USER">Click for Finalize-event-user in the Full Manual</a></h3>
+
+<p>User-supplied code to complete <a href="ACL2____EVENTS.html">events</a>, e.g., with extra <a href="ACL2____SUMMARY.html">summary</a> output</p><p>This utility is intended for system hackers, not standard ACL2 
+ users.</p> 
+ 
+ <p>ACL2 prints summaries at the conclusions of processing <a href="ACL2____EVENTS.html">events</a> 
+ (unless summaries are inhibited; see <a href="ACL2____SET-INHIBIT-OUTPUT-LST.html">set-inhibit-output-lst</a> and also 
+ see <a href="ACL2____SET-INHIBITED-SUMMARY-TYPES.html">set-inhibited-summary-types</a>).  You may arrange for processing to 
+ take place just after the <a href="ACL2____SUMMARY.html">summary</a>, by defining a function with argument 
+ list <span class="v">(<a href="ACL2____CTX.html">ctx</a> body state)</span> that returns one value, namely <span class="v">state</span>.  We 
+ describe <span class="v">ctx</span> and <span class="v">body</span> at the end below, but you may simply prefer to 
+ ignore these arguments.)  Your function should normally be a <a href="ACL2____GUARD.html">guard</a>-verified <span class="v">:</span><span class="tt"><a href="ACL2____LOGIC.html">logic</a></span> mode function with no guard other than 
+ that provided by the input requirement on <span class="tt"><a href="ACL2____STATE.html">state</a></span>, that is, <span class="v">(state-p
+ state)</span>; but later below we discuss how to avoid this requirement.  You then 
+ attach (see <a href="ACL2____DEFATTACH.html">defattach</a>) your function to the function 
+ <span class="v">finalize-event-user</span>.  The following example illustrates how this all 
+ works.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> finalize-event-user-test (<a href="ACL2____CTX.html">ctx</a> body state)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs state)
+           (<a href="COMMON-LISP____IGNORE.html">ignore</a> ctx body))
+  (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____AND.html">and</a> (boundp-global 'abbrev-evisc-tuple state)
+              (<a href="ACL2____OPEN-OUTPUT-CHANNEL-P.html">open-output-channel-p</a> *standard-co*
+                                     :character
+                                     state))
+         (<a href="ACL2____PPROGN.html">pprogn</a>
+          (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQ.html">eq</a> (<a href="ACL2____F-GET-GLOBAL.html">f-get-global</a> 'abbrev-evisc-tuple state) :DEFAULT)
+              (<a href="ACL2____PRINC_42.html">princ$</a> "Abbrev-evisc-tuple has its default value."
+                      *standard-co*
+                      state)
+            (<a href="ACL2____PRINC_42.html">princ$</a> "Abbrev-evisc-tuple has been modified."
+                    *standard-co*
+                    state))
+          (<a href="ACL2____NEWLINE.html">newline</a> *standard-co* state)))
+        (t state)))
+
+(<a href="ACL2____DEFATTACH-SYSTEM.html">defattach-system</a> finalize-event-user finalize-event-user-test)</pre> 
+ 
+ <p>After admission of the two events above, an event <a href="ACL2____SUMMARY.html">summary</a> will 
+ conclude with extra printout, for example:</p> 
+ 
+ <pre class="code">Note: Abbrev-evisc-tuple has its default value.</pre> 
+ 
+ <p>If the attachment function (above, <span class="v">finalize-event-user-test</span>) does not 
+ meet all the requirements stated above, then you can use the <span class="v">:skip-checks</span> 
+ argument of <span class="tt"><a href="ACL2____DEFATTACH.html">defattach</a></span> to get around the requirement, as illustrated by 
+ the following example.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> finalize-event-user-test2 (<a href="ACL2____CTX.html">ctx</a> body state)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs state
+                  :mode :program)
+           (<a href="COMMON-LISP____IGNORE.html">ignore</a> ctx body))
+  (<a href="ACL2____OBSERVATION.html">observation</a>
+   'my-test
+   "~|Value of term-evisc-tuple: ~x0~|"
+   (<a href="ACL2____F-GET-GLOBAL.html">f-get-global</a> 'term-evisc-tuple state)))
+
+(<a href="ACL2____DEFTTAG.html">defttag</a> t) ; needed for :skip-checks t
+
+(<a href="ACL2____DEFATTACH-SYSTEM.html">defattach-system</a> (<a href="ACL2____FINALIZE-EVENT-USER.html">finalize-event-user</a> finalize-event-user-test2)
+  :skip-checks t)</pre> 
+ 
+ <p>So for example:</p> 
+ 
+ <pre class="code">ACL2 !&gt;(set-term-evisc-tuple (<a href="ACL2____EVISC-TUPLE.html">evisc-tuple</a> 2 7 nil nil) state)
+ (:TERM)
+ACL2 !&gt;(<a href="ACL2____DEFCONST.html">defconst</a> *foo6* '(a b c))
+
+Summary
+Form:  ( DEFCONST *FOO6* ...)
+Rules: NIL
+Time:  0.00 seconds (prove: 0.00, print: 0.00, other: 0.00)
+
+ACL2 Observation in MY-TEST:
+Value of term-evisc-tuple: (NIL 2 7 NIL)
+ *FOO6*
+ACL2 !&gt;</pre> 
+ 
+ <p>Note that (as of this writing) the macro <span class="tt"><a href="ACL2____OBSERVATION.html">observation</a></span> expands to a 
+ call of a <span class="v">:</span><span class="tt"><a href="ACL2____PROGRAM.html">program</a></span>-mode function.  Thus, the trick shown above 
+ involving <span class="v">:skip-checks</span> allows the use of <span class="v">:program</span>-mode functions; 
+ for example, you can print with <span class="tt"><a href="ACL2____FMT.html">fmt</a></span>.</p> 
+ 
+ <p>See community book <span class="v">books/misc/defattach-bang.lisp</span> for a variant of 
+ <span class="tt"><a href="ACL2____DEFATTACH.html">defattach</a></span> that uses <span class="tt"><a href="ACL2____EC-CALL.html">ec-call</a></span> to avoid issues of <a href="ACL2____GUARD.html">guard</a> 
+ verification.</p> 
+ 
+ <p>Also see <a href="ACL2____INITIALIZE-EVENT-USER.html">initialize-event-user</a>, which discusses the handling of 
+ <a href="ACL2____STATE.html">state</a> globals by that utility as well as by 
+ <span class="v">finalize-event-user</span>.</p> 
+ 
+ <p>Finally, as promised above, we briefly describe the arguments <span class="v">ctx</span> and 
+ <span class="v">body</span>.  These are the arguments passed to the call of macro 
+ <span class="v">with-ctx-summarized</span> under which <span class="v">finalize-event-user</span> (or 
+ <span class="v">initialize-event-user</span>) was called.  Thus, they are unevaluated 
+ expressions.  For example, system function <span class="v">defthm-fn1</span> has a body of the 
+ following form.</p> 
+ 
+ <pre class="code">(with-ctx-summarized
+ (<a href="COMMON-LISP____CONS.html">cons</a> 'defthm name)
+ (<a href="COMMON-LISP____LET.html">let</a> ((wrld (<a href="ACL2____W.html">w</a> state))
+       (ens (ens state))
+       .....</pre> 
+ 
+ <p>Thus, when <span class="v">initialize-event-user</span> and <span class="v">finalize-event-user</span> are 
+ called on behalf of <span class="tt"><a href="ACL2____DEFTHM.html">defthm</a></span>, <span class="v">ctx</span> is the s-expression</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____CONS.html">cons</a> 'defthm name)</pre> 
+ 
+ <p>while <span class="v">body</span> is the following s-expression (with most code elided).</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____LET.html">let</a> ((wrld (<a href="ACL2____W.html">w</a> state))
+      (ens (ens state))
+      .....</pre> 
+ 
+ <p>You might find it helpful to use <span class="tt"><a href="ACL2____TRACE_42.html">trace$</a></span> to get a sense of <span class="v">ctx</span> 
+ and <span class="v">body</span>, for example, <span class="v">(<a href="ACL2____TRACE_42.html">trace$</a> finalize-event-user)</span>.</p>
+</body>
+</html>

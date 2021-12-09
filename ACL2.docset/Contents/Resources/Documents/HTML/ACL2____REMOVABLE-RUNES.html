@@ -1,0 +1,156 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Removable-runes</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____REMOVABLE-RUNES">Click for Removable-runes in the Full Manual</a></h3>
+
+<p>Compute <a href="ACL2____RUNE.html">rune</a>s to <a href="ACL2____DISABLE.html">disable</a></p><pre class="code">Example Form:
+(<a href="ACL2____REMOVABLE-RUNES.html">removable-runes</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> proper-cons-nest-p (x)
+                   (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a> x)))
+                   (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> x) nil)
+                         ((<a href="ACL2____FQUOTEP.html">fquotep</a> x) (<a href="ACL2____TRUE-LISTP.html">true-listp</a> (<a href="COMMON-LISP____CADR.html">cadr</a> x)))
+                         ((<a href="COMMON-LISP____EQ.html">eq</a> (<a href="ACL2____FFN-SYMB.html">ffn-symb</a> x) 'cons)
+                          (proper-cons-nest-p (<a href="ACL2____FARGN.html">fargn</a> x 2)))
+                         (t nil)))
+                 :verbose-p :minimal)
+
+General Form:
+(<a href="ACL2____REMOVABLE-RUNES.html">removable-runes</a> event-form
+                 :verbose-p  v ; default = :normal
+                 :multiplier m ; default = 1)
+                 )</pre> 
+ 
+ <p>where <span class="v">event-form</span> is an embeddable event (see <a href="ACL2____EVENTS.html">events</a>); <span class="v">v</span> is 
+ <span class="v">nil</span>, <span class="v">:minimal</span>, <span class="v">:normal</span>, or <span class="v">t</span>; and <span class="v">m</span> is a positive 
+ rational number.  The value returned is an <a href="ACL2____ERROR-TRIPLE.html">error-triple</a> <span class="v">(<a href="ACL2____MV.html">mv</a> erp
+ runes state)</span>, where <span class="v">erp</span> is typically <span class="v">nil</span> and <span class="v">runes</span> is a list 
+ of <a href="ACL2____RUNE.html">rune</a>s that can be <a href="ACL2____DISABLE.html">disable</a>d for the indicated <span class="v">event-form</span>; 
+ moreover, if the multiplier <span class="v">m</span> is less than 1, then the event is admitted 
+ with fewer prover steps.  (See <a href="ACL2____SET-PROVER-STEP-LIMIT.html">set-prover-step-limit</a> for a discussion 
+ of prover steps.)  For example, if the list of runes returned for an event 
+ form is <span class="v">((:definition f1) (:rewrite thm1))</span>, then the proof of that event 
+ form was performed successfully  and, for the default <span class="v">m</span> = 1, with 
+ no more prover steps  if we first evaluate the event 
+ <span class="v">(<a href="ACL2____IN-THEORY.html">in-theory</a> (<a href="ACL2____DISABLE.html">disable</a> (:definition f1) (:rewrite thm1)))</span>.</p> 
+ 
+ <p>For a related utility, see <a href="ACL2____MINIMAL-RUNES.html">minimal-runes</a>.</p> 
+ 
+ <p>WARNING: It is generally best to avoid using <span class="v">:</span><span class="tt"><a href="ACL2____IN-THEORY.html">in-theory</a></span> <a href="ACL2____HINTS.html">hints</a> in the form you supply to <span class="v">removable-runes</span> or its related utility, 
+ <span class="v">minimal-runes</span>.  We explain why below, after describing how the tool 
+ works.</p> 
+ 
+ <p>We now describe the two keyword arguments in turn, and in doing so, we 
+ explain how the tool works.</p> 
+ 
+ <p>The <span class="v">:verbose-p</span> argument controls the level of output.  We begin by 
+ describing the default behavior.  The output for the default value 
+ <span class="v">:verbose-p = :normal</span> is broken into sections for successive ``rounds''. 
+ Each section appears as follows, other than the initial section, which only 
+ lists the steps for the original proof attempt.</p> 
+ 
+ <pre class="code">New steps: [steps]
+Old steps: [steps] (Initially: [steps])
+Time: [time]
+Removed: [rune]
+Removable:
+[list of runes]
+Used:
+[list of runes]
+[progress line]</pre> 
+ 
+ <p>The ``<span class="v">New Steps</span>'' field has the number of prover steps taken by that 
+ round's proof attempt.  The ``<span class="v">Old Steps</span>'', ``<span class="v">Time</span>'', 
+ ``<span class="v">Removed</span>'', ``<span class="v">Removable</span>'', and ``<span class="v">Used</span>'' fields state the 
+ following, respectively: the number of prover steps for the previous round and 
+ for the initial round (but this line is omitted for the initial round); the 
+ time taken for the new event (by default, the run time; see <a href="ACL2____GET-INTERNAL-TIME.html">get-internal-time</a>); the rune that was newly disabled for the current round; 
+ the list of runes disabled after the current round, which extends the previous 
+ round's <span class="v">Removable</span> field with that newly disabled rune; and the list of 
+ runes used automatically in the proof for the current round.  For all but the 
+ initial round, the event was admitted in the previous round after disabling 
+ the <span class="v">Removable</span> runes (with an <span class="tt"><a href="ACL2____IN-THEORY.html">in-theory</a></span> event), resulting in a set 
+ <span class="v">S</span> of runes reported for that event.  The progress line shows attempts in 
+ the current round to decrease the number of steps by disabling one rune from 
+ <span class="v">S</span> per attempt, using <span class="v">'.'</span> for a failed such attempt and <span class="v">'+'</span> for 
+ a success.  Each such rune is chosen from the list of runes reported for the 
+ previous round.</p> 
+ 
+ <p>If <span class="v">:verbose-p = :minimal</span>, then the output will be as described above 
+ except that the <span class="v">Removable</span> and <span class="v">Used</span> fields are omitted.  If 
+ <span class="v">:verbose-p = nil</span>, then there is no output.  Finally, if <span class="v">:verbose-p =
+ t</span>, then all the fields are printed, but in addition you will see the usual 
+ output for each attempt, each (except for the initial event) preceded by the 
+ corresponding <span class="tt"><a href="ACL2____IN-THEORY.html">in-theory</a></span> event.</p> 
+ 
+ <p>We now say a bit more about the tool's algorithm as we describe the 
+ <span class="v">:multiplier</span> argument, which is 1 by default but can also be any positive 
+ rational number.  Recall that each round is an attempt to find a rune to 
+ disable: specifically, one that provides the fewest number of resulting prover 
+ steps.  The multiplier provides a bound on the number of prover steps: if 
+ <span class="v">s0</span> is the number of steps for the preceding (or initial) round, then the 
+ number of steps for the next round is not allowed to exceed <span class="v">(<a href="COMMON-LISP____FLOOR.html">floor</a> (<a href="COMMON-LISP_____A2.html">*</a> m s0)
+ 1)</span>, where <span class="v">m</span> is the value of the <span class="v">:multiplier</span> keyword.  If this 
+ bound reaches 0 (which can only happen if <span class="v">m &lt; 1</span>, the algorithm 
+ terminates.</p> 
+ 
+ <p>As promised above, we now explain why it is generally best to avoid using 
+ <span class="v">:</span><span class="tt"><a href="ACL2____IN-THEORY.html">in-theory</a></span> <a href="ACL2____HINTS.html">hints</a> in the form you supply to 
+ <span class="v">removable-runes</span> or its related utility, <span class="v">minimal-runes</span>.  To see why, 
+ consider the following example.  First evaluate:</p> 
+ 
+ <pre class="code">(<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "tools/removable-runes" :dir :system)
+(<a href="ACL2____DEFUND.html">defund</a> foo (x) (<a href="COMMON-LISP____CONS.html">cons</a> x x))</pre> 
+ 
+ <p>Notice that <span class="v">foo</span> is now <a href="ACL2____DISABLE.html">disable</a>d; see <a href="ACL2____DEFUND.html">defund</a>.  The 
+ following example may seem surprising; an explanation is below.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____REMOVABLE-RUNES.html">removable-runes</a>
+        (<a href="ACL2____THM.html">thm</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (foo x) (<a href="COMMON-LISP____CONS.html">cons</a> x x))
+             :hints (("Goal" :in-theory (<a href="ACL2____ENABLE.html">enable</a> foo)))))
+-
+New steps: 15 (initial attempt)
+Time: 0.00
+Used: ((:DEFINITION FOO))
++
+New steps: 15
+Old steps: 15 (Initially: 15)
+Time: 0.00
+Removed: (:DEFINITION FOO)
+Removable:
+((:DEFINITION FOO))
+Used:
+((:DEFINITION FOO))
+
+ ((:DEFINITION FOO))
+ACL2 !&gt;</pre> 
+ 
+ <p>The result is that the definition of <span class="v">foo</span> is removable, i.e., can be 
+ disabled; yet clearly that definition is needed for the proof!  To understand 
+ this possibly surprising result, understand that <span class="v">removable-runes</span> precedes 
+ each proof attempt by globally disabling the candidate set of removable runes. 
+ So in essence the proof attempt when attempting to disable the definition of 
+ <span class="v">foo</span> is really as follows.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____PROGN.html">progn</a> (<a href="ACL2____IN-THEORY.html">in-theory</a> (<a href="ACL2____DISABLE.html">disable</a> foo))
+       (<a href="ACL2____THM.html">thm</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (foo x) (<a href="COMMON-LISP____CONS.html">cons</a> x x))
+            :hints (("Goal" :in-theory (<a href="ACL2____ENABLE.html">enable</a> foo)))))</pre> 
+ 
+ <p>Obviously the hint takes precedence over the initial <span class="v">in-theory</span> event, 
+ which is why the proof succeeds.  The moral of the story is this: avoid 
+ <span class="v">:in-theory</span> hints when using <span class="v">removable-runes</span> or its companion tool, 
+ <span class="tt"><a href="ACL2____MINIMAL-RUNES.html">minimal-runes</a></span>.  Instead, you could do this, for example:</p> 
+ 
+ <pre class="code">(<a href="ACL2____IN-THEORY.html">in-theory</a> (<a href="ACL2____ENABLE.html">enable</a> foo))
+(<a href="ACL2____REMOVABLE-RUNES.html">removable-runes</a>
+ (<a href="ACL2____THM.html">thm</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (foo x) (<a href="COMMON-LISP____CONS.html">cons</a> x x))))</pre> 
+ 
+ <p>Finally, we expand on a point made above.  When a rune is chosen to add to 
+ the evolving list of disables, the corresponding proof attempt might actually 
+ involve runes that were not present in any earlier proof attempt.  Any new 
+ such runes are then considered for disabling in later rounds.</p>
+</body>
+</html>

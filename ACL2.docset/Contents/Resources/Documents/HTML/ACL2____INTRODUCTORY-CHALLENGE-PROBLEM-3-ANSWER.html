@@ -1,0 +1,122 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Introductory-challenge-problem-3-answer</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____INTRODUCTORY-CHALLENGE-PROBLEM-3-ANSWER">Click for Introductory-challenge-problem-3-answer in the Full Manual</a></h3>
+
+<p>Answer to challenge problem 3 for the new user of ACL2</p><p>This answer is in the form of a script sufficient to lead ACL2 to a 
+ proof.</p> 
+ 
+ <pre class="code">; Trying <span class="v">dupsp-rev</span> at this point produces the key checkpoint: 
+ 
+; (IMPLIES (AND (CONSP X) 
+;               (NOT (MEMBER (CAR X) (CDR X))) 
+;               (EQUAL (DUPSP (REV (CDR X))) 
+;                      (DUPSP (CDR X)))) 
+;          (EQUAL (DUPSP (APPEND (REV (CDR X)) (LIST (CAR X)))) 
+;                 (DUPSP (CDR X)))) 
+ 
+; which suggests the lemma 
+ 
+; (defthm dupsp-append 
+;   (implies (not (member e x)) 
+;            (equal (dupsp (append x (list e))) 
+;                   (dupsp x)))) 
+ 
+; However, attempting to prove that, produces a key checkpoint 
+; containing <span class="v">(<a href="COMMON-LISP____MEMBER.html">MEMBER</a> (<a href="COMMON-LISP____CAR.html">CAR</a> X) (<a href="COMMON-LISP____APPEND.html">APPEND</a> (<a href="COMMON-LISP____CDR.html">CDR</a> X) (<a href="COMMON-LISP____LIST.html">LIST</a> E)))</span>. 
+; So we prove the lemma: 
+ 
+(defthm member-append 
+  (iff (member e (append a b)) 
+       (or (member e a) 
+           (member e b)))) 
+ 
+; Note that we had to use <span class="v">iff</span> instead of <span class="v">equal</span> since 
+; <span class="v">member</span> is not a Boolean function. 
+ 
+; Having proved this lemma, we return to <span class="v">dupsp-append</span> and succeed: 
+ 
+(defthm dupsp-append 
+  (implies (not (member e x)) 
+           (equal (dupsp (append x (list e))) 
+                  (dupsp x)))) 
+ 
+; So now we return to <span class="v">dups-rev</span>, expecting success.  But it fails 
+; with the same key checkpoint: 
+ 
+; (IMPLIES (AND (CONSP X) 
+;               (NOT (MEMBER (CAR X) (CDR X))) 
+;               (EQUAL (DUPSP (REV (CDR X))) 
+;                      (DUPSP (CDR X)))) 
+;          (EQUAL (DUPSP (APPEND (REV (CDR X)) (LIST (CAR X)))) 
+;                 (DUPSP (CDR X)))) 
+ 
+; Why wasn't our <span class="v">dupsp-append</span> lemma applied?  We have two choices here: 
+; (1) Think.  (2) Use tools. 
+ 
+; Think: When an enabled rewrite rule doesn't fire even though the 
+; left-hand side matches the target, the hypothesis couldn't be 
+; relieved.  The <span class="v">dups-append</span> rule has the hypothesis <span class="v">(<a href="COMMON-LISP____NOT.html">not</a>
+; (<a href="COMMON-LISP____MEMBER.html">member</a> e x))</span> and after the match with the left-hand side, <span class="v">e</span> 
+; is <span class="v">(<a href="COMMON-LISP____CAR.html">CAR</a> X)</span> and <span class="v">x</span> is <span class="v">(<a href="ACL2____REV.html">REV</a> (<a href="COMMON-LISP____CDR.html">CDR</a> X))</span>.  So the system 
+; couldn't rewrite <span class="v">(<a href="COMMON-LISP____NOT.html">NOT</a> (<a href="COMMON-LISP____MEMBER.html">MEMBER</a> (<a href="COMMON-LISP____CAR.html">CAR</a> X) (<a href="ACL2____REV.html">REV</a> (<a href="COMMON-LISP____CDR.html">CDR</a> X))))</span> to true, 
+; even though it knows that <span class="v">(<a href="COMMON-LISP____NOT.html">NOT</a> (<a href="COMMON-LISP____MEMBER.html">MEMBER</a> (<a href="COMMON-LISP____CAR.html">CAR</a> X) (<a href="COMMON-LISP____CDR.html">CDR</a> X)))</span> from 
+; the second hypothesis of the checkpoint.  Obviously, we need to 
+; prove <span class="v">member-rev</span> below. 
+ 
+; Use tools:  We could enable the ``break rewrite'' facility, with 
+ 
+; ACL2 !&gt;:brr t 
+ 
+; and then install an unconditional monitor on the rewrite rule 
+; <span class="v">dupsp-append</span>, whose rune is (:REWRITE DUPSP-APPEND), with: 
+ 
+; :monitor (:rewrite dupsp-append) t 
+ 
+; Then we could re-try our main theorem, dupsp-rev.  At the resulting 
+; interactive break we type :eval to evaluate the attempt to relieve the 
+; hypotheses of the rule. 
+ 
+; (1 Breaking (:REWRITE DUPSP-APPEND) on 
+; (DUPSP (BINARY-APPEND (REV #) (CONS # #))): 
+; 1 ACL2 &gt;:eval 
+ 
+; 1x (:REWRITE DUPSP-APPEND) failed because :HYP 1 rewrote to 
+; (NOT (MEMBER (CAR X) (REV #))). 
+ 
+; Note that the report above shows that hypothesis 1 of the rule 
+; did not rewrite to T but instead rewrote to an expression 
+; involving <span class="v">(<a href="COMMON-LISP____MEMBER.html">member</a> ... (<a href="ACL2____REV.html">rev</a> ...))</span>.  Thus, we're led to the 
+; same conclusion that Thinking produced.  To get out of the 
+; interactive break we type: 
+ 
+; 1 ACL2 &gt;:a! 
+; Abort to ACL2 top-level 
+ 
+; and then turn off the break rewrite tool since we won't need it 
+; again right now, with: 
+ 
+; ACL2 !&gt;:brr nil 
+ 
+; In either case, by thinking or using tools, we decide to prove: 
+ 
+(defthm member-rev 
+  (iff (member e (rev x)) 
+       (member e x))) 
+ 
+; which succeeds.  Now when we try to prove dups-rev, it succeeds. 
+ 
+(defthm dupsp-rev 
+  (equal (dupsp (rev x)) 
+         (dupsp x))) 
+ 
+</pre> 
+ 
+ <p>Use your browser's <b>Back Button</b> now to return to <a href="ACL2____INTRODUCTORY-CHALLENGE-PROBLEM-3.html">introductory-challenge-problem-3</a>.</p>
+</body>
+</html>

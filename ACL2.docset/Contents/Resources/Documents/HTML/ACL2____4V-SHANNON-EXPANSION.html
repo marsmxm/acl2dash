@@ -1,0 +1,254 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>4v-shannon-expansion</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____4V-SHANNON-EXPANSION">Click for 4v-shannon-expansion in the Full Manual</a></h3>
+
+<p>A conservative transformation of an s-expression that pulls a 
+particular variable out into a top-level if-then-else.</p><p>The shannon expansion of a term M by a Boolean variable V is</p> 
+ 
+<pre class="code">if V then M' else M'',</pre> 
+ 
+<p>where M' is formed from M by substituting true for V and M'' is formed by 
+subsituting false for V.</p> 
+ 
+<p>For 4-valued terms we need to make a slight adjustment, because in the case 
+where V is X, this doesn't work.  Instead, the term we get looks like:</p> 
+ 
+<pre class="code">(<a href="ACL2____XOR.html">XOR</a> (<a href="ACL2____XOR.html">XOR</a> V V) (ITE V M' M'')).</pre> 
+ 
+<p>Here the term (XOR V V) detects the case where V is X or Z, and XORing that 
+with the if-then-else term makes the whole result X in that case.</p> 
+ 
+<p>This is useful for certain cases where a term may have false dependencies. 
+Consider</p> 
+ 
+<pre class="code">(ITE V (ITE (<a href="COMMON-LISP____NOT.html">NOT</a> V) A B) C).</pre> 
+ 
+<p>Intuitively, we'd think that the A branch wouldn't have any relevance, since 
+we can only get there by going through a V and a (NOT V) test, which are 
+contradictory.  But in fact there is a case where A affects the result: when B 
+and C are the same Boolean value and V=X.  Then, if A is the same Boolean value 
+as B and C, then the result is that value, otherwise X.  But we may be willing 
+to give up this special case and allow the term to evaluate to X whenever V is 
+X, in exchange for getting rid of the dependency on A.  The Shannon 
+expansion (if combined with rewriting) accomplishes this: the Shannon-rewritten 
+version of the term above looks like:</p> 
+ 
+<pre class="code">(<a href="ACL2____XOR.html">XOR</a> (<a href="ACL2____XOR.html">XOR</a> V V)
+     (ITE (T) (ITE (<a href="COMMON-LISP____NOT.html">NOT</a> (T)) A B) C)
+     (ITE (F) (ITE (<a href="COMMON-LISP____NOT.html">NOT</a> (F)) A B) C))</pre> 
+ 
+which rewrites to 
+ 
+<pre class="code">(<a href="ACL2____XOR.html">XOR</a> (<a href="ACL2____XOR.html">XOR</a> V V) B C).</pre> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>4v-shannon-expansion-true-al</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> 4v-shannon-expansion-true-al (var)
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t))
+       (<a href="ACL2____HONS-ACONS.html">hons-acons</a> var *4vt-sexpr* nil))</pre> 
+<p><b>Function: </b>4v-shannon-expansion-false-al</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> 4v-shannon-expansion-false-al (var)
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t))
+       (<a href="ACL2____HONS-ACONS.html">hons-acons</a> var *4vf-sexpr* nil))</pre> 
+<p><b>Function: </b>4v-shannon-expansion-few</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ 4v-shannon-expansion-few (var x)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t))
+ (<a href="ACL2____B_A2.html">b*</a>
+  ((true-al (4v-shannon-expansion-true-al var))
+   (true-br (<a href="ACL2____4V-SEXPR-RESTRICT.html">4v-sexpr-restrict</a> x true-al))
+   ((when (<a href="ACL2____HONS-EQUAL.html">hons-equal</a> true-br x)) x)
+   (false-al (4v-shannon-expansion-false-al var))
+   (false-br (<a href="ACL2____4V-SEXPR-RESTRICT.html">4v-sexpr-restrict</a> x false-al)))
+  (<a href="COMMON-LISP____CONS.html">cons</a>
+       'xor
+       (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'xor (<a href="COMMON-LISP____CONS.html">cons</a> var (<a href="COMMON-LISP____CONS.html">cons</a> var 'nil)))
+             (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'ite
+                         (<a href="COMMON-LISP____CONS.html">cons</a> var
+                               (<a href="COMMON-LISP____CONS.html">cons</a> true-br (<a href="COMMON-LISP____CONS.html">cons</a> false-br 'nil))))
+                   'nil)))))</pre> 
+<p><b>Function: </b>4v-shannon-expansion-many</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ 4v-shannon-expansion-many (var x)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t))
+ (<a href="ACL2____B_A2.html">b*</a>
+  ((vars (<a href="ACL2____4V-SEXPR-VARS.html">4v-sexpr-vars</a> x))
+   ((unless (gentle-member var vars)) x)
+   (true-al (4v-shannon-expansion-true-al var))
+   (true-br (<a href="ACL2____4V-SEXPR-RESTRICT.html">4v-sexpr-restrict</a> x true-al))
+   (false-al (4v-shannon-expansion-false-al var))
+   (false-br (<a href="ACL2____4V-SEXPR-RESTRICT.html">4v-sexpr-restrict</a> x false-al)))
+  (<a href="COMMON-LISP____CONS.html">cons</a>
+       'xor
+       (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'xor (<a href="COMMON-LISP____CONS.html">cons</a> var (<a href="COMMON-LISP____CONS.html">cons</a> var 'nil)))
+             (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'ite
+                         (<a href="COMMON-LISP____CONS.html">cons</a> var
+                               (<a href="COMMON-LISP____CONS.html">cons</a> true-br (<a href="COMMON-LISP____CONS.html">cons</a> false-br 'nil))))
+                   'nil)))))</pre> 
+<p><b>Theorem: </b>4v-sexpr-eval-with-redundant-cons</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> 4v-sexpr-eval-with-redundant-cons
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____CDR.html">cdr</a> (<a href="ACL2____HONS-ASSOC-EQUAL.html">hons-assoc-equal</a> v env))
+                        val)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____4V-SEXPR-EVAL.html">4v-sexpr-eval</a> x (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> v val) env))
+                        (<a href="ACL2____4V-SEXPR-EVAL.html">4v-sexpr-eval</a> x env))))</pre> 
+<p><b>Theorem: </b>4v-sexpr-eval-list-with-redundant-cons</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     4v-sexpr-eval-list-with-redundant-cons
+     (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____CDR.html">cdr</a> (<a href="ACL2____HONS-ASSOC-EQUAL.html">hons-assoc-equal</a> v env))
+                     val)
+              (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____4V-SEXPR-EVAL-LIST.html">4v-sexpr-eval-list</a> x (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> v val) env))
+                     (<a href="ACL2____4V-SEXPR-EVAL-LIST.html">4v-sexpr-eval-list</a> x env))))</pre> 
+<p><b>Theorem: </b>4v-sexpr-eval-with-non-variable-cons</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> 4v-sexpr-eval-with-non-variable-cons
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____CONSP.html">consp</a> v)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____4V-SEXPR-EVAL.html">4v-sexpr-eval</a> x (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> v val) env))
+                        (<a href="ACL2____4V-SEXPR-EVAL.html">4v-sexpr-eval</a> x env))))</pre> 
+<p><b>Theorem: </b>4v-sexpr-eval-list-with-non-variable-cons</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     4v-sexpr-eval-list-with-non-variable-cons
+     (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____CONSP.html">consp</a> v)
+              (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____4V-SEXPR-EVAL-LIST.html">4v-sexpr-eval-list</a> x (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> v val) env))
+                     (<a href="ACL2____4V-SEXPR-EVAL-LIST.html">4v-sexpr-eval-list</a> x env))))</pre> 
+<p><b>Theorem: </b>rewrite-ite-by-var-ok-simpl</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+   rewrite-ite-by-var-ok-simpl
+   (<a href="ACL2____4V-_C3_D3.html">4v-&lt;=</a> (<a href="ACL2____4V-XOR.html">4v-xor</a> (<a href="ACL2____4V-XOR.html">4v-xor</a> (<a href="ACL2____4V-SEXPR-EVAL.html">4v-sexpr-eval</a> v env)
+                          (<a href="ACL2____4V-SEXPR-EVAL.html">4v-sexpr-eval</a> v env))
+                  (<a href="ACL2____4V-ITE.html">4v-ite</a> (<a href="ACL2____4V-SEXPR-EVAL.html">4v-sexpr-eval</a> v env)
+                          (<a href="ACL2____4V-SEXPR-EVAL.html">4v-sexpr-eval</a> a (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> v t) env))
+                          (<a href="ACL2____4V-SEXPR-EVAL.html">4v-sexpr-eval</a> b (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> v 'f) env))))
+          (<a href="ACL2____4V-ITE.html">4v-ite</a> (<a href="ACL2____4V-SEXPR-EVAL.html">4v-sexpr-eval</a> v env)
+                  (<a href="ACL2____4V-SEXPR-EVAL.html">4v-sexpr-eval</a> a env)
+                  (<a href="ACL2____4V-SEXPR-EVAL.html">4v-sexpr-eval</a> b env))))</pre> 
+<p><b>Theorem: </b>rewrite-ite-by-var-ok</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ rewrite-ite-by-var-ok
+ (<a href="ACL2____4V-_C3_D3.html">4v-&lt;=</a>
+  (<a href="ACL2____4V-SEXPR-EVAL.html">4v-sexpr-eval</a>
+   (<a href="COMMON-LISP____CONS.html">cons</a>
+    'xor
+    (<a href="COMMON-LISP____CONS.html">cons</a>
+     (<a href="COMMON-LISP____CONS.html">cons</a> 'xor (<a href="COMMON-LISP____CONS.html">cons</a> v (<a href="COMMON-LISP____CONS.html">cons</a> v 'nil)))
+     (<a href="COMMON-LISP____CONS.html">cons</a>
+      (<a href="COMMON-LISP____CONS.html">cons</a>
+       'ite
+       (<a href="COMMON-LISP____CONS.html">cons</a>
+        v
+        (<a href="COMMON-LISP____CONS.html">cons</a>
+         (<a href="ACL2____4V-SEXPR-RESTRICT.html">4v-sexpr-restrict</a> a (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> v (<a href="COMMON-LISP____CONS.html">cons</a> 't 'nil)) 'nil))
+         (<a href="COMMON-LISP____CONS.html">cons</a>
+           (<a href="ACL2____4V-SEXPR-RESTRICT.html">4v-sexpr-restrict</a> b (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> v (<a href="COMMON-LISP____CONS.html">cons</a> 'f 'nil)) 'nil))
+           'nil))))
+      'nil)))
+   env)
+  (<a href="ACL2____4V-SEXPR-EVAL.html">4v-sexpr-eval</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'ite
+                       (<a href="COMMON-LISP____CONS.html">cons</a> v (<a href="COMMON-LISP____CONS.html">cons</a> a (<a href="COMMON-LISP____CONS.html">cons</a> b 'nil))))
+                 env)))</pre> 
+<p><b>Theorem: </b>4v-sexpr-vars-4v-shannon-expansion-few</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ 4v-sexpr-vars-4v-shannon-expansion-few
+ (<a href="ACL2____IMPLIES.html">implies</a>
+      (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> k (<a href="ACL2____4V-SEXPR-VARS.html">4v-sexpr-vars</a> x)))
+           (<a href="COMMON-LISP____ATOM.html">atom</a> var))
+      (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a>
+                k
+                (<a href="ACL2____4V-SEXPR-VARS.html">4v-sexpr-vars</a> (4v-shannon-expansion-few var x))))))</pre> 
+<p><b>Theorem: </b>4v-shannon-expansion-few-correct</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> 4v-shannon-expansion-few-correct
+        (<a href="ACL2____4V-_C3_D3.html">4v-&lt;=</a> (<a href="ACL2____4V-SEXPR-EVAL.html">4v-sexpr-eval</a> (4v-shannon-expansion-few var x)
+                              env)
+               (<a href="ACL2____4V-SEXPR-EVAL.html">4v-sexpr-eval</a> x env)))</pre> 
+<p><b>Theorem: </b>4v-shannon-expansion-many-correct</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> 4v-shannon-expansion-many-correct
+        (<a href="ACL2____4V-_C3_D3.html">4v-&lt;=</a> (<a href="ACL2____4V-SEXPR-EVAL.html">4v-sexpr-eval</a> (4v-shannon-expansion-many var x)
+                              env)
+               (<a href="ACL2____4V-SEXPR-EVAL.html">4v-sexpr-eval</a> x env)))</pre> 
+<p><b>Function: </b>4v-shannon-expansion-mode-p</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> 4v-shannon-expansion-mode-p (x)
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t))
+       (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____EQ.html">eq</a> x :few-vars) (<a href="COMMON-LISP____EQ.html">eq</a> x :many-vars)))</pre> 
+<p><b>Function: </b>4v-shannon-expansion-list</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> 4v-shannon-expansion-list (sigs x mode)
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (4v-shannon-expansion-mode-p mode)))
+       (<a href="ACL2____B_A2.html">b*</a> (((when (<a href="COMMON-LISP____ATOM.html">atom</a> sigs)) x)
+            (x (4v-shannon-expansion-list (<a href="COMMON-LISP____CDR.html">cdr</a> sigs)
+                                          x mode)))
+           (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQ.html">eq</a> mode :few-vars)
+               (4v-shannon-expansion-few (<a href="COMMON-LISP____CAR.html">car</a> sigs) x)
+               (4v-shannon-expansion-many (<a href="COMMON-LISP____CAR.html">car</a> sigs)
+                                          x))))</pre> 
+<p><b>Theorem: </b>4v-sexpr-vars-4v-shannon-expansion-list</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ 4v-sexpr-vars-4v-shannon-expansion-list
+ (<a href="ACL2____IMPLIES.html">implies</a>
+  (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____ATOM-LISTP.html">atom-listp</a> sigs)
+       (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> k (<a href="ACL2____4V-SEXPR-VARS.html">4v-sexpr-vars</a> x))))
+  (<a href="COMMON-LISP____NOT.html">not</a>
+    (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a>
+         k
+         (<a href="ACL2____4V-SEXPR-VARS.html">4v-sexpr-vars</a> (4v-shannon-expansion-list sigs x mode))))))</pre> 
+<p><b>Theorem: </b>4v-shannon-expansion-list-correct</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     4v-shannon-expansion-list-correct
+     (<a href="ACL2____4V-_C3_D3.html">4v-&lt;=</a> (<a href="ACL2____4V-SEXPR-EVAL.html">4v-sexpr-eval</a> (4v-shannon-expansion-list vars x mode)
+                           env)
+            (<a href="ACL2____4V-SEXPR-EVAL.html">4v-sexpr-eval</a> x env)))</pre> 
+<p><b>Theorem: </b>4v-shannon-expansion-list-conservative</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> 4v-shannon-expansion-list-conservative
+        (<a href="ACL2____4V-SEXPR-_C3_D3.html">4v-sexpr-&lt;=</a> (4v-shannon-expansion-list vars x mode)
+                     x))</pre> 
+<p><b>Function: </b>rewrite-with-shannon-expansion</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> rewrite-with-shannon-expansion
+       (vars x mode)
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (4v-shannon-expansion-mode-p mode)))
+       (<a href="ACL2____B_A2.html">b*</a> ((x (4v-shannon-expansion-list vars x mode)))
+           (<a href="ACL2____SEXPR-REWRITE.html">sexpr-rewrite</a> x *sexpr-rewrites*)))</pre> 
+<p><b>Theorem: </b>rewrite-with-shannon-expansion-conservative</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> rewrite-with-shannon-expansion-conservative
+        (<a href="ACL2____4V-SEXPR-_C3_D3.html">4v-sexpr-&lt;=</a> (rewrite-with-shannon-expansion vars x mode)
+                     x))</pre> 
+<p><b>Theorem: </b>4v-sexpr-vars-rewrite-with-shannon-expansion</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ 4v-sexpr-vars-rewrite-with-shannon-expansion
+ (<a href="ACL2____IMPLIES.html">implies</a>
+  (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____ATOM-LISTP.html">atom-listp</a> vars)
+       (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> k (<a href="ACL2____4V-SEXPR-VARS.html">4v-sexpr-vars</a> x))))
+  (<a href="COMMON-LISP____NOT.html">not</a>
+   (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a>
+    k
+    (<a href="ACL2____4V-SEXPR-VARS.html">4v-sexpr-vars</a> (rewrite-with-shannon-expansion vars x mode))))))</pre> 
+<p><b>Function: </b>rewrite-with-shannon-expansion-alist-main</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+   rewrite-with-shannon-expansion-alist-main
+   (vars x mode)
+   (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (4v-shannon-expansion-mode-p mode)))
+   (<a href="ACL2____B_A2.html">b*</a> (((when (<a href="COMMON-LISP____ATOM.html">atom</a> x)) nil)
+        ((when (<a href="COMMON-LISP____ATOM.html">atom</a> (<a href="COMMON-LISP____CAR.html">car</a> x)))
+         (rewrite-with-shannon-expansion-alist-main vars (<a href="COMMON-LISP____CDR.html">cdr</a> x)
+                                                    mode)))
+       (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CAAR.html">caar</a> x)
+                   (rewrite-with-shannon-expansion vars (<a href="COMMON-LISP____CDAR.html">cdar</a> x)
+                                                   mode))
+             (rewrite-with-shannon-expansion-alist-main vars (<a href="COMMON-LISP____CDR.html">cdr</a> x)
+                                                        mode))))</pre> 
+<p><b>Theorem: </b>4v-sexpr-vars-rewrite-with-shannon-expansion-alist-main</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ 4v-sexpr-vars-rewrite-with-shannon-expansion-alist-main
+ (<a href="ACL2____IMPLIES.html">implies</a>
+  (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____ATOM-LISTP.html">atom-listp</a> vars)
+       (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> k (<a href="ACL2____4V-SEXPR-VARS-LIST.html">4v-sexpr-vars-list</a> (<a href="ACL2____ALIST-VALS.html">alist-vals</a> x)))))
+  (<a href="COMMON-LISP____NOT.html">not</a>
+   (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a>
+    k
+    (<a href="ACL2____4V-SEXPR-VARS-LIST.html">4v-sexpr-vars-list</a>
+     (<a href="ACL2____ALIST-VALS.html">alist-vals</a>
+       (rewrite-with-shannon-expansion-alist-main vars x mode)))))))</pre> 
+<p><b>Theorem: </b>rewrite-with-shannon-expansion-alist-main-conservative</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> rewrite-with-shannon-expansion-alist-main-conservative
+        (<a href="ACL2____4V-SEXPR-ALIST-_C3_D3.html">4v-sexpr-alist-&lt;=</a>
+             (rewrite-with-shannon-expansion-alist-main vars x mode)
+             x))</pre> 
+<p><b>Theorem: </b>alist-keys-rewrite-with-shannon-expansion-alist-main</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+  alist-keys-rewrite-with-shannon-expansion-alist-main
+  (<a href="COMMON-LISP____EQUAL.html">equal</a>
+       (<a href="ACL2____ALIST-KEYS.html">alist-keys</a>
+            (rewrite-with-shannon-expansion-alist-main vars x mode))
+       (<a href="ACL2____ALIST-KEYS.html">alist-keys</a> x)))</pre> 
+<p><b>Function: </b>rewrite-with-shannon-expansion-alist</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ rewrite-with-shannon-expansion-alist
+ (vars x mode)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (4v-shannon-expansion-mode-p mode)))
+ (<a href="ACL2____MBE.html">mbe</a>
+  :logic (rewrite-with-shannon-expansion-alist-main vars x mode)
+  :exec
+  (<a href="ACL2____B_A2.html">b*</a>
+     ((ans (rewrite-with-shannon-expansion-alist-main vars x mode)))
+     (<a href="ACL2____CLEAR-MEMOIZE-TABLE.html">clear-memoize-table</a> '4v-shannon-expansion-true-al)
+     (<a href="ACL2____CLEAR-MEMOIZE-TABLE.html">clear-memoize-table</a> '4v-shannon-expansion-false-al)
+     (<a href="ACL2____CLEAR-MEMOIZE-TABLE.html">clear-memoize-table</a> '4v-sexpr-restrict)
+     (<a href="ACL2____CLEAR-MEMOIZE-TABLE.html">clear-memoize-table</a> 'sexpr-rewrite)
+     ans)))</pre> 
+
+</body>
+</html>

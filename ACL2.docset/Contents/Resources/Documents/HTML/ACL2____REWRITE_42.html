@@ -1,0 +1,289 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Rewrite$</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____REWRITE_42">Click for Rewrite$ in the Full Manual</a></h3>
+
+<p>Rewrite a term</p><p><span class="v">Rewrite$</span> is a macro that provides a convenient and flexible 
+ interface to the ACL2 <a href="ACL2____REWRITE.html">rewrite</a>r, which can be called programmatically. 
+ The documentation below is divided into the following sections.</p> 
+ 
+ <ul> 
+ 
+ <li>An introductory example</li> 
+ <li>Return values</li> 
+ <li>General Form</li> 
+ <li>Basic options</li> 
+ <li>Hint options, each with default <span class="v">nil</span>
+</li> 
+ <li>Advanced options</li> 
+ <li>Summary of algorithm</li> 
+ <li>Related tools</li> 
+ 
+ </ul> 
+ 
+ <h3>An introductory example</h3> 
+ 
+ <p>We begin with the following example of a call of <span class="v">rewrite$</span>.  The 
+ keyword option <span class="v">:translate t</span> is used because the first argument is not a 
+ translated <a href="ACL2____TERM.html">term</a>, due to the call of the macro, <span class="tt"><a href="COMMON-LISP____APPEND.html">append</a></span>.  We see 
+ that the call of <span class="v">rewrite$</span> produces a 2-element list consisting of the 
+ result, <span class="v">X</span>, of rewriting the input term, together with a list of <a href="ACL2____RUNE.html">rune</a>s justifying that rewrite.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____REWRITE_42.html">rewrite$</a> '(<a href="COMMON-LISP____CAR.html">car</a> (<a href="COMMON-LISP____APPEND.html">append</a> (<a href="COMMON-LISP____CONS.html">cons</a> x y) z)) :translate t)
+ (X ((:DEFINITION BINARY-APPEND)
+     (:REWRITE CDR-CONS)
+     (:REWRITE CAR-CONS)
+     (:FAKE-RUNE-FOR-TYPE-SET NIL)))
+ACL2 !&gt;</pre> 
+ 
+ <p>Notice the ``fake rune'' that is returned.  Fake runes are easy to remove; 
+ see for example the constant <span class="v">*fake-rune-alist*</span> in the ACL2 sources or 
+ function <span class="v">drop-fake-runes</span> defined in community book 
+ <span class="v">kestrel/utilities/runes.lisp</span>.</p> 
+ 
+ <p>Other simple examples may be found in community book 
+ <span class="v">books/demos/rewrite-dollar-input.lsp</span>.</p> 
+ 
+ <h3>Return values</h3> 
+ 
+ <p>A call <span class="v">(<a href="ACL2____REWRITE_42.html">rewrite$</a> term ...)</span> returns an <a href="ACL2____ERROR-TRIPLE.html">error-triple</a>, <span class="v">(<a href="ACL2____MV.html">mv</a> erp
+ val state)</span>.  <span class="v">Erp</span> is non-<span class="v">nil</span> when an error has occurred.  Otherwise 
+ <span class="v">val</span> is of the form <span class="v">(rewritten-term runes . pairs)</span> where <span class="v">pairs</span> 
+ is typically <span class="v">nil</span> (as discussed further below) and:</p> 
+ 
+ <ul> 
+ 
+ <li>
+<span class="v">rewritten-term</span> is the result of rewriting <span class="v">term</span> as directed by 
+ the other inputs; and</li> 
+ 
+ <li>
+<span class="v">runes</span> is a list containing the <a href="ACL2____RUNE.html">rune</a>s that participated in the 
+ rewriting of <span class="v">term</span> to <span class="v">rewritten-term</span>.</li> 
+ 
+ </ul> 
+ 
+ <p>Because of forcing (see <a href="ACL2____FORCE.html">force</a>), rewriting of the input term may 
+ generate goals to be proved later, based on the forced hypotheses encountered 
+ during rewriting that were not relieved at that time.  We call these ``forced 
+ assumptions''.  If there are forced assumptions, then they are conjoined into 
+ a single goal, which by default is the target of a separate call to the 
+ prover, much like a call of <span class="tt"><a href="ACL2____THM.html">thm</a></span>.  The return value <span class="v">pairs</span>, 
+ mentioned above, is <span class="v">nil</span> exactly when there are no forced assumptions.  We 
+ say no more here about <span class="v">pairs</span>, as it will suffice for most users to view 
+ them solely as an indicator of forced assumptions.  (Technical note for 
+ advanced users: these are the pairs returned by ACL2 source function 
+ <span class="v">extract-and-clausify-assumptions</span>.)</p> 
+ 
+ <p>There are many keyword arguments that control the rewriting process.  One 
+ of particular importance semantically is <span class="v">:alist</span>.  When this argument is 
+ <span class="v">nil</span> then the resulting rewritten term is provably equivalent (with 
+ respect to the current ACL2 <a href="ACL2____WORLD.html">world</a>) to the input term.  Otherwise the 
+ rewritten term is provably equivalent to the result of substituting the 
+ specified alist into the input term.  Another important keyword argument is 
+ <span class="v">:hyps</span>, which provides hypotheses under which the given term is to be 
+ rewritten.  The hypotheses themselves may be rewritten, using keyword argument 
+ <span class="v">:rewrite-hyps</span>.  All keywords are documented below.</p> 
+ 
+ <h3>General Form</h3> 
+ 
+ <p>All arguments of <span class="v">rewrite$</span> except the first are keyword arguments, 
+ hence are optional, with appropriate defaults.  All are evaluated.</p> 
+ 
+ <pre class="code"> (<a href="ACL2____REWRITE_42.html">rewrite$</a> term
+
+; Basic options (in alphabetical order):
+
+           :alist                    ; default nil
+           :ctx                      ; default 'rewrite$
+           :default-hints-p          ; default t
+           :equiv                    ; default nil
+           :geneqv                   ; default nil
+           :hyps                     ; default nil
+           :must-rewrite             ; default nil
+           :prove-forced-assumptions ; default t
+           :repeat                   ; default 1
+           :translate                ; default nil
+           :untranslate              ; default nil
+
+; Hint options (in alphabetical order), each with default nil:
+
+           :backchain-limit-rw :expand :hands-off :in-theory
+           :no-thanks :nonlinearp :restrict :rw-cache-state
+
+; Advanced options (in alphabetical order):
+
+           :obj        ; default '?
+           :rrec       ; default nil
+           :wrld       ; default (<a href="ACL2____W.html">w</a> state)
+           )</pre> 
+ 
+ <p><span class="v">Term</span> should evaluate to a translated or untranslated term (see <a href="ACL2____TERM.html">term</a>) according to whether the value of <span class="v">:translate</span> is <span class="v">nil</span> or 
+ non-<span class="v">nil</span>, respectively.  If <span class="v">:translate</span> is <span class="v">nil</span> (the default), 
+ <span class="v">term</span> should already be in translated form; otherwise <span class="v">term</span> will be 
+ translated.</p> 
+ 
+ <p>IMPORTANT: The keyword options, discussed below according to the groups 
+ above, are all evaluated.  So for example:</p> 
+ 
+ <pre class="code">; Correct
+(<a href="ACL2____REWRITE_42.html">rewrite$</a> '(<a href="COMMON-LISP____CONS.html">cons</a> a (<a href="COMMON-LISP____CDR.html">cdr</a> x)) :alist '((a . (<a href="COMMON-LISP____CAR.html">car</a> x))) :hyps '((<a href="COMMON-LISP____CONSP.html">consp</a> x)))
+
+; WRONG!
+(<a href="ACL2____REWRITE_42.html">rewrite$</a> '(<a href="COMMON-LISP____CONS.html">cons</a> a (<a href="COMMON-LISP____CDR.html">cdr</a> x)) :alist ((a . (<a href="COMMON-LISP____CAR.html">car</a> x))) :hyps ((<a href="COMMON-LISP____CONSP.html">consp</a> x)))</pre> 
+ 
+ <h3>Basic options</h3> 
+ 
+ <ul> 
+ 
+ <li>
+<span class="v">:alist</span> (default <span class="v">nil</span>)<br> 
+ is an association list mapping variables to terms, where each term is already 
+ translated or else is untranslated according to whether the value of 
+ <span class="v">:translate</span> is <span class="v">nil</span> or non-<span class="v">nil</span>, respectively.</li> 
+ 
+ <li>
+<span class="v">:ctx</span> (default <span class="v">'rewrite$</span>)<br> 
+ is a ``context'', such as the <span class="v">ctx</span> argument of <span class="tt"><a href="ACL2____ER.html">er</a></span>.</li> 
+ 
+ <li>
+<span class="v">:default-hints-p</span> (default <span class="v">t</span>)<br> is non-<span class="v">nil</span> when the 
+ construction of hints for the rewriter call is to take into account the <a href="ACL2____DEFAULT-HINTS.html">default-hints</a> in the current <a href="ACL2____WORLD.html">world</a>.</li> 
+ 
+ <li>
+<span class="v">:equiv</span> and <span class="v">:geneqv</span> (both with default <span class="v">nil</span>)<br> 
+ specify the equivalence relation(s) to be preserved by (<a href="ACL2____CONGRUENCE.html">congruence</a>-based) rewriting.  It is illegal to specify a non-<span class="v">nil</span> value 
+ for more than one of these.  Most users will prefer to use <span class="v">:equiv</span>, which 
+ should be a function symbol that is a known (to ACL2) equivalence relation. 
+ The keyword option <span class="v">:geneqv</span> is really only for those who know how 
+ generated equivalence relations are represented in the ACL2 system.</li> 
+ 
+ <li>
+<span class="v">:hyps</span> (default <span class="v">nil</span>)<br> 
+ is a non-empty list of hypotheses under which rewriting takes place.  Each 
+ hypothesis is already translated or is untranslated according to whether the 
+ value of <span class="v">:translate</span> is <span class="v">nil</span> or non-<span class="v">nil</span>, respectively.</li> 
+ 
+ <li>
+<span class="v">:must-rewrite</span> (default <span class="v">nil</span>)<br> indicates, when its value is 
+ non-<span class="v">nil</span>, that the rewritten term must not be equal to the input term.  It 
+ is illegal to supply non-<span class="v">nil</span> values for both <span class="v">:alist</span> and 
+ <span class="v">:must-rewrite</span>, since it's usually not a sensible combination since at the 
+ least, the alist will be substituted into the term.</li> 
+ 
+ <li>
+<span class="v">:prove-forced-assumptions</span> (default <span class="v">t</span>)<br> affects the proof of 
+ the forced assumptions.  It has the following legal values. 
+ 
+ <ul> 
+ 
+ <li>
+<span class="v">t</span>: prove the forced assumptions as mentioned above: a single prover 
+ call to prove their conjunction.</li> 
+ 
+ <li>
+<span class="v">:same-hints</span>: same as <span class="v">t</span>, except generate the same <span class="v">:hints</span> for 
+ the prover call as are generated for the rewriting (from the eight hint 
+ options discussed below).</li> 
+ 
+ <li>
+<span class="v">nil</span>: do not attempt a proof of the forced assumptions, instead 
+ returning a non-<span class="v">nil</span> `<span class="v">pairs</span>' value as discussed above.</li> 
+ 
+ <li>
+<span class="v">:none-forced</span>: cause an error if there are any forced 
+ assumptions.</li> 
+ 
+ <li>Otherwise, the value of <span class="v">:prove-forced-assumptions</span> should be of the 
+ form expected for the value of <span class="v">:hints</span> supplied to <span class="tt"><a href="ACL2____DEFTHM.html">defthm</a></span>.  For 
+ example, the following might follow <span class="v">:prove-forced-assumptions</span> in a call 
+ of <span class="v">rewrite$</span>: <span class="v">'(("Goal" :in-theory (<a href="ACL2____ENABLE.html">enable</a> reverse)))</span>.</li> 
+ 
+ </ul>
+</li> 
+ 
+ <li>
+<span class="v">:repeat</span> (default <span class="v">1</span>)<br> 
+ indicates how many times to call the rewriter.  The value should be a positive 
+ integer.  If the value of <span class="v">:repeat</span> is greater than 1, then the term 
+ resulting from the first call is the input term for the second call, whose 
+ result (if the value of <span class="v">:repeat</span> is greater than 2) is the input term for 
+ the third call, and so on.  Note that the value of <span class="v">:alist</span> is <span class="v">nil</span> for 
+ all calls after the first.</li> 
+ 
+ <li>
+<span class="v">:translate</span> (default <span class="v">nil</span>)<br> 
+ indicates whether or not terms in the input are to be translated or not (see 
+ <a href="ACL2____TERM.html">term</a> for a discussed of ``translate'').  If the value is <span class="v">nil</span> then 
+ translation will not take place, so the given terms  not only the input 
+ term, but also terms in the <span class="v">cdr</span> positions of the <span class="v">:alist</span> and terms in 
+ the <span class="v">:hyps</span>  should already be in translated form.  But if the value 
+ is not <span class="v">nil</span>, then all of these will be translated.</li> 
+ 
+ <li>
+<span class="v">:untranslate</span> (default <span class="v">nil</span>)<br> 
+ indicates whether the rewritten term will be given in translated or 
+ untranslated form.  It also specifies, when not <span class="v">nil</span>, that certain error 
+ messages display terms in untranslated form.</li> 
+ 
+ </ul> 
+ 
+ <h3>Hint options, each with default <span class="v">nil</span>
+</h3> 
+ 
+ <p>The eight hint options displayed above are the same as discussed in the 
+ documentation topic, <a href="ACL2____HINTS.html">hints</a>.  These are the only legal hint keywords for 
+ <span class="v">rewrite$</span>.</p> 
+ 
+ <h3>Advanced options</h3> 
+ 
+ <p>The ``advanced options'' <span class="v">:obj</span>, <span class="v">:wrld</span>, and <span class="v">:rrec</span> can 
+ generally be ignored, so we say little about them here.  <span class="v">:Obj</span> is the 
+ ``obj'' argument of the rewriter, typically the symbol `<span class="v">?</span>' but <span class="v">t</span> 
+ when backchaining.  See <a href="ACL2____REWRITE_42-HYPS.html">rewrite$-hyps</a> and its use in community book 
+ <span class="v">books/kestrel/apt/simplify-defun-impl.lisp</span> for how <span class="v">:rrec</span> can avoid 
+ repeating some computations.  <span class="v">:Wrld</span> should probably be left as its 
+ default, which is the current ACL2 logical <a href="ACL2____WORLD.html">world</a>.</p> 
+ 
+ <h3>Summary of algorithm</h3> 
+ 
+ <p>Here we provide a brief summary of the algorithm used by <span class="v">rewrite$</span>. 
+ Most users can probably skip this section.</p> 
+ 
+ <p>Not surprisingly, the primary simplification technique used by 
+ <span class="v">rewrite$</span> is rewriting.  However, <a href="ACL2____FORWARD-CHAINING.html">forward-chaining</a> and <a href="ACL2____LINEAR-ARITHMETIC.html">linear-arithmetic</a> are also used, as follows.</p> 
+ 
+ <p>Initially, a function called <span class="v">rewrite$-setup</span> is invoked on the given 
+ <span class="v">:hyps</span> to produce data structures that record facts from forward-chaining 
+  a so-called <span class="v">fc-pair-lst</span> data structure  and linear 
+ arithmetic  a so-called <span class="v">pot-lst</span> data structure.  (Exception: this 
+ step is skipped if <span class="v">:rrec</span> is supplied, since the value of that option 
+ already contains such information.)  Then we loop through <span class="v">:repeat</span> 
+ iterations, where each iteration proceeds according the the following 
+ pseudocode.  Note that the initial alist is given by <span class="v">:alist</span>, but 
+ subsequent alists are all <span class="v">nil</span>.</p> 
+ 
+ <pre class="code">Replace term with its rewrite with respect to the alist, hyps, fc-pair-lst,
+  and pot-lst.
+If the alist is empty and the term didn't change, exit the loop.</pre> 
+ 
+ <h3>Related tools</h3> 
+ 
+ <p>See <a href="ACL2____REWRITE_42-HYPS.html">rewrite$-hyps</a> for a tool that rewrites a list of hypotheses. 
+ That tool does more than just apply rewriting directly to each hypothesis: it 
+ also uses <a href="ACL2____FORWARD-CHAINING.html">forward-chaining</a> and <a href="ACL2____LINEAR-ARITHMETIC.html">linear-arithmetic</a> derived from 
+ the hypotheses.  A related tool <a href="ACL2____REWRITE_42-CONTEXT.html">rewrite$-context</a>, is similar but takes 
+ an ``<span class="v">rrec</span>'' input that already contains any <a href="ACL2____FORWARD-CHAINING.html">forward-chaining</a> and 
+ <a href="ACL2____LINEAR-ARITHMETIC.html">linear-arithmetic</a> information.</p> 
+ 
+ <p>For related tools see <a href="ACL2____EXPANDER.html">expander</a> and <a href="ACL2____EASY-SIMPLIFY-TERM.html">easy-simplify-term</a>.  In 
+ particular, code from the expander function <span class="v">tool2-fn</span> served as a guide to 
+ the coding of <span class="v">rewrite$</span>; see <a href="ACL2____COMMUNITY-BOOK.html">community-book</a> 
+ <span class="v">books/misc/expander.lisp</span>.</p>
+</body>
+</html>

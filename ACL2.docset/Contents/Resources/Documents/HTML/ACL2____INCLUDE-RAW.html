@@ -1,0 +1,110 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Include-raw</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____INCLUDE-RAW">Click for Include-raw in the Full Manual</a></h3>
+
+<p>A better way to load raw Lisp code than directly using <a href="ACL2____PROGN_12.html">progn!</a> 
+or <a href="ACL2____SET-RAW-MODE.html">set-raw-mode</a>.</p><p>Sometimes you want to include raw Lisp code in an ACL2 book to 
+achieve better performance or do fancy things like connect to external 
+programs.  With <a href="ACL2____DEFTTAG.html">trust tags</a>, you can do this. 
+Unfortunately, the built-in mechanisms (<a href="ACL2____PROGN_12.html">progn!</a> and <a href="ACL2____SET-RAW-MODE.html">set-raw-mode</a>) 
+have some portability problems related to compilation, file paths, read tables, 
+non-ACL2 objects, and so on; see below for some examples.</p> 
+ 
+<h3>Using Include-Raw</h3> 
+ 
+<p>Using <span class="v">include-raw</span> solves some of these problems.  Here are some 
+examples of how to use it:</p> 
+ 
+<pre class="code">(<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "tools/include-raw" :dir :system)
+
+(<a href="ACL2____DEFTTAG.html">defttag</a> :my-ttag) ; required before calling include-raw
+
+(<a href="ACL2____INCLUDE-RAW.html">include-raw</a> "my-raw-lisp-file.lsp")
+
+(<a href="ACL2____INCLUDE-RAW.html">include-raw</a> "another-raw-lisp-file.lsp"
+             :do-not-compile t)</pre> 
+ 
+<p>When you use <span class="v">include-raw</span>, your raw Lisp code goes into a separate file. 
+If your book is named <span class="v">foo.lisp</span>, then this file should typically be named 
+<span class="v">foo-raw.lsp</span>.  Why?</p> 
+ 
+<ul> 
+ 
+<li>The <span class="v">.lsp</span> extension helps build systems realize that the raw file is 
+not a proper ACL2 book and should not be certified.</li> 
+ 
+<li>The <span class="v">-raw</span> part helps to avoid running into a problem: on most Lisps, 
+compiling <span class="v">foo.lisp</span> or <span class="v">foo.lsp</span> results in the same compiled file, 
+e.g., <span class="v">foo.fasl</span> or similar.  So it is a mistake to use the same base name 
+for a raw Lisp file with a <span class="v">.lsp</span> extension and an ACL2 book with <span class="v">.lisp</span> 
+extension.</li> 
+ 
+</ul> 
+ 
+<p>The path of the raw Lisp file must be given relative to the book containing 
+the <span class="v">include-raw</span> form.  Typically we put the raw Lisp file in the same 
+directory as its book.</p> 
+ 
+<p>By default, the raw Lisp file will be compiled and loaded when the 
+containing book is certified.  When including the book, the compiled file will 
+be loaded if possible, otherwise the original file will be loaded instead.  By 
+default, if either compilation or loading fails, an error will occur.</p> 
+ 
+ 
+<h3>Benefits</h3> 
+ 
+<p>Keeping raw Lisp code in a separate file means you can use various kinds of 
+Lisp syntax that are not allowed in ACL2.  Otherwise you have to jump through 
+awful hoops like having to <a href="COMMON-LISP____INTERN.html">intern</a>ing the names of functions like 
+<span class="v">ccl::static-cons</span> that you want to call.  It's also nice to be able to use 
+floats, etc.</p> 
+ 
+<p>Using <span class="v">include-raw</span> instead of something like <span class="v">load</span> after a 
+<span class="v">set-raw-mode</span> means you get predictable path behavior.  Otherwise, unless 
+you go out of your way to save the <a href="ACL2____CBD.html">cbd</a> with a <a href="ACL2____MAKE-EVENT.html">make-event</a>, you can 
+end up with <a href="ACL2____INCLUDE-BOOK.html">include-book</a> failing when you try to load your book from 
+other directories.</p> 
+ 
+<p>Using <span class="v">include-raw</span> means that by default your definitions get compiled, 
+which can help to avoid stack overflows on some Lisps that don't compile 
+definitions automatically.  This isn't the case for definitions submitted 
+inside a <a href="ACL2____PROGN_12.html">progn!</a>.  It also helps defend against the <a href="ACL2____COMP.html">comp</a> command 
+undoing your raw Lisp definitions.</p> 
+ 
+ 
+<h3>Optional Arguments</h3> 
+ 
+<p>The optional keywords <span class="v">:on-compile-fail</span> and/or <span class="v">:on-load-fail</span> may be 
+used to suppress the error for failed compilation or loading, respectively; 
+their argument is a term which will be evaluated in lieu of producing an error. 
+When evaluating this term, the variable <span class="v">condition</span> is bound to a value 
+describing the failure; see Common Lisp documentation on <span class="v">handler-case</span>. 
+Note: for non-ansi-compliant Common Lisp implementations, such as GCL 2.6.*, no 
+such error handling is provided.  Here is an example:</p> 
+ 
+<pre class="code">(<a href="ACL2____INCLUDE-RAW.html">include-raw</a> "a-raw-lisp-file.lsp"
+             :on-compile-fail
+             (format t "Compilation failed with message ~a~%"
+                     condition)
+             :on-load-fail
+             (<a href="ACL2____CW.html">cw</a> "Oh well, the load failed~%")
+             :host-readtable t)</pre> 
+ 
+ 
+<p>The optional keyword <span class="v">:do-not-compile</span> may be used to suppress 
+compilation.  In this case, during book certification the file will just be 
+loaded using <span class="v">load</span>.  Similarly, during <span class="v">include-book</span> we will only load 
+the lisp file, and not try to load a compiled file.</p> 
+ 
+<p>The optional keyword <span class="v">:host-readtable</span> may be used to make sure that the 
+original <span class="v">*readtable*</span> for this Lisp is being used, instead of the ACL2 
+readtable, while reading the file.  This may sometimes be necessary to avoid 
+differences between ACL2's reader and what raw Lisp code is expecting.</p>
+</body>
+</html>

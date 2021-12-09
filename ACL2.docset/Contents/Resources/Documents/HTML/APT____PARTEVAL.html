@@ -1,0 +1,269 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Parteval</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=APT____PARTEVAL">Click for Parteval in the Full Manual</a></h3>
+
+<p>APT partial evaluation transformation: 
+          specialize a function by setting one or more parameters 
+          to specified constant values.</p><h3>Introduction</h3><p>Partial evaluation is a well-known program transformation technique. 
+      This APT transformation realizes this technique in ACL2. 
+      Partial evaluation is a broad topic; 
+      the current version of this APT transformation is relatively simple, 
+      but will be extended in the future.</p><p>This partial evaluation transformation specializes an ACL2 function 
+      by setting some of its parameters to specified constant values, 
+      and eliminating such parameters from the function. 
+      In partial evaluation terminology, 
+      the parameters that are set to constant values are <i>static</i>, 
+      while the remaining parameters are <i>dynamic</i>.</p><p>This transformation is related to <span class="tt"><a href="APT____RESTRICT.html">restrict</a></span>, 
+      which also specializes a function, 
+      but does not change its parameters.</p><p>The <span class="v">parteval</span> <a href="res/kestrel-apt-design-notes/parteval.pdf" target="_blank"><nobr>design notes<img src="../Icon_External_Link.png" title="External link to res/kestrel-apt-design-notes/parteval.pdf"></nobr></a>, which use <a href="res/kestrel-design-notes/notation.pdf" target="_blank"><nobr>this notation<img src="../Icon_External_Link.png" title="External link to res/kestrel-design-notes/notation.pdf"></nobr></a>, provide the mathematical concepts and template proofs 
+      upon which this transformation is based. 
+      These notes should be read alongside this reference documentation, 
+      which refers to them in some places.</p><h3>General Form</h3><pre class="code">(<a href="APT____PARTEVAL.html">parteval</a> old
+          static
+          :new-name       ; default :auto
+          :new-enable     ; default :auto
+          :thm-name       ; default :auto
+          :thm-enable     ; default t
+          :verify-guards  ; default :auto
+          :untranslate    ; default :nice
+          :print          ; default :result
+          :show-only      ; default nil
+  )</pre><h3>Inputs</h3><p><span class="v">old</span></p><blockquote>
+<p>Denotes the target function to transform.</p>
+<p>It must be the name of a function, 
+      or a <a href="ACL2____NUMBERED-NAMES.html">numbered name</a> 
+      with a wildcard index that 
+      <a href="ACL2____RESOLVE-NUMBERED-NAME-WILDCARD.html">resolves</a> 
+      to the name of a function. 
+      In the rest of this documentation page, for expository convenience, 
+      it is assumed that <span class="v">old</span> is the name of the denoted function.</p>
+<p><span class="v">old</span> must 
+       be in logic mode, 
+       be <a href="ACL2____FUNCTION-DEFINEDNESS.html">defined</a>, 
+       return a non-<a href="ACL2____MV.html">multiple</a> value, and 
+       have no input or output <a href="ACL2____STOBJ.html">stobjs</a>. 
+       If the <span class="v">:verify-guards</span> input is <span class="v">t</span>, 
+       <span class="v">old</span> must be guard-verified.</p>
+<p>In the rest of this documentation page:</p>
+<ul>
+<li>Let <span class="v">x1</span>, ..., <span class="v">xn</span>, <span class="v">y1</span>, ..., <span class="v">ym</span> be 
+        the formal parameters of <span class="v">old</span>, 
+        where <span class="v">n</span> \geq 0 and <span class="v">m</span> &gt; 0.</li>
+<li>Let <span class="v">old-guard&lt;x1,...,xn,y1,...,ym&gt;</span> be the guard term of <span class="v">old</span>.</li>
+<li>Let <span class="v">old-body&lt;x1,...,xn,y1,...,ym&gt;</span> be the body of <span class="v">old</span>.</li>
+</ul>
+<p>The current implementation distinguishes the following three cases:</p>
+<ol>
+<li>
+<span class="v">old</span> is not recursive. 
+        In this case, let its body be 
+        <span class="v">old-body&lt;x1,...,xn,y1,...,ym&gt;</span>.</li>
+<li>
+<span class="v">old</span> is recursive, 
+        <span class="v">y1</span>, ..., <span class="v">ym</span> are unchanged in all the recursive calls, 
+        and <span class="v">old</span> does not occur in its termination theorem. 
+        In this case, let its body be<pre class="code">old-body&lt;x1,...,xn,y1,...,ym,
+         (old update1-x1&lt;x1,...,xn,y1,...,ym&gt;
+              ...
+              update1-xn&lt;x1,...,xn,y1,...,ym&gt;
+              y1 ... ym)
+         ...
+         (old updatep-x1&lt;x1,...,xn,y1,...,ym&gt;
+              ...
+              updatep-xn&lt;x1,...,xn,y1,...,ym&gt;
+              y1 ... ym)&gt;</pre>
+</li>
+<li>
+<span class="v">old</span> is recursive but it does not satisfy 
+        some of the conditions in case 2 above.</li>
+</ol>
+<p>In the <span class="v">parteval</span> <a href="res/kestrel-apt-design-notes/parteval.pdf" target="_blank"><nobr>design notes<img src="../Icon_External_Link.png" title="External link to res/kestrel-apt-design-notes/parteval.pdf"></nobr></a>, 
+       <span class="v">old</span> is denoted by f.</p>
+</blockquote><p><span class="v">static</span></p><blockquote>
+<p>Specifies the static parameters of <span class="v">old</span>, 
+       along with the constant values to assign to these parameters.</p>
+<p>It must be a non-empty list of doublets <span class="v">((y1 c1) ... (ym cm))</span>. 
+       Each <span class="v">yj</span> must be a parameter of <span class="v">old</span>. 
+       The <span class="v">y1</span>, ..., <span class="v">ym</span> must be all distinct. 
+       Each <span class="v">cj</span> must be a ground term 
+       that only calls logic-mode functions, 
+       that returns a non-<a href="ACL2____MV.html">multiple</a> value, 
+       and that has no output <a href="ACL2____STOBJ.html">stobjs</a>. 
+       If the generated function is guard-verified 
+       (which is determined by the <span class="v">:verify-guards</span> input; see below), 
+       then each <span class="v">cj</span> must only call guard-verified functions, 
+       except possibly in the <span class="v">:logic</span> subterms of <span class="tt"><a href="ACL2____MBE.html">mbe</a></span>s 
+       and via <span class="tt"><a href="ACL2____EC-CALL.html">ec-call</a></span>. 
+       Each <span class="v">cj</span> must not include any calls to <span class="v">old</span>.</p>
+<p>The transformation specializes <span class="v">old</span> 
+       by setting each <span class="v">yj</span> to the value of the term <span class="v">cj</span>.</p>
+<p>In this documentation page, for expository convenience, 
+       the static parameters <span class="v">y1</span>, ..., <span class="v">ym</span> 
+       come after the dynamic parameters <span class="v">x1</span>, ..., <span class="v">xn</span>. 
+       However, this is not required: 
+       static and dynamic parameters can be intermixed in any way.</p>
+<p>In the <span class="v">parteval</span> <a href="res/kestrel-apt-design-notes/parteval.pdf" target="_blank"><nobr>design notes<img src="../Icon_External_Link.png" title="External link to res/kestrel-apt-design-notes/parteval.pdf"></nobr></a>, 
+       <span class="v">cj</span> is denoted by \widetilde{y}_j, 
+       for 1 \leq j \leq m.</p>
+</blockquote><p><span class="v">:new-name</span>  default <span class="v">:auto</span></p><blockquote>
+<p>Determines the name of the generated new function.</p>
+<p>It must be one of the following:</p>
+<ul>
+<li>
+<span class="v">:auto</span>, to generate the name automatically 
+       as described in <a href="APT____FUNCTION-NAME-GENERATION.html">function-name-generation</a>.</li>
+<li>Any other symbol, to use as the name of the function.</li>
+</ul>
+<p>In the rest of this documentation page, 
+      let <span class="v">new</span> be this function.</p>
+</blockquote><p><span class="v">:new-enable</span>  default <span class="v">:auto</span></p><blockquote>
+<p>Determines whether <span class="v">new</span> is enabled.</p>
+<p>It must be one of the following:</p>
+<ul>
+<li>
+<span class="v">t</span>, to enable it.</li>
+<li>
+<span class="v">nil</span>, to disable it.</li>
+<li>
+<span class="v">:auto</span>, to enable it iff <span class="v">old</span> is enabled.</li>
+</ul>
+</blockquote><p><span class="v">thm-name</span>  default <span class="v">:auto</span></p><blockquote>
+<p>Determines the name of the theorem that relates <span class="v">old</span> to <span class="v">new</span>:</p>
+<ul>
+<li>
+<span class="v">:auto</span>, to use the <a href="ACL2____PAIRED-NAMES.html">paired name</a> obtained by <a href="ACL2____MAKE-PAIRED-NAME.html">pairing</a> the name of <span class="v">old</span> and the name of <span class="v">new</span>, putting the result into the same package as <span class="v">new</span>.</li>
+<li>Any other symbol 
+         (that is not in the main Lisp package and that is not a keyword), 
+         to use as the name of the theorem.</li>
+</ul>
+<p>In the rest of this documentation page, let <span class="v">old-to-new</span> be this theorem.</p>
+</blockquote><p><span class="v">:thm-enable</span>  default <span class="v">t</span></p><blockquote>
+<p>Determines whether <span class="v">old-to-new</span> is enabled:</p>
+<ul>
+<li>
+<span class="v">t</span>, to enable it.</li>
+<li>
+<span class="v">nil</span>, to disable it.</li>
+</ul>
+<p>If <span class="v">old</span> has the form of case 3 above 
+       and <span class="v">new</span> is enabled (as determined by the <span class="v">:new-enable</span> input), 
+       then <span class="v">:thm-enable</span> cannot be <span class="v">t</span>.</p>
+</blockquote><p><span class="v">:verify-guards</span>  default <span class="v">:auto</span></p><blockquote>
+<p>Determines whether the guards of the generated functions are verified or not.</p>
+<p>It must be one of the following:</p>
+<ul>
+<li>
+<span class="v">t</span>, to verify the guards.</li>
+<li>
+<span class="v">nil</span>, to not verify guards.</li>
+<li>
+<span class="v">:auto</span>, to verify the guards if and only if 
+       the guards of the target function <span class="v">old</span> are verified.</li>
+</ul>
+</blockquote><p><span class="v">:untranslate</span>  default <span class="v">:nice</span></p><blockquote>
+<p>Specifies if and how the body of <span class="v">new</span> should be turned 
+      from internal translated form to external untranslated form.</p>
+<p>It must be an <a href="APT____UNTRANSLATE-SPECIFIER.html">untranslate specifier</a>; see that documentation topic for details.</p>
+</blockquote><p><span class="v">:print</span>  default <span class="v">:result</span></p><blockquote>
+<p>Specifies what is printed on the screen 
+        (see <a href="ACL2____EVENT-MACRO-SCREEN-PRINTING.html">ACL2::event-macro-screen-printing</a>).</p>
+<p>It must be one of the following:</p>
+<ul>
+<li>
+<span class="v">nil</span>, to print nothing (not even error output).</li>
+<li>
+<span class="v">:error</span>, to print only error output (if any).</li>
+<li>
+<span class="v">:result</span>, to print, besides any error output, 
+         also the <a href="ACL2____EVENT-MACRO-RESULTS.html">results</a> of <span class="v">parteval</span>. 
+         This is the default value of the <span class="v">:print</span> input.</li>
+<li>
+<span class="v">:info</span>, to print, 
+         besides any error output and the results, 
+         also some additional information about 
+         the internal operations of <span class="v">parteval</span>.</li>
+<li>
+<span class="v">:all</span>, to print, 
+          besides any error output, 
+          the results, 
+          and the additional information, 
+          also ACL2's output in response to all the submitted events.</li>
+</ul>
+<p>If the call of <span class="v">parteval</span> is redundant, 
+        an indication to that effect is printed on the screen, 
+        unless <span class="v">:print</span> is <span class="v">nil</span>.</p>
+</blockquote><p><span class="v">:show-only</span>  default <span class="v">nil</span></p><blockquote>
+<p>Determines whether the event expansion of <span class="v">parteval</span> is submitted to ACL2 or just printed on the screen:</p>
+<ul>
+<li>
+<span class="v">nil</span>, to submit it.</li>
+<li>
+<span class="v">t</span>, to just print it. 
+            In this case: 
+            the event expansion is printed even if <span class="v">:print</span> is <span class="v">nil</span> 
+            (because the user has explicitly asked to show the event expansion); 
+            the resulting events are not re-printed separately 
+            (other than their appearance in the printed event expansion) 
+            even if <span class="v">:print</span> is <span class="v">:result</span> or <span class="v">:info</span> or <span class="v">:all</span>; 
+            no ACL2 output is printed for the event expansion 
+            even if <span class="v">:print</span> is <span class="v">:all</span> 
+            (because the event expansion is not submitted). 
+            If the call of <span class="v">parteval</span> is redundant 
+            (as defined in the `Redundancy' section), the event expansion generated by the existing call 
+            is printed.</li>
+</ul>
+</blockquote><h3>Generated Events</h3><p><span class="v">new</span></p><blockquote>
+<p>Specialized version of <span class="v">old</span>, 
+       where cases 1, 2, and 3 refer to the description of <span class="v">old</span> above:</p>
+<pre class="code">;; case 1:
+(<a href="COMMON-LISP____DEFUN.html">defun</a> new (x1 ... xn)
+  old-body&lt;x1,...,xn,c1,...,cm&gt;)
+
+;; case 2:
+(<a href="COMMON-LISP____DEFUN.html">defun</a> new (x1 ... xn)
+  old-body&lt;x1,...,xn,c1,...,cm,
+           (new update1-x1&lt;x1,...,xn,c1,...,cm&gt;
+                ...
+                update1-xn&lt;x1,...,xn,c1,...,cm&gt;)
+           ...
+           (new updatep-x1&lt;x1,...,xn,c1,...,cm&gt;
+                ...
+                updatep-xn&lt;x1,...,xn,c1,...,cm&gt;)&gt;)
+
+;; case 3:
+(<a href="COMMON-LISP____DEFUN.html">defun</a> new (x1 ... xn)
+  (old x1 ... xn c1 ... cm))</pre>
+<p>The guard is <span class="v">old-guard&lt;x1,...,xn,c1,...cm&gt;</span>.</p>
+<p>In case 2, the measure is the same as <span class="v">old</span>.</p>
+<p>In case 3, the new function is not recursive. 
+       This is simple, preliminary approach; 
+       support for more forms of recursive functions (besides case 2) 
+       may be added in the future.</p>
+<p>In the <span class="v">parteval</span> <a href="res/kestrel-apt-design-notes/parteval.pdf" target="_blank"><nobr>design notes<img src="../Icon_External_Link.png" title="External link to res/kestrel-apt-design-notes/parteval.pdf"></nobr></a>, 
+       <span class="v">new</span> is denoted by f'.</p>
+</blockquote><p><span class="v">old-to-new</span></p><blockquote>
+<p>Theorem that relates <span class="v">old</span> to <span class="v">new</span>:</p>
+<pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> old-to-new
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> y1 c1)
+                ...
+                (<a href="COMMON-LISP____EQUAL.html">equal</a> ym cm)
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (old x1 ... xn y1 ... ym)
+                  (new x1 ... xn)))</pre>
+<p>In the <span class="v">parteval</span> <a href="res/kestrel-apt-design-notes/parteval.pdf" target="_blank"><nobr>design notes<img src="../Icon_External_Link.png" title="External link to res/kestrel-apt-design-notes/parteval.pdf"></nobr></a>, 
+       <span class="v">old-to-new</span> is denoted by \mathit{ff}'.</p>
+</blockquote><h3>Redundancy</h3><p>A call of <span class="v">parteval</span> is redundant if and only if 
+         it is identical to a previous successful call of <span class="v">parteval</span> whose <span class="v">:show-only</span> input is not <span class="v">t</span>, 
+         except that the two calls may differ in 
+         their <span class="v">:print</span> and <span class="v">:show-only</span> inputs. 
+         These inputs do not affect the generated events, 
+         and thus they are ignored for the purpose of redundancy.</p><p>A call of <span class="v">parteval</span> whose <span class="v">:show-only</span> input is <span class="v">t</span> 
+         does not generate any event. 
+         Thus, no successive call may be redundant with such a call.</p>
+</body>
+</html>

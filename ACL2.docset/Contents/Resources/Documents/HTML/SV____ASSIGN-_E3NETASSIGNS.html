@@ -1,0 +1,154 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Assign-&gt;netassigns</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=SV____ASSIGN-_E3NETASSIGNS">Click for Assign-&gt;netassigns in the Full Manual</a></h3>
+
+<p>Turns an assignment (possibly to parts of wires) into several assignments 
+          to whole wires.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(assign-&gt;netassigns lhs offset dr acc)  assigns</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">lhs</span>  <font color="#606060">Guard <span class="v">(<a href="SV____LHS-P.html">lhs-p</a> lhs)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">offset</span>  <font color="#606060">Guard <span class="v">(<a href="ACL2____NATP.html">natp</a> offset)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">dr</span>  <font color="#606060">Guard <span class="v">(<a href="SV____DRIVER-P.html">driver-p</a> dr)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">acc</span>  accumulator.<br><font color="#606060">Guard <span class="v">(<a href="SV____NETASSIGNS-P.html">netassigns-p</a> acc)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">assigns</span>  <font color="#606060">Type <span class="v">(<a href="SV____NETASSIGNS-P.html">netassigns-p</a> assigns)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+ 
+ 
+<p>For example, suppose we have the following Verilog code:</p> 
+ 
+<pre class="code">wire [10:0] a;
+wire [8:1] b;
+wire [3:2] c;
+wire [12:0] foo;
+assign { a[8:3], b[5:1] c } = foo;</pre> 
+ 
+<p>We would turn this assignment into three separate assignments, essentially 
+like this:</p> 
+ 
+<pre class="code">assign a = { 2'bz, foo[12:7], 3'bz };
+assign b = { 3'bz, foo[6:2] };
+assign c = foo[1:0];</pre> 
+ 
+<p>The representation in SVEX is a bit different than the Verilog notation 
+suggests: we don't know each variable's width and we don't have a part-select 
+operator -- instead, on the left-hand side, we have an <a href="SV____LHS.html">lhs</a> structure 
+forming the concatenation, and on the right-hand side use shifts concatenations 
+to emulate part-selecting from the RHS expression.  So a more accurate view 
+would be as follows, where <span class="v">a[3+:6]</span> is meant to represent an <a href="SV____LHATOM.html">lhatom</a> 
+of width 6 and right-shift 3; <span class="v">inf</span> is used to signify an infinite-width 
+constant; and <span class="v">{ ... , 2'foo }</span> signifies concatenating the <span class="v">...</span> with 2 
+bits of <span class="v">foo</span>:</p> 
+ 
+<pre class="code">assign { a[3+:6], b[1+:5], c[2+:2] } = foo;</pre> 
+<p>becomes</p> 
+<pre class="code">assign c = { 'z, 2'foo };
+assign b = { 'z, 5'(foo &gt;&gt; 2) };
+assign a = { 'z, 6'(foo &gt;&gt; 7), 3'bz };</pre> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>assign-&gt;netassigns</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ assign-&gt;netassigns (<a href="SV____LHS.html">lhs</a> offset dr acc)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="SV____LHS-P.html">lhs-p</a> lhs)
+                             (<a href="ACL2____NATP.html">natp</a> offset)
+                             (<a href="SV____DRIVER-P.html">driver-p</a> dr)
+                             (<a href="SV____NETASSIGNS-P.html">netassigns-p</a> acc))))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'assign-&gt;netassigns))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+   (((<a href="ACL2____MV.html">mv</a> first rest) (<a href="SV____LHS-DECOMP.html">lhs-decomp</a> lhs))
+    (acc (<a href="SV____NETASSIGNS-FIX.html">netassigns-fix</a> acc))
+    ((unless first) acc)
+    ((<a href="SV____LHRANGE.html">lhrange</a> first) first)
+    (offset (<a href="ACL2____LNFIX.html">lnfix</a> offset))
+    ((<a href="SV____DRIVER.html">driver</a> dr))
+    ((when (<a href="COMMON-LISP____EQ.html">eq</a> (<a href="SV____LHATOM-KIND.html">lhatom-kind</a> first.atom) :z))
+     (<a href="SV____ASSIGN-_E3NETASSIGNS.html">assign-&gt;netassigns</a> rest (<a href="COMMON-LISP_____B2.html">+</a> offset first.w)
+                         dr acc))
+    ((<a href="SV____LHATOM-VAR.html">lhatom-var</a> first.atom))
+    (new-driver
+     (<a href="SV____CHANGE-DRIVER.html">change-driver</a>
+        dr
+        :value
+        (svex-concat first.atom.rsh (<a href="SV____SVEX-Z.html">svex-z</a>)
+                     (svex-concat first.w (svex-rsh offset dr.value)
+                                  (<a href="SV____SVEX-Z.html">svex-z</a>)))))
+    (rest-drivers (<a href="COMMON-LISP____CDR.html">cdr</a> (<a href="ACL2____HONS-GET.html">hons-get</a> first.atom.name acc)))
+    (acc (<a href="ACL2____HONS-ACONS.html">hons-acons</a> first.atom.name
+                     (<a href="COMMON-LISP____CONS.html">cons</a> new-driver rest-drivers)
+                     acc)))
+   (<a href="SV____ASSIGN-_E3NETASSIGNS.html">assign-&gt;netassigns</a> rest (<a href="COMMON-LISP_____B2.html">+</a> offset first.w)
+                       dr acc))))</pre> 
+<p><b>Theorem: </b>netassigns-p-of-assign-&gt;netassigns</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> netassigns-p-of-assign-&gt;netassigns
+        (<a href="ACL2____B_A2.html">b*</a> ((<a href="SV____ASSIGNS.html">assigns</a> (<a href="SV____ASSIGN-_E3NETASSIGNS.html">assign-&gt;netassigns</a> lhs offset dr acc)))
+            (<a href="SV____NETASSIGNS-P.html">netassigns-p</a> assigns))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>assign-&gt;netassigns-of-lhs-fix-lhs</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> assign-&gt;netassigns-of-lhs-fix-lhs
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SV____ASSIGN-_E3NETASSIGNS.html">assign-&gt;netassigns</a> (<a href="SV____LHS-FIX.html">lhs-fix</a> lhs)
+                                   offset dr acc)
+               (<a href="SV____ASSIGN-_E3NETASSIGNS.html">assign-&gt;netassigns</a> lhs offset dr acc)))</pre> 
+<p><b>Theorem: </b>assign-&gt;netassigns-lhs-equiv-congruence-on-lhs</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     assign-&gt;netassigns-lhs-equiv-congruence-on-lhs
+     (<a href="ACL2____IMPLIES.html">implies</a> (<a href="SV____LHS-EQUIV.html">lhs-equiv</a> lhs lhs-equiv)
+              (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SV____ASSIGN-_E3NETASSIGNS.html">assign-&gt;netassigns</a> lhs offset dr acc)
+                     (<a href="SV____ASSIGN-_E3NETASSIGNS.html">assign-&gt;netassigns</a> lhs-equiv offset dr acc)))
+     :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>assign-&gt;netassigns-of-nfix-offset</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> assign-&gt;netassigns-of-nfix-offset
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SV____ASSIGN-_E3NETASSIGNS.html">assign-&gt;netassigns</a> lhs (<a href="ACL2____NFIX.html">nfix</a> offset)
+                                   dr acc)
+               (<a href="SV____ASSIGN-_E3NETASSIGNS.html">assign-&gt;netassigns</a> lhs offset dr acc)))</pre> 
+<p><b>Theorem: </b>assign-&gt;netassigns-nat-equiv-congruence-on-offset</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     assign-&gt;netassigns-nat-equiv-congruence-on-offset
+     (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____NAT-EQUIV.html">nat-equiv</a> offset offset-equiv)
+              (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SV____ASSIGN-_E3NETASSIGNS.html">assign-&gt;netassigns</a> lhs offset dr acc)
+                     (<a href="SV____ASSIGN-_E3NETASSIGNS.html">assign-&gt;netassigns</a> lhs offset-equiv dr acc)))
+     :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>assign-&gt;netassigns-of-driver-fix-dr</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> assign-&gt;netassigns-of-driver-fix-dr
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SV____ASSIGN-_E3NETASSIGNS.html">assign-&gt;netassigns</a> lhs offset (<a href="SV____DRIVER-FIX.html">driver-fix</a> dr)
+                                   acc)
+               (<a href="SV____ASSIGN-_E3NETASSIGNS.html">assign-&gt;netassigns</a> lhs offset dr acc)))</pre> 
+<p><b>Theorem: </b>assign-&gt;netassigns-driver-equiv-congruence-on-dr</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     assign-&gt;netassigns-driver-equiv-congruence-on-dr
+     (<a href="ACL2____IMPLIES.html">implies</a> (<a href="SV____DRIVER-EQUIV.html">driver-equiv</a> dr dr-equiv)
+              (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SV____ASSIGN-_E3NETASSIGNS.html">assign-&gt;netassigns</a> lhs offset dr acc)
+                     (<a href="SV____ASSIGN-_E3NETASSIGNS.html">assign-&gt;netassigns</a> lhs offset dr-equiv acc)))
+     :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>assign-&gt;netassigns-of-netassigns-fix-acc</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     assign-&gt;netassigns-of-netassigns-fix-acc
+     (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SV____ASSIGN-_E3NETASSIGNS.html">assign-&gt;netassigns</a> lhs offset dr (<a href="SV____NETASSIGNS-FIX.html">netassigns-fix</a> acc))
+            (<a href="SV____ASSIGN-_E3NETASSIGNS.html">assign-&gt;netassigns</a> lhs offset dr acc)))</pre> 
+<p><b>Theorem: </b>assign-&gt;netassigns-netassigns-equiv-congruence-on-acc</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     assign-&gt;netassigns-netassigns-equiv-congruence-on-acc
+     (<a href="ACL2____IMPLIES.html">implies</a> (<a href="SV____NETASSIGNS-EQUIV.html">netassigns-equiv</a> acc acc-equiv)
+              (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SV____ASSIGN-_E3NETASSIGNS.html">assign-&gt;netassigns</a> lhs offset dr acc)
+                     (<a href="SV____ASSIGN-_E3NETASSIGNS.html">assign-&gt;netassigns</a> lhs offset dr acc-equiv)))
+     :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>vars-of-assign-&gt;netassigns</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vars-of-assign-&gt;netassigns
+ (<a href="ACL2____IMPLIES.html">implies</a>
+  (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____MEMBER.html">member</a> v (<a href="SV____LHS-VARS.html">lhs-vars</a> lhs)))
+       (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____MEMBER.html">member</a> v (<a href="SV____SVEX-VARS.html">svex-vars</a> (<a href="SV____DRIVER-_E3VALUE.html">driver-&gt;value</a> dr))))
+       (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____MEMBER.html">member</a> v (<a href="SV____NETASSIGNS-VARS.html">netassigns-vars</a> acc))))
+  (<a href="COMMON-LISP____NOT.html">not</a>
+   (<a href="COMMON-LISP____MEMBER.html">member</a>
+        v
+        (<a href="SV____NETASSIGNS-VARS.html">netassigns-vars</a> (<a href="SV____ASSIGN-_E3NETASSIGNS.html">assign-&gt;netassigns</a> lhs offset dr acc))))))</pre> 
+
+</body>
+</html>

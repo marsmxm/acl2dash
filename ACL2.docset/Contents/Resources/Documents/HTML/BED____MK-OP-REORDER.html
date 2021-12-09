@@ -1,0 +1,115 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Mk-op-reorder</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=BED____MK-OP-REORDER">Click for Mk-op-reorder in the Full Manual</a></h3>
+
+<p>Construct a reduced BED using <a href="BED____BED-ORDER.html">bed-order</a>.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(mk-op-reorder op left right order)  (mv bed order)</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">op</span>  Operator being applied.<br><font color="#606060">Guard <span class="v">(<a href="BED____BED-OP-P.html">bed-op-p</a> op)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">left</span>  First argument to the operator (a bed).</dd> 
+  <dd>
+<span class="tt">right</span>  Second argument to the operator (a bed).</dd> 
+  <dd>
+<span class="tt">order</span>  The ordering for <a href="BED____BED-ORDER.html">bed-order</a>.</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">bed</span>  A bed for op(left, right).</dd> 
+<dd>
+<span class="tt">order</span>  The (perhaps extended) order.</dd> 
+ 
+</dl></div> 
+<p>We expect that by now, we've already dealt with:</p> 
+ 
+<ul> 
+<li>Trivial operators: <span class="v">true</span>, <span class="v">false</span>, <span class="v">arg1</span>, and <span class="v">arg2</span>
+</li> 
+<li>Constant propagation</li> 
+<li>Identical arguments</li> 
+</ul> 
+ 
+<p>And we've decided that we're really going to construct op(left, right).  We 
+now want to take symmetry into account.  That is, we can merge <span class="v">and(a,b)</span> 
+and <span class="v">and(b,a)</span> into some canonical version.</p> 
+ 
+<p>Something subtle is, what do we want to do with symmetry w.r.t. the negation 
+operators like <span class="v">andc1</span>.  Suppose that <span class="v">a &lt; b</span> in the <a href="BED____BED-ORDER.html">bed-order</a>.  I 
+think there are perhaps two good options:</p> 
+ 
+<ol> 
+ 
+<li>Prefer fewer operators.  We could, e.g., reduce <span class="v">andc1</span> and <span class="v">andc2</span> 
+toward <span class="v">andc1(a,b)</span> or <span class="v">andc1(b,a)</span>, so that we never use an <span class="v">andc2</span> 
+operator.</li> 
+ 
+<li>Prefer fewer permutations.  We could, e.g., reduce <span class="v">andc1</span> and 
+<span class="v">andc2</span> toward <span class="v">andc1(a,b)</span> or <span class="v">andc1(a,b)</span>, so that we never have the 
+arguments out of order.</li> 
+ 
+</ol> 
+ 
+<p>I think that to start, I want to try out the latter option.  It seems like 
+it might have some slight advantages w.r.t. structure sharing, and I guess the 
+whole point of BEDs is to embrace having a lot of operators.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>mk-op-reorder</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> mk-op-reorder (op left right order)
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="BED____BED-OP-P.html">bed-op-p</a> op)))
+       (<a href="COMMON-LISP____LET.html">let</a> ((__function__ 'mk-op-reorder))
+            (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+            (<a href="ACL2____B_A2.html">b*</a> ((op (<a href="BED____BED-OP-FIX_42.html">bed-op-fix$</a> op))
+                 ((when (<a href="COMMON-LISP____EQL.html">eql</a> op (<a href="BED____BED-OP-TRUE.html">bed-op-true</a>)))
+                  (<a href="ACL2____MV.html">mv</a> t order))
+                 ((when (<a href="COMMON-LISP____EQL.html">eql</a> op (<a href="BED____BED-OP-FALSE.html">bed-op-false</a>)))
+                  (<a href="ACL2____MV.html">mv</a> nil order))
+                 ((when (<a href="COMMON-LISP____EQL.html">eql</a> op (<a href="BED____BED-OP-ARG1.html">bed-op-arg1</a>)))
+                  (<a href="ACL2____MV.html">mv</a> left order))
+                 ((when (<a href="COMMON-LISP____EQL.html">eql</a> op (<a href="BED____BED-OP-ARG2.html">bed-op-arg2</a>)))
+                  (<a href="ACL2____MV.html">mv</a> right order))
+                 ((when (<a href="COMMON-LISP____EQL.html">eql</a> op (<a href="BED____BED-OP-NOT2.html">bed-op-not2</a>)))
+                  (<a href="ACL2____MV.html">mv</a> (<a href="BED____MK-NOT.html">mk-not</a> right) order))
+                 ((when (<a href="COMMON-LISP____EQL.html">eql</a> op (<a href="BED____BED-OP-NOT1.html">bed-op-not1</a>)))
+                  (<a href="ACL2____MV.html">mv</a> (<a href="BED____MK-NOT.html">mk-not</a> left) order))
+                 ((<a href="ACL2____MV.html">mv</a> okp order)
+                  (<a href="BED____BED-ORDER.html">bed-order</a> left right order))
+                 ((when (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____EQL.html">eql</a> op (<a href="BED____BED-OP-AND.html">bed-op-and</a>))
+                            (<a href="COMMON-LISP____EQL.html">eql</a> op (<a href="BED____BED-OP-IOR.html">bed-op-ior</a>))
+                            (<a href="COMMON-LISP____EQL.html">eql</a> op (<a href="BED____BED-OP-EQV.html">bed-op-eqv</a>))
+                            (<a href="COMMON-LISP____EQL.html">eql</a> op (<a href="BED____BED-OP-NAND.html">bed-op-nand</a>))
+                            (<a href="COMMON-LISP____EQL.html">eql</a> op (<a href="BED____BED-OP-NOR.html">bed-op-nor</a>))
+                            (<a href="COMMON-LISP____EQL.html">eql</a> op (<a href="BED____BED-OP-XOR.html">bed-op-xor</a>))))
+                  (<a href="ACL2____MV.html">mv</a> (<a href="COMMON-LISP____IF.html">if</a> okp (<a href="BED____MK-OP-RAW.html">mk-op-raw</a> op left right)
+                          (<a href="BED____MK-OP-RAW.html">mk-op-raw</a> op right left))
+                      order))
+                 ((when (<a href="COMMON-LISP____EQL.html">eql</a> op (<a href="BED____BED-OP-ORC1.html">bed-op-orc1</a>)))
+                  (<a href="ACL2____MV.html">mv</a> (<a href="COMMON-LISP____IF.html">if</a> okp (<a href="BED____MK-OP-RAW.html">mk-op-raw</a> op left right)
+                          (<a href="BED____MK-OP-RAW.html">mk-op-raw</a> (<a href="BED____BED-OP-ORC2.html">bed-op-orc2</a>) right left))
+                      order))
+                 ((when (<a href="COMMON-LISP____EQL.html">eql</a> op (<a href="BED____BED-OP-ANDC1.html">bed-op-andc1</a>)))
+                  (<a href="ACL2____MV.html">mv</a> (<a href="COMMON-LISP____IF.html">if</a> okp (<a href="BED____MK-OP-RAW.html">mk-op-raw</a> op left right)
+                          (<a href="BED____MK-OP-RAW.html">mk-op-raw</a> (<a href="BED____BED-OP-ANDC2.html">bed-op-andc2</a>) right left))
+                      order))
+                 ((when (<a href="COMMON-LISP____EQL.html">eql</a> op (<a href="BED____BED-OP-ORC2.html">bed-op-orc2</a>)))
+                  (<a href="ACL2____MV.html">mv</a> (<a href="COMMON-LISP____IF.html">if</a> okp (<a href="BED____MK-OP-RAW.html">mk-op-raw</a> op left right)
+                          (<a href="BED____MK-OP-RAW.html">mk-op-raw</a> (<a href="BED____BED-OP-ORC1.html">bed-op-orc1</a>) right left))
+                      order))
+                 ((when (<a href="COMMON-LISP____EQL.html">eql</a> op (<a href="BED____BED-OP-ANDC2.html">bed-op-andc2</a>)))
+                  (<a href="ACL2____MV.html">mv</a> (<a href="COMMON-LISP____IF.html">if</a> okp (<a href="BED____MK-OP-RAW.html">mk-op-raw</a> op left right)
+                          (<a href="BED____MK-OP-RAW.html">mk-op-raw</a> (<a href="BED____BED-OP-ANDC1.html">bed-op-andc1</a>) right left))
+                      order)))
+                (<a href="ACL2____MV.html">mv</a> (<a href="BED____MK-OP-RAW.html">mk-op-raw</a> op left right) order))))</pre> 
+<p><b>Theorem: </b>bed-eval-of-mk-op-reorder</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> bed-eval-of-mk-op-reorder
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> bed &amp;)
+              (<a href="BED____MK-OP-REORDER.html">mk-op-reorder</a> op left right order)))
+            (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="BED____BED-EVAL.html">bed-eval</a> bed env)
+                   (<a href="BED____BED-EVAL.html">bed-eval</a> (<a href="BED____MK-OP-RAW.html">mk-op-raw</a> op left right)
+                             env))))</pre> 
+
+</body>
+</html>

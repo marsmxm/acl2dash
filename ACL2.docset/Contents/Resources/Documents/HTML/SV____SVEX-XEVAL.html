@@ -1,0 +1,181 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Svex-xeval</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=SV____SVEX-XEVAL">Click for Svex-xeval in the Full Manual</a></h3>
+
+<p>Cheaply detect always-constant bits in an <a href="SV____SVEX.html">svex</a> by 
+approximately evaluating it under the empty (i.e., all X) environment.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(svex-xeval x)  val</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">x</span>  Expression to evaluate.<br><font color="#606060">Guard <span class="v">(<a href="SV____SVEX-P.html">svex-p</a> x)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">val</span>  <font color="#606060">Type <span class="v">(<a href="SV____4VEC-P.html">4vec-p</a> val)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>This is a lightweight way to tell that certain bits of an <a href="SV____SVEX.html">svex</a> expression are actually particular constants, no matter how you bind its 
+variables.  It returns an <a href="SV____4VEC.html">4vec</a> which tells us that certain bits of 
+<span class="v">expr</span> are ``obviously'' constant, and that other bits are not known to be 
+constant.  In particular:</p> 
+ 
+<ul> 
+ 
+<li>Xes indicate that this bit of <span class="v">expr</span> is not obviously constant,</li> 
+ 
+<li>0/1/Z bits indicate that this bit of <span class="v">expr</span> is obviously always 
+0/1/Z.</li> 
+ 
+</ul> 
+ 
+ 
+<h3>Example</h3> 
+ 
+<p>Consider the following expression:</p> 
+ 
+<pre class="code">(bitand (bitor a b) (bitand c #b1000))</pre> 
+ 
+<p>What values can this expression return?  You can see that, regardless of the 
+values of <span class="v">a</span>, <span class="v">b</span>, and <span class="v">c</span>, the resulting <a href="SV____4VEC.html">4vec</a> will always 
+have 0 on its lower 3 bits.  It will also always have 0s on bits 5 and above. 
+But bit 4 will depend on the values of <span class="v">a</span>, <span class="v">b</span>, and <span class="v">c</span>.</p> 
+ 
+<p>When we use <span class="v">svex-xeval</span>, we get:</p> 
+ 
+<pre class="code">(<a href="SV____SVEX-XEVAL.html">svex-xeval</a> '(bitand (bitor a b) (bitand c #b1000))) == (8 . 0)</pre> 
+ 
+<p>Here is the interpretation of the resulting <a href="SV____4VEC.html">4vec</a>, <span class="v">(8 . 0)</span>:</p> 
+ 
+<pre class="code">bits of upper (8) are: 0...01000
+bits of lower (0) are: 0...00000
+---------------------------------
+01ZX interpretation:   0...0X000</pre> 
+ 
+<p>So <span class="v">svex-xeval</span> is telling us that:</p> 
+ 
+<ul> 
+<li>Bit 4 is not known to be always constant.</li> 
+<li>All the other bits are known to be always constant 0.</li> 
+</ul> 
+ 
+ 
+<h3>Implementation</h3> 
+ 
+<p><span class="v">(<a href="SV____SVEX-XEVAL.html">svex-xeval</a> expr)</span> is almost identical to <span class="v">(<a href="SV____SVEX-EVAL.html">svex-eval</a> expr nil)</span>. 
+Recall that, when <a href="SV____SVEX-EVAL.html">svex-eval</a> encounters a variable that isn't bound in 
+the environment, it returns the all Xes vector.  So, when we evaluate <span class="v">expr</span> 
+in the <span class="v">nil</span> environment, it's as if we've bound all of its variables to all 
+Xes.</p> 
+ 
+<p>If all of our <a href="SV____EXPRESSIONS.html">expressions</a> were ``properly monotonic'' and truly 
+treated <span class="v">x</span> bits as unknowns, then the result of <span class="v">(<a href="SV____SVEX-EVAL.html">svex-eval</a> expr nil)</span> 
+would clearly be a conservative approximation of <span class="v">(<a href="SV____SVEX-EVAL.html">svex-eval</a> expr env)</span> for 
+any environment.</p> 
+ 
+<p>This almost works.  However, the case-equality operator <span class="v">===</span> is 
+problematic, because it has a non-monotonic semantics that does not treat X 
+bits as unknown.  As a result, evaluation in the <span class="v">nil</span> environment doesn't 
+really work for what we're trying to do here.  For example:</p> 
+ 
+<pre class="code">(<a href="SV____SVEX-EVAL.html">svex-eval</a> '(=== a b) nil)     --&gt;  -1  (all bits true)</pre> 
+ 
+<p>But obviously this expression isn't always true, for instance:</p> 
+ 
+<pre class="code">(<a href="COMMON-LISP____LET.html">let</a> ((env '((a . 1) (b . 0))))
+  (<a href="SV____SVEX-EVAL.html">svex-eval</a> '(=== a b) env))    --&gt;  0  (all bits false)</pre> 
+ 
+<p>To correct for this, <span class="v">svex-xeval</span> simply interprets <span class="v">===</span> as <span class="v">==</span> 
+instead.  Since <span class="v">==</span> is an ordinary, properly monotonic function, and 
+since it conservatively approximates <span class="v">===</span>, this works out quite well 
+and we get, for instance:</p> 
+ 
+<pre class="code">(<a href="SV____SVEX-XEVAL.html">svex-xeval</a> '(=== a b))  --&gt; all Xes
+(<a href="SV____SVEX-XEVAL.html">svex-xeval</a> '(=== a a))  --&gt; all Xes
+(<a href="SV____SVEX-XEVAL.html">svex-xeval</a> '(=== 0 0))  --&gt; all true</pre> 
+ 
+ 
+ 
+<p><b>Theorem: </b>return-type-of-svex-xeval.val</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> return-type-of-svex-xeval.val
+        (<a href="ACL2____B_A2.html">b*</a> ((?val (<a href="SV____SVEX-XEVAL.html">svex-xeval</a> x)))
+            (<a href="SV____4VEC-P.html">4vec-p</a> val))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>return-type-of-svex-call-xeval.val</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> return-type-of-svex-call-xeval.val
+        (<a href="ACL2____B_A2.html">b*</a> ((?val (<a href="SV____SVEX-CALL-XEVAL.html">svex-call-xeval</a> x)))
+            (<a href="SV____4VEC-P.html">4vec-p</a> val))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>return-type-of-svex-fn/args-xeval.val</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> return-type-of-svex-fn/args-xeval.val
+        (<a href="ACL2____B_A2.html">b*</a> ((?val (<a href="SV____SVEX-FN_F2ARGS-XEVAL.html">svex-fn/args-xeval</a> fn args)))
+            (<a href="SV____4VEC-P.html">4vec-p</a> val))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>return-type-of-svexlist-xeval.val</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> return-type-of-svexlist-xeval.val
+        (<a href="ACL2____B_A2.html">b*</a> ((?val (<a href="SV____SVEXLIST-XEVAL.html">svexlist-xeval</a> x)))
+            (<a href="SV____4VECLIST-P.html">4veclist-p</a> val))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>svex-xeval-of-quote</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> svex-xeval-of-quote
+        (<a href="ACL2____IMPLIES.html">implies</a> (svex-case x :quote)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SV____SVEX-XEVAL.html">svex-xeval</a> x)
+                        (<a href="SV____SVEX-QUOTE-_E3VAL.html">svex-quote-&gt;val</a> x))))</pre> 
+<p><b>Theorem: </b>svex-xeval-of-svex-fix-x</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> svex-xeval-of-svex-fix-x
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SV____SVEX-XEVAL.html">svex-xeval</a> (<a href="SV____SVEX-FIX.html">svex-fix</a> x))
+               (<a href="SV____SVEX-XEVAL.html">svex-xeval</a> x)))</pre> 
+<p><b>Theorem: </b>svex-call-xeval-of-svex-fix-x</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> svex-call-xeval-of-svex-fix-x
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SV____SVEX-CALL-XEVAL.html">svex-call-xeval</a> (<a href="SV____SVEX-FIX.html">svex-fix</a> x))
+               (<a href="SV____SVEX-CALL-XEVAL.html">svex-call-xeval</a> x)))</pre> 
+<p><b>Theorem: </b>svex-fn/args-xeval-of-fnsym-fix-fn</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> svex-fn/args-xeval-of-fnsym-fix-fn
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SV____SVEX-FN_F2ARGS-XEVAL.html">svex-fn/args-xeval</a> (<a href="SV____FNSYM-FIX.html">fnsym-fix</a> fn) args)
+               (<a href="SV____SVEX-FN_F2ARGS-XEVAL.html">svex-fn/args-xeval</a> fn args)))</pre> 
+<p><b>Theorem: </b>svex-fn/args-xeval-of-svexlist-fix-args</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> svex-fn/args-xeval-of-svexlist-fix-args
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SV____SVEX-FN_F2ARGS-XEVAL.html">svex-fn/args-xeval</a> fn (<a href="SV____SVEXLIST-FIX.html">svexlist-fix</a> args))
+               (<a href="SV____SVEX-FN_F2ARGS-XEVAL.html">svex-fn/args-xeval</a> fn args)))</pre> 
+<p><b>Theorem: </b>svexlist-xeval-of-svexlist-fix-x</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> svexlist-xeval-of-svexlist-fix-x
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SV____SVEXLIST-XEVAL.html">svexlist-xeval</a> (<a href="SV____SVEXLIST-FIX.html">svexlist-fix</a> x))
+               (<a href="SV____SVEXLIST-XEVAL.html">svexlist-xeval</a> x)))</pre> 
+<p><b>Theorem: </b>svex-xeval-svex-equiv-congruence-on-x</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> svex-xeval-svex-equiv-congruence-on-x
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="SV____SVEX-EQUIV.html">svex-equiv</a> x x-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SV____SVEX-XEVAL.html">svex-xeval</a> x)
+                        (<a href="SV____SVEX-XEVAL.html">svex-xeval</a> x-equiv)))
+        :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>svex-call-xeval-svex-equiv-congruence-on-x</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> svex-call-xeval-svex-equiv-congruence-on-x
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="SV____SVEX-EQUIV.html">svex-equiv</a> x x-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SV____SVEX-CALL-XEVAL.html">svex-call-xeval</a> x)
+                        (<a href="SV____SVEX-CALL-XEVAL.html">svex-call-xeval</a> x-equiv)))
+        :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>svex-fn/args-xeval-fnsym-equiv-congruence-on-fn</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> svex-fn/args-xeval-fnsym-equiv-congruence-on-fn
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="SV____FNSYM-EQUIV.html">fnsym-equiv</a> fn fn-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SV____SVEX-FN_F2ARGS-XEVAL.html">svex-fn/args-xeval</a> fn args)
+                        (<a href="SV____SVEX-FN_F2ARGS-XEVAL.html">svex-fn/args-xeval</a> fn-equiv args)))
+        :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>svex-fn/args-xeval-svexlist-equiv-congruence-on-args</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> svex-fn/args-xeval-svexlist-equiv-congruence-on-args
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="SV____SVEXLIST-EQUIV.html">svexlist-equiv</a> args args-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SV____SVEX-FN_F2ARGS-XEVAL.html">svex-fn/args-xeval</a> fn args)
+                        (<a href="SV____SVEX-FN_F2ARGS-XEVAL.html">svex-fn/args-xeval</a> fn args-equiv)))
+        :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>svexlist-xeval-svexlist-equiv-congruence-on-x</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> svexlist-xeval-svexlist-equiv-congruence-on-x
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="SV____SVEXLIST-EQUIV.html">svexlist-equiv</a> x x-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SV____SVEXLIST-XEVAL.html">svexlist-xeval</a> x)
+                        (<a href="SV____SVEXLIST-XEVAL.html">svexlist-xeval</a> x-equiv)))
+        :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>svexlist-xeval-nil</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> svexlist-xeval-nil
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SV____SVEXLIST-XEVAL.html">svexlist-xeval</a> nil) nil))</pre> 
+<p><b>Theorem: </b>car-of-svexlist-xeval</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> car-of-svexlist-xeval
+        (<a href="SV____4VEC-EQUIV.html">4vec-equiv</a> (<a href="COMMON-LISP____CAR.html">car</a> (<a href="SV____SVEXLIST-XEVAL.html">svexlist-xeval</a> x))
+                    (<a href="SV____SVEX-XEVAL.html">svex-xeval</a> (<a href="COMMON-LISP____CAR.html">car</a> x))))</pre> 
+<p><b>Theorem: </b>cdr-of-svexlist-xeval</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> cdr-of-svexlist-xeval
+        (<a href="SV____4VECLIST-EQUIV.html">4veclist-equiv</a> (<a href="COMMON-LISP____CDR.html">cdr</a> (<a href="SV____SVEXLIST-XEVAL.html">svexlist-xeval</a> x))
+                        (<a href="SV____SVEXLIST-XEVAL.html">svexlist-xeval</a> (<a href="COMMON-LISP____CDR.html">cdr</a> x))))</pre> 
+<p><b>Theorem: </b>len-of-svexlist-xeval</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> len-of-svexlist-xeval
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____LEN.html">len</a> (<a href="SV____SVEXLIST-XEVAL.html">svexlist-xeval</a> x))
+               (<a href="ACL2____LEN.html">len</a> x)))</pre> 
+<p><b>Theorem: </b>svexlist-xeval-of-append</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> svexlist-xeval-of-append
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SV____SVEXLIST-XEVAL.html">svexlist-xeval</a> (<a href="COMMON-LISP____APPEND.html">append</a> a b))
+               (<a href="COMMON-LISP____APPEND.html">append</a> (<a href="SV____SVEXLIST-XEVAL.html">svexlist-xeval</a> a)
+                       (<a href="SV____SVEXLIST-XEVAL.html">svexlist-xeval</a> b))))</pre> 
+
+</body>
+</html>

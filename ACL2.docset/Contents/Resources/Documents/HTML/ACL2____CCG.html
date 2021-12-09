@@ -1,0 +1,134 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Ccg</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____CCG">Click for Ccg in the Full Manual</a></h3>
+
+<p>A powerful automated termination prover for ACL2</p><p>In order to see how the CCG analysis works, consider the following 
+ definition of Ackermann's function from exercise 6.15 in the ACL2 
+ textbook:</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> ack (x y)
+   (<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2____ZP.html">zp</a> x)
+       1
+     (<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2____ZP.html">zp</a> y)
+         (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> x 1) 2 (<a href="COMMON-LISP_____B2.html">+</a> x 2))
+       (ack (ack (<a href="COMMON-LISP____1-.html">1-</a> x) y) (<a href="COMMON-LISP____1-.html">1-</a> y)))))</pre> 
+ 
+ <p>ACL2 cannot automatically prove the termination of <span class="v">ack</span> using its 
+  measure-based termination proof. In order to admit the function, the user 
+  must supply a measure. An example measure is <span class="v">(<a href="ACL2____MAKE-ORD.html">make-ord</a> 1 (<a href="COMMON-LISP____1_B2.html">1+</a> (acl2s-size
+  y)) (acl2s-size x))</span>, which is equivalent to the ordinal <span class="v">w * (<a href="COMMON-LISP____1_B2.html">1+</a>
+  (acl2s-size y)) + (acl2s-size x)</span>, where <span class="v">w</span> is the first infinite 
+  ordinal.</p> 
+ 
+ <p>The CCG analysis, on the other hand, automatically proves termination as 
+ follows. Note that there are two recursive calls. These calls, along with 
+ their rulers (i.e. the conditions under which the recursive call is reached) 
+ are called <i>calling contexts</i>, or sometimes just <i>contexts</i> (for 
+ more on rulers, see <a href="ACL2____RULER-EXTENDERS.html">ruler-extenders</a>). For <span class="v">ack</span>, these are:</p> 
+ 
+ <pre class="code">1. (ack (<a href="COMMON-LISP____1-.html">1-</a> x) y) with ruler ((<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____ZP.html">zp</a> x)) (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____ZP.html">zp</a> y))).
+2. (ack (ack (<a href="COMMON-LISP____1-.html">1-</a> x) y) (<a href="COMMON-LISP____1-.html">1-</a> y)) with ruler ((<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____ZP.html">zp</a> x)) (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____ZP.html">zp</a> y))).</pre> 
+ 
+ <p>These calling contexts are used to build a <i>calling context graph 
+ (CCG)</i>, from which our analysis derives its name. This graph has an edge 
+ from context <span class="v">c1</span> to context <span class="v">c2</span> when it is possible that execution can 
+ move from context <span class="v">c1</span> to context <span class="v">c2</span> in one ``step'' (i.e. without 
+ visiting any other contexts). For our example, we get the complete graph, with 
+ edges from each context to both contexts.</p> 
+ 
+ <p>The analysis next attempts to guess <i>calling context measures (CCMs)</i>, 
+ or just <i>measures</i>, for each function. These are similar to ACL2 
+ measures, in that they are ACL2 terms that must provably be able to evaluate 
+ to an ordinal value (unlike ACL2 measures, CCG currently ignores the current 
+ well-founded relation setting). However, functions may have multiple CCMs, 
+ instead of one, like ACL2, and the CCG analysis has some more sophisticated 
+ heuristics for guessing appropriate measures. However, there is a mechanism 
+ for supplying measures to the CCG analysis if you need to see <a href="ACL2____CCG-XARGS.html">ccg-xargs</a>. In our example, the CCG analysis will guess the measures 
+ <span class="v">(acl2s-size x)</span>, <span class="v">(acl2s-size y)</span>, and <span class="v">(<a href="COMMON-LISP_____B2.html">+</a> (acl2s-size x) (acl2s-size
+ y))</span>. This last one turns out to be unimportant for the termination 
+ proof. However, note that the first two of these measures are components of 
+ the ordinal measure that we gave ACL2 to prove termination earlier. As one 
+ might guess, these are important for the success of our CCG analysis.</p> 
+ 
+ <p>Like ACL2's measure analysis, we are concerned with what happens to these 
+ values when a recursive call is made. However, we are concerned not just with 
+ decreasing measures, but also non-increasing measures. Thus, we construct 
+ <i>Calling Context Measure Functions (CCMFs)</i>, which tell us how one 
+ measure compares to another across recursive calls.</p> 
+ 
+ <p>In our example, note that when the recursive call of the context 1 is made, 
+ the new value of <span class="v">(acl2s-size x)</span> is less than the original value of 
+ <span class="v">(acl2s-size x)</span>. More formally, we can prove the following:</p> 
+ 
+ <pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____ZP.html">zp</a> x))
+              (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____ZP.html">zp</a> y)))
+         (<a href="ACL2____O_C3.html">o&lt;</a> (acl2s-size (<a href="COMMON-LISP____1-.html">1-</a> x))
+             (acl2s-size x)))</pre> 
+ 
+ <p>For those of you that are familiar with measure-based termination proofs in 
+ ACL2, this should look familiar, as it has the same structure as such a 
+ termination proof. However, we also note the following trivial 
+ observation:</p> 
+ 
+ <pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____ZP.html">zp</a> x))
+              (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____ZP.html">zp</a> y)))
+         (<a href="ACL2____O_C3_D3.html">o&lt;=</a> (acl2s-size y)
+              (acl2s-size y)))</pre> 
+ 
+ <p>That is, <span class="v">y</span> stays the same across this recursive call. For the other 
+ context, we similarly note that <span class="v">(acl2s-size y)</span> is decreasing. However, we 
+ can say nothing about the value of <span class="v">(acl2s-size x)</span>. The CCG algorithm does 
+ this analysis using queries to the theorem prover that are carefully 
+ restricted to limit prover time.</p> 
+ 
+ <p>Finally, the CCG analysis uses this local information to do a global 
+ analysis of what happens to values. This analysis asks the question, for every 
+ infinite path through our CCG, <span class="v">c_1</span>, <span class="v">c_2</span>, <span class="v">c_3</span>, ..., is there a 
+ natural number <span class="v">N</span> such that there is an infinite sequence of measures 
+ <span class="v">m_N</span>, <span class="v">m_(N+1)</span>, <span class="v">m_(N+2)</span>, ... such that each <span class="v">m_i</span> is a measure 
+ for the context <span class="v">c_i</span> (i.e. a measure for the function containing <span class="v">ci</span>), 
+ we have proven that the <span class="v">m_(i+1)</span> is never larger than <span class="v">m_i</span>, and for 
+ infinitely many <span class="v">i</span>, it is the case that we have proven that <span class="v">m_i</span> is 
+ always larger than <span class="v">m_(i+)</span>. That's a bit of a mouthful, but what we are 
+ essentially saying is that, for every possible infinite sequence of recursions 
+ it is the case that after some finite number of steps, we can start picking 
+ out measures such that they never increase and infinitely often they 
+ decrease. Since these measures return ordinal values, we then know that there 
+ can be no infinite recursions, and we are done.</p> 
+ 
+ <p>For our example, consider two kinds of infinite paths through our CCG: 
+ those that visit context 2 infinitely often, and those that don't. In the 
+ first case, we know that <span class="v">(acl2s-size y)</span> is never increasing, since a 
+ visit to context 1 does not change the value of <span class="v">y</span>, and a visit to context 
+ 2 decreases the value of <span class="v">(acl2s-size y)</span>. Furthermore, since we visit 
+ context 2 infinitely often, we know that <span class="v">(acl2s-size y)</span> is infinitely 
+ decreasing along this path. Therefore, we have met the criteria for proving no 
+ such path is a valid computation. In the case in which we do not visit context 
+ 2 infinitely often, there must be a value <span class="v">N</span> such that we do not visit 
+ context 2 any more after the <span class="v">N</span>th context in the path. After this, we must 
+ only visit context 1, which always decreases the value of <span class="v">(acl2s-size
+ x)</span>. Therefore, no such path can be a valid computation. Since all infinite 
+ paths through our CCG either visit context 2 infinitely often or not, we have 
+ proven termination. This analysis of the local data in the global context is 
+ done automatically by a decision procedure.</p> 
+ 
+ <p>That is a brief overview of the CCG analysis. Note that, can it prove many 
+ functions terminating that ACL2 cannot. It also does so using simpler 
+ measures. In the <span class="v">ack</span> example, we did not require any infinite ordinal 
+ measures to prove termination using CCG. Intuitively, CCG is in a way putting 
+ together the measures for you so you don't have to think about the ordinal 
+ structure. Thus, even when the CCG analysis to prove termination, it is often 
+ easier to give it multiple simple measures and allow it to put together the 
+ global termination argument than to give ACL2 the entire measure so it can 
+ prove that it decreases every single step.</p> 
+ 
+ <p>To find out more about interacting and controlling the CCG analysis, see 
+ the topics included in this section.</p>
+</body>
+</html>

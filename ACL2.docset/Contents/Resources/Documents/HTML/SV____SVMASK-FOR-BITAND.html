@@ -1,0 +1,115 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Svmask-for-bitand</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=SV____SVMASK-FOR-BITAND">Click for Svmask-for-bitand in the Full Manual</a></h3>
+
+<p>Implements <a href="SV____SVEX-ARGMASKS.html">svex-argmasks</a> for <span class="v">BITAND</span>.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(svmask-for-bitand mask args)  argmasks</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">mask</span>  Care mask for the full expression.<br><font color="#606060">Guard <span class="v">(<a href="SV____4VMASK-P.html">4vmask-p</a> mask)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">args</span>  Arguments to this <span class="v">BITAND</span> operator.<br><font color="#606060">Guard <span class="v">(<a href="SV____SVEXLIST-P.html">svexlist-p</a> args)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">argmasks</span>  The new care masks inferred for the <span class="v">args</span>.<br><font color="#606060">Type <span class="v">(<a href="SV____4VMASKLIST-P.html">4vmasklist-p</a> argmasks)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>We are considering a <span class="v">(bitand x y)</span> expression and we know that 
+we only care about the bits mentioned in <span class="v">mask</span>.  We want to figure out 
+which bits of X and Y we care about.  As a starting point, since bitwise AND 
+operates in a bit-by-bit fashion, we certainly don't care about any bits that 
+are don't cares in our outer <span class="v">mask</span>.  But we can do better than that.</p> 
+ 
+<p>For any particular bit of <span class="v">x</span>, if we can tell that the corresponding bit 
+of <span class="v">y</span> is zero, then we know that the resulting bit from the AND is going to 
+be 0, so this bit of X doesn't matter.  The basic idea here, then, is to 
+improve <span class="v">mask</span> for <span class="v">x</span> by taking away any bits of <span class="v">y</span> that we can tell 
+are zero.  Symmetrically, we can take improve <span class="v">mask</span> for <span class="v">y</span> by taking 
+away any bits of <span class="v">x</span> that are known to be zero.</p> 
+ 
+<p>Well, almost.  What if we know that bit 4 of <span class="v">x</span> is zero AND that bit 4 
+of <span class="v">y</span> is zero.  We can't just mark bit 4 as a don't care in both arguments, 
+because we need to keep at least one zero or the other.  This leads to a 
+certain kind of asymmetry, and leaves us with some choice regarding which 
+argument we want to mask more aggressively.</p> 
+ 
+<p>We don't currently try very hard to make any kind of sensible choice here. 
+Instead, as a rather arbitrary default, we normally mask <span class="v">y</span> more 
+aggressively than <span class="v">x</span>.  However, as a special exception, if <span class="v">y</span> is 
+entirely constant under the outer mask, then we will mask <span class="v">x</span> more 
+aggressively.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>svmask-for-bitand</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ svmask-for-bitand (mask args)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="SV____4VMASK-P.html">4vmask-p</a> mask)
+                             (<a href="SV____SVEXLIST-P.html">svexlist-p</a> args))))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'svmask-for-bitand))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+   (((svex-nths x y) args)
+    (mask (<a href="SV____4VMASK-FIX.html">4vmask-fix</a> mask)))
+   (<a href="ACL2____B_A2.html">b*</a>
+     (((<a href="SV____S4VEC.html">s4vec</a> xval) (<a href="SV____SVEX-S4XEVAL.html">svex-s4xeval</a> x))
+      ((<a href="SV____S4VEC.html">s4vec</a> yval) (<a href="SV____SVEX-S4XEVAL.html">svex-s4xeval</a> y))
+      (x-zero (<a href="BITOPS____SPARSEINT-BITNOR.html">sparseint-bitnor</a> xval.upper xval.lower))
+      (y-zero (<a href="BITOPS____SPARSEINT-BITNOR.html">sparseint-bitnor</a> yval.upper yval.lower))
+      (shared-zeros
+           (<a href="BITOPS____SPARSEINT-BITAND.html">sparseint-bitand</a> x-zero (<a href="BITOPS____SPARSEINT-BITAND.html">sparseint-bitand</a> y-zero mask)))
+      (xm-nonzero (<a href="BITOPS____SPARSEINT-BITANDC2.html">sparseint-bitandc2</a> mask x-zero))
+      (ym-nonzero (<a href="BITOPS____SPARSEINT-BITANDC2.html">sparseint-bitandc2</a> mask y-zero))
+      ((when (<a href="BITOPS____SPARSEINT-EQUAL.html">sparseint-equal</a> 0 shared-zeros))
+       (<a href="COMMON-LISP____LIST.html">list</a> ym-nonzero xm-nonzero))
+      (y-x (<a href="BITOPS____SPARSEINT-BITANDC2.html">sparseint-bitandc2</a> yval.upper yval.lower))
+      (ym-x (<a href="BITOPS____SPARSEINT-TEST-BITAND.html">sparseint-test-bitand</a> mask y-x))
+      ((unless ym-x)
+       (<a href="COMMON-LISP____LIST.html">list</a> ym-nonzero
+             (<a href="BITOPS____SPARSEINT-BITOR.html">sparseint-bitor</a> xm-nonzero shared-zeros))))
+     (<a href="COMMON-LISP____LIST.html">list</a> (<a href="BITOPS____SPARSEINT-BITOR.html">sparseint-bitor</a> ym-nonzero shared-zeros)
+           xm-nonzero)))))</pre> 
+<p><b>Theorem: </b>4vmasklist-p-of-svmask-for-bitand</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> 4vmasklist-p-of-svmask-for-bitand
+        (<a href="ACL2____B_A2.html">b*</a> ((argmasks (<a href="SV____SVMASK-FOR-BITAND.html">svmask-for-bitand</a> mask args)))
+            (<a href="SV____4VMASKLIST-P.html">4vmasklist-p</a> argmasks))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>svmask-for-bitand-of-4vmask-fix-mask</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> svmask-for-bitand-of-4vmask-fix-mask
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SV____SVMASK-FOR-BITAND.html">svmask-for-bitand</a> (<a href="SV____4VMASK-FIX.html">4vmask-fix</a> mask)
+                                  args)
+               (<a href="SV____SVMASK-FOR-BITAND.html">svmask-for-bitand</a> mask args)))</pre> 
+<p><b>Theorem: </b>svmask-for-bitand-4vmask-equiv-congruence-on-mask</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> svmask-for-bitand-4vmask-equiv-congruence-on-mask
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="SV____4VMASK-EQUIV.html">4vmask-equiv</a> mask mask-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SV____SVMASK-FOR-BITAND.html">svmask-for-bitand</a> mask args)
+                        (<a href="SV____SVMASK-FOR-BITAND.html">svmask-for-bitand</a> mask-equiv args)))
+        :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>svmask-for-bitand-of-svexlist-fix-args</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> svmask-for-bitand-of-svexlist-fix-args
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SV____SVMASK-FOR-BITAND.html">svmask-for-bitand</a> mask (<a href="SV____SVEXLIST-FIX.html">svexlist-fix</a> args))
+               (<a href="SV____SVMASK-FOR-BITAND.html">svmask-for-bitand</a> mask args)))</pre> 
+<p><b>Theorem: </b>svmask-for-bitand-svexlist-equiv-congruence-on-args</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> svmask-for-bitand-svexlist-equiv-congruence-on-args
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="SV____SVEXLIST-EQUIV.html">svexlist-equiv</a> args args-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SV____SVMASK-FOR-BITAND.html">svmask-for-bitand</a> mask args)
+                        (<a href="SV____SVMASK-FOR-BITAND.html">svmask-for-bitand</a> mask args-equiv)))
+        :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>svmask-for-bitand-correct</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ svmask-for-bitand-correct
+ (<a href="ACL2____IMPLIES.html">implies</a>
+    (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SV____4VECLIST-MASK.html">4veclist-mask</a> (<a href="SV____SVMASK-FOR-BITAND.html">svmask-for-bitand</a> mask args)
+                               (<a href="SV____SVEXLIST-EVAL.html">svexlist-eval</a> args env))
+                (<a href="SV____4VECLIST-MASK.html">4veclist-mask</a> (<a href="SV____SVMASK-FOR-BITAND.html">svmask-for-bitand</a> mask args)
+                               args1))
+         (<a href="ACL2____SYNTAXP.html">syntaxp</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> args1
+                              (<a href="COMMON-LISP____CONS.html">cons</a> 'svexlist-eval
+                                    (<a href="COMMON-LISP____CONS.html">cons</a> args (<a href="COMMON-LISP____CONS.html">cons</a> env 'nil)))))))
+    (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SV____4VEC-MASK.html">4vec-mask</a> mask (<a href="SV____SVEX-APPLY.html">svex-apply</a> 'bitand args1))
+           (<a href="SV____4VEC-MASK.html">4vec-mask</a> mask
+                      (<a href="SV____SVEX-APPLY.html">svex-apply</a> 'bitand
+                                  (<a href="SV____SVEXLIST-EVAL.html">svexlist-eval</a> args env))))))</pre> 
+
+</body>
+</html>

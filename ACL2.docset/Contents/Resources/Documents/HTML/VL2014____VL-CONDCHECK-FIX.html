@@ -1,0 +1,113 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Vl-condcheck-fix</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL2014____VL-CONDCHECK-FIX">Click for Vl-condcheck-fix in the Full Manual</a></h3>
+
+<p>Canonicalize an test expression for condcheck.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(vl-condcheck-fix x)  new-x</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">x</span>  <font color="#606060">Guard <span class="v">(<a href="VL2014____VL-EXPR-P.html">vl-expr-p</a> x)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">new-x</span>  <font color="#606060">Type <span class="v">(<a href="VL2014____VL-EXPR-P.html">vl-expr-p</a> new-x)</span>, given the <a href="ACL2____GUARD.html">guard</a>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>We fix X (in the normal sense of <a href="VL2014____VL-EXPR-STRIP.html">vl-expr-strip</a>, to throw away 
+widths, attributes, etc., to facilitate equality checking), and then do certain 
+kinds of not-necessarily-sound rewriting to try to further canonicalize things. 
+These rewrites might possibly help us recognize a broader class of errors, but 
+probably aren't super important.</p> 
+ 
+<pre class="code">!A     --&gt; ~A               unsound, but sort of valid for one-bit ops
+
+A != B --&gt; ~(A == B)        and we sort the args
+A ~^ B --&gt; A == B           unsound, but sort of valid for one-bit ops
+A ^ B  --&gt; ~(A == B)        unsound, but sort of valid for one-bit ops
+
+A &lt; B  --&gt; ~(A &gt;= B)
+A &gt; B  --&gt; ~(B &gt;= A)
+A &lt;= B --&gt; B &gt;= A</pre> 
+ 
+<p>We also put arguments of commutative operators into <a href="ACL2_____C3_C3.html">&lt;&lt;</a> order.  Note 
+that we only apply these rewrites at the top-level and not in any deep way, 
+which also sort of makes sense since we only want to assume that the top-level 
+expression is one-bit wide.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>vl-condcheck-fix</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ vl-condcheck-fix (x)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-EXPR-P.html">vl-expr-p</a> x)))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'vl-condcheck-fix))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+   ((x (<a href="VL2014____VL-EXPR-STRIP.html">vl-expr-strip</a> x))
+    ((when (vl-fast-atom-p x)) x)
+    (op (<a href="VL2014____VL-NONATOM-_E3OP.html">vl-nonatom-&gt;op</a> x))
+    (<a href="ACL2____ARGS.html">args</a> (<a href="VL2014____VL-NONATOM-_E3ARGS.html">vl-nonatom-&gt;args</a> x))
+    ((when (<a href="COMMON-LISP____EQ.html">eq</a> op :vl-unary-lognot))
+     (<a href="VL2014____CHANGE-VL-NONATOM.html">change-vl-nonatom</a> x
+                        :op :vl-unary-bitnot))
+    ((when (<a href="COMMON-LISP____EQ.html">eq</a> op :vl-binary-neq))
+     (<a href="VL2014____MAKE-VL-NONATOM.html">make-vl-nonatom</a>
+      :op :vl-unary-bitnot
+      :args
+      (<a href="COMMON-LISP____LIST.html">list</a>
+        (<a href="VL2014____CHANGE-VL-NONATOM.html">change-vl-nonatom</a> x
+                           :op :vl-binary-eq
+                           :args (<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2_____C3_C3.html">&lt;&lt;</a> (<a href="COMMON-LISP____FIRST.html">first</a> args) (<a href="COMMON-LISP____SECOND.html">second</a> args))
+                                     args (<a href="ACL2____REV.html">rev</a> args))))))
+    ((when (<a href="COMMON-LISP____EQ.html">eq</a> op :vl-binary-xnor))
+     (<a href="VL2014____CHANGE-VL-NONATOM.html">change-vl-nonatom</a> x
+                        :op :vl-binary-eq
+                        :args (<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2_____C3_C3.html">&lt;&lt;</a> (<a href="COMMON-LISP____FIRST.html">first</a> args) (<a href="COMMON-LISP____SECOND.html">second</a> args))
+                                  args (<a href="ACL2____REV.html">rev</a> args))))
+    ((when (<a href="COMMON-LISP____EQ.html">eq</a> op :vl-binary-xor))
+     (<a href="VL2014____MAKE-VL-NONATOM.html">make-vl-nonatom</a>
+      :op :vl-unary-bitnot
+      :args
+      (<a href="COMMON-LISP____LIST.html">list</a>
+        (<a href="VL2014____CHANGE-VL-NONATOM.html">change-vl-nonatom</a> x
+                           :op :vl-binary-eq
+                           :args (<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2_____C3_C3.html">&lt;&lt;</a> (<a href="COMMON-LISP____FIRST.html">first</a> args) (<a href="COMMON-LISP____SECOND.html">second</a> args))
+                                     args (<a href="ACL2____REV.html">rev</a> args))))))
+    ((when (<a href="COMMON-LISP____EQ.html">eq</a> op :vl-binary-lt))
+     (<a href="VL2014____MAKE-VL-NONATOM.html">make-vl-nonatom</a>
+          :op :vl-unary-bitnot
+          :args (<a href="COMMON-LISP____LIST.html">list</a> (<a href="VL2014____CHANGE-VL-NONATOM.html">change-vl-nonatom</a> x
+                                         :op :vl-binary-gte))))
+    ((when (<a href="COMMON-LISP____EQ.html">eq</a> op :vl-binary-gt))
+     (<a href="VL2014____MAKE-VL-NONATOM.html">make-vl-nonatom</a>
+          :op :vl-unary-bitnot
+          :args (<a href="COMMON-LISP____LIST.html">list</a> (<a href="VL2014____CHANGE-VL-NONATOM.html">change-vl-nonatom</a> x
+                                         :op :vl-binary-gte
+                                         :args (<a href="ACL2____REV.html">rev</a> args)))))
+    ((when (<a href="COMMON-LISP____EQ.html">eq</a> op :vl-binary-lte))
+     (<a href="VL2014____CHANGE-VL-NONATOM.html">change-vl-nonatom</a> x
+                        :op :vl-binary-gte
+                        :args (<a href="ACL2____REV.html">rev</a> args)))
+    ((when
+        (<a href="COMMON-LISP____MEMBER.html">member</a>
+             op
+             '(:vl-binary-plus :vl-binary-times
+                               :vl-binary-ceq :vl-binary-cne
+                               :vl-binary-logand :vl-binary-logor
+                               :vl-binary-bitand :vl-binary-bitor)))
+     (<a href="VL2014____CHANGE-VL-NONATOM.html">change-vl-nonatom</a> x
+                        :args (<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2_____C3_C3.html">&lt;&lt;</a> (<a href="COMMON-LISP____FIRST.html">first</a> args) (<a href="COMMON-LISP____SECOND.html">second</a> args))
+                                  args (<a href="ACL2____REV.html">rev</a> args)))))
+   x)))</pre> 
+<p><b>Theorem: </b>vl-expr-p-of-vl-condcheck-fix</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-expr-p-of-vl-condcheck-fix
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____FORCE.html">force</a> (<a href="VL2014____VL-EXPR-P.html">vl-expr-p</a> x)))
+                 (<a href="ACL2____B_A2.html">b*</a> ((new-x (<a href="VL2014____VL-CONDCHECK-FIX.html">vl-condcheck-fix</a> x)))
+                     (<a href="VL2014____VL-EXPR-P.html">vl-expr-p</a> new-x)))
+        :rule-classes :rewrite)</pre> 
+
+</body>
+</html>

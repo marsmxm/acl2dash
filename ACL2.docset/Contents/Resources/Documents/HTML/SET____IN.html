@@ -1,0 +1,95 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>In</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=SET____IN">Click for In in the Full Manual</a></h3>
+
+<p><span class="tt">(in a x)</span> determines if <span class="v">a</span> is a member of the set <span class="v">X</span>.</p><p>The logical definition of <span class="v">in</span> makes no mention of the set 
+order, except implicitly by the use of the set <a href="SET____PRIMITIVES.html">primitives</a> like <a href="SET____HEAD.html">head</a> and <a href="SET____TAIL.html">tail</a>.</p> 
+ 
+<p>The :exec version just inlines the set primitives and does one level of loop 
+unrolling.  On CCL, it seems to run about 2.6x faster on the following 
+loop:</p> 
+ 
+<pre class="code">;; 4.703 sec logic, 1.811 sec exec
+(<a href="COMMON-LISP____LET.html">let</a> ((big-set (loop for i from 1 to 100000 collect i)))
+  (<a href="ACL2____GC_42.html">gc$</a>)
+  (time (loop for i fixnum from 1 to 30000 do (<a href="SET____IN.html">set::in</a> i big-set))))</pre> 
+ 
+<p>There are other ways we could optimize <span class="v">in</span>.  Since the set is ordered, 
+we could try to use the set order <a href="ACL2_____C3_C3.html">&lt;&lt;</a> to stop early when we ran into an 
+element that is larger than the one we are looking for.  For instance, when 
+looking for 1 in the set '(2 3 4), we know that since <span class="v">1 &lt;&lt; 2</span> that <span class="v">1</span> 
+cannot be a member of this set.</p> 
+ 
+<p>The simplest way to do this is to use <span class="v">&lt;&lt;</span> at every element.  But set 
+order comparisons can be very expensive, especially when sets contain large 
+cons structures.  So while it is easy to contrive situations where exploiting 
+the order would be advantageous, like</p> 
+ 
+<pre class="code">(<a href="SET____IN.html">in</a> 1 '(2 3 4 .... 100000))</pre> 
+ 
+<p>where we could return instantly, there are also times where it would be 
+slower.  For instance, on</p> 
+ 
+<pre class="code">(<a href="SET____IN.html">in</a> 100001 '(1 2 3 4 ... 100000))</pre> 
+ 
+<p>we would incur the extra cost of 100,000 calls to <span class="v">&lt;&lt;</span>.</p> 
+ 
+<p>For this reason, we do not currently implement any short-circuiting.  The 
+reasoning is:</p> 
+ 
+<ul> 
+ 
+<li>it is not clear which would be faster in all cases,</li> 
+ 
+<li>it is not clear what the typical usage behavior of <span class="v">in</span> is, so even if 
+we wanted to benchmark alternate implementations, it may be hard to come up 
+with the right benchmarking suite</li> 
+ 
+<li>both solutions are O(n) anyway, and <span class="v">in</span> isn't a function that should 
+probably be used in any kind of loop so its performance shouldn't be especially 
+critical to anything</li> 
+ 
+<li>the current method is arguably no less efficient than an unordered 
+implementation.</li> 
+ 
+</ul> 
+ 
+<p>Future note.  In principle membership in an ordered list might be done in 
+<span class="v">O(log_2 n)</span>.  We are considering using a <i>galloping</i> membership check 
+in the future to obtain something along these lines.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>in</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> in (a x)
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="SET____SETP.html">setp</a> x)))
+       (<a href="ACL2____MBE.html">mbe</a> :logic (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="SET____EMPTY.html">empty</a> x))
+                        (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> a (<a href="SET____HEAD.html">head</a> x)) (<a href="SET____IN.html">in</a> a (<a href="SET____TAIL.html">tail</a> x))))
+            :exec (<a href="COMMON-LISP____AND.html">and</a> x
+                       (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> a (<a href="COMMON-LISP____CAR.html">car</a> x))
+                           (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____CDR.html">cdr</a> x)
+                                (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> a (<a href="COMMON-LISP____CADR.html">cadr</a> x))
+                                    (<a href="SET____IN.html">in</a> a (<a href="COMMON-LISP____CDDR.html">cddr</a> x))))))))</pre> 
+<p><b>Theorem: </b>in-type</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> in-type
+        (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SET____IN.html">in</a> a x) t)
+            (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SET____IN.html">in</a> a x) nil))
+        :rule-classes :type-prescription)</pre> 
+<p><b>Theorem: </b>not-in-self</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> not-in-self (<a href="COMMON-LISP____NOT.html">not</a> (<a href="SET____IN.html">in</a> x x)))</pre> 
+<p><b>Theorem: </b>in-sfix-cancel</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> in-sfix-cancel
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SET____IN.html">in</a> a (<a href="SET____SFIX.html">sfix</a> x)) (<a href="SET____IN.html">in</a> a x)))</pre> 
+<p><b>Theorem: </b>never-in-empty</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> never-in-empty
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="SET____EMPTY.html">empty</a> x) (<a href="COMMON-LISP____NOT.html">not</a> (<a href="SET____IN.html">in</a> a x))))</pre> 
+<p><b>Theorem: </b>in-set</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> in-set (<a href="ACL2____IMPLIES.html">implies</a> (<a href="SET____IN.html">in</a> a x) (<a href="SET____SETP.html">setp</a> x)))</pre> 
+<p><b>Theorem: </b>in-tail</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> in-tail
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="SET____IN.html">in</a> a (<a href="SET____TAIL.html">tail</a> x)) (<a href="SET____IN.html">in</a> a x)))</pre> 
+<p><b>Theorem: </b>in-tail-or-head</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> in-tail-or-head
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="SET____IN.html">in</a> a x) (<a href="COMMON-LISP____NOT.html">not</a> (<a href="SET____IN.html">in</a> a (<a href="SET____TAIL.html">tail</a> x))))
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SET____HEAD.html">head</a> x) a)))</pre> 
+<p><b>Theorem: </b>in-head</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> in-head
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SET____IN.html">in</a> (<a href="SET____HEAD.html">head</a> x) x) (<a href="COMMON-LISP____NOT.html">not</a> (<a href="SET____EMPTY.html">empty</a> x))))</pre> 
+
+</body>
+</html>

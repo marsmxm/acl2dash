@@ -1,0 +1,112 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>7. Proving Coverage</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=GL____7._02Proving_02Coverage">Click for 7. Proving Coverage in the Full Manual</a></h3>
+
+<p></p> 
+ 
+<p>There are really two parts to any GL theorem.  First, we need to 
+symbolically execute the goal formula and ensure it cannot evaluate to 
+<span class="v">nil</span>.  But in addition to this, we must ensure that the objects we use to 
+represent the variables of the theorem cover all the cases that satisfy the 
+hypothesis.  This part of the proof is called the <b>coverage 
+obligation</b>.</p> 
+ 
+<p>For <span class="v">fast-logcount-32-correct</span>, the coverage obligation is to show that 
+our binding for <span class="v">x</span> is able to represent every integer from 0 to <span class="v">2^32 -
+1</span>.  This is true of <span class="v">Xinit</span>, and the coverage proof goes through 
+automatically.</p> 
+ 
+<p>But suppose we forget that <span class="v">:g-integer</span>s use a signed representation, and 
+attempt to prove <span class="v">fast-logcount-32-correct</span> using the following (incorrect) 
+g-bindings.</p> 
+ 
+<pre class="code">:g-bindings `((x ,(<a href="GL____G-INT.html">g-int</a> 0 1 32)))</pre> 
+ 
+<p>This looks like a 32-bit integer, but because of the sign bit it does not cover 
+the intended unsigned range.  If we submit the <a href="ACL2____DEF-GL-THM.html">def-gl-thm</a> command 
+with these bindings, the symbolic execution part of the proof is still successful. 
+But this execution has only really shown the goal holds for 31-bit unsigned 
+integers, so <a href="ACL2____DEF-GL-THM.html">def-gl-thm</a> prints the message</p> 
+ 
+<pre class="code">ERROR: Coverage proof appears to have failed.</pre> 
+ 
+<p>and leaves us with a failed subgoal,</p> 
+ 
+<pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> x)
+              (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> 0 x)
+              (<a href="COMMON-LISP_____C3.html">&lt;</a> x 4294967296))
+         (<a href="COMMON-LISP_____C3.html">&lt;</a> x 2147483648))</pre> 
+ 
+<p>This goal is clearly not provable: we are trying to show <span class="v">x</span> must be less 
+than <span class="v">2^31</span> (from our <span class="v">:g-bindings</span>) whenever it is less than 
+<span class="v">2^32</span> (from the hypothesis).</p> 
+ 
+<p>Usually when the <span class="v">:g-bindings</span> are correct, the coverage proof will be 
+automatic, so if you see that a coverage proof has failed, the first thing to 
+do is check whether your bindings are really sufficient.</p> 
+ 
+<p>On the other hand, proving coverage is undecidable in principle, so 
+sometimes GL will fail to prove coverage even though the bindings are 
+appropriate.  For these cases, there are some keyword arguments to <a href="ACL2____DEF-GL-THM.html">def-gl-thm</a> that may help coverage proofs succeed.</p> 
+ 
+<p>First, as a practical matter, GL does the symbolic execution part of the 
+proof <b>before</b> trying to prove coverage.  This can get in the way of 
+debugging coverage proofs when the symbolic execution takes a long time.  You 
+can use <span class="v">:test-side-goals t</span> to have GL skip the symbolic execution and go 
+straight to the coverage proof.  Of course, no <a href="ACL2____DEFTHM.html">defthm</a> is produced when 
+this option is used.</p> 
+ 
+<p>By default, our coverage proof strategy uses a restricted set of rules and 
+ignores the current theory.  It heuristically expands functions in the 
+hypothesis and throws away terms that seem irrelevant.  When this strategy 
+fails, it is usually for one of two reasons.</p> 
+ 
+<ol> 
+ 
+<li>The heuristics expand too many terms and overwhelm ACL2.  GL tries to avoid 
+this by throwing away irrelevant terms, but sometimes this approach is 
+insufficient.  It may be helpful to disable the expansion of functions that are 
+not important for proving coverage.  The <span class="v">:do-not-expand</span> argument allows 
+you to list functions that should not be expanded.</li> 
+ 
+<li>The heuristics throw away a necessary hypothesis, leading to unprovable 
+goals.  GL's coverage proof strategy tries to show that the binding for each 
+variable is sufficient, one variable at a time.  During this process it throws 
+away hypotheses that do not mention the variable, but in some cases this can be 
+inappropriate.  For instance, suppose the following is a coverage goal for 
+<span class="v">b</span>: 
+ 
+<pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____NATP.html">natp</a> a)
+              (<a href="ACL2____NATP.html">natp</a> b)
+              (<a href="COMMON-LISP_____C3.html">&lt;</a> a (<a href="COMMON-LISP____EXPT.html">expt</a> 2 15))
+              (<a href="COMMON-LISP_____C3.html">&lt;</a> b a))
+         (<a href="COMMON-LISP_____C3.html">&lt;</a> b (<a href="COMMON-LISP____EXPT.html">expt</a> 2 15)))</pre> 
+ 
+Here, throwing away the terms that don't mention <span class="v">b</span> will cause the proof to 
+fail.  A good way to avoid this problem is to separate type and size hypotheses 
+from more complicated assumptions that are not important for proving coverage, 
+along these lines: 
+ 
+<pre class="code">(<a href="ACL2____DEF-GL-THM.html">def-gl-thm</a> my-theorem
+  :hyp (<a href="COMMON-LISP____AND.html">and</a> (type-assms-1 x)
+            (type-assms-2 y)
+            (type-assms-3 z)
+            (complicated-non-type-assms x y z))
+  :concl ...
+  :g-bindings ...
+  :do-not-expand '(complicated-non-type-assms))</pre> 
+ 
+</li> 
+</ol> 
+ 
+<p>For more control, you can also use the <span class="v">:cov-theory-add</span> argument to 
+enable additional rules during the coverage proof, e.g., <span class="v">:cov-theory-add
+'(type-rule1 type-rule2)</span>.</p>
+</body>
+</html>

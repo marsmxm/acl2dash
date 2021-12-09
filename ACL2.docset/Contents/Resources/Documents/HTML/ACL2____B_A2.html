@@ -1,0 +1,373 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>B*</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____B_A2">Click for B* in the Full Manual</a></h3>
+
+<p>The <span class="v">b*</span> macro is a replacement for <a href="COMMON-LISP____LET_A2.html">let*</a> that adds support 
+for multiple return values, mixing control flow with binding, causing side 
+effects, introducing type declarations, and doing other kinds of custom pattern 
+matching.</p><h3>Introduction</h3> 
+ 
+<p>To use <span class="v">b*</span> you will need to load the following book:</p> 
+ 
+<pre class="code">(<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "std/util/bstar" :dir :system)</pre> 
+ 
+<p>In its most basic form, the <span class="v">b*</span> macro is nearly a drop-in replacement 
+for <a href="COMMON-LISP____LET_A2.html">let*</a>.  For instance, these are equivalent:</p> 
+ 
+<pre class="code">(<a href="COMMON-LISP____LET_A2.html">let*</a> ((x 1)               (<a href="ACL2____B_A2.html">b*</a> ((x 1)
+       (y 2)          ==        (y 2)
+       (z (<a href="COMMON-LISP_____B2.html">+</a> x y)))             (z (<a href="COMMON-LISP_____B2.html">+</a> x y)))
+  (<a href="COMMON-LISP____LIST.html">list</a> x y z))              (<a href="COMMON-LISP____LIST.html">list</a> x y z))</pre> 
+ 
+<p>But beyond simple variable bindings, <span class="v">b*</span> provides many useful, extended 
+<a href="ACL2____B_A2-BINDERS.html">b*-binders</a>.  A simple example is the <a href="ACL2____PATBIND-MV.html">mv 
+binder</a>, which can nicely avoid switching between <a href="COMMON-LISP____LET_A2.html">let*</a> and <a href="ACL2____MV-LET.html">mv-let</a>.  For instance:</p> 
+ 
+<pre class="code">(<a href="COMMON-LISP____LET_A2.html">let*</a> ((parts (get-parts args)))            (<a href="ACL2____B_A2.html">b*</a> ((parts (get-parts args))
+  (<a href="ACL2____MV-LET.html">mv-let</a> (good bad)                   ==       ((<a href="ACL2____MV.html">mv</a> good bad) (split-parts parts))
+    (split-parts parts)                         (new-good (mark-good good))
+    (<a href="COMMON-LISP____LET_A2.html">let*</a> ((new-good (mark-good good))          (new-bad  (mark-bad bad)))
+           (new-bad  (mark-bad bad)))         (<a href="COMMON-LISP____APPEND.html">append</a> new-good new-bad))
+      (<a href="COMMON-LISP____APPEND.html">append</a> new-good new-bad))))</pre> 
+ 
+<p>Another example is the <a href="ACL2____PATBIND-WHEN.html">when 
+binder</a>, which allows for a sort of "early exit" from the <span class="v">b*</span> form 
+without needing to alternate between <span class="v">let*</span> and <span class="v">if</span>.  For instance:</p> 
+ 
+<pre class="code">(<a href="COMMON-LISP____LET_A2.html">let*</a> ((sum (get-sum (<a href="COMMON-LISP____CAR.html">car</a> x))))       (<a href="ACL2____B_A2.html">b*</a> ((sum (get-sum (<a href="COMMON-LISP____CAR.html">car</a> x)))
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP_____C3.html">&lt;</a> sum limit)               ==       ((when (<a href="COMMON-LISP_____C3.html">&lt;</a> sum limit))
+      ans                                   ans)
+    (<a href="COMMON-LISP____LET_A2.html">let*</a> ((ans   (<a href="COMMON-LISP_____B2.html">+</a> ans sum))             (ans   (<a href="COMMON-LISP_____B2.html">+</a> ans sum))
+           (limit (<a href="COMMON-LISP_____B2.html">+</a> limit 1)))            (limit (<a href="COMMON-LISP_____B2.html">+</a> limit 1)))
+      (fn (<a href="COMMON-LISP____CDR.html">cdr</a> x) ans limit))))         (fn (<a href="COMMON-LISP____CDR.html">cdr</a> x) ans limit))</pre> 
+ 
+<p>The only part of the <span class="v">let*</span> syntax that is not available in <span class="v">b*</span> is 
+the <a href="COMMON-LISP____DECLARE.html">declare</a> syntax.  However, <span class="v">ignore</span>/<span class="v">ignorable</span> declarations 
+are available using a different syntax (see below), and <a href="ACL2____TYPE-SPEC.html">type-spec</a> 
+declarations are available using the <a href="ACL2____PATBIND-THE.html">the 
+binder.</a></p> 
+ 
+ 
+<h3>General Form</h3> 
+ 
+<p>The general syntax of b* is:</p> 
+ 
+<pre class="code">(<a href="ACL2____B_A2.html">b*</a> &lt;list-of-bindings&gt; . &lt;list-of-result-forms&gt;)</pre> 
+ 
+<p>where a <i>result form</i> is any ACL2 term, and a <i>binding</i> is</p> 
+ 
+<pre class="code">(&lt;binder-form&gt; [&lt;expression&gt;])</pre> 
+ 
+<p>Depending on the binder form, it may be that multiple expressions are 
+allowed or only a single one.</p> 
+ 
+<p>The <span class="v">std/util/bstar</span> book comes with several useful b* binders already 
+defined, which we describe below.  You can also define your own, custom binder 
+forms to extend the syntax of <span class="v">b*</span> to provide additional kinds of pattern 
+matching or to implement common coding patterns.  For example, the <a href="STD____DEFAGGREGATE.html">std::defaggregate</a> macro automatically introduces new <span class="v">b*</span> binders that let 
+you access the fields of structures using a C-like <span class="v">employee.name</span> style 
+syntax.</p> 
+ 
+<p>Note: One difference between <span class="v">let*</span> and <span class="v">b*</span> is that <span class="v">b*</span> allows 
+multiple forms to occur in the body, and returns the value of the last form. 
+For example:</p> 
+ 
+<pre class="code">(<a href="ACL2____B_A2.html">b*</a> ((x 1)
+     (y 2)
+     (z (<a href="COMMON-LISP_____B2.html">+</a> x y)))
+  (<a href="ACL2____CW.html">cw</a> "Hello, ")
+  (<a href="ACL2____CW.html">cw</a> " world!~%")
+  (<a href="COMMON-LISP____LIST.html">list</a> x y z))</pre> 
+ 
+<p>Will print <span class="v">Hello, world!</span> before returning <span class="v">(1 2 3)</span>, whereas putting 
+these <a href="ACL2____CW.html">cw</a> statements into a <a href="COMMON-LISP____LET_A2.html">let*</a> form would be a syntax error.</p> 
+ 
+ 
+<h3>Built-In B* Binders</h3> 
+ 
+<p>Here is a nonsensical example that gives a flavor for the kind of b* binders 
+that are available "out of the box."</p> 
+ 
+<pre class="code">(<a href="ACL2____B_A2.html">b*</a> ( ;; don't forget the first open paren! (like with let*)
+
+     ;; let*-like binding to a single variable:
+     (x (<a href="COMMON-LISP____CONS.html">cons</a> 'a 'b))
+
+     ;; mv binding
+     ((<a href="ACL2____MV.html">mv</a> y z) (return-two-values x x))
+
+     ;; No binding: expression evaluated for side effects
+     (<a href="COMMON-LISP____-.html">-</a> (<a href="ACL2____CW.html">cw</a> "Hello")) ;; prints "Hello"
+
+     ;; Binding with type declaration:
+     ((<a href="COMMON-LISP____THE.html">the</a> (integer 0 100) n) (foo z))
+
+     ;; MV which ignores a value:
+     ((<a href="ACL2____MV.html">mv</a> &amp; a) (return-garbage-in-first-mv y z))
+
+     ;; Binds value 0 to C and value 1 to D,
+     ;; declares (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> C) and (<a href="COMMON-LISP____IGNORE.html">ignore</a> D)
+     ((<a href="ACL2____MV.html">mv</a> ?c ?!d) (another-mv a z))
+
+     ;; Bind V to the middle value of an error triple,
+     ;; quitting if there is an error condition (a la er-let*)
+     ((<a href="ACL2____ER.html">er</a> v) (<a href="ACL2____TRANS-EVAL.html">trans-eval</a> '(<a href="ACL2____LEN.html">len</a> (<a href="COMMON-LISP____LIST.html">list</a> 'a 1 2 3)) 'foo state))
+
+     ;; The WHEN, IF, and UNLESS constructs insert an IF in the
+     ;; binding stream.  WHEN and IF are equivalent.
+     ((when v) (finish-early-because-of v))
+     ((<a href="COMMON-LISP____IF.html">if</a> v)   (finish-early-because-of v))
+     ((unless c) (finish-early-unless c))
+
+     ;; Pattern-based binding using cons, where D is ignorable
+     ((<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> b c) ?d) (must-return-nested-conses a))
+
+     ;; Patterns based on LIST and LIST* are also supported:
+     ((<a href="COMMON-LISP____LIST.html">list</a> a b) '((1 2) (3 4)))
+     ((<a href="COMMON-LISP____LIST_A2.html">list*</a> a (<a href="COMMON-LISP____THE.html">the</a> string b) c) '((1 2) "foo" 5 6 7))
+
+     ;; Alternate form of pattern binding with cons nests, where G is
+     ;; ignored and F has a type declaration:
+     (`(,e (,(<a href="COMMON-LISP____THE.html">the</a> (signed-byte 8) f) . ,?!g))
+      (makes-a-list-of-conses b))
+
+     ;; Pattern with user-defined constructor:
+     ((my-tuple foo bar hum) (something-of-type-my-tuple e c g))
+
+     ;; Don't-cares with pattern bindings:
+     ((my-tuple &amp; (<a href="COMMON-LISP____CONS.html">cons</a> carbar &amp;) hum) (something-else foo f hum))
+
+     ;; Pattern inside an mv:
+     ((<a href="ACL2____MV.html">mv</a> a (<a href="COMMON-LISP____CONS.html">cons</a> &amp; c)) (make-mv-with-cons))
+
+     ) ;; also don't forget the close-paren after the binder list
+
+  ;; the body (after the binder list) is an implicit PROGN$
+  (run-this-for-side-effects ...)
+  (return-this-expression .....))</pre> 
+ 
+<p>Note: The built-in binders are all defined in the ACL2 package, and can be 
+used (without package prefix) in any other package that imports the binder 
+symbol, or with the <span class="v">acl2::</span> packge prefix anywhere. See also the note about 
+packages under user-defined binders below.</p> 
+ 
+<p>We now give some additional details about these built-in binders.  Since 
+users can also define their own <span class="v">b*</span> binders, you may wish to see <a href="ACL2____B_A2-BINDERS.html">b*-binders</a> for a more comprehensive list of available binder forms.</p> 
+ 
+<dl> 
+ 
+<dt><span class="v">(<a href="ACL2____MV.html">mv</a> a b ...)</span></dt> 
+<dd>Produces an <a href="ACL2____MV-LET.html">mv-let</a> binding.</dd> 
+ 
+<dt><span class="v">(<a href="COMMON-LISP____CONS.html">cons</a> a b)</span></dt> 
+<dd>Binds <span class="v">a</span> and <span class="v">b</span> to <span class="v">(<a href="COMMON-LISP____CAR.html">car</a> val)</span> and <span class="v">(<a href="COMMON-LISP____CDR.html">cdr</a> val)</span>, respectively, 
+where <span class="v">val</span> is the result of the corresponding expression.</dd> 
+ 
+<dt><span class="v">(<a href="ACL2____ER.html">er</a> a)</span></dt> 
+<dd>Produces an ER-LET* binding.</dd> 
+ 
+<dt><span class="v">(<a href="COMMON-LISP____LIST.html">list</a> a b ...)</span></dt> 
+<dd>Binds <span class="v">a</span>, <span class="v">b</span>, ... to <span class="v">(<a href="COMMON-LISP____CAR.html">car</a> val)</span>, <span class="v">(<a href="COMMON-LISP____CADR.html">cadr</a> val)</span>, etc., where 
+<span class="v">val</span> is the result of the corresponding expression.</dd> 
+ 
+<dt><span class="v">(nths a b ...)</span></dt> 
+<dd>Binds <span class="v">a</span>, <span class="v">b</span>, ... to <span class="v">(<a href="COMMON-LISP____NTH.html">nth</a> 0 val)</span>, <span class="v">(<a href="COMMON-LISP____NTH.html">nth</a> 1 val)</span>, etc., 
+where <span class="v">val</span> is the result of the corresponding expression.  This is very 
+much like <span class="v">list</span>, but may be useful when <a href="COMMON-LISP____NTH.html">nth</a> is disabled.</dd> 
+ 
+<dt>
+<span class="v">(<a href="COMMON-LISP____LIST_A2.html">list*</a> a b)</span><br> 
+    <span class="v">`(,a . ,b)</span>
+</dt> 
+<dd>Alternatives to the <span class="v">cons</span> binder.</dd> 
+ 
+<dt><span class="v">(<a href="COMMON-LISP____THE.html">the</a> type-spec var)</span></dt> 
+<dd>Binds <span class="v">var</span> to the result of the corresponding expression, and adds 
+a <a href="COMMON-LISP____DECLARE.html">declare</a> form saying that <span class="v">var</span> is of the given <a href="ACL2____TYPE-SPEC.html">type-spec</a>. 
+You can nest <span class="v">the</span> patterns inside other patterns, but <span class="v">var</span> must itself 
+be a symbol instead of a nested pattern, and <span class="v">type-spec</span> must be a valid 
+<a href="ACL2____TYPE-SPEC.html">type-spec</a>.</dd> 
+ 
+<dt>
+<span class="v">(<a href="COMMON-LISP____IF.html">if</a> test)</span><br> 
+<span class="v">(when test)</span><br> 
+<span class="v">(unless test)</span>
+</dt> 
+ 
+<dd>These forms don't actually produce bindings at all.  Instead, they insert 
+an <a href="COMMON-LISP____IF.html">if</a> where one branch is the rest of the <span class="v">B*</span> form and the other is 
+the "bound" expression.  For example, 
+<pre class="code">(<a href="ACL2____B_A2.html">b*</a> (((<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ATOM.html">atom</a> a)) 0)
+     (<a href="COMMON-LISP____REST.html">rest</a> (of-bindings)))
+  final-expr)</pre> 
+expands to something like this: 
+<pre class="code">(<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ATOM.html">atom</a> a)
+    0
+  (<a href="ACL2____B_A2.html">b*</a> ((<a href="COMMON-LISP____REST.html">rest</a> (of-bindings)))
+    final-expr))</pre> 
+These forms can also create an "implicit progn" with multiple expressions, 
+like this: 
+<pre class="code">(<a href="ACL2____B_A2.html">b*</a> (((<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ATOM.html">atom</a> a))
+      (<a href="ACL2____CW.html">cw</a> "a is an atom, returning 0")
+      0)
+     ...)
+  ...)</pre> 
+</dd> 
+ 
+</dl> 
+ 
+ 
+<p>Note that the <span class="v">cons</span>, <span class="v">list</span>, <span class="v">list*</span>, and backtick binders may be 
+nested arbitrarily inside other binders.  User-defined binders may often be 
+arbitrarily nested.  For example,</p> 
+ 
+<pre class="code">((<a href="ACL2____MV.html">mv</a> (<a href="COMMON-LISP____LIST.html">list</a> `(,a . ,b)) (<a href="COMMON-LISP____CONS.html">cons</a> c d)) &lt;form&gt;)</pre> 
+ 
+<p>will result in the following (logical) bindings:</p> 
+ 
+<ul> 
+<li>
+<span class="v">a</span> bound to <span class="v">(<a href="COMMON-LISP____CAR.html">car</a> (<a href="COMMON-LISP____NTH.html">nth</a> 0 (<a href="ACL2____MV-NTH.html">mv-nth</a> 0 &lt;form&gt;)))</span>
+</li> 
+<li>
+<span class="v">b</span> bound to <span class="v">(<a href="COMMON-LISP____CDR.html">cdr</a> (<a href="COMMON-LISP____NTH.html">nth</a> 0 (<a href="ACL2____MV-NTH.html">mv-nth</a> 0 &lt;form&gt;)))</span>
+</li> 
+<li>
+<span class="v">c</span> bound to <span class="v">(<a href="COMMON-LISP____CAR.html">car</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 1 &lt;form&gt;))</span>
+</li> 
+<li>
+<span class="v">d</span> bound to <span class="v">(<a href="COMMON-LISP____CDR.html">cdr</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 1 &lt;form&gt;))</span>
+</li> 
+</ul> 
+ 
+ 
+ 
+<h3>Side Effects and Ignoring Variables</h3> 
+ 
+<p>The following constructs may be used in place of variables</p> 
+ 
+<table class="xtable"> 
+ 
+<tr> 
+<th><span class="v">-</span></th> 
+<td>Dash (<span class="v">-</span>), used as a top-level binding form, will run the corresponding 
+expressions (in an implicit progn) for side-effects without binding its value. 
+Used as a lower-level binding form, it will cause the binding to be ignored or 
+not created.</td> 
+</tr> 
+ 
+<tr> 
+<th><span class="v">&amp;</span></th> 
+<td>Ampersand (<span class="v">&amp;</span>), used as a top-level binding form, will cause the 
+corresponding expression to be ignored and not run at all.  Used as a 
+lower-level binding form, it will cause the binding to be ignored or not 
+created.</td> 
+</tr> 
+ 
+<tr> 
+<th><span class="v">?!</span></th> 
+<td>Any symbol beginning with <span class="v">?!</span> works similarly to the <span class="v">&amp;</span> form.  It 
+is <a href="COMMON-LISP____DECLARE.html">declare</a>d ignored or not evaluated at all.</td> 
+</tr> 
+ 
+<tr> 
+<th><span class="v">?</span></th> 
+<td>Any symbol beginning with <span class="v">?</span> but not <span class="v">?!</span> will make a binding of the symbol 
+obtained by removing the <span class="v">?</span>, and will make an <span class="v">ignorable</span> declaration for this 
+variable.</td> 
+</tr> 
+ 
+</table> 
+ 
+ 
+<h3>User-Defined Binders</h3> 
+ 
+<p>B* expands to multiple nestings of another macro, <span class="v">PATBIND</span>, analogously 
+to how LET* expands to multiple nestings of LET.</p> 
+ 
+<p>New b* binders may be created by defining a macro named <span class="v">PATBIND-&lt;name&gt;</span>. 
+We discuss the detailed interface of user-defined binders below.  But first, 
+note that <span class="v">def-patbind-macro</span> provides a simple way to define certain user binders. 
+For example, this form is used to define the binder for CONS:</p> 
+ 
+<pre class="code">(def-patbind-macro cons (<a href="COMMON-LISP____CAR.html">car</a> cdr))</pre> 
+ 
+<p>This defines a binder macro, <span class="v">patbind-cons</span>, which enables <span class="v">(<a href="COMMON-LISP____CONS.html">cons</a> a
+b)</span> to be used as a binder form.  This binder form must take two arguments 
+since two destructor functions, <span class="v">(<a href="COMMON-LISP____CAR.html">car</a> cdr)</span>, are given to 
+<span class="v">def-patbind-macro</span>.  The destructor functions are each applied to the form 
+to produce the bindings for the corresponding arguments of the binder.</p> 
+ 
+<p>There are many cases in which <span class="v">def-patbind-macro</span> is not powerful enough. 
+For example, a binder produced by <span class="v">def-patbind-macro</span> may only take a fixed 
+number of arguments.  More flexible operations may be defined by hand-defining 
+the binder macro using the form <a href="ACL2____DEF-B_A2-BINDER.html">def-b*-binder</a>.</p> 
+ 
+<p>A binder macro, <span class="v">patbind-&lt;name&gt;</span> must take three arguments: <span class="v">args</span>, 
+<span class="v">forms</span>, and <span class="v">rest-expr</span>.  The form</p> 
+ 
+<pre class="code">(<a href="ACL2____B_A2.html">b*</a> (((foo arg1 arg2) binding1 binding2))
+  expr)</pre> 
+ 
+<p>translates to a macro call</p> 
+ 
+<pre class="code">(patbind-foo (arg1 arg2) (binding1 binding2) expr)</pre> 
+ 
+<p>That is:</p> 
+ 
+<ul> 
+<li>
+<span class="v">args</span> is the list of arguments given to the binder form,</li> 
+<li>
+<span class="v">bindings</span> is the list of expressions bound to them, and</li> 
+<li>
+<span class="v">expr</span> is the result expression to be run once the bindings are in place.</li> 
+</ul> 
+ 
+<p>The definition of the <span class="v">patbind-foo</span> macro determines how this gets 
+further expanded.  Some informative examples of these binder macros may be 
+found in <span class="v">std/util/bstar.lisp</span>; simply search for uses of <a href="ACL2____DEF-B_A2-BINDER.html">def-b*-binder</a>.</p> 
+ 
+<p>Here are some further notes on defining binder macros.</p> 
+ 
+<p>Interaction with packages: The macro <span class="v">patbind-foo</span> is derived from a use 
+of the <span class="v">foo</span> binder using <span class="v">intern-in-package-of-symbol</span> with <span class="v">foo</span> as 
+the package witness.  Practially speaking, this means that you can use a binder 
+from a different package (without any package prefix) if either the binder name 
+<span class="v">foo</span> or the macro <span class="v">patbind-foo</span> is imported into your package. 
+Additionally, if <span class="v">foo</span> was defined as a binder in the <span class="v">bar</span> package and 
+not imported into your current package, it can still be invoked as 
+<span class="v">bar::foo</span>.  Note also that when defining a binder using <span class="v">def-b*-binder</span>, 
+the <span class="v">args</span>, <span class="v">forms</span>, and <span class="v">rest-expr</span> formals are always in the ACL2 
+package.</p> 
+ 
+<p>Often the simplest way to accomplish the intended effect of a patbind macro 
+is to have it construct another <span class="v">b*</span> form to be recursively expanded, or to 
+call other patbind macros.  See, for example, the definition of 
+<span class="v">patbind-list</span>.</p> 
+ 
+<p>Patbind macros for forms that are truly creating bindings should indeed use 
+<span class="v">b*</span> (or <span class="v">patbind</span>, which is what <span class="v">b*</span> expands to) to create these 
+bindings, so that ignores and nestings are dealt with uniformly.  See, for 
+example, the definition of <span class="v">patbind-nths</span>.</p> 
+ 
+<p>In order to get good performance, destructuring binders such as are produced 
+by <span class="v">def-patbind-macro</span> bind a variable to any binding that isn't already a 
+variable or quoted constant.  This is important so that in the following form, 
+<span class="v">(foo x y)</span> is run only once:</p> 
+ 
+<pre class="code">(<a href="ACL2____B_A2.html">b*</a> (((<a href="COMMON-LISP____CONS.html">cons</a> a b) (foo x y))) ...)</pre> 
+ 
+<p>In these cases, it is good discipline to check the new variables introduced 
+using the macro <span class="v">check-vars-not-free</span>; since ACL2 does not have gensym, this 
+is the best option we have. See any definition produced by 
+<span class="v">def-patbind-macro</span> for examples, and additionally <span class="v">patbind-nths</span>, 
+<span class="v">patbind-er</span>, and so forth.</p>
+</body>
+</html>

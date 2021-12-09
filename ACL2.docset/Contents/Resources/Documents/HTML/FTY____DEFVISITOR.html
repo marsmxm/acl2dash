@@ -1,0 +1,165 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Defvisitor</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=FTY____DEFVISITOR">Click for Defvisitor in the Full Manual</a></h3>
+
+<p>Generate visitor functions for one type or one mutually-recursive clique of types.</p><p>Defvisitor first requires that you have a visitor template defined 
+using <a href="FTY____DEFVISITOR-TEMPLATE.html">defvisitor-template</a>.  The defvisitor form then instantiates that 
+template to create a visitor function for a type, or for each type in a 
+mutually-recursive clique of types.  See also <a href="FTY____DEFVISITORS.html">defvisitors</a>, which 
+generates several defvisitor forms in order to traverse several types, and 
+<a href="FTY____DEFVISITOR-MULTI.html">defvisitor-multi</a>, which combines defvisitor and defvisitors forms into a 
+mutual recursion.</p> 
+ 
+<p>For example, the following visitor template was described in <a href="FTY____DEFVISITOR-TEMPLATE.html">defvisitor-template</a>:</p> 
+ 
+<pre class="code">(<a href="FTY____DEFVISITOR-TEMPLATE.html">defvisitor-template</a> collect-strings ((x :object))
+  :returns (names (:join (<a href="COMMON-LISP____APPEND.html">append</a> names1 names)
+                   :tmp-var names1
+                   :initial nil)
+                  string-listp)
+  :type-fns ((<a href="COMMON-LISP____STRING.html">string</a> list))
+  :fnname-template collect-strings-in-&lt;type&gt;)</pre> 
+ 
+<p>If we have a type defined as follows:</p> 
+<pre class="code">(<a href="FTY____DEFTAGSUM.html">deftagsum</a> simple-tree
+  ;; Some simple kind of structure
+  (:leaf ((name  stringp)
+          (<a href="ACL2____VALUE.html">value</a> natp)
+          (cost  integerp)))
+  (:branch ((left   simple-tree)
+            (right  simple-tree)
+            (hint   booleanp)
+            (family stringp)
+            (size   natp))))</pre> 
+<p>then to create a visitor for the simple-tree type, we can do:</p> 
+ 
+<pre class="code">(<a href="FTY____DEFVISITOR.html">defvisitor</a> collect-strings-in-simple-tree-definition
+            ;; optional event name, for tags etc
+
+  ;; type or mutually-recursive clique of types to visit
+  :type simple-tree
+
+  ;; template to instantiate
+  :template collect-strings)</pre> 
+ 
+<p>This creates (essentially) the following function definition:</p> 
+ 
+<pre class="code">(<a href="ACL2____DEFINE.html">define</a> collect-strings-in-simple-tree ((x simple-tree-p))
+  :returns (names string-listp)
+  :measure (simple-tree-count x)
+  (simple-tree-case x
+    :leaf   (<a href="ACL2____B_A2.html">b*</a> ((names (<a href="COMMON-LISP____LIST.html">list</a> x.name)))
+               names)
+    :branch (<a href="ACL2____B_A2.html">b*</a> ((names (collect-strings-in-simple-tree x.left))
+                 (names1 (collect-strings-in-simple-tree x.right))
+                 (names (<a href="COMMON-LISP____APPEND.html">append</a> names1 names))
+                 (names1 (<a href="COMMON-LISP____LIST.html">list</a> x.family))
+                 (names (<a href="COMMON-LISP____APPEND.html">append</a> names1 names)))
+               names)))</pre> 
+ 
+<p>Additionally, defvisitor modifies the collect-strings template so that 
+future instantiations of the template will, by default, use 
+<span class="v">collect-strings-in-simple-tree</span> when visiting a simple-tree object.  (The 
+pair <span class="v">(simple-tree collect-strings-in-simple-tree)</span> is added to the 
+<span class="v">:type-fns</span> of the template; see <a href="FTY____DEFVISITOR-TEMPLATE.html">defvisitor-template</a>.)</p> 
+ 
+ 
+<p>If we instead have a mutually-recursive clique of types, like the following:</p> 
+ 
+<pre class="code">(<a href="FTY____DEFTYPES.html">deftypes</a> mrec-tree
+  (<a href="FTY____DEFTAGSUM.html">deftagsum</a> mrec-tree-node
+     (:leaf ((name stringp)
+             (<a href="ACL2____VALUE.html">value</a> natp)
+             (cost integerp)))
+     (:branch ((children mrec-treelist)
+               (family stringp)
+               (size natp))))
+  (<a href="FTY____DEFLIST.html">deflist</a> mrec-treelist :elt-type mrec-tree-node))</pre> 
+ 
+<p>then we can create a mutual recursion of visitors for these types as follows:</p> 
+ 
+<pre class="code">(<a href="FTY____DEFVISITOR.html">defvisitor</a> collect-mrec-tree-strings
+   :type mrec-tree   ;; the deftypes form name, not one of the type names
+   :template collect-strings)</pre> 
+ 
+<p>This creates a definition like this:</p> 
+ 
+<pre class="code">(<a href="ACL2____DEFINES.html">defines</a> collect-strings-in-mrec-tree
+  (<a href="ACL2____DEFINE.html">define</a> collect-strings-in-mrec-tree-node ((x mrec-tree-node-p))
+     :returns (names string-listp)
+     :measure (mrec-tree-node-count x)
+     (mrec-tree-node-case x
+       :leaf ...    ;; similar to the simple-tree above
+       :branch ...))
+  (<a href="ACL2____DEFINE.html">define</a> collect-strings-in-mrec-treelist ((x mrec-treelist-p))
+     :returns (names string-listp)
+     :measure (mrec-treelist-count x)
+     (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ATOM.html">atom</a> x)
+         nil
+       (<a href="ACL2____B_A2.html">b*</a> ((names (collect-strings-in-mrec-tree-node (<a href="COMMON-LISP____CAR.html">car</a> x)))
+            (names1 (collect-strings-in-mrec-treelist (<a href="COMMON-LISP____CDR.html">cdr</a> x)))
+            (names (<a href="COMMON-LISP____APPEND.html">append</a> names1 names)))
+         names))))</pre> 
+ 
+<p>The general form of defvisitor is:</p> 
+ 
+<pre class="code">(<a href="FTY____DEFVISITOR.html">defvisitor</a> [ event-name ]
+   :type type-name
+   :template template-name
+   other-keyword-args
+   mrec-defines
+   ///
+   post-events)</pre> 
+ 
+<p>One or more additional define forms may be nested inside a defvisitor form; 
+this means they will be added to the mutual-recursion with the generated 
+visitor functions.  This can be used to specialize the visitor's behavior on 
+some field so that when visiting that field the function is called, which then 
+calls other visitor functions from the clique.</p> 
+ 
+<p>The available keyword arguments (other than <span class="v">:type</span> and <span class="v">:template</span>) 
+are as follows:</p> 
+ 
+<ul> 
+ 
+<li>
+<span class="v">:type-fns</span>, <span class="v">:field-fns</span>, <span class="v">:prod-fns</span> -- these add additional 
+entries to the corresponding arguments of the template; see <a href="FTY____DEFVISITOR-TEMPLATE.html">defvisitor-template</a>.  When the defvisitor event finishes, these entries are 
+left in the updated template.</li> 
+ 
+<li>
+<span class="v">:fnname-template</span>, <span class="v">:renames</span> -- these override the corresponding 
+arguments of the template, but only for the current defvisitor; i.e., they are 
+not stored in the updated template.</li> 
+ 
+<li>
+<span class="v">:omit-types</span>, <span class="v">:include-types</span> -- when defining visitors for a 
+mutually-recursive clique of types, <span class="v">:omit-types</span> may be used to skip 
+creation of a visitor for some of the types, or <span class="v">:include-types</span> may be used 
+to only create visitors for the listed types.</li> 
+ 
+<li>
+<span class="v">:measure</span> -- Template for generating the measure for the functions; 
+defaults to <span class="v">:count</span>.  In the template, <span class="v">:count</span> is replaced by the count 
+function for each type visited, and <span class="v">:order</span> is replaced by the current 
+order value (see below).  E.g., <span class="v">(<a href="ACL2____TWO-NATS-MEASURE.html">two-nats-measure</a> :count 0)</span> is often a 
+useful measure template, and <span class="v">(<a href="ACL2____TWO-NATS-MEASURE.html">two-nats-measure</a> :order :count)</span> is sometimes 
+useful inside <a href="FTY____DEFVISITOR-MULTI.html">defvisitor-multi</a>.</li> 
+ 
+<li>
+<span class="v">:defines-args</span>, <span class="v">define-args</span> -- Extra keyword arguments provided to 
+<span class="v">defines</span> or <span class="v">:define</span> respectively; <span class="v">defines-args</span> is only applicable 
+when there is a mutual recursion.</li> 
+ 
+<li>
+<span class="v">:order</span> specifies the order value for this clique, which is useful when 
+combining multiple defvisitor cliques into a single mutual recursion with <a href="FTY____DEFVISITOR-MULTI.html">defvisitor-multi</a>.</li> 
+</ul>
+</body>
+</html>

@@ -1,0 +1,189 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Vl-datatype-elem-&gt;mod-components</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL____VL-DATATYPE-ELEM-_E3MOD-COMPONENTS">Click for Vl-datatype-elem-&gt;mod-components in the Full Manual</a></h3>
+
+<p></p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(vl-datatype-elem-&gt;mod-components name subwire self-lsb submod) 
+   
+(mv wire1 insts1 aliases1)</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">name</span>  The name of the new wire.<br><font color="#606060">Guard <span class="v">(<a href="SV____NAME-P.html">sv::name-p</a> name)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">subwire</span>  A dummy wire with dimensions appropriate for the new wire.<br><font color="#606060">Guard <span class="v">(<a href="SV____WIRE-P.html">sv::wire-p</a> subwire)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">self-lsb</span>  Where to line up the wire with the self instance, for 
+                         nontrivial data-structures.<br><font color="#606060">Guard <span class="v">(<a href="ACL2____MAYBE-NATP.html">maybe-natp</a> self-lsb)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">submod</span>  For nontrivial data-structures, the name of the module representing 
+            the data structure.<br><font color="#606060">Guard <span class="v">(<a href="COMMON-LISP____OR.html">or</a> (<a href="SV____MODNAME-P.html">sv::modname-p</a> submod) (<a href="COMMON-LISP____NOT.html">not</a> submod))</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">wire1</span>  The resulting wire declaration.<br><font color="#606060">Type <span class="v">(<a href="SV____WIRE-P.html">sv::wire-p</a> wire1)</span>.</font>
+</dd> 
+<dd>
+<span class="tt">insts1</span>  Instance of the data structure module 
+                                            if necessary.<br><font color="#606060">Type <span class="v">(<a href="SV____MODINSTLIST-P.html">sv::modinstlist-p</a> insts1)</span>.</font>
+</dd> 
+<dd>
+<span class="tt">aliases1</span>  Aliases: between the new wire and the self of the instanced 
+                          data structure module, if necessary, and between the 
+                          new wire and the outer data structure/interface 
+                          module.<br><font color="#606060">Type <span class="v">(<a href="SV____LHSPAIRS-P.html">sv::lhspairs-p</a> aliases1)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>To create a wire of a given datatype, we first make the required 
+modules and instances for the datatype, then connect up a new wire to the 
+instance's :self wire.  So if we have, e.g.,</p> 
+<pre class="code">logic [3:0] foo;
+struct { logic [2:0] bar; logic [1:4] baz; } fa;</pre> 
+ 
+<p>then we first run <a href="VL____VL-DATATYPE-_E3MODS.html">vl-datatype-&gt;mods</a> on each of the datatypes.  For 
+the <span class="v">logic [3:0]</span> type, it doesn't produce a module since that fits in a 
+simple vector.  For the struct type, it produces a module containing something 
+like this:</p> 
+ 
+<pre class="code">logic [6:0] self;       // representing the whole struct
+logic [2:0] bar;
+logic [1:4] baz;
+alias bar = self[6:4];  // aliases describe which fields correspond to which parts of self
+alias baz = self[3:0];</pre> 
+ 
+<p><a href="VL____VL-DATATYPE-_E3MODS.html">Vl-datatype-&gt;mods</a> produces this module and returns its name (which is 
+just the VL datatype -- call it "ourstruct" for our purposes) and its self 
+wire.</p> 
+ 
+<p>So now, to make the wire foo, we look at the values returned by <a href="VL____VL-DATATYPE-_E3MODS.html">vl-datatype-&gt;mods</a>: it still produces a self wire, even though it doesn't 
+create a submodule, and we just modify that self wire to set the name to foo. 
+For fa, we do the same thing, but we also create an instance of the struct 
+module -- also named fa -- and alias the wire fa to that instance's self wire:</p> 
+<pre class="code">logic [6:0] fa;
+ourstruct fa ();
+alias fa = fa.self;</pre> 
+<p>When the aliases are all composed together, this induces the right aliases 
+for the struct:</p> 
+<pre class="code">alias fa[3:0] = fa.baz;
+alias fa[6:4] = fa.bar;</pre> 
+ 
+<p>Sometimes we need to do this same thing for members of a struct/union or 
+interface.  In this case, there is an additional alias that we need to 
+generate, mapping each vector to the (outer) self wire.  This is determined by 
+the <span class="v">self-lsb</span> input; if given, then we create an additional alias to the 
+self wire, where the lsb of the new wire lines up with the given index of the 
+self wire.  (This creates the aliases between bar/baz and the self wire of 
+ourstruct, above.)</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>vl-datatype-elem-&gt;mod-components</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ vl-datatype-elem-&gt;mod-components
+ (name subwire self-lsb submod)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="SV____NAME-P.html">sv::name-p</a> name)
+                             (<a href="SV____WIRE-P.html">sv::wire-p</a> subwire)
+                             (<a href="ACL2____MAYBE-NATP.html">maybe-natp</a> self-lsb)
+                             (<a href="COMMON-LISP____OR.html">or</a> (<a href="SV____MODNAME-P.html">sv::modname-p</a> submod)
+                                 (<a href="COMMON-LISP____NOT.html">not</a> submod)))))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'vl-datatype-elem-&gt;mod-components))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+   (((<a href="SV____WIRE.html">sv::wire</a> subwire))
+    (wire (<a href="SV____MAKE-WIRE.html">sv::make-wire</a> :name name
+                         :width subwire.width
+                         :low-idx subwire.low-idx))
+    ((unless (<a href="COMMON-LISP____OR.html">or</a> submod self-lsb))
+     (<a href="ACL2____MV.html">mv</a> wire nil nil))
+    ((<a href="ACL2____MV.html">mv</a> insts aliases1)
+     (<a href="COMMON-LISP____IF.html">if</a> submod
+         (<a href="ACL2____B_A2.html">b*</a> ((modinst (<a href="SV____MAKE-MODINST.html">sv::make-modinst</a> :instname name
+                                         :modname submod)))
+             (<a href="ACL2____MV.html">mv</a> (<a href="COMMON-LISP____LIST.html">list</a> modinst)
+                 (<a href="VL____VLSV-AGGREGATE-SUBALIAS.html">vlsv-aggregate-subalias</a> name subwire.width)))
+         (<a href="ACL2____MV.html">mv</a> nil nil)))
+    (aliases2
+         (<a href="COMMON-LISP____IF.html">if</a> self-lsb
+             (<a href="VL____VLSV-AGGREGATE-SUPERALIAS.html">vlsv-aggregate-superalias</a> name subwire.width self-lsb)
+             nil)))
+   (<a href="ACL2____MV.html">mv</a> wire
+       insts (<a href="COMMON-LISP____APPEND.html">append</a> aliases2 aliases1)))))</pre> 
+<p><b>Theorem: </b>wire-p-of-vl-datatype-elem-&gt;mod-components.wire1</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> wire-p-of-vl-datatype-elem-&gt;mod-components.wire1
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?wire1 ?insts1 ?aliases1)
+              (<a href="VL____VL-DATATYPE-ELEM-_E3MOD-COMPONENTS.html">vl-datatype-elem-&gt;mod-components</a>
+                   name subwire self-lsb submod)))
+            (<a href="SV____WIRE-P.html">sv::wire-p</a> wire1))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>modinstlist-p-of-vl-datatype-elem-&gt;mod-components.insts1</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> modinstlist-p-of-vl-datatype-elem-&gt;mod-components.insts1
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?wire1 ?insts1 ?aliases1)
+              (<a href="VL____VL-DATATYPE-ELEM-_E3MOD-COMPONENTS.html">vl-datatype-elem-&gt;mod-components</a>
+                   name subwire self-lsb submod)))
+            (<a href="SV____MODINSTLIST-P.html">sv::modinstlist-p</a> insts1))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>lhspairs-p-of-vl-datatype-elem-&gt;mod-components.aliases1</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> lhspairs-p-of-vl-datatype-elem-&gt;mod-components.aliases1
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?wire1 ?insts1 ?aliases1)
+              (<a href="VL____VL-DATATYPE-ELEM-_E3MOD-COMPONENTS.html">vl-datatype-elem-&gt;mod-components</a>
+                   name subwire self-lsb submod)))
+            (<a href="SV____LHSPAIRS-P.html">sv::lhspairs-p</a> aliases1))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>vars-of-vl-datatype-elem-&gt;mod-components</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vars-of-vl-datatype-elem-&gt;mod-components
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?wire1 ?insts1 ?aliases1)
+              (<a href="VL____VL-DATATYPE-ELEM-_E3MOD-COMPONENTS.html">vl-datatype-elem-&gt;mod-components</a>
+                   name subwire self-lsb submod)))
+            (<a href="SV____SVARLIST-ADDR-P.html">sv::svarlist-addr-p</a> (<a href="SV____LHSPAIRS-VARS.html">sv::lhspairs-vars</a> aliases1)))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>vl-datatype-elem-&gt;mod-components-of-name-fix-name</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-datatype-elem-&gt;mod-components-of-name-fix-name
+ (<a href="COMMON-LISP____EQUAL.html">equal</a>
+   (<a href="VL____VL-DATATYPE-ELEM-_E3MOD-COMPONENTS.html">vl-datatype-elem-&gt;mod-components</a> (<a href="SV____NAME-FIX.html">sv::name-fix</a> name)
+                                     subwire self-lsb submod)
+   (<a href="VL____VL-DATATYPE-ELEM-_E3MOD-COMPONENTS.html">vl-datatype-elem-&gt;mod-components</a> name subwire self-lsb submod)))</pre> 
+<p><b>Theorem: </b>vl-datatype-elem-&gt;mod-components-name-equiv-congruence-on-name</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-datatype-elem-&gt;mod-components-name-equiv-congruence-on-name
+ (<a href="ACL2____IMPLIES.html">implies</a>
+  (<a href="SV____NAME-EQUIV.html">sv::name-equiv</a> name name-equiv)
+  (<a href="COMMON-LISP____EQUAL.html">equal</a>
+     (<a href="VL____VL-DATATYPE-ELEM-_E3MOD-COMPONENTS.html">vl-datatype-elem-&gt;mod-components</a> name subwire self-lsb submod)
+     (<a href="VL____VL-DATATYPE-ELEM-_E3MOD-COMPONENTS.html">vl-datatype-elem-&gt;mod-components</a>
+          name-equiv subwire self-lsb submod)))
+ :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>vl-datatype-elem-&gt;mod-components-of-wire-fix-subwire</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-datatype-elem-&gt;mod-components-of-wire-fix-subwire
+ (<a href="COMMON-LISP____EQUAL.html">equal</a>
+   (<a href="VL____VL-DATATYPE-ELEM-_E3MOD-COMPONENTS.html">vl-datatype-elem-&gt;mod-components</a> name (<a href="SV____WIRE-FIX.html">sv::wire-fix</a> subwire)
+                                     self-lsb submod)
+   (<a href="VL____VL-DATATYPE-ELEM-_E3MOD-COMPONENTS.html">vl-datatype-elem-&gt;mod-components</a> name subwire self-lsb submod)))</pre> 
+<p><b>Theorem: </b>vl-datatype-elem-&gt;mod-components-wire-equiv-congruence-on-subwire</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-datatype-elem-&gt;mod-components-wire-equiv-congruence-on-subwire
+ (<a href="ACL2____IMPLIES.html">implies</a>
+  (<a href="SV____WIRE-EQUIV.html">sv::wire-equiv</a> subwire subwire-equiv)
+  (<a href="COMMON-LISP____EQUAL.html">equal</a>
+     (<a href="VL____VL-DATATYPE-ELEM-_E3MOD-COMPONENTS.html">vl-datatype-elem-&gt;mod-components</a> name subwire self-lsb submod)
+     (<a href="VL____VL-DATATYPE-ELEM-_E3MOD-COMPONENTS.html">vl-datatype-elem-&gt;mod-components</a>
+          name subwire-equiv self-lsb submod)))
+ :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>vl-datatype-elem-&gt;mod-components-of-maybe-natp-fix-self-lsb</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-datatype-elem-&gt;mod-components-of-maybe-natp-fix-self-lsb
+ (<a href="COMMON-LISP____EQUAL.html">equal</a>
+   (<a href="VL____VL-DATATYPE-ELEM-_E3MOD-COMPONENTS.html">vl-datatype-elem-&gt;mod-components</a>
+        name subwire (<a href="ACL2____MAYBE-NATP-FIX.html">maybe-natp-fix</a> self-lsb)
+        submod)
+   (<a href="VL____VL-DATATYPE-ELEM-_E3MOD-COMPONENTS.html">vl-datatype-elem-&gt;mod-components</a> name subwire self-lsb submod)))</pre> 
+<p><b>Theorem: </b>vl-datatype-elem-&gt;mod-components-maybe-nat-equiv-congruence-on-self-lsb</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-datatype-elem-&gt;mod-components-maybe-nat-equiv-congruence-on-self-lsb
+ (<a href="ACL2____IMPLIES.html">implies</a>
+  (<a href="ACL2____MAYBE-NAT-EQUIV.html">acl2::maybe-nat-equiv</a> self-lsb self-lsb-equiv)
+  (<a href="COMMON-LISP____EQUAL.html">equal</a>
+     (<a href="VL____VL-DATATYPE-ELEM-_E3MOD-COMPONENTS.html">vl-datatype-elem-&gt;mod-components</a> name subwire self-lsb submod)
+     (<a href="VL____VL-DATATYPE-ELEM-_E3MOD-COMPONENTS.html">vl-datatype-elem-&gt;mod-components</a>
+          name subwire self-lsb-equiv submod)))
+ :rule-classes :congruence)</pre> 
+
+</body>
+</html>

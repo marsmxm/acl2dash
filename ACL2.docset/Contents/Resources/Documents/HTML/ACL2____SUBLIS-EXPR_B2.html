@@ -1,0 +1,110 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Sublis-expr+</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____SUBLIS-EXPR_B2">Click for Sublis-expr+ in the Full Manual</a></h3>
+
+<p>Replace <a href="ACL2____TERM.html">term</a>s by variables, even inside <a href="COMMON-LISP____LAMBDA.html">lambda</a> bodies</p><p>WARNING: This utility takes an alist that maps terms to variables. 
+ In that sense it is more restrictive than the corresponding utility that is 
+ built into ACL2, <span class="v">sublis-expr</span>.  This restriction to variables could 
+ probably be lifted with a little effort (but was acceptable for its initial 
+ purpose).</p> 
+ 
+ <pre class="code">General Form:
+(<a href="ACL2____SUBLIS-EXPR_B2.html">sublis-expr+</a> alist term)</pre> 
+ 
+ <p>where <span class="v">alist</span> is an alist that maps terms to variables and <span class="v">term</span> is 
+ a (translated) <span class="tt"><a href="ACL2____TERM.html">term</a></span>.  The value is a term that results from replacing 
+ occurrences of terms in the domain of <span class="v">alist</span> by the corresponding 
+ variables.  Notably, this replacement can take place in bodies of <a href="COMMON-LISP____LAMBDA.html">lambda</a>s, with attention to avoiding so-called variable capture (as discused 
+ further below).</p> 
+ 
+ <p>Consider the following example, which for readability is expressed in terms 
+ of untranslated terms.</p> 
+ 
+ <pre class="code">alist:
+(((<a href="COMMON-LISP____NTH.html">nth</a> '0 (<a href="ACL2____BINARY-APPEND.html">binary-append</a> a b)) . x)
+ ((<a href="COMMON-LISP____NTH.html">nth</a> '1 (<a href="ACL2____BINARY-APPEND.html">binary-append</a> a b)) . y))
+
+term (untranslated):
+(<a href="COMMON-LISP____LET.html">let</a> ((<a href="ACL2____U.html">u</a> (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____NTH.html">nth</a> 0 (<a href="COMMON-LISP____APPEND.html">append</a> a b))
+               (<a href="COMMON-LISP____NTH.html">nth</a> 1 (<a href="COMMON-LISP____APPEND.html">append</a> a b)))))
+  (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____NTH.html">nth</a> 0 (<a href="COMMON-LISP____APPEND.html">append</a> a b)) u))
+
+result (untranslated):
+(<a href="COMMON-LISP____LET.html">let</a> ((<a href="ACL2____U.html">u</a> (<a href="COMMON-LISP____CONS.html">cons</a> x y)))
+  (<a href="COMMON-LISP____CONS.html">cons</a> x u))</pre> 
+ 
+ <p>Note that substitution occurred even inside the body of the input <span class="v">let</span> 
+ expression, which corresponds to the body of the input <span class="v">lambda</span> expression 
+ below.  Here is an actual call, with translated terms, that corresponds to the 
+ description above.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____SUBLIS-EXPR_B2.html">sublis-expr+</a> '(((<a href="COMMON-LISP____NTH.html">nth</a> '0 (<a href="ACL2____BINARY-APPEND.html">binary-append</a> a b)) . x)
+                       ((<a href="COMMON-LISP____NTH.html">nth</a> '1 (<a href="ACL2____BINARY-APPEND.html">binary-append</a> a b)) . y))
+                     '((<a href="COMMON-LISP____LAMBDA.html">lambda</a> (<a href="ACL2____U.html">u</a> b a)
+                         (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____NTH.html">nth</a> '0 (<a href="ACL2____BINARY-APPEND.html">binary-append</a> a b)) u))
+                       (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____NTH.html">nth</a> '0 (<a href="ACL2____BINARY-APPEND.html">binary-append</a> a b))
+                             (<a href="COMMON-LISP____NTH.html">nth</a> '1 (<a href="ACL2____BINARY-APPEND.html">binary-append</a> a b)))
+                       b a))
+((<a href="COMMON-LISP____LAMBDA.html">LAMBDA</a> (<a href="ACL2____U.html">U</a> B A) (<a href="COMMON-LISP____CONS.html">CONS</a> X U))
+ (<a href="COMMON-LISP____CONS.html">CONS</a> X Y)
+ B A)
+ACL2 !&gt;</pre> 
+ 
+ <p>Remark.  Notice that a simpler term that is equivalent to the one above is 
+ as follows.</p> 
+ 
+ <pre class="code">((<a href="COMMON-LISP____LAMBDA.html">LAMBDA</a> (<a href="ACL2____U.html">U</a>) (<a href="COMMON-LISP____CONS.html">CONS</a> X U))
+ (<a href="COMMON-LISP____CONS.html">CONS</a> X Y))</pre> 
+ 
+ <p>Indeed, they both untranslate to: <span class="v">(<a href="COMMON-LISP____LET.html">let</a> ((<a href="ACL2____U.html">u</a> (<a href="COMMON-LISP____CONS.html">cons</a> x y))) (<a href="COMMON-LISP____CONS.html">cons</a> x u))</span>. 
+ An enhancement to consider would be to drop formals that are bound to 
+ themselves, like <span class="v">A</span> and <span class="v">B</span> in the example above.  End of Remark.</p> 
+ 
+ <p>Finally, we note that variable capture is avoided, as illustrated by the 
+ following example.  Consider the (untranslated) input <span class="v">(<a href="COMMON-LISP____LET.html">let</a> ((<a href="ACL2____U.html">u</a> (<a href="COMMON-LISP____CONS.html">cons</a> x
+ y))) (<a href="COMMON-LISP____CONS.html">cons</a> x u))</span>, and suppose that we try to replace <span class="v">x</span> with a 
+ ``global'' value of <span class="v">u</span>.  Then it would be an error to replace <span class="v">x</span> by 
+ <span class="v">u</span> in the body of the <span class="v">let</span>, <span class="v">(<a href="COMMON-LISP____CONS.html">cons</a> x u)</span>, because the new 
+ occurrence of <span class="v">u</span> would reference (be ``captured by'') the bound variable 
+ <span class="v">u</span>, not the ``global'' value of <span class="v">u</span>.  Let's see what actually 
+ happens.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____SUBLIS-EXPR_B2.html">sublis-expr+</a> '((x . u))
+                      '((<a href="COMMON-LISP____LAMBDA.html">lambda</a> (<a href="ACL2____U.html">u</a> x) (<a href="COMMON-LISP____CONS.html">cons</a> x u)) (<a href="COMMON-LISP____CONS.html">cons</a> x y) x))
+((<a href="COMMON-LISP____LAMBDA.html">LAMBDA</a> (<a href="ACL2____U.html">U</a> X) (<a href="COMMON-LISP____CONS.html">CONS</a> X U)) (<a href="COMMON-LISP____CONS.html">CONS</a> U Y) U)
+ACL2 !&gt;(<a href="ACL2____UNTRANSLATE.html">untranslate</a> ; input
+        '((<a href="COMMON-LISP____LAMBDA.html">lambda</a> (<a href="ACL2____U.html">u</a> x) (<a href="COMMON-LISP____CONS.html">cons</a> x u)) (<a href="COMMON-LISP____CONS.html">cons</a> x y) x)
+        nil (<a href="ACL2____W.html">w</a> state))
+(<a href="COMMON-LISP____LET.html">LET</a> ((<a href="ACL2____U.html">U</a> (<a href="COMMON-LISP____CONS.html">CONS</a> X Y))) (<a href="COMMON-LISP____CONS.html">CONS</a> X U))
+ACL2 !&gt;(<a href="ACL2____UNTRANSLATE.html">untranslate</a> ; result
+        '((<a href="COMMON-LISP____LAMBDA.html">LAMBDA</a> (<a href="ACL2____U.html">U</a> X) (<a href="COMMON-LISP____CONS.html">CONS</a> X U)) (<a href="COMMON-LISP____CONS.html">CONS</a> U Y) U)
+        nil (<a href="ACL2____W.html">w</a> state))
+(<a href="COMMON-LISP____LET.html">LET</a> ((<a href="ACL2____U.html">U</a> (<a href="COMMON-LISP____CONS.html">CONS</a> U Y)) (X U)) (<a href="COMMON-LISP____CONS.html">CONS</a> X U))
+ACL2 !&gt;</pre> 
+ 
+ <p>It would also be an error to replace <span class="v">u</span> by <span class="v">x</span> in that same body of 
+ the <span class="v">let</span>, <span class="v">(<a href="COMMON-LISP____CONS.html">cons</a> x u)</span>, because that new occurrence of <span class="v">u</span> would 
+ reference the bound variable <span class="v">u</span>, not the ``global'' value of <span class="v">u</span>.  The 
+ input term is returned unchanged in this case.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____SUBLIS-EXPR_B2.html">sublis-expr+</a> '((<a href="ACL2____U.html">u</a> . x))
+                     '((<a href="COMMON-LISP____LAMBDA.html">lambda</a> (<a href="ACL2____U.html">u</a> x) (<a href="COMMON-LISP____CONS.html">cons</a> x u)) (<a href="COMMON-LISP____CONS.html">cons</a> x y) x))
+((<a href="COMMON-LISP____LAMBDA.html">LAMBDA</a> (<a href="ACL2____U.html">U</a> X) (<a href="COMMON-LISP____CONS.html">CONS</a> X U)) (<a href="COMMON-LISP____CONS.html">CONS</a> X Y) X)
+ACL2 !&gt;(<a href="ACL2____UNTRANSLATE.html">untranslate</a> ; new result
+        '((<a href="COMMON-LISP____LAMBDA.html">LAMBDA</a> (<a href="ACL2____U.html">U</a> X) (<a href="COMMON-LISP____CONS.html">CONS</a> X U)) (<a href="COMMON-LISP____CONS.html">CONS</a> X Y) X)
+        nil (<a href="ACL2____W.html">w</a> state))
+(<a href="COMMON-LISP____LET.html">LET</a> ((<a href="ACL2____U.html">U</a> (<a href="COMMON-LISP____CONS.html">CONS</a> X Y))) (<a href="COMMON-LISP____CONS.html">CONS</a> X U))
+ACL2 !&gt;</pre> 
+ 
+ <p>It would also have been correct to rename the bound variable, to produce the 
+ result <span class="v">((<a href="COMMON-LISP____LAMBDA.html">LAMBDA</a> (U1 X) (<a href="COMMON-LISP____CONS.html">CONS</a> X U1)) (<a href="COMMON-LISP____CONS.html">CONS</a> X Y) X)</span>, which untranslates to 
+ <span class="v">(<a href="COMMON-LISP____LET.html">let</a> ((u1 (<a href="COMMON-LISP____CONS.html">cons</a> x y))) (<a href="COMMON-LISP____CONS.html">cons</a> x u1))</span>.  Perhaps a future enhancement of 
+ this utility will do such renaming.</p>
+</body>
+</html>

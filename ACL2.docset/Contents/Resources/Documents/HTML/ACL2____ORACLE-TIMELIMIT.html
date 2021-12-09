@@ -1,0 +1,125 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Oracle-timelimit</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____ORACLE-TIMELIMIT">Click for Oracle-timelimit in the Full Manual</a></h3>
+
+<p>Carry out some computation, returning (not just printing!) how long 
+it took and (on supported Lisps) how many bytes were allocated, but aborting 
+the execution if it takes too long.</p><p>The <span class="v">oracle-timelimit</span> macro is similar to <a href="ACL2____ORACLE-TIME.html">oracle-time</a> 
+except that besides reporting times, it also allows you impose a limit on how 
+long the form is allowed to run for and how much memory it is allowed to use. 
+If execution takes too long or allocates too much memory, execution is 
+aborted.</p> 
+ 
+<p><b>Warning</b>.  This book is intended to be a practically useful tool, but 
+it may not be entirely sound.  In particular:</p> 
+ 
+<ul> 
+ 
+<li>In case of a timeout, execution will (of course) not complete normally.  If 
+the computation you are timing includes, for instance, updates to <a href="ACL2____STOBJ.html">stobj</a>s 
+or the <a href="ACL2____STATE.html">state</a>, then the stobjs may have been only partially updated. 
+This might especially pose a soundness problem for <a href="ACL2____DEFABSSTOBJ.html">abstract stobjs</a> since the stobj invariant might be ruined 
+if a sequence of writes is interrupted.</li> 
+ 
+<li>The internal, core, intermediate part of the computation makes use of a 
+<a href="ACL2____RETURN-LAST.html">return-last</a> style macro that will not return the right results when the 
+computation is timed out.  The top-level <span class="v">oracle-timelimit</span> macro accounts 
+for this, but in principle a malicious user could directly call the internal 
+macro to easily cause unsoundness.</li> 
+ 
+</ul> 
+ 
+<h5>Basic Example</h5> 
+ 
+<pre class="code">(<a href="ACL2____ORACLE-TIMELIMIT.html">oracle-timelimit</a> 1/3 ; Fail if more than 1/3 second is needed
+  (fib 35))           ; What to execute
+--&gt;
+(<a href="ACL2____MV.html">mv</a> successp          ; Did the computation complete in time?
+    seconds           ; Time taken (rational number of seconds)
+    bytes             ; Bytes allocated (natural)
+    ans               ; Answer on success, or NIL on timeout
+    state)            ; Adjusted with changes to oracle</pre> 
+ 
+<h5>Example with Multiple Return Values</h5> 
+ 
+<pre class="code">(<a href="ACL2____ORACLE-TIMELIMIT.html">oracle-timelimit</a> 5        ; Fail if more than 5 seconds are needed
+  (<a href="ACL2____RANDOM_42.html">random$</a> 100 state)      ; What to execute
+  :ret    (<a href="ACL2____MV.html">mv</a> ans state)   ; Return signature of the form to execute
+  :onfail (<a href="ACL2____MV.html">mv</a> :oops state) ; Alternate values to return on timeout
+  )
+--&gt;
+(<a href="ACL2____MV.html">mv</a> successp          ; Did the computation complete in time?
+    seconds           ; Time taken (rational number of seconds)
+    bytes             ; Bytes allocated (natural)
+    ans               ; Answer on success, or :oops on timeout
+    state)            ; Adjusted with changes to the oracle</pre> 
+ 
+<p>See also the file <span class="v">[books]/tools/oracle-timelimit-tests.lisp</span> for some 
+additional tests and working examples.</p> 
+ 
+<h5>General Form</h5> 
+ 
+<pre class="code">(<a href="ACL2____ORACLE-TIMELIMIT.html">oracle-timelimit</a>
+  timelimit            ; rational valued time limit
+  form                 ; what to execute
+  [:ret    retspec]    ; return signature for form
+  [:onfail failspec]   ; return values for timeout case
+  [:maxmem bytes]      ; maximum memory allocation to allow (CCL Only)
+
+  ;; Special option to catch Lisp errors that arise during form
+  [:suppress-lisp-errors bool]
+  )</pre> 
+ 
+<p>The <span class="v">timelimit</span> should evaluate to a rational number which is interpreted 
+as some number of seconds.</p> 
+ 
+<p>The <span class="v">form</span> can be any arbitrary ACL2 form that you want to execute.  If 
+this form returns an ordinary, single value, e.g., as in <span class="v">(fib 35)</span>, then 
+the <span class="v">:ret</span> form is not needed.  Otherwise, <span class="v">:ret</span> should explain the 
+return signature of form, as in <a href="ACL2____ORACLE-TIME.html">oracle-time</a>.</p> 
+ 
+<p>(CCL Only) If provided, the <span class="v">:maxmem</span> should specify a memory ceiling in 
+bytes; the default is <span class="v">nil</span>, in which case no memory ceiling is imposed. 
+This is a very rough mechanism and its implementation may change in the future. 
+The memory usage is checked only occasionally (i.e., once per second or 
+similar).  Note that we check the global memory usage of the entire ACL2 
+process, with no regard to which thread has allocated the memory or how much 
+memory was allocated before the computation began.</p> 
+ 
+<p>The return value of <span class="v">oracle-timelimit</span> extends the return value of 
+<span class="v">form</span> with multiple values.  The basic idea is that <span class="v">oracle-timelimit</span> 
+is going to macroexpand to something like the following:</p> 
+ 
+<pre class="code">(<a href="ACL2____MV-LET.html">mv-let</a> retspec
+    form
+  (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> &amp; successp state) (<a href="ACL2____READ-ACL2-ORACLE.html">read-acl2-oracle</a> state))
+       ((<a href="ACL2____MV.html">mv</a> &amp; time state)     (<a href="ACL2____READ-ACL2-ORACLE.html">read-acl2-oracle</a> state))
+       ((<a href="ACL2____MV.html">mv</a> &amp; bytes state)    (<a href="ACL2____READ-ACL2-ORACLE.html">read-acl2-oracle</a> state))
+       ;; Fix time/bytes to sensible values
+       (time     (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____RATIONALP.html">rationalp</a> time) (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> 0 time)) time 0))
+       (bytes    (<a href="ACL2____NFIX.html">nfix</a> bytes))
+       ((unless successp)
+        ;; execution timed out
+        (<a href="ACL2____MV.html">mv</a> nil time bytes failspec [state])))
+     ;; Else, execution succeeded
+     (<a href="ACL2____MV.html">mv</a> t time bytes retspec [state])))</pre> 
+ 
+<p>You can see here that the <span class="v">retspec</span> is used to explain how to bind the 
+results of executing the form.  It is also, essentially, spliced into the 
+return values for the success and failure cases.  The only twist is that if 
+<span class="v">retspec</span> mentions <span class="v">state</span>, then we don't add an extra <span class="v">state</span> onto 
+the end of the form.</p> 
+ 
+<p>By default, if <span class="v">form</span> causes a raw Lisp error such as a type error, stack 
+overflow, or causes some other non-local exit such as throwing to a tag, the 
+error will propagate through the <span class="v">oracle-timelimit</span> call.  However, if you 
+set <span class="v">:suppress-lisp-errors t</span>, then any such error will be treated as a 
+timeout.  This may have any number of unsound consequences!</p>
+</body>
+</html>

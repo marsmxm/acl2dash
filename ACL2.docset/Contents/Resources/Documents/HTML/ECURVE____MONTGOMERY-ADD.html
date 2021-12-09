@@ -1,0 +1,143 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Montgomery-add</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ECURVE____MONTGOMERY-ADD">Click for Montgomery-add in the Full Manual</a></h3>
+
+<p>Group addition on a Montgomery curve.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(montgomery-add point1 point2 curve)  point3</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">point1</span>  <font color="#606060">Guard <span class="v">(<a href="ECURVE____POINTP.html">pointp</a> point1)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">point2</span>  <font color="#606060">Guard <span class="v">(<a href="ECURVE____POINTP.html">pointp</a> point2)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">curve</span>  <font color="#606060">Guard <span class="v">(<a href="ECURVE____MONTGOMERY-CURVEP.html">montgomery-curvep</a> curve)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">point3</span>  <font color="#606060">Type <span class="v">(<a href="ECURVE____POINTP.html">pointp</a> point3)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>We require, in the guard, both points to be on the curve. 
+     Indeed, the group addition operation is only defined 
+     on points on the curve, not on any points.</p><p>As in short Weierstrass curves, there are various cases to consider; 
+     things are not as uniform as in (complete) twisted Edwards curves. 
+     If either point is the one at infinity, 
+     the result is the other point. 
+     Otherwise, both points are finite, and we proceed as follows. 
+     If the two points have 
+     the same x coordinates and opposite y coordinates, 
+     the result is the point at infinity. 
+     Otherwise, if the points have the same x coordinates, 
+     then the y coordinates must also be the same, 
+     and different from 0, 
+     since both points are on the curve 
+     (we should formally prove this eventually, for validation): 
+     we are thus in the point doubling case, 
+     and the formula from the referenced papers applies. 
+     Finally, if the x coordinates differ, 
+     we are in the ``normal'' (but incomplete) case, 
+     and the formula from the referenced papers applies.</p><p>Note that, to verify guards, 
+     we need to use 3 \mod p instead of just 3, 
+     in case p = 3.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>montgomery-add</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ montgomery-add (point1 point2 curve)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="ECURVE____POINTP.html">pointp</a> point1)
+                             (<a href="ECURVE____POINTP.html">pointp</a> point2)
+                             (<a href="ECURVE____MONTGOMERY-CURVEP.html">montgomery-curvep</a> curve))))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="ECURVE____POINT-ON-MONTGOMERY-P.html">point-on-montgomery-p</a> point1 curve)
+                             (<a href="ECURVE____POINT-ON-MONTGOMERY-P.html">point-on-montgomery-p</a> point2 curve))))
+ (<a href="COMMON-LISP____LET.html">let</a> ((acl2::__function__ 'montgomery-add))
+      (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> acl2::__function__))
+      (<a href="ACL2____B_A2.html">b*</a> ((p (<a href="ECURVE____MONTGOMERY-CURVE-_E3P.html">montgomery-curve-&gt;p</a> curve))
+           (a (<a href="ECURVE____MONTGOMERY-CURVE-_E3A.html">montgomery-curve-&gt;a</a> curve))
+           (b (<a href="ECURVE____MONTGOMERY-CURVE-_E3B.html">montgomery-curve-&gt;b</a> curve))
+           ((when (<a href="COMMON-LISP____EQ.html">eq</a> (<a href="ECURVE____POINT-KIND.html">point-kind</a> point1) :infinite))
+            (<a href="ECURVE____POINT-FIX.html">point-fix</a> point2))
+           ((when (<a href="COMMON-LISP____EQ.html">eq</a> (<a href="ECURVE____POINT-KIND.html">point-kind</a> point2) :infinite))
+            (<a href="ECURVE____POINT-FIX.html">point-fix</a> point1))
+           (x1 (<a href="ECURVE____POINT-FINITE-_E3X.html">point-finite-&gt;x</a> point1))
+           (y1 (<a href="ECURVE____POINT-FINITE-_E3Y.html">point-finite-&gt;y</a> point1))
+           (x2 (<a href="ECURVE____POINT-FINITE-_E3X.html">point-finite-&gt;x</a> point2))
+           (y2 (<a href="ECURVE____POINT-FINITE-_E3Y.html">point-finite-&gt;y</a> point2))
+           ((when (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> x1 x2)
+                       (<a href="COMMON-LISP____EQUAL.html">equal</a> y1 (neg y2 p))))
+            (<a href="ECURVE____POINT-INFINITE.html">point-infinite</a>))
+           ((when (<a href="COMMON-LISP____EQUAL.html">equal</a> x1 x2))
+            (<a href="ACL2____B_A2.html">b*</a> ((x x1)
+                 (y y1)
+                 (x^2 (mul x x p))
+                 (|3.X^2| (mul (<a href="COMMON-LISP____MOD.html">mod</a> 3 p) x^2 p))
+                 (a.x (mul a x p))
+                 (|2.A.X| (mul 2 a.x p))
+                 (b.y (mul b y p))
+                 (|2.B.Y| (mul 2 b.y p))
+                 (|3.X^2+2.A.X+1| (add |3.X^2| (add |2.A.X| 1 p) p))
+                 (l (div |3.X^2+2.A.X+1| |2.B.Y| p))
+                 (l^2 (mul l l p))
+                 (b.l^2 (mul b l^2 p))
+                 (|2.X| (mul 2 x p))
+                 (b.l^2-a (sub b.l^2 a p))
+                 (b.l^2-a-2.x (sub b.l^2-a |2.X| p))
+                 (x3 b.l^2-a-2.x)
+                 (x3-x (sub x3 x p))
+                 (l.[x3-x] (mul l x3-x p))
+                 (y+l.[x3-x] (add y l.[x3-x] p))
+                 (y3 (neg y+l.[x3-x] p)))
+                (<a href="ECURVE____POINT-FINITE.html">point-finite</a> x3 y3)))
+           (y2-y1 (sub y2 y1 p))
+           (x2-x1 (sub x2 x1 p))
+           (l (div y2-y1 x2-x1 p))
+           (l^2 (mul l l p))
+           (b.l^2 (mul b l^2 p))
+           (b.l^2-a (sub b.l^2 a p))
+           (b.l^2-a-x1 (sub b.l^2-a x1 p))
+           (b.l^2-a-x1-x2 (sub b.l^2-a-x1 x2 p))
+           (x3 b.l^2-a-x1-x2)
+           (x3-x1 (sub x3 x1 p))
+           (l.[x3-x1] (mul l x3-x1 p))
+           (y1+l.[x3-x1] (add y1 l.[x3-x1] p))
+           (y3 (neg y1+l.[x3-x1] p)))
+          (<a href="ECURVE____POINT-FINITE.html">point-finite</a> x3 y3))))</pre> 
+<p><b>Theorem: </b>pointp-of-montgomery-add</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> pointp-of-montgomery-add
+        (<a href="ACL2____B_A2.html">b*</a> ((point3 (<a href="ECURVE____MONTGOMERY-ADD.html">montgomery-add</a> point1 point2 curve)))
+            (<a href="ECURVE____POINTP.html">pointp</a> point3))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>montgomery-add-of-point-fix-point1</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> montgomery-add-of-point-fix-point1
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ECURVE____MONTGOMERY-ADD.html">montgomery-add</a> (<a href="ECURVE____POINT-FIX.html">point-fix</a> point1)
+                               point2 curve)
+               (<a href="ECURVE____MONTGOMERY-ADD.html">montgomery-add</a> point1 point2 curve)))</pre> 
+<p><b>Theorem: </b>montgomery-add-point-equiv-congruence-on-point1</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> montgomery-add-point-equiv-congruence-on-point1
+        (<a href="ACL2____IMPLIES.html">implies</a> (point-equiv point1 point1-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ECURVE____MONTGOMERY-ADD.html">montgomery-add</a> point1 point2 curve)
+                        (<a href="ECURVE____MONTGOMERY-ADD.html">montgomery-add</a> point1-equiv point2 curve)))
+        :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>montgomery-add-of-point-fix-point2</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> montgomery-add-of-point-fix-point2
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ECURVE____MONTGOMERY-ADD.html">montgomery-add</a> point1 (<a href="ECURVE____POINT-FIX.html">point-fix</a> point2)
+                               curve)
+               (<a href="ECURVE____MONTGOMERY-ADD.html">montgomery-add</a> point1 point2 curve)))</pre> 
+<p><b>Theorem: </b>montgomery-add-point-equiv-congruence-on-point2</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> montgomery-add-point-equiv-congruence-on-point2
+        (<a href="ACL2____IMPLIES.html">implies</a> (point-equiv point2 point2-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ECURVE____MONTGOMERY-ADD.html">montgomery-add</a> point1 point2 curve)
+                        (<a href="ECURVE____MONTGOMERY-ADD.html">montgomery-add</a> point1 point2-equiv curve)))
+        :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>montgomery-add-of-montgomery-curve-fix-curve</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> montgomery-add-of-montgomery-curve-fix-curve
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ECURVE____MONTGOMERY-ADD.html">montgomery-add</a> point1
+                               point2 (<a href="ECURVE____MONTGOMERY-CURVE-FIX.html">montgomery-curve-fix</a> curve))
+               (<a href="ECURVE____MONTGOMERY-ADD.html">montgomery-add</a> point1 point2 curve)))</pre> 
+<p><b>Theorem: </b>montgomery-add-montgomery-curve-equiv-congruence-on-curve</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> montgomery-add-montgomery-curve-equiv-congruence-on-curve
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ECURVE____MONTGOMERY-CURVE-EQUIV.html">montgomery-curve-equiv</a> curve curve-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ECURVE____MONTGOMERY-ADD.html">montgomery-add</a> point1 point2 curve)
+                        (<a href="ECURVE____MONTGOMERY-ADD.html">montgomery-add</a> point1 point2 curve-equiv)))
+        :rule-classes :congruence)</pre> 
+
+</body>
+</html>

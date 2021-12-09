@@ -1,0 +1,107 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>*vl-1-bit-approx-mux*</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL2014_____A2VL-1-BIT-APPROX-MUX_A2">Click for *vl-1-bit-approx-mux* in the Full Manual</a></h3>
+
+<p>Primitive 1-bit (more conservative) multiplexor module.</p><p>The Verilog definition of this module is:</p> 
+ 
+<pre class="code">module VL_1_BIT_APPROX_MUX (out, sel, a, b) ;
+  output out;
+  input sel;
+  input a;
+  input b;
+  assign out = sel ? a : b;
+endmodule</pre> 
+ 
+<p>VL takes this as a primitive, and we use it to implement <span class="v">?:</span> 
+expressions.  The corresponding <a href="ACL2____ESIM.html">esim</a> primitive is <a href="ACL2_____A2ESIM-SAFE-MUX_A2.html">ACL2::*esim-safe-mux*</a>.</p> 
+ 
+<p>The esim semantics are a <b>conservative, inexact approximation</b> of the 
+Verilog semantics, for two reasons.</p> 
+ 
+<h3>1. Z Input Handling</h3> 
+ 
+<p>In Verilog, the expression <span class="v">sel ? a : b</span> produces a <span class="v">Z</span> value when the 
+selected input is <span class="v">Z</span>.  But our corresponding esim primitive produces X in 
+this case.</p> 
+ 
+<p>Occasionally, <span class="v">?:</span> operators with <span class="v">Z</span> inputs are used in Verilog 
+designs to model efficient muxes, based on tri-state buffers, where the selects 
+are expected to be one-hot.  For instance:</p> 
+ 
+<pre class="code">assign out = sel1 ? data1 : 1'bz;
+assign out = sel2 ? data2 : 1'bz;
+assign out = sel3 ? data3 : 1'bz;</pre> 
+ 
+<p>Such a circuit could not be modeled correctly using approx-muxes; the esim 
+semantics would always produce an X on the output.  To avoid this, VL tries to 
+recognize <span class="v">?:</span> operators that literally are of the form <span class="v">a ?  b : Z</span>, 
+using a simple kind of pattern-matching, and in these cases it uses a different 
+primitive, <a href="VL2014_____A2VL-1-BIT-ZMUX_A2.html">*vl-1-bit-zmux*</a>, instead of approx muxes.</p> 
+ 
+<p>But in general, the Verilog semantics do not really correspond to any kind 
+of hardware that you would implement.  For instance, an AND/OR style mux would 
+always drive its output, regardless of whether its inputs were driven.  So the 
+ESIM semantics, which treat the output as X instead of Z in this case, are 
+arguably more realistic and safer than the Verilog semantics.</p> 
+ 
+<h3>2. X Select Handling</h3> 
+ 
+<p>In Verilog, when <span class="v">sel</span> evaluates to X or Z, the expression <span class="v">sel ? a :
+b</span> may still produce a good 1 or 0 value when both data inputs <span class="v">a</span> and 
+<span class="v">b</span> share this value.</p> 
+ 
+<p>For certain kinds of mux implementations, this seems overly optimistic, and 
+our esim semantics for an approx mux is that whenever <span class="v">sel</span> is X, we output 
+is X, even if the inputs agree.  For more discussion about this issue and the 
+tradeoffs involved, see <a href="ACL2____4V-ITE.html">ACL2::4v-ite</a>.</p> 
+ 
+<p>For special cases where this approximation is not acceptable, VL implements 
+a special <span class="v">VL_X_SELECT</span> that can be used to override this behavior.  <span class="v">?:</span> 
+operators that are annotated with this attribute will be implemented in a less 
+conservative way, as <a href="VL2014_____A2VL-1-BIT-MUX_A2.html">*vl-1-bit-mux*</a> primitives.  See <a href="VL2014____VL-MUX-OCCFORM.html">vl-mux-occform</a> for more information.</p><p><b>Definition: </b>*vl-1-bit-approx-mux*</p><pre class="code">(<a href="ACL2____DEFCONST.html">defconst</a>
+ *vl-1-bit-approx-mux*
+ (<a href="ACL2____B_A2.html">b*</a>
+  ((name "VL_1_BIT_APPROX_MUX")
+   (atts '(("VL_PRIMITIVE") ("VL_HANDS_OFF")))
+   ((<a href="ACL2____MV.html">mv</a> out-expr
+        out-port out-portdecl out-vardecl)
+    (<a href="VL2014____VL-PRIMITIVE-MKPORT.html">vl-primitive-mkport</a> "out" :vl-output))
+   ((<a href="ACL2____MV.html">mv</a> sel-expr
+        sel-port sel-portdecl sel-vardecl)
+    (<a href="VL2014____VL-PRIMITIVE-MKPORT.html">vl-primitive-mkport</a> "sel" :vl-input))
+   ((<a href="ACL2____MV.html">mv</a> a-expr a-port a-portdecl a-vardecl)
+    (<a href="VL2014____VL-PRIMITIVE-MKPORT.html">vl-primitive-mkport</a> "a" :vl-input))
+   ((<a href="ACL2____MV.html">mv</a> b-expr b-port b-portdecl b-vardecl)
+    (<a href="VL2014____VL-PRIMITIVE-MKPORT.html">vl-primitive-mkport</a> "b" :vl-input))
+   (<a href="ACL2____ASSIGN.html">assign</a>
+     (<a href="VL2014____MAKE-VL-ASSIGN.html">make-vl-assign</a>
+          :lvalue out-expr
+          :expr (<a href="VL2014____MAKE-VL-NONATOM.html">make-vl-nonatom</a> :op :vl-qmark
+                                 :args (<a href="COMMON-LISP____LIST.html">list</a> sel-expr a-expr b-expr)
+                                 :finalwidth 1
+                                 :finaltype :vl-unsigned)
+          :loc *vl-fakeloc*)))
+  (<a href="ACL2____HONS-COPY.html">hons-copy</a>
+       (<a href="VL2014____MAKE-VL-MODULE.html">make-vl-module</a>
+            :name name
+            :origname name
+            :ports (<a href="COMMON-LISP____LIST.html">list</a> out-port sel-port a-port b-port)
+            :portdecls (<a href="COMMON-LISP____LIST.html">list</a> out-portdecl
+                             sel-portdecl a-portdecl b-portdecl)
+            :vardecls (<a href="COMMON-LISP____LIST.html">list</a> out-vardecl
+                            sel-vardecl a-vardecl b-vardecl)
+            :assigns (<a href="COMMON-LISP____LIST.html">list</a> assign)
+            :minloc *vl-fakeloc*
+            :maxloc *vl-fakeloc*
+            :atts atts
+            :esim acl2::*esim-safe-mux*))))</pre> 
+ 
+
+</body>
+</html>

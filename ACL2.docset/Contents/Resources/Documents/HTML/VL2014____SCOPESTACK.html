@@ -1,0 +1,150 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Scopestack</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL2014____SCOPESTACK">Click for Scopestack in the Full Manual</a></h3>
+
+<p>Scopestacks deal with namespaces in SystemVerilog by tracking the 
+bindings of names in scopes.  They provide a straightforward, correct way to 
+look up identifiers.</p><h3>Namespaces in SystemVerilog</h3> 
+ 
+<p>SystemVerilog has a complicated system of namespaces, but it mostly boils 
+down to a few categories of names for things:</p> 
+ 
+<ul> 
+ 
+<li>
+<b>items,</b> (our name), including nets/variables, parameters, 
+instances (of modules, gates, UDPs, and interfaces), typedefs, functions, 
+tasks, and named generate blocks;</li> 
+ 
+<li>
+<b>definitions,</b> including module, UDP, interface, and program 
+declarations;</li> 
+ 
+<li>
+<b>ports</b>;</li> 
+ 
+<li>and <b>packages</b>.</li> 
+ 
+</ul> 
+ 
+<p>The items are the most complicated.  Packages occur only at the global 
+scope.  Ports only occur in modules and interfaces.  In principle the 
+SystemVerilog spec allows for nested modules and interfaces, but most 
+implementations don't support this and neither do we, so definitions can only 
+occur at the global scope.  In contrast, to look for an item, we first look in 
+the most local scope; if it isn't found there, we search subsequent nested 
+scopes until we get to the global scope.</p> 
+ 
+ 
+<h3>Scopestacks</h3> 
+ 
+<p>A scopestack is a structure that holds representations of nested scopes. 
+Each scope may be one of several types, namely the types on the left-hand 
+column of the table <a href="VL2014_____A2VL-SCOPES-_E3ITEMS_A2.html">*vl-scopes-&gt;items*</a>:</p> 
+ 
+<pre class="code">(interface module
+           genblob blockscope design package)</pre> 
+ 
+<p>Whenever we search a scope, we call a <a href="ACL2____MEMOIZE.html">memoize</a>d function that turns 
+that scope representation into a fast alist, in which we look up the name. 
+That way, subsequent lookups in the same scope will be constant-time.  This 
+design means that you may occasionally need to free up memory associated with 
+scopestacks; see <a href="VL2014____VL-SCOPESTACKS-FREE.html">vl-scopestacks-free</a>.</p> 
+ 
+ 
+<h5>Construction and Maintenance</h5> 
+ 
+<ul> 
+<li>
+<span class="v">nil</span> is an empty scopestack (without even the global design scope).</li> 
+ 
+<li>
+<span class="v">(<a href="VL2014____VL-SCOPESTACK-INIT.html">vl-scopestack-init</a> design)</span> creates a scopestack with only the global 
+scope of the design visible.</li> 
+ 
+<li>
+<span class="v">(<a href="VL2014____VL-SCOPESTACK-PUSH.html">vl-scopestack-push</a> scope ss)</span> pushes a new nested scope onto the 
+scopestack.  Typically you will need to call this function as you "enter" a 
+new scope, e.g., as your analysis or transformation descends into a particular 
+module, function, etc.</li> 
+ 
+<li>
+<span class="v">(<a href="VL2014____VL-SCOPESTACK-POP.html">vl-scopestack-pop</a> ss)</span> removes the innermost scope from the 
+scopestack, but this is <b>rarely needed</b> because scopestacks are 
+applicative.</li> 
+ 
+<li>
+<span class="v">(<a href="VL2014____VL-SCOPESTACKS-FREE.html">vl-scopestacks-free</a>)</span> clears the memoization tables associated with 
+scopestacks, which in CCL also will allow their associated fast-alists to be 
+garbage collected.  We don't currently have a mechanism free these fast alists 
+otherwise.</li> 
+ 
+</ul> 
+ 
+ 
+<h5>Accessing Items</h5> 
+ 
+<p>The interface for accessing items is more complex than for definitions and 
+packages because items may be found in multiple scopes.</p> 
+ 
+<ul> 
+ 
+<li>
+<span class="v">(<a href="VL2014____VL-SCOPESTACK-FIND-ITEM.html">vl-scopestack-find-item</a> name ss)</span> searches the scopestack for the 
+given name (a string).  The declaration of the item is returned as a <a href="VL2014____VL-SCOPEITEM.html">vl-scopeitem</a>.  The more specific type of the declaration, e.g., <a href="VL2014____VL-VARDECL.html">vl-vardecl</a>, <a href="VL2014____VL-MODINST.html">vl-modinst</a>, etc., can be determined by examining its 
+tag.</li> 
+ 
+<li>
+<span class="v">(<a href="VL2014____VL-SCOPESTACK-FIND-ITEM_F2SS.html">vl-scopestack-find-item/ss</a> name ss)</span> returns <span class="v">(<a href="ACL2____MV.html">mv</a> item new-ss)</span>, 
+where item is the same as returned by <span class="v">vl-scopestack-find-item</span> and 
+<span class="v">new-ss</span> is the scopestack visible from that item's declaration.  For 
+instance, if you are deep within a bunch of nested begin/end blocks, the 
+<span class="v">new-ss</span> you get back might be for some superior block, the whole module, or 
+the scopestack for some entirely different package where the <span class="v">item</span> is 
+declared..</li> 
+ 
+<li>
+<span class="v">(<a href="VL2014____VL-SCOPESTACK-FIND-ITEM_F2CONTEXT.html">vl-scopestack-find-item/context</a> name ss)</span> returns <span class="v">(<a href="ACL2____MV.html">mv</a> item ctx-ss
+package)</span>.  Here <span class="v">item</span> is the same as above.  The <span class="v">ctx-ss</span> is similar 
+to the <span class="v">new-ss</span> above <b>but</b> packages are handled differently.  In 
+particular, <span class="v">ctx-ss</span> here is always the scopestack for some superior scope 
+where the item was found.  If <span class="v">item</span> is imported from a package, then 
+ <ul> 
+    <li>
+<span class="v">ctx-ss</span> refers to, e.g., the module where the item was imported into, whereas</li> 
+    <li>
+<span class="v">new-ss</span> refers to the package that the item was imported from</li> 
+ </ul> 
+The separate <span class="v">package</span> return value is a maybe-string that gives the name 
+of the package where the item was imported from, if applicable.</li> 
+ 
+</ul> 
+ 
+ 
+<h5>Accessing Non-Items</h5> 
+ 
+<ul> 
+ 
+<li>
+<span class="v">(<a href="VL2014____VL-SCOPESTACK-FIND-DEFINITION.html">vl-scopestack-find-definition</a> name ss)</span> is similar to -find-item, but 
+finds a definition instead of an item.  The <span class="v">definition/ss</span> and 
+<span class="v">definition/context</span> versions also exist, but aren't as informative since 
+the definition can (currently) only exist at the global scope.</li> 
+ 
+<li>
+<span class="v">(<a href="VL2014____VL-SCOPESTACK-FIND-PACKAGE.html">vl-scopestack-find-package</a> name ss)</span>, similar.</li> 
+ 
+<li>
+<span class="v">(<a href="VL2014____VL-SCOPE-FIND-PORTDECL-FAST.html">vl-scope-find-portdecl-fast</a> name scope)</span> is similar, but acts only on a 
+scope, not a stack of them, since searching beyond the local module for a port 
+doesn't make much sense.</li> 
+ 
+</ul>
+</body>
+</html>

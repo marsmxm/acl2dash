@@ -1,0 +1,97 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Free-variables-type-prescription</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____FREE-VARIABLES-TYPE-PRESCRIPTION">Click for Free-variables-type-prescription in the Full Manual</a></h3>
+
+<p>Matching for free variable in <a href="ACL2____TYPE-PRESCRIPTION.html">type-prescription</a> rules</p><p>We assume familiarity with the issue of dealing with free variables 
+ in hypotheses; see <a href="ACL2____FREE-VARIABLES.html">free-variables</a>.</p> 
+ 
+ <p>By default, starting with Version 4.3, ACL2 attempts all possible matches 
+ for free variables.  Consider the following example.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFSTUB.html">defstub</a> f1 (x) t)
+(<a href="ACL2____DEFSTUB.html">defstub</a> f2 (x y) t)
+(<a href="ACL2____DEFSTUB.html">defstub</a> f3 (y) t)
+
+(<a href="ACL2____DEFAXIOM.html">defaxiom</a> f1-prop
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (f2 x y) ; &lt;-- y is free in this hypothesis
+                (f3 y))
+           (f1 x))       ; &lt;-- (f1 x) is the type-term (<a href="COMMON-LISP____TYPE.html">type</a> is `non-nil')
+  :rule-classes :type-prescription)
+
+; Succeeds:
+(<a href="ACL2____THM.html">thm</a> (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (f2 a b)
+                   (f3 b))
+              (f1 a)))
+
+; The following fails unless we try more than one match for free variables in
+; hypotheses.
+(<a href="ACL2____THM.html">thm</a> (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (f2 a b)
+                   (f2 a c)
+                   (f2 a d)
+                   (f3 b))
+              (f1 a)))</pre> 
+ 
+ <p>There may be times when you want to match only the first free variable.  In 
+ that case, you can write a function of two arguments, the 
+ <i>type-prescription</i> <a href="ACL2____RUNE.html">rune</a> being applied and the current ACL2 world, 
+ that prohibits multiple matching for those times.  Your function is then 
+ `attached' to the built-in constrained function, <span class="v">oncep-ts</span>.  The following 
+ examples are intended to explain how this works.</p> 
+ 
+ <p>First, let us disallow all multiple matching of free variables (i.e., 
+ implement the behavior often referred to as ``<span class="v">:match-free :once</span>''; see 
+ <a href="ACL2____FREE-VARIABLES.html">free-variables</a>).</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> oncep-tp-always (<a href="ACL2____RUNE.html">rune</a> wrld)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORE.html">ignore</a> rune wrld)
+           (<a href="ACL2____XARGS.html">xargs</a> :mode :logic :guard t))
+  t)
+
+(<a href="ACL2____DEFATTACH-SYSTEM.html">defattach-system</a> oncep-tp oncep-tp-always)</pre> 
+ 
+ <p>The second <span class="v">thm</span> form above will now fail, because only one 
+ free-variable match is permitted for the first hypothesis of rule <span class="v">f1-prop</span> 
+ above.</p> 
+ 
+ <p>Now suppose that instead, we want to disallow multiple matches for free 
+ variables in hypotheses of type-prescription rules <i>except</i> for the rule 
+ <span class="v">f1-prop</span> above.  With the following events, the second <span class="v">thm</span> form above 
+ once again succeeds.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> oncep-tp-always-except-f1-prop (<a href="ACL2____RUNE.html">rune</a> wrld)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORE.html">ignore</a> wrld)
+           (<a href="ACL2____XARGS.html">xargs</a> :mode :logic :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____CONSP.html">consp</a> rune)
+                                           (<a href="COMMON-LISP____CONSP.html">consp</a> (<a href="COMMON-LISP____CDR.html">cdr</a> rune))
+                                           (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> (<a href="COMMON-LISP____CADR.html">cadr</a> rune)))))
+  (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQ.html">eq</a> (base-symbol rune) 'f1-prop)))
+
+(<a href="ACL2____DEFATTACH-SYSTEM.html">defattach-system</a> oncep-tp oncep-tp-always-except-f1-prop)</pre> 
+ 
+ <p>In general, your <span class="tt"><a href="ACL2____DEFATTACH.html">defattach</a></span> event will attach a function symbol to 
+ <span class="v">oncep-tp</span>.  The <a href="ACL2____GUARD.html">guard</a> of that function symbol must be implied by 
+ the guard of <span class="v">oncep-tp</span>:</p> 
+ 
+ <pre class="code">ACL2 !&gt;:args oncep-tp
+
+Function         ONCEP-TP
+Formals:         (<a href="ACL2____RUNE.html">RUNE</a> WRLD)
+Signature:       (ONCEP-TP * *)
+                 =&gt; *
+Guard:           (<a href="COMMON-LISP____AND.html">AND</a> (<a href="ACL2____PLIST-WORLDP.html">PLIST-WORLDP</a> WRLD)
+                      (<a href="COMMON-LISP____CONSP.html">CONSP</a> RUNE)
+                      (<a href="COMMON-LISP____CONSP.html">CONSP</a> (<a href="COMMON-LISP____CDR.html">CDR</a> RUNE))
+                      (<a href="COMMON-LISP____SYMBOLP.html">SYMBOLP</a> (<a href="COMMON-LISP____CADR.html">CADR</a> RUNE)))
+Guards Verified: T
+Defun-Mode:      :logic
+Type:            built-in (<a href="COMMON-LISP____OR.html">or</a> unrestricted)
+
+ ONCEP-TP
+ACL2 !&gt;</pre>
+</body>
+</html>

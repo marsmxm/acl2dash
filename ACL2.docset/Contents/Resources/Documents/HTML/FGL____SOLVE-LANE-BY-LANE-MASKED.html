@@ -1,0 +1,73 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Solve-lane-by-lane-masked</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=FGL____SOLVE-LANE-BY-LANE-MASKED">Click for Solve-lane-by-lane-masked in the Full Manual</a></h3>
+
+<p>Equality check that works around hard SAT/fraiging problems caused by writemasking.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(solve-lane-by-lane-masked x y mask width)  *</pre></dt> 
+</dl></div> 
+<p>This addresses a problem that sometimes comes up in proving 
+correctness of SIMD operations with writemasking.  Suppose an instruction 
+applies function F to each 32-bit lane of a vector, with writemasking; that is, 
+the spec for lane i is <span class="v">mask[i] ? F(src.lanes32[i]) : dst.lanes32[i]</span>.  Now, 
+perhaps the implementation applies the same function F, but instead operates on 
+<span class="v">mask[i] ? src.lanes32[i] : 0</span>.  Of course this is OK because when 
+<span class="v">mask[i]</span> is 0 we don't care what the function computes.  But unfortunately 
+when we pack the lanes together and try to equivalence check spec versus 
+implementation, one of our best tools, fraiging (aka SAT sweeping) doesn't 
+work.  This is because there are no equivalent formulas within the computation 
+of the function F: each subformula G within F shows up in the spec as 
+<span class="v">G(src.lanes32[i])</span> but in the implementation as <span class="v">G(mask[i] ?
+src.lanes32[i] : 0)</span>, which is obviously not equivalent.</p> 
+ 
+<p>A workaround for this problem is to split the check for each lane into cases 
+according to <span class="v">mask[i]</span> and propagate that assumption into their formulas. 
+That is, when <span class="v">mask[i]</span> is assumed true, replace <span class="v">mask[i] ?
+src.lanes32[i] : 0</span> with just <span class="v">src.lanes32[i]</span>.  FGL has a special function 
+called <span class="v">fgl-pathcond-fix</span> that can do this: logically it is the 
+identity function, but under FGL it rewrites the input symbolic object to 
+assume the current path condition.  That is, for each Boolean formula in the 
+symbolic object, that formula is simplified by replacing any AIG literals known 
+to be true (false) under the path condition with 1 (0).  In many cases simply 
+splitting into cases for each lane's corresponding mask bit, specializing each 
+equivalence under both cases, produces a formula that is much easier to solve 
+than the original, especially using fraiging.</p> 
+ 
+<p>Sometimes this may not work; for a somewhat more aggressive strategy, see 
+<a href="FGL____SOLVE-LANE-BY-LANE-MASKED_B2.html">solve-lane-by-lane-masked+</a>.</p> 
+ 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>solve-lane-by-lane-masked</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> solve-lane-by-lane-masked
+       (x y mask width)
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t))
+       (<a href="COMMON-LISP____LET.html">let</a> ((__function__ 'solve-lane-by-lane-masked))
+            (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+            (<a href="COMMON-LISP____EQUAL.html">equal</a> x y)))</pre> 
+<p><b>Theorem: </b>solve-lane-by-lane-masked-impl</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+  solve-lane-by-lane-masked-impl
+  (<a href="ACL2____IMPLIES.html">implies</a>
+       (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____SYNTAXP.html">syntaxp</a> (<a href="ACL2____POSP.html">posp</a> width))
+            (<a href="FGL____CHECK-INTEGERP.html">check-integerp</a> xintp x)
+            (<a href="FGL____CHECK-INTEGERP.html">check-integerp</a> yintp y))
+       (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="FGL____SOLVE-LANE-BY-LANE-MASKED.html">solve-lane-by-lane-masked</a> x y mask width)
+              (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="FGL____CHECK-INT-ENDP.html">check-int-endp</a> x-endp x)
+                       (<a href="FGL____CHECK-INT-ENDP.html">check-int-endp</a> y-endp y))
+                  (<a href="COMMON-LISP____EQUAL.html">equal</a> x y)
+                  (<a href="ACL2____AND_A2.html">and*</a> (<a href="ACL2____B_A2.html">b*</a> ((lane-equiv (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____LOGHEAD.html">loghead</a> width x)
+                                                (<a href="ACL2____LOGHEAD.html">loghead</a> width y))))
+                            (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____LOGBITP.html">logbitp</a> 0 mask)
+                                (fgl-pathcond-fix lane-equiv)
+                                (fgl-pathcond-fix lane-equiv)))
+                        (<a href="FGL____SOLVE-LANE-BY-LANE-MASKED.html">solve-lane-by-lane-masked</a> (<a href="ACL2____LOGTAIL.html">logtail</a> width x)
+                                                   (<a href="ACL2____LOGTAIL.html">logtail</a> width y)
+                                                   (<a href="ACL2____LOGCDR.html">logcdr</a> mask)
+                                                   width))))))</pre> 
+
+</body>
+</html>

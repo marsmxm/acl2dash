@@ -1,0 +1,117 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Wme64</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=X86ISA____WME64">Click for Wme64 in the Full Manual</a></h3>
+
+<p>Write an unsigned 64-bit value to memory via an effective address.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(wme64 proc-mode eff-addr seg-reg val check-alignment? x86) 
+   
+(mv flg x86-new)</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">check-alignment?</span>  <font color="#606060">Guard <span class="v">(<a href="ACL2____BOOLEANP.html">booleanp</a> check-alignment?)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">x86-new</span>  <font color="#606060">Type <span class="v">(x86p x86-new)</span>, given <span class="v">(x86p x86)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>The effective address <span class="v">eff-addr</span> is translated to a canonical 
+          linear address.  If this translation is successful and no other error 
+          occurs (like alignment errors), then <a href="X86ISA____WML64.html">wml64</a> is 
+          called.</p> 
+          <p>Prior to the effective address translation, we check whether write 
+          access is allowed.  In 32-bit mode, write access is allowed in data 
+          segments (DS, ES, FS, GS, and SS) if the W bit in the segment 
+          descriptor is 1; write access is disallowed in code segments (this is 
+          not explicitly mentioned in Intel manual, May'18, Volume 3, Section 
+          3.4.5.1, but it seems reasonable).  In 64-bit mode, the W bit is 
+          ignored (see Atmel manual, Dec'17, Volume 2, Section 4.8.1); by 
+          analogy, we allow write access to the code segment as well. 
+          These checks may be slightly optimized using the invariant that 
+          SS.W must be 1 when SS is loaded.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>wme64$inline</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ wme64$inline
+ (proc-mode eff-addr
+            seg-reg val check-alignment? x86)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (x86)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____TYPE.html">type</a> (integer 0 4) proc-mode)
+          (<a href="COMMON-LISP____TYPE.html">type</a> (signed-byte 64) eff-addr)
+          (<a href="COMMON-LISP____TYPE.html">type</a> (integer 0 5) seg-reg)
+          (<a href="COMMON-LISP____TYPE.html">type</a> (unsigned-byte 64) val))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____BOOLEANP.html">booleanp</a> check-alignment?)))
+ (<a href="ACL2____B_A2.html">b*</a>
+  (((when
+     (<a href="COMMON-LISP____AND.html">and</a>
+      (<a href="COMMON-LISP_____F2_D3.html">/=</a> proc-mode 0)
+      (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP_____D3.html">=</a> seg-reg 1)
+          (<a href="ACL2____B_A2.html">b*</a> ((attr (<a href="ACL2____LOGHEAD.html">loghead</a> 16 (seg-hidden-attri seg-reg x86)))
+               (<a href="ACL2____W.html">w</a> (<a href="X86ISA____DATA-SEGMENT-DESCRIPTOR-ATTRIBUTESBITS-_E3W.html">data-segment-descriptor-attributesbits-&gt;w</a> attr)))
+              (<a href="COMMON-LISP_____D3.html">=</a> w 0)))))
+    (<a href="ACL2____MV.html">mv</a> (<a href="COMMON-LISP____LIST.html">list</a> :non-writable-segment eff-addr seg-reg)
+        x86))
+   ((<a href="ACL2____MV.html">mv</a> flg lin-addr)
+    (<a href="X86ISA____EA-TO-LA.html">ea-to-la</a> proc-mode eff-addr seg-reg 8 x86))
+   ((when flg) (<a href="ACL2____MV.html">mv</a> flg x86))
+   ((unless (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____NOT.html">not</a> check-alignment?)
+                (<a href="X86ISA____ADDRESS-ALIGNED-P.html">address-aligned-p</a> lin-addr 8 nil)))
+    (<a href="ACL2____MV.html">mv</a> (<a href="COMMON-LISP____LIST.html">list</a> :unaligned-linear-address lin-addr)
+        x86)))
+  (<a href="X86ISA____WML64.html">wml64</a> lin-addr val x86)))</pre> 
+<p><b>Theorem: </b>x86p-of-wme64.x86-new</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+    x86p-of-wme64.x86-new
+    (<a href="ACL2____IMPLIES.html">implies</a> (x86p x86)
+             (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?flg ?x86-new)
+                   (wme64$inline proc-mode eff-addr
+                                 seg-reg val check-alignment? x86)))
+                 (x86p x86-new)))
+    :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>wme64-when-64-bit-modep-and-not-fs/gs</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> wme64-when-64-bit-modep-and-not-fs/gs
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> seg-reg 4))
+                      (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> seg-reg 5))
+                      (<a href="X86ISA____CANONICAL-ADDRESS-P.html">canonical-address-p</a> eff-addr)
+                      (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____NOT.html">not</a> check-alignment?)
+                          (<a href="X86ISA____ADDRESS-ALIGNED-P.html">address-aligned-p</a> eff-addr 8 nil)))
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="X86ISA____WME64.html">wme64</a> 0 eff-addr
+                               seg-reg val check-alignment? x86)
+                        (<a href="X86ISA____WML64.html">wml64</a> eff-addr val x86))))</pre> 
+<p><b>Theorem: </b>wme64-unaligned-when-64-bit-modep-and-not-fs/gs</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     wme64-unaligned-when-64-bit-modep-and-not-fs/gs
+     (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> seg-reg 4))
+                   (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> seg-reg 5))
+                   (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____NOT.html">not</a> check-alignment?)
+                            (<a href="X86ISA____ADDRESS-ALIGNED-P.html">address-aligned-p</a> eff-addr 8 nil)))
+                   (<a href="X86ISA____CANONICAL-ADDRESS-P.html">canonical-address-p</a> eff-addr))
+              (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="X86ISA____WME64.html">wme64</a> 0 eff-addr
+                            seg-reg val check-alignment? x86)
+                     (<a href="COMMON-LISP____LIST.html">list</a> (<a href="COMMON-LISP____LIST.html">list</a> :unaligned-linear-address eff-addr)
+                           x86))))</pre> 
+<p><b>Theorem: </b>wme64-when-64-bit-modep-and-fs/gs</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ wme64-when-64-bit-modep-and-fs/gs
+ (<a href="ACL2____IMPLIES.html">implies</a>
+     (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> seg-reg 4) (<a href="COMMON-LISP____EQUAL.html">equal</a> seg-reg 5))
+     (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="X86ISA____WME64.html">wme64</a> 0 eff-addr
+                   seg-reg val check-alignment? x86)
+            (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> flg lin-addr)
+                  (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> base &amp; &amp;)
+                        (<a href="X86ISA____SEGMENT-BASE-AND-BOUNDS.html">segment-base-and-bounds</a> 0 seg-reg x86))
+                       (lin-addr (<a href="X86ISA____I64.html">i64</a> (<a href="COMMON-LISP_____B2.html">+</a> base (<a href="X86ISA____N64.html">n64</a> eff-addr)))))
+                      (<a href="COMMON-LISP____IF.html">if</a> (<a href="X86ISA____CANONICAL-ADDRESS-P.html">canonical-address-p</a> lin-addr)
+                          (<a href="ACL2____MV.html">mv</a> nil lin-addr)
+                          (<a href="ACL2____MV.html">mv</a> (<a href="COMMON-LISP____LIST.html">list</a> :non-canonical-address lin-addr)
+                              0))))
+                 ((when flg) (<a href="ACL2____MV.html">mv</a> flg x86))
+                 ((unless (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____NOT.html">not</a> check-alignment?)
+                              (<a href="X86ISA____ADDRESS-ALIGNED-P.html">address-aligned-p</a> lin-addr 8 nil)))
+                  (<a href="ACL2____MV.html">mv</a> (<a href="COMMON-LISP____LIST.html">list</a> :unaligned-linear-address lin-addr)
+                      x86)))
+                (<a href="X86ISA____WML64.html">wml64</a> lin-addr val x86)))))</pre> 
+
+</body>
+</html>

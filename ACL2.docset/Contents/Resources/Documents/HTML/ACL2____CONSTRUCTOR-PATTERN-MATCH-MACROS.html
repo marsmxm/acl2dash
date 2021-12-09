@@ -1,0 +1,220 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Constructor-pattern-match-macros</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____CONSTRUCTOR-PATTERN-MATCH-MACROS">Click for Constructor-pattern-match-macros in the Full Manual</a></h3>
+
+<p>How to write pattern-match macros for custom constructors.</p><p>Here we discuss how constructor <a href="ACL2____PATTERN-MATCH.html">pattern-match</a> macros work in 
+conjunction with pattern-match.  In most cases the user does not need to be 
+concerned with the internals discussed here; see <a href="ACL2____DEF-PATTERN-MATCH-CONSTRUCTOR.html">def-pattern-match-constructor</a> for an easy way to get pattern-match to 
+recognize a user-defined form.</p> 
+ 
+<p>The trick behind pattern-match is that whenever a constructor <span class="v">cname</span> is 
+seen in a pattern, a call to the macro named <span class="v">cname-pattern-matcher</span> is 
+returned and macro expansion continues by expanding that macro.  Because of 
+this, all the unprocessed parts of the original pattern-match call must be 
+passed through that macro.  By the design of the framework, the constructor 
+macro will only operate on a few of the arguments given to it, passing the rest 
+through to the main function that performs pattern matching, 
+<span class="v">pattern-bindings-list</span>.</p> 
+ 
+<p>The arguments given to the constructor's macro are</p> 
+ 
+<pre class="code">(<a href="ACL2____TERM.html">term</a> args tests bindings lhses rhses pmstate)</pre> 
+ 
+<p>The arguments that <span class="v">pattern-bindings-list</span> takes are</p> 
+ 
+<pre class="code">(lhses rhses tests bindings pmstate)</pre> 
+ 
+<p>The argument list of <span class="v">pattern-bindings-list</span> is a subset of that of the 
+constructor's macro.  We will discuss how to form the arguments for 
+<span class="v">pattern-bindings-list</span> from those given to the constructor macro.</p> 
+ 
+<p>The constructor macro is responsible for error handling in the case of a 
+nonsensical invocation of the constructor (primarily, one with the wrong number 
+of arguments), adding appropriate tests to determine whether <span class="v">term</span> can 
+match the pattern, and ``lining up'' the arguments given to the constructor in 
+the pattern with the appropriate destructors applied to the term in 
+question.</p> 
+ 
+<p>We will go through the arguments given to the macro and outline what needs 
+to be done with them to fulfill the above obligations.</p> 
+ 
+<p><span class="v">term</span> is a term which should evaluate to the current part of the input 
+that we are trying to match.  If the original term given as input to pattern 
+match was x, then term may be something like <span class="v">(<a href="COMMON-LISP____CAR.html">car</a> (<a href="COMMON-LISP____NTH.html">nth</a> 4 (<a href="COMMON-LISP____CDR.html">cdr</a> x)))</span>. 
+Therefore we need to add tests to determine whether this is of the correct form 
+to be matched to something created by our constructor, and we need to apply the 
+correct destructors to it to break it down for further matching.</p> 
+ 
+<p><span class="v">args</span> is the list of arguments given to the constructor in the pattern 
+that we're matching to.  The whole pattern that <span class="v">term</span> is supporsed to match 
+is our constructor <span class="v">cname</span> applied to <span class="v">args</span>.  For error checking we need 
+to ensure that <span class="v">args</span> is the correct length for the call to our constructor 
+to make sense.  It is also helpful to ensure that <span class="v">args</span> is a true-list and 
+issue a helpful error message if not.  Each element of <span class="v">args</span> must also be 
+paired with an application of a destructor to <span class="v">term</span> to continue pattern 
+matching.  If, as is usually the case, the arguments we're expecting are to be 
+read as subpatterns, the best approach is not to examine them individually but 
+to let pattern-bindings-list do the real work.</p> 
+ 
+<p><span class="v">tests</span> is an accumulated list of tests to be applied to the input to 
+determine whether it matches the pattern.  We need to prepend to this list any 
+necessary tests on <span class="v">term</span> so as to determine whether it could be formed by 
+our constructor.</p> 
+ 
+<p><span class="v">bindings</span> is an accumulated list of variables that will be bound to 
+applications of destructors to the input term.  While the results of the 
+processing that our macro does will have a direct effect on this list, most of 
+the time it should be passed through to <span class="v">pattern-bindings-list</span> and we 
+should instead manipulate <span class="v">lhses</span> and <span class="v">rhses</span>:</p> 
+ 
+<p><span class="v">lhses</span> and <span class="v">rhses</span> are lists of, respectively, subpatterns of the 
+top-level pattern that we're processing and corresponding subterms of the input 
+term that will be matched to the patterns.  In most cases what we'll do is 
+prepent <span class="v">args</span> to <span class="v">lhses</span> while prepending a list of each of our 
+destructors applied to <span class="v">term</span> to <span class="v">rhses</span>.  <span class="v">pattern-bindings-list</span> 
+will then handle the details of variable bindings and recursive subpattern 
+matching as determined by the contents of <span class="v">lhses</span>.  Each macro must maintain 
+the invariant that <span class="v">lhses</span> and <span class="v">rhses</span> are the same length; if this isn't 
+the case there are probably other things going wrong as well.  The intuition 
+behind these names is that eventually patterns in <span class="v">lhses</span> break down to 
+variables, which are bound to corresponding subterms broken down from elements 
+of <span class="v">rhses</span>.  We're using LHS and RHS here as in an assignment statement in 
+some imperative language, as opposed to the sense used when talking about a 
+rewrite rule.</p> 
+ 
+<p><span class="v">pmstate</span> contains the expression to be evaluated if the pattern matches, 
+the list of tests to be tried before confirming a match, declarations, the rest 
+of the clauses to match to in case this match fails, and the name of the macro 
+to pass the final results to.  These are grouped together specifically because 
+they don't have to do with the actual pattern-matching but must be kept intact 
+through the various iterations of macro expansion.  This argument should 
+*always* be passed through intact to pattern-bindings-list unless you're trying 
+to really confuse your users.</p> 
+ 
+<p>An example of a very typical constructor macro is the one for cons, which is 
+automatically generated by <span class="v">def-pattern-match-constructor</span>:</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFMACRO.html">defmacro</a>
+  cons-pattern-matcher
+  (<a href="ACL2____TERM.html">term</a> args tests bindings lhses rhses pmstate)
+  (<a href="COMMON-LISP____COND.html">cond</a>
+   ;; First check args for well-formedness: it should always be a true-list of
+   ;; length 2, since any other argument list to cons is ill-formed.
+   ((<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____TRUE-LISTP.html">true-listp</a> args))
+    (<a href="ACL2____ER.html">er</a> hard 'top-level ``badly formed expression: ~~x0~~%''
+        (<a href="COMMON-LISP____CONS.html">cons</a> 'cons args)))
+   ((<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP_____D3.html">=</a> (<a href="ACL2____LEN.html">len</a> args) 2))
+    (<a href="ACL2____ER.html">er</a> hard 'top-level
+        ``Wrong number of arguments to CONS in pattern matching: ~~x0~~%''
+        (<a href="COMMON-LISP____CONS.html">CONS</a> 'CONS ARGS)))
+   (t (<a href="COMMON-LISP____LET.html">let</a>
+       ;; Push destructor applications (<a href="COMMON-LISP____CAR.html">car</a> term) and (<a href="COMMON-LISP____CDR.html">cdr</a> term) onto rhses
+       ((rhses (<a href="COMMON-LISP____APPEND.html">append</a> (<a href="COMMON-LISP____LIST.html">list</a> (<a href="COMMON-LISP____LIST.html">list</a> 'car term) (<a href="COMMON-LISP____LIST.html">list</a> 'cdr term)) rhses))
+        ;; Push the args onto lhses (they must occur in the order corresponding
+        ;; to the order of the destructor calls pushed onto rhses.)
+        (lhses (<a href="COMMON-LISP____APPEND.html">append</a> args lhses))
+        ;; Push a test that term is consp onto tests
+        (tests (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____LIST.html">list</a> 'consp term) tests)))
+       ;; Finally call pattern-bindings-list again.
+       (pattern-bindings-list lhses rhses tests bindings pmstate)))))</pre> 
+ 
+<p>If there are no errors, this simply makes three changes to the existing 
+arguments: it prepends the two subterms <span class="v">(<a href="COMMON-LISP____CAR.html">car</a> term)</span> and <span class="v">(<a href="COMMON-LISP____CDR.html">cdr</a> term)</span> 
+onto <span class="v">rhses</span> and the list of arguments to <span class="v">lhses</span> and adds the test 
+<span class="v">(<a href="COMMON-LISP____CONSP.html">consp</a> term)</span> to tests.  It then calls pattern-bindings-list.</p> 
+ 
+<p>The macro for list works the same way, but could not have been generated by 
+<span class="v">def-pattern-match-constructor</span> because it handles variable length argument 
+lists.  It again simply prepends all arguments to <span class="v">lhses</span>, prepends a list 
+of applications of destructors to the input term to rhses (try evaluating 
+<span class="v">(list-of-nths 0 5 'x)</span> to see the resulting form), and tests whether the 
+input term is of a suitable form, in this case whether it is a true-list of the 
+same length as the argument list.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> list-pattern-matcher
+  (<a href="ACL2____TERM.html">term</a> args tests bindings lhses rhses pmstate)
+  ;; Ensure that args is a true-list; it may be any length.
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____TRUE-LISTP.html">true-listp</a> args))
+      (<a href="ACL2____ER.html">er</a> hard 'top-level ``Badly formed expression: ~~x0~~%''
+          (<a href="COMMON-LISP____CONS.html">cons</a> 'list args))
+    (<a href="COMMON-LISP____LET.html">let</a>
+        ;; list-of-nths produces a list of calls to nth, from (<a href="COMMON-LISP____NTH.html">nth</a> 0 term) up
+        ;; to (<a href="COMMON-LISP____NTH.html">nth</a> (<a href="COMMON-LISP____-.html">-</a> (<a href="COMMON-LISP____LENGTH.html">length</a> args) 1) term).
+        ((rhses (<a href="COMMON-LISP____APPEND.html">append</a> (list-of-nths 0 (<a href="COMMON-LISP____LENGTH.html">length</a> args) term) rhses))
+         ;; push args onto lhses
+         (lhses (<a href="COMMON-LISP____APPEND.html">append</a> args lhses))
+         ;; Require that term is a true-list with length corresponding to that
+         ;; of args.
+         (tests (<a href="COMMON-LISP____APPEND.html">append</a> `((<a href="ACL2____TRUE-LISTP.html">true-listp</a> ,term)
+                          (<a href="COMMON-LISP_____D3.html">=</a> (<a href="ACL2____LEN.html">len</a> ,term) ,(<a href="COMMON-LISP____LENGTH.html">length</a> args)))
+                        tests)))
+      (pattern-bindings-list lhses rhses tests bindings pmstate))))</pre> 
+ 
+<p>A nonstandard, but still correct, example is the one for list*, which 
+instead of doing the processing itself replaces its pattern with an equivalent 
+cons structure so that the cons macro will do all the work: to illustrate what 
+is prepended to <span class="v">lhses</span>, try running <span class="v">(list*-macro (<a href="COMMON-LISP____LIST.html">list</a> 'a 'b 'c 'd))</span>. 
+In this case no test needs to be added because the cons macro takes care of it. 
+Note that we could easily cause an infinite loop in macro expansion by abusing 
+this type of thing and, for example, pushing a new <span class="v">list*</span> pattern onto 
+lhses.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> list*-pattern-matcher
+  (<a href="ACL2____TERM.html">term</a> args tests bindings lhses rhses pmstate)
+  ;; Check that args is a true-listp.
+  ;; If this is counterintuitive, consider that this would suggest syntax such
+  ;; as (<a href="COMMON-LISP____LIST_A2.html">list*</a> a b . c).
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____TRUE-LISTP.html">true-listp</a> args))
+      (<a href="ACL2____ER.html">er</a> hard 'top-level ``Badly formed expression: ~~x0~~%''
+          (<a href="COMMON-LISP____CONS.html">cons</a> 'list* args))
+    (<a href="COMMON-LISP____LET.html">let</a>
+        ;; Just push term onto rhses
+        ((rhses (<a href="COMMON-LISP____CONS.html">cons</a> term rhses))
+         ;; list*-macro is the very function that list* uses to expand an
+         ;; invocation into a nest of conses.  Since we have a cons pattern
+         ;; matcher already, we just take advantage of this.
+         (lhses (<a href="COMMON-LISP____CONS.html">cons</a> (list*-macro args) lhses)))
+      ;; No additional tests are necessary - we trust in cons-pattern-matcher
+      ;; to take care of that.
+      (pattern-bindings-list lhses rhses tests bindings pmstate))))</pre> 
+ 
+<p>Another nonstandard example is raw-pattern-matcher, which reverts the 
+behavior of pattern-match to that of case-match for the term inside; in fact, 
+it just calls the function that does the work for case-match - 
+<span class="v">match-tests-and-bindings</span> - and uses its results.  In this case, since the 
+argument to our constructor is not taken to be a subpattern of the form handled 
+by <span class="v">pattern-bindings-list</span>, we manipulate <span class="v">bindings</span> directly rather than 
+dealing with <span class="v">lhses</span> and <span class="v">rhses</span>.  It is fortunate that the form of the 
+tests and bindings variables for <span class="v">match-tests-and-bindings</span> is the same as 
+ours or we would need to do more processing of them.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> raw-pattern-matcher
+  (<a href="ACL2____TERM.html">term</a> args tests bindings lhses rhses pmstate)
+  ;; Args should be a list of length 1 - just a pattern.
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____ATOM.html">atom</a> args)
+          (<a href="COMMON-LISP____CDR.html">cdr</a> args))
+      (<a href="ACL2____ER.html">er</a> hard 'top-level ``Badly formed expression: ~~x0~~%''
+          (<a href="COMMON-LISP____CONS.html">cons</a> 'raw args))
+    ;; match-tests-and-bindings takes a term, a case-match pattern, and a list
+    ;; of tests and bindings; it returns a new version of tests and bindings
+    ;; including the ones necessary to match the term to the pattern.
+    (<a href="ACL2____MV-LET.html">mv-let</a> (tests bindings)
+            (match-tests-and-bindings term (<a href="COMMON-LISP____CAR.html">car</a> args) tests bindings)
+            ;; We then pass the new tests and bindings to
+            ;; pattern-bindings-list.
+            (pattern-bindings-list lhses rhses tests bindings pmstate))))</pre> 
+ 
+<p>Also try looking at the definitions for <span class="v">bind-pattern-matcher</span>, 
+<span class="v">any-pattern-matcher</span>, and both <span class="v">force-pattern-matcher</span> and 
+<span class="v">force-match-remove-tests-pattern-matcher</span> as further nonstandard 
+examples.</p> 
+ 
+
+</body>
+</html>

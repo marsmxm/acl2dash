@@ -1,0 +1,60 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Cblock-expression-building</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL2014____CBLOCK-EXPRESSION-BUILDING">Click for Cblock-expression-building in the Full Manual</a></h3>
+
+<p>Convert a combinational always block into assignments.</p><p>Basic examples of what we're trying to do here:</p> 
+<pre class="code">always @(<a href="COMMON-LISP_____A2.html">*</a>)            ----&gt;   assign lhs = condition1 ? {expr1}
+   if (condition1)                        : condition2 ? {expr2}
+      lhs = expr1;                        : {expr3}
+   else if (condition2)
+      lhs = expr2;
+   else
+      lhs = expr3;
+
+always @(<a href="COMMON-LISP_____A2.html">*</a>)            ----&gt;   assign lhs = condition ? {expr2} : {expr1}
+   lhs = expr1;
+   if (condition)
+      lhs = expr2;</pre> 
+ 
+<p>Note that this conversion isn't quite right if the widths of the <span class="v">expr</span>s 
+above can differ.  For instance, in the merged expressions like <span class="v">condition ?
+expr2 : expr1</span>, suppose the width of <span class="v">expr1</span> and <span class="v">lhs</span> are 5, but the 
+width of <span class="v">expr2</span> is 7.  Now the width of the new, combined expression is 
+also <span class="v">7</span>, and (because of the sizing rules) the new expression would be 
+wider than <span class="v">expr1</span>.</p> 
+ 
+<p>To avoid this, we locally use the <a href="VL2014____STMTTEMPS.html">stmttemps</a> transform before trying 
+to carry out this expression building.  This should ensure that all lhses/rhses 
+are well-typed and have compatible widths.  The excessive use of concatenations 
+above ensures that everything is unsigned, to avoid creating badly typed 
+<span class="v">?:</span> expressions.</p> 
+ 
+<p>Slight twist.  If we know that this is supposed to be a combinational always 
+block because it's written with <span class="v">always_comb</span>, then we allow the lhs to not 
+be written in every branch.  In this case a Verilog simulator may not trigger 
+any update of the variable, essentially treating it like a latch.  However, it 
+seems quite likely that a synthesis tool will not infer a latch.  To try to 
+avoid making mistakes here, we want to make sure to drive the variable to Xes 
+in this case.</p> 
+ 
+<p>To drive the variable to Xes, a simple thing to do is, e.g.,</p> 
+ 
+<pre class="code">always_comb           ---&gt;  always_comb
+   if (condition)              lhs = XXXX
+      lhs = expr;              if (condition)
+   if (condition2)                lhs = expr;
+      lhs = expr2;             if (condition2)
+                                  lhs = expr2;</pre> 
+ 
+<p>This is safe even if all the branches are covered (in which case we're 
+simply setting the variable to X and then to its real value).</p> 
+ 
+
+</body>
+</html>

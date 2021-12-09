@@ -1,0 +1,120 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Vl-condcheck-fix</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL____VL-CONDCHECK-FIX">Click for Vl-condcheck-fix in the Full Manual</a></h3>
+
+<p>Canonicalize an test expression for condcheck.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(vl-condcheck-fix x)  new-x</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">x</span>  <font color="#606060">Guard <span class="v">(<a href="VL____VL-EXPR-P.html">vl-expr-p</a> x)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">new-x</span>  <font color="#606060">Type <span class="v">(<a href="VL____VL-EXPR-P.html">vl-expr-p</a> new-x)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>We fix X (in the normal sense of <a href="VL____VL-EXPR-STRIP.html">vl-expr-strip</a>, to throw away 
+widths, attributes, etc., to facilitate equality checking), and then do certain 
+kinds of not-necessarily-sound rewriting to try to further canonicalize things. 
+These rewrites might possibly help us recognize a broader class of errors, but 
+probably aren't super important.</p> 
+ 
+<pre class="code">!A     --&gt; ~A               unsound, but sort of valid for one-bit ops
+
+A != B --&gt; ~(A == B)        and we sort the args
+A ~^ B --&gt; A == B           unsound, but sort of valid for one-bit ops
+A ^ B  --&gt; ~(A == B)        unsound, but sort of valid for one-bit ops
+
+A &lt; B  --&gt; ~(A &gt;= B)
+A &gt; B  --&gt; ~(B &gt;= A)
+A &lt;= B --&gt; B &gt;= A</pre> 
+ 
+<p>We also put arguments of commutative operators into <a href="ACL2_____C3_C3.html">&lt;&lt;</a> order.  Note 
+that we only apply these rewrites at the top-level and not in any deep way, 
+which also sort of makes sense since we only want to assume that the top-level 
+expression is one-bit wide.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>vl-condcheck-fix</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ vl-condcheck-fix (x)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL____VL-EXPR-P.html">vl-expr-p</a> x)))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'vl-condcheck-fix))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+   ((x (<a href="VL____VL-EXPR-STRIP.html">vl-expr-strip</a> x)))
+   (<a href="VL____VL-EXPR-CASE.html">vl-expr-case</a>
+    x
+    :vl-unary (<a href="COMMON-LISP____IF.html">if</a> (vl-unaryop-equiv x.op :vl-unary-lognot)
+                  (<a href="VL____CHANGE-VL-UNARY.html">change-vl-unary</a> x :op :vl-unary-bitnot)
+                  x)
+    :vl-binary
+    (<a href="ACL2____B_A2.html">b*</a>
+     (((<a href="ACL2____MV.html">mv</a> min max)
+       (<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2_____C3_C3.html">&lt;&lt;</a> x.left x.right)
+           (<a href="ACL2____MV.html">mv</a> x.left x.right)
+           (<a href="ACL2____MV.html">mv</a> x.right x.left)))
+      ((when (vl-binaryop-equiv x.op :vl-binary-neq))
+       (<a href="VL____MAKE-VL-UNARY.html">make-vl-unary</a> :op :vl-unary-bitnot
+                      :arg (<a href="VL____CHANGE-VL-BINARY.html">change-vl-binary</a> x
+                                             :op :vl-binary-eq
+                                             :left min
+                                             :right max)))
+      ((when (vl-binaryop-equiv x.op :vl-binary-xnor))
+       (<a href="VL____CHANGE-VL-BINARY.html">change-vl-binary</a> x
+                         :op :vl-binary-eq
+                         :left min
+                         :right max))
+      ((when (vl-binaryop-equiv x.op :vl-binary-xor))
+       (<a href="VL____MAKE-VL-UNARY.html">make-vl-unary</a> :op :vl-unary-bitnot
+                      :arg (<a href="VL____CHANGE-VL-BINARY.html">change-vl-binary</a> x
+                                             :op :vl-binary-eq
+                                             :left min
+                                             :right max)))
+      ((when (vl-binaryop-equiv x.op :vl-binary-lt))
+       (<a href="VL____MAKE-VL-UNARY.html">make-vl-unary</a> :op :vl-unary-bitnot
+                      :arg (<a href="VL____CHANGE-VL-BINARY.html">change-vl-binary</a> x
+                                             :op :vl-binary-gte)))
+      ((when (vl-binaryop-equiv x.op :vl-binary-gt))
+       (<a href="VL____MAKE-VL-UNARY.html">make-vl-unary</a> :op :vl-unary-bitnot
+                      :arg (<a href="VL____CHANGE-VL-BINARY.html">change-vl-binary</a> x
+                                             :op :vl-binary-gte
+                                             :left x.right
+                                             :right x.left)))
+      ((when (vl-binaryop-equiv x.op :vl-binary-lte))
+       (<a href="VL____CHANGE-VL-BINARY.html">change-vl-binary</a> x
+                         :op :vl-binary-gte
+                         :left x.right
+                         :right x.left))
+      ((when
+        (<a href="COMMON-LISP____MEMBER.html">member</a>
+             x.op
+             '(:vl-binary-plus :vl-binary-times
+                               :vl-binary-ceq :vl-binary-cne
+                               :vl-binary-logand :vl-binary-logor
+                               :vl-binary-bitand :vl-binary-bitor)))
+       (<a href="VL____CHANGE-VL-BINARY.html">change-vl-binary</a> x
+                         :left min
+                         :right max)))
+     x)
+    :otherwise x))))</pre> 
+<p><b>Theorem: </b>vl-expr-p-of-vl-condcheck-fix</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-expr-p-of-vl-condcheck-fix
+        (<a href="ACL2____B_A2.html">b*</a> ((new-x (<a href="VL____VL-CONDCHECK-FIX.html">vl-condcheck-fix</a> x)))
+            (<a href="VL____VL-EXPR-P.html">vl-expr-p</a> new-x))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>vl-condcheck-fix-of-vl-expr-fix-x</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-condcheck-fix-of-vl-expr-fix-x
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL____VL-CONDCHECK-FIX.html">vl-condcheck-fix</a> (<a href="VL____VL-EXPR-FIX.html">vl-expr-fix</a> x))
+               (<a href="VL____VL-CONDCHECK-FIX.html">vl-condcheck-fix</a> x)))</pre> 
+<p><b>Theorem: </b>vl-condcheck-fix-vl-expr-equiv-congruence-on-x</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-condcheck-fix-vl-expr-equiv-congruence-on-x
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="VL____VL-EXPR-EQUIV.html">vl-expr-equiv</a> x x-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL____VL-CONDCHECK-FIX.html">vl-condcheck-fix</a> x)
+                        (<a href="VL____VL-CONDCHECK-FIX.html">vl-condcheck-fix</a> x-equiv)))
+        :rule-classes :congruence)</pre> 
+
+</body>
+</html>

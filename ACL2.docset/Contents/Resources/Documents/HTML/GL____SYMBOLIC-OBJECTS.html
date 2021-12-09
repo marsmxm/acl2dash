@@ -1,0 +1,147 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Symbolic-objects</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=GL____SYMBOLIC-OBJECTS">Click for Symbolic-objects in the Full Manual</a></h3>
+
+<p>Format of symbolic objects in <a href="ACL2____GL.html">gl</a>.</p><p>Symbolic objects represent functions from the set of 
+environments (described below) to the set of ACL2 objects.  The value of an 
+object at an environment is given by an evaluator function.  Symbolic objects 
+are recursively structured and have a number of constructors.  We first briefly 
+describe evaluators (and why there can be more than one), then the structure of 
+environment objects, and then the symbolic object constructors.</p> 
+ 
+ 
+<h4>Evaluators</h4> 
+ 
+<p>A symbolic object evaluator is a function with the interface</p> 
+ 
+<pre class="code">(EV symbolic-object environment) =&gt; value.</pre> 
+ 
+<p>There may be several evaluators defined.  The differences between evaluators 
+have to do with the G-APPLY symbolic object type, which represents a function 
+applied to symbolic arguments.  In order to evaluate such an object, the 
+evaluator must be defined such that it recognizes the particular function 
+symbol used in the G-APPLY object.  An evaluator may not evaluate a symbolic 
+object containing a G-APPLY construct with an unrecognized function symbol. 
+One evaluator, named EVAL-G-BASE, is initially defined in the GL library, and 
+recognizes function symbols of the predefined primitives included with the 
+library.</p> 
+ 
+<h4>Environments</h4> 
+ 
+<p>The basic components of symbolic objects are data structures containing 
+Boolean functions, represented either by BDDs or AIGs (see <a href="GL____MODES.html">modes</a>), and G-VAR 
+constructs, which represent unconstrained variables.  To evaluate a symbolic 
+object, each of these needs to be evaluated to a constant.  An environment 
+contains the information necessary to evaluate either kind of expression:</p> 
+<ul> 
+<li>a truth assignment for the Boolean variables used in the Boolean function 
+representation; in AIG mode, this is an alist mapping variable names to 
+Booleans, and in BDD mode, an ordered list of Booleans corresponding to the 
+decision levels of the BDDs.</li> 
+<li>an alist mapping unconstrained variable names to their values.</li> 
+</ul> 
+ 
+<h4>Symbolic Object Representation</h4> 
+ 
+<p>There are eight basic constructions of symbolic objects, some of which may 
+recursively contain other symbolic objects.  We now describe each such 
+construction and its evaluation.</p> 
+ 
+<dl> 
+ 
+<dt>Representation: (:G-BOOLEAN . bfr)</dt> 
+<dt>Constructor: (G-BOOLEAN bfr)</dt> 
+ 
+<dd>Takes the values T and NIL.  The evaluation of a G-BOOLEAN object is simply 
+the evaluation of <span class="v">&lt;bdd&gt;</span> using the list of Booleans in the 
+environment.</dd> 
+ 
+<dt>Representation: (:G-INTEGER . list-of-bfrs)</dt> 
+<dt>Constructor: (G-INTEGER list-of-bfrs)</dt> 
+ 
+<dd>Evaluates to an integer.  <span class="v">&lt;list-of-bfrs&gt;</span> gives the bits of the 
+integer, least significant first.  The representation is two's-complement, 
+i.e. the last bit represents 0 if false or -1 if true.  The enpty list 
+represents 0.</dd> 
+ 
+<dt>Representation (:G-CONCRETE . object)</dt> 
+<dt>Constructor: (G-CONCRETE object)</dt> 
+ 
+<dd>Evaluates to <span class="v">&lt;object&gt;</span>.  While most ACL2 objects evaluate to themselves 
+anyway, this construct is useful for representing symbolic objects or objects 
+structured similarly to symbolic objects.  For example, <pre class="code">(:G-CONCRETE . (:G-BOOLEAN . (T . NIL))) evaluates to
+(:G-BOOLEAN . (T . NIL)), whereas
+(:G-BOOLEAN . (T . NIL)) evaluates to either T or NIL.</pre>
+</dd> 
+ 
+<dt>Representation: (:G-VAR . name)</dt> 
+<dt>Constructor: (G-VAR . name)</dt> 
+ 
+<dd>
+<span class="v">&lt;name&gt;</span> may be any object.  Evaluates to the object bound to 
+<span class="v">&lt;name&gt;</span> in the environment.</dd> 
+ 
+<dt>Representation: (:G-ITE test then . else)</dt> 
+<dt>Constructor: (G-ITE test then else)</dt> 
+ 
+<dd>Each of <span class="v">&lt;test&gt;</span>, <span class="v">&lt;then&gt;</span>, and <span class="v">&lt;else&gt;</span> must be symbolic objects. 
+If <span class="v">&lt;test&gt;</span> evaluates to a nonnil value, then this object evaluates to the 
+evaluation of <span class="v">&lt;then&gt;</span>; otherwise this evaluates to the evaluation of 
+<span class="v">&lt;else&gt;</span>.</dd> 
+ 
+<dt>Representation: (:G-APPLY fn . arglist)</dt> 
+<dt>Constructor: (G-APPLY fnsym arglist)</dt> 
+ 
+<dd>
+<span class="v">&lt;fn&gt;</span> should be a symbol and <span class="v">&lt;arglist&gt;</span> should be a symbolic 
+object.  If the evaluator recognizes <span class="v">&lt;fn&gt;</span> and <span class="v">&lt;arglist&gt;</span> evaluates to 
+<span class="v">&lt;args&gt;</span>, a true-list of length equal to the arity of the function 
+<span class="v">&lt;fn&gt;</span>, then this object evaluates to the application of <span class="v">&lt;fn&gt;</span> to 
+<span class="v">&lt;args&gt;</span>.  Otherwise, the evaluation is undefined.</dd> 
+ 
+<dt>Representation: atom</dt> 
+ 
+<dd>Every atom evaluates to itself.  However, the keyword symbols 
+:G-BOOLEAN, :G-INTEGER, :G-CONCRETE, :G-VAR, :G-ITE, and :G-APPLY are not 
+themselves well-formed symbolic objects.</dd> 
+ 
+<dt>Representation: <span class="v">(<a href="COMMON-LISP____CAR.html">car</a> . cdr)</span>
+</dt> 
+ 
+<dd>A cons of two symbolic objects evaluates to the cons of their evaluations. 
+Note that since the keyword symbols that distinguish symbolic object 
+constructions are not themselves well-formed symbolic objects, this 
+construction is unambiguous.</dd> 
+ 
+</dl> 
+ 
+<h4>Miscellaneous notes about symbolic objects and evaluation</h4> 
+ 
+<ul> 
+ 
+<li>Any function from finitely many Boolean values to the universe of 
+ACL2 objects can be expressed using only the G-ITE, G-BOOLEAN, and 
+G-CONCRETE forms.</li> 
+ 
+<li>Most ACL2 objects are themselves well-formed symbolic objects which 
+evaluate to themselves.  The exceptions are ones which contain the special 
+keyword symbolis :G-BOOLEAN, :G-INTEGER :G-CONCRETE, :G-VAR, 
+:G-ITE, and :G-APPLY.  These atoms (and out of all atoms, only these) 
+are not well-formed symbolic objects.  Since a cons of any two 
+well-formed symbolic objects is itself a well-formed symbolic objects, 
+only objects containing these atoms may be non-well-formed.</li> 
+ 
+<li>The function that checks well-formedness of symbolic objects is GOBJECTP, 
+and the initial evaluator function is GL::EVAL-G-BASE.  It may be useful to 
+read the definitions of these functions for reference in case the above 
+symbolic object documentation is unclear.</li> 
+ 
+</ul>
+</body>
+</html>

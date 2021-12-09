@@ -1,0 +1,128 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Check-expr-asg</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=C____CHECK-EXPR-ASG">Click for Check-expr-asg in the Full Manual</a></h3>
+
+<p>Check an expression that must be an assignment exrpression.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(check-expr-asg e funtab vartab)  wf?</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">e</span>  <font color="#606060">Guard <span class="v">(<a href="C____EXPRP.html">exprp</a> e)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">funtab</span>  <font color="#606060">Guard <span class="v">(<a href="C____FUN-TABLEP.html">fun-tablep</a> funtab)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">vartab</span>  <font color="#606060">Guard <span class="v">(<a href="C____VAR-TABLEP.html">var-tablep</a> vartab)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">wf?</span>  <font color="#606060">Type <span class="v">(<a href="C____WELLFORMED-RESULTP.html">wellformed-resultp</a> wf?)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>For now, we only allow simple assignment expressions, with:</p><ul>
+<li>A left-hand side consisting of 
+      either a variable in scope 
+      or an array subscripting expression 
+      where the array is a variable in scope.</li>
+<li>A right-hand side consisting of a function call or a pure expression.</li>
+</ul><p>The two sides must have the same type, 
+     which is more restrictive than [C:6.5.16.1]. 
+     Since it is an invariant (currently not formally proved) 
+     that variables never have <span class="v">void</span> type, 
+     the equality of types implies that the function must not return <span class="v">void</span>. 
+     We do not return any type information because 
+     an expression statement throws away the expression's value; 
+     indeed, we are only interested in the side effects of assignment here.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>check-expr-asg</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ check-expr-asg (e funtab vartab)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="C____EXPRP.html">exprp</a> e)
+                             (<a href="C____FUN-TABLEP.html">fun-tablep</a> funtab)
+                             (<a href="C____VAR-TABLEP.html">var-tablep</a> vartab))))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'check-expr-asg))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+   (((unless (<a href="C____EXPR-CASE.html">expr-case</a> e :binary))
+     (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :expr-asg-not-binary (<a href="C____EXPR-FIX.html">expr-fix</a> e))))
+    (op (<a href="C____EXPR-BINARY-_E3OP.html">expr-binary-&gt;op</a> e))
+    (left (<a href="C____EXPR-BINARY-_E3ARG1.html">expr-binary-&gt;arg1</a> e))
+    (right (<a href="C____EXPR-BINARY-_E3ARG2.html">expr-binary-&gt;arg2</a> e))
+    ((unless (<a href="C____BINOP-CASE.html">binop-case</a> op :asg))
+     (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :expr-asg-not-asg op)))
+    (ltype
+     (<a href="COMMON-LISP____COND.html">cond</a>
+        ((<a href="C____EXPR-CASE.html">expr-case</a> left :ident)
+         (<a href="ACL2____B_A2.html">b*</a> ((var (<a href="C____EXPR-IDENT-_E3GET.html">expr-ident-&gt;get</a> left))
+              (ltype (<a href="C____VAR-TABLE-LOOKUP.html">var-table-lookup</a> var vartab))
+              ((when (<a href="COMMON-LISP____NOT.html">not</a> ltype))
+               (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :expr-asg-var-not-found var))))
+             ltype))
+        ((<a href="C____EXPR-CASE.html">expr-case</a> left :arrsub)
+         (<a href="ACL2____B_A2.html">b*</a> ((arr (<a href="C____EXPR-ARRSUB-_E3ARR.html">expr-arrsub-&gt;arr</a> left))
+              (sub (<a href="C____EXPR-ARRSUB-_E3SUB.html">expr-arrsub-&gt;sub</a> left))
+              ((unless (<a href="C____EXPR-CASE.html">expr-case</a> arr :ident))
+               (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :expr-asg-arrsub-not-var left)))
+              (var (<a href="C____EXPR-IDENT-_E3GET.html">expr-ident-&gt;get</a> arr))
+              (arr-type (<a href="C____VAR-TABLE-LOOKUP.html">var-table-lookup</a> var vartab))
+              ((when (<a href="COMMON-LISP____NOT.html">not</a> arr-type))
+               (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :expr-asg-arrsub-array-not-found left)))
+              ((unless (<a href="C____TYPE-CASE.html">type-case</a> arr-type :pointer))
+               (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :array-mistype arr
+                            :required :pointer
+                            :supplied arr-type)))
+              (sub-type (<a href="C____CHECK-EXPR-PURE.html">check-expr-pure</a> sub vartab))
+              ((when (<a href="C____ERRORP.html">errorp</a> sub-type)) sub-type)
+              ((unless (<a href="C____TYPE-INTEGERP.html">type-integerp</a> sub-type))
+               (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :subscript-mistype sub
+                            :required :integer
+                            :supplid sub-type))))
+             (<a href="C____TYPE-POINTER-_E3REFERENCED.html">type-pointer-&gt;referenced</a> arr-type)))
+        (t (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :expr-asg-disallowed left)))))
+    ((when (<a href="C____ERRORP.html">errorp</a> ltype)) ltype)
+    (rtype (<a href="C____CHECK-EXPR-CALL-OR-PURE.html">check-expr-call-or-pure</a> right funtab vartab))
+    ((when (<a href="C____ERRORP.html">errorp</a> rtype)) rtype)
+    ((unless (<a href="COMMON-LISP____EQUAL.html">equal</a> ltype rtype))
+     (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :asg-mistype left right
+                  :required ltype
+                  :supplied rtype))))
+   :wellformed)))</pre> 
+<p><b>Theorem: </b>wellformed-resultp-of-check-expr-asg</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> wellformed-resultp-of-check-expr-asg
+        (<a href="ACL2____B_A2.html">b*</a> ((wf? (<a href="C____CHECK-EXPR-ASG.html">check-expr-asg</a> e funtab vartab)))
+            (<a href="C____WELLFORMED-RESULTP.html">wellformed-resultp</a> wf?))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>check-expr-asg-of-expr-fix-e</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> check-expr-asg-of-expr-fix-e
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____CHECK-EXPR-ASG.html">check-expr-asg</a> (<a href="C____EXPR-FIX.html">expr-fix</a> e)
+                               funtab vartab)
+               (<a href="C____CHECK-EXPR-ASG.html">check-expr-asg</a> e funtab vartab)))</pre> 
+<p><b>Theorem: </b>check-expr-asg-expr-equiv-congruence-on-e</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> check-expr-asg-expr-equiv-congruence-on-e
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="C____EXPR-EQUIV.html">expr-equiv</a> e e-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____CHECK-EXPR-ASG.html">check-expr-asg</a> e funtab vartab)
+                        (<a href="C____CHECK-EXPR-ASG.html">check-expr-asg</a> e-equiv funtab vartab)))
+        :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>check-expr-asg-of-fun-table-fix-funtab</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> check-expr-asg-of-fun-table-fix-funtab
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____CHECK-EXPR-ASG.html">check-expr-asg</a> e (<a href="C____FUN-TABLE-FIX.html">fun-table-fix</a> funtab)
+                               vartab)
+               (<a href="C____CHECK-EXPR-ASG.html">check-expr-asg</a> e funtab vartab)))</pre> 
+<p><b>Theorem: </b>check-expr-asg-fun-table-equiv-congruence-on-funtab</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> check-expr-asg-fun-table-equiv-congruence-on-funtab
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="C____FUN-TABLE-EQUIV.html">fun-table-equiv</a> funtab funtab-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____CHECK-EXPR-ASG.html">check-expr-asg</a> e funtab vartab)
+                        (<a href="C____CHECK-EXPR-ASG.html">check-expr-asg</a> e funtab-equiv vartab)))
+        :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>check-expr-asg-of-var-table-fix-vartab</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> check-expr-asg-of-var-table-fix-vartab
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____CHECK-EXPR-ASG.html">check-expr-asg</a> e funtab (<a href="C____VAR-TABLE-FIX.html">var-table-fix</a> vartab))
+               (<a href="C____CHECK-EXPR-ASG.html">check-expr-asg</a> e funtab vartab)))</pre> 
+<p><b>Theorem: </b>check-expr-asg-var-table-equiv-congruence-on-vartab</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> check-expr-asg-var-table-equiv-congruence-on-vartab
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="C____VAR-TABLE-EQUIV.html">var-table-equiv</a> vartab vartab-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____CHECK-EXPR-ASG.html">check-expr-asg</a> e funtab vartab)
+                        (<a href="C____CHECK-EXPR-ASG.html">check-expr-asg</a> e funtab vartab-equiv)))
+        :rule-classes :congruence)</pre> 
+
+</body>
+</html>

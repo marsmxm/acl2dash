@@ -1,0 +1,79 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Stmttemps</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL2014____STMTTEMPS">Click for Stmttemps in the Full Manual</a></h3>
+
+<p>Replace <span class="v">if</span> conditions and right-hand sides into temporary 
+wires.</p><p>This is a preprocessing step in synthesizing always blocks.  We 
+expect it to be run only after expressions are sized.</p> 
+ 
+<p>We rewrite statements throughout each flop-like <span class="v">always</span> block, adding 
+temporary wires for:</p> 
+ 
+<ol> 
+<li>non-trivial conditions of if expressions</li> 
+<li>non-sliceable right-hand sides of assignment statements</li> 
+</ol> 
+ 
+<p>We don't apply this transform to latch-like blocks, because it would 
+interfere with our sensitivity-list checking.  That is, if our sensitivity list 
+is something like <span class="v">@(en1 or en2 or d)</span> and we rewrite <span class="v">if (en1 &amp; en2)
+...</span>  to <span class="v">if (temp_123) ...</span>, we would think the resulting sensitivity list 
+was incorrect.</p> 
+ 
+<p>Regarding (1), this is mainly an optimization.  The idea is that we want to 
+simplify the condition expressions, since we might end up duplicating them 
+across many flops.  That is, if we have a block like:</p> 
+ 
+<pre class="code">always @@(posedge clk)
+  if (foo1 + foo2 + foo3 + foo4 == 1) begin
+     a &lt;= b;
+     c &lt;= d;
+  end</pre> 
+ 
+<p>Then this might lead to flops like:</p> 
+ 
+<pre class="code">myflop flop1 (a, (foo1 + foo2 + foo3 + foo4 == 1) ? b : a, clk);
+myflop flop2 (c, (foo1 + foo2 + foo3 + foo4 == 1) ? d : c, clk);</pre> 
+ 
+<p>And we'll be redundantly synthesizing this complex expression.  This 
+wouldn't necessarily be any kind of problem, but it seems like we can do better 
+by pulling the combinational logic out of the conditions, e.g.:</p> 
+ 
+<pre class="code">wire temp = |( foo1 + foo2 + foo3 + foo4 == 1);
+
+always @(posedge clk)
+  if (temp) begin
+    a &lt;= b;
+    c &lt;= d;
+  end</pre> 
+ 
+<p>When we synthesize this simpler block, we'll avoid introducing the repeated 
+subexpression.  That is, our output will be something like:</p> 
+ 
+<pre class="code">wire temp = |( foo1 + foo2 + foo3 + foo4 == 1);
+myflop flop1 (a, temp ? b : a, clk);
+myflop flop2 (c, temp ? d : c, clk);</pre> 
+ 
+<p>Regarding (2), the idea here is that to support blocks that write to 
+different bits of wires, we may need to split up the right-hand sides.  For 
+instance, if we are trying to synthesize something like:</p> 
+ 
+<pre class="code">always @@(posedge clk)
+  if (<a href="COMMON-LISP____COND.html">cond</a>)
+     {a[1:0], a[3:2]} &lt;= b1 + b2;
+  else
+     a[3:0] &lt;= b1 + b2 + 1;</pre> 
+ 
+<p>Then we're basically going to end up dealing with this at the bit level, and 
+we're going to have to talk about bit <span class="v">0</span> of these compound expressions like 
+<span class="v">b1 + b2</span>.  So we will want to be able to split up the right-hand sides we 
+see.  We also split up any wires where the widths of the lhs/rhs don't agree, 
+so that later transforms just need to deal with compatible assignments.</p>
+</body>
+</html>

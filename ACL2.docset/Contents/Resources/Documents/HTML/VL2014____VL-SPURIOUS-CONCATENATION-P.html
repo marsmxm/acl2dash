@@ -1,0 +1,94 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Vl-spurious-concatenation-p</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL2014____VL-SPURIOUS-CONCATENATION-P">Click for Vl-spurious-concatenation-p in the Full Manual</a></h3>
+
+<p>Determine if a concatenation such as <span class="v">{foo}</span> can be safely 
+rewritten to just <span class="v">foo</span>.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(vl-spurious-concatenation-p arg ss)  spurious-p</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">arg</span>  The argument to the concatenation.<br><font color="#606060">Guard <span class="v">(<a href="VL2014____VL-EXPR-P.html">vl-expr-p</a> arg)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">ss</span>  the scope stack we're in.<br><font color="#606060">Guard <span class="v">(<a href="VL2014____VL-SCOPESTACK-P.html">vl-scopestack-p</a> ss)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">spurious-p</span>  <font color="#606060">Type <span class="v">(<a href="ACL2____BOOLEANP.html">booleanp</a> spurious-p)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>In early implementations of <a href="VL2014____VL-EXPR-CLEAN-CONCATS.html">vl-expr-clean-concats</a>, we 
+looked for singleton concatenations like <span class="v">{foo}</span> and replaced them with 
+<span class="v">foo</span>.</p> 
+ 
+<p>Unfortunately, it's tricky to safely do this before sizing has been done. 
+For instance, if we replace <span class="v">{a+b}</span> with just <span class="v">a+b</span>, then we've lost the 
+fact that <span class="v">a+b</span> should be self-determined.  In general this wouldn't be safe 
+and could screw things up.</p> 
+ 
+<p>However, we found that we still wanted to carry out this reduction in places 
+where it <i>is</i> safe.  For instance, it seems okay to do this in the special 
+cases of bit- and part-selects: these expressions are always unsigned and, 
+e.g., there is no difference between extending <span class="v">{foo[3]}</span> and <span class="v">foo[3]</span>, 
+since a zero-extension is necessary in either case.</p> 
+ 
+<p>As an additional tweak, which we wanted for a particular VL-Mangle project, 
+we now also permit <span class="v">arg</span> to be an unsigned constint, weirdint, or identifier 
+atom (if it is the name of an unsigned net or register.)</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>vl-spurious-concatenation-p</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+     vl-spurious-concatenation-p (arg ss)
+     (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="VL2014____VL-EXPR-P.html">vl-expr-p</a> arg)
+                                 (<a href="VL2014____VL-SCOPESTACK-P.html">vl-scopestack-p</a> ss))))
+     (<a href="COMMON-LISP____LET.html">let</a> ((__function__ 'vl-spurious-concatenation-p))
+          (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+          (<a href="COMMON-LISP____IF.html">if</a> (vl-fast-atom-p arg)
+              (<a href="ACL2____B_A2.html">b*</a> ((guts (<a href="VL2014____VL-ATOM-_E3GUTS.html">vl-atom-&gt;guts</a> arg))
+                   ((when (<a href="VL2014____VL-FAST-CONSTINT-P.html">vl-fast-constint-p</a> guts))
+                    (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL2014____VL-CONSTINT-_E3ORIGTYPE.html">vl-constint-&gt;origtype</a> guts)
+                           :vl-unsigned))
+                   ((when (<a href="VL2014____VL-FAST-WEIRDINT-P.html">vl-fast-weirdint-p</a> guts))
+                    (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL2014____VL-WEIRDINT-_E3ORIGTYPE.html">vl-weirdint-&gt;origtype</a> guts)
+                           :vl-unsigned))
+                   ((unless (<a href="VL2014____VL-FAST-ID-P.html">vl-fast-id-p</a> guts)) nil)
+                   (look (<a href="VL2014____VL-SCOPESTACK-FIND-ITEM.html">vl-scopestack-find-item</a> (<a href="VL2014____VL-ID-_E3NAME.html">vl-id-&gt;name</a> guts)
+                                                  ss))
+                   ((unless (<a href="COMMON-LISP____AND.html">and</a> look (<a href="COMMON-LISP____EQ.html">eq</a> (<a href="ACL2____TAG.html">tag</a> look) :vl-vardecl)
+                                 (<a href="VL2014____VL-SIMPLEVAR-P.html">vl-simplevar-p</a> look)))
+                    nil))
+                  (<a href="COMMON-LISP____NOT.html">not</a> (<a href="VL2014____VL-SIMPLEVAR-_E3SIGNEDP.html">vl-simplevar-&gt;signedp</a> look)))
+              (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____EQ.html">eq</a> (<a href="VL2014____VL-NONATOM-_E3OP.html">vl-nonatom-&gt;op</a> arg) :vl-bitselect)
+                  (<a href="COMMON-LISP____EQ.html">eq</a> (<a href="VL2014____VL-NONATOM-_E3OP.html">vl-nonatom-&gt;op</a> arg)
+                      :vl-partselect-colon)))))</pre> 
+<p><b>Theorem: </b>booleanp-of-vl-spurious-concatenation-p</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> booleanp-of-vl-spurious-concatenation-p
+        (<a href="ACL2____B_A2.html">b*</a> ((spurious-p (<a href="VL2014____VL-SPURIOUS-CONCATENATION-P.html">vl-spurious-concatenation-p</a> arg ss)))
+            (<a href="ACL2____BOOLEANP.html">booleanp</a> spurious-p))
+        :rule-classes :type-prescription)</pre> 
+<p><b>Theorem: </b>vl-spurious-concatenation-p-of-vl-expr-fix-arg</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-spurious-concatenation-p-of-vl-expr-fix-arg
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL2014____VL-SPURIOUS-CONCATENATION-P.html">vl-spurious-concatenation-p</a> (<a href="VL2014____VL-EXPR-FIX.html">vl-expr-fix</a> arg)
+                                            ss)
+               (<a href="VL2014____VL-SPURIOUS-CONCATENATION-P.html">vl-spurious-concatenation-p</a> arg ss)))</pre> 
+<p><b>Theorem: </b>vl-spurious-concatenation-p-vl-expr-equiv-congruence-on-arg</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-spurious-concatenation-p-vl-expr-equiv-congruence-on-arg
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="VL2014____VL-EXPR-EQUIV.html">vl-expr-equiv</a> arg arg-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL2014____VL-SPURIOUS-CONCATENATION-P.html">vl-spurious-concatenation-p</a> arg ss)
+                        (<a href="VL2014____VL-SPURIOUS-CONCATENATION-P.html">vl-spurious-concatenation-p</a> arg-equiv ss)))
+        :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>vl-spurious-concatenation-p-of-vl-scopestack-fix-ss</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     vl-spurious-concatenation-p-of-vl-scopestack-fix-ss
+     (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL2014____VL-SPURIOUS-CONCATENATION-P.html">vl-spurious-concatenation-p</a> arg (<a href="VL2014____VL-SCOPESTACK-FIX.html">vl-scopestack-fix</a> ss))
+            (<a href="VL2014____VL-SPURIOUS-CONCATENATION-P.html">vl-spurious-concatenation-p</a> arg ss)))</pre> 
+<p><b>Theorem: </b>vl-spurious-concatenation-p-vl-scopestack-equiv-congruence-on-ss</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+    vl-spurious-concatenation-p-vl-scopestack-equiv-congruence-on-ss
+    (<a href="ACL2____IMPLIES.html">implies</a> (<a href="VL2014____VL-SCOPESTACK-EQUIV.html">vl-scopestack-equiv</a> ss ss-equiv)
+             (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL2014____VL-SPURIOUS-CONCATENATION-P.html">vl-spurious-concatenation-p</a> arg ss)
+                    (<a href="VL2014____VL-SPURIOUS-CONCATENATION-P.html">vl-spurious-concatenation-p</a> arg ss-equiv)))
+    :rule-classes :congruence)</pre> 
+
+</body>
+</html>

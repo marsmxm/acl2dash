@@ -1,0 +1,203 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Vl-vardecl</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL2014____VL-VARDECL">Click for Vl-vardecl in the Full Manual</a></h3>
+
+<p>Representation of a single variable or net (e.g., wire) declaration.</p><p>This is a product type introduced by <a href="FTY____DEFPROD.html">defprod</a>.</p> 
+<h5>Fields</h5> 
+<dl>
+<dt>name  <a href="COMMON-LISP____STRINGP.html">stringp</a>
+</dt> 
+<dd>Name of the variable being declared.</dd> 
+ 
+<dt>type  <a href="VL2014____VL-DATATYPE.html">vl-datatype</a>
+</dt> 
+<dd>Kind of net or variable, e.g., wire, logic, reg, integer, real, 
+             etc.  Also contains sizing information.</dd> 
+ 
+<dt>nettype  <a href="VL2014____VL-MAYBE-NETTYPENAME.html">vl-maybe-nettypename</a>
+</dt> 
+<dd>If NIL, then this is really a variable, not a net.</dd> 
+ 
+<dt>constp  <a href="ACL2____BOOLEANP.html">booleanp</a>
+</dt> 
+<dd>(Variables only).  Indicates whether the <span class="v">const</span> keyword was 
+             provided.</dd> 
+ 
+<dt>varp  <a href="ACL2____BOOLEANP.html">booleanp</a>
+</dt> 
+<dd>(Variables only).  Indicates whether the <span class="v">var</span> keyword was 
+             provided.</dd> 
+ 
+<dt>lifetime  <a href="VL2014____VL-LIFETIME-P.html">vl-lifetime-p</a>
+</dt> 
+<dd>(Variables only).  See SystemVerilog-2012 Section 6.21.  There 
+              are pretty complex rules for variable lifetimes.  BOZO we don't 
+              really support this yet in any meaningful way, and the 
+              <span class="v">lifetime</span> field is currently just used to record whether a 
+              <span class="v">static</span> or <span class="v">automatic</span> keyword was found during parsing.</dd> 
+ 
+<dt>initval  <a href="VL2014____VL-MAYBE-EXPR.html">vl-maybe-expr</a>
+</dt> 
+<dd>(Variables only).  BOZO.  When present, indicates the initial 
+             value for the variable, e.g., if one writes <span class="v">integer i = 3;</span>, 
+             then the <span class="v">initval</span> will be the <a href="VL2014____VL-EXPR-P.html">vl-expr-p</a> for <span class="v">3</span>. 
+             When wire declarations have initial values, the parser turns them 
+             into separate continuous assignment statements, instead.  It 
+             should turn these into separate initial blocks, I think.</dd> 
+ 
+<dt>vectoredp  <a href="ACL2____BOOLEANP.html">booleanp</a>
+</dt> 
+<dd>(Nets only) True if the <span class="v">vectored</span> keyword was explicitly 
+                provided.</dd> 
+ 
+<dt>scalaredp  <a href="ACL2____BOOLEANP.html">booleanp</a>
+</dt> 
+<dd>(Nets only) True if the <span class="v">scalared</span> keyword was explicitly 
+                provided.</dd> 
+ 
+<dt>delay  <a href="VL2014____VL-MAYBE-GATEDELAY.html">vl-maybe-gatedelay</a>
+</dt> 
+<dd>(Nets only) The delay associated with this wire, if any. 
+                For instance, <span class="v">wire #1 foo</span>.</dd> 
+ 
+<dt>cstrength  <a href="VL2014____VL-MAYBE-CSTRENGTH.html">vl-maybe-cstrength</a>
+</dt> 
+<dd>(Trireg nets only).  The charge strength associated with the 
+                net, if any.  For instance, <span class="v">trireg medium foo</span>.</dd> 
+ 
+<dt>atts  <a href="VL2014____VL-ATTS.html">vl-atts</a>
+</dt> 
+<dd>Any attributes associated with this declaration.</dd> 
+ 
+<dt>loc  <a href="VL2014____VL-LOCATION.html">vl-location</a>
+</dt> 
+<dd>Where the declaration was found in the source code.</dd> 
+ 
+</dl><p>Verilog-2005 and SystemVerilog-2012 distinguish between variables 
+and nets.  Historically, VL also separated these concepts in its basic 
+syntactic representation.  However, we eventually decided that merging together 
+the two concepts into a single syntactic representation would be simpler.  So, 
+today, <span class="v">vl-vardecl-p</span> objects are used for both <span class="v">net</span> declarations and 
+for <span class="v">reg</span>/variable declarations.</p> 
+ 
+<p>Net declarations introduce new wires with certain properties (type, 
+signedness, size, and so on).  Here are some examples of basic net 
+declarations.</p> 
+ 
+<pre class="code">module m (a, b, c) ;
+  wire [4:0] w ;       // &lt;-- plain net declaration
+  wire ab = a &amp; b ;    // &lt;-- net declaration with assignment
+  ...
+endmodule</pre> 
+ 
+<p>Net declarations can also arise from using the combined form of port 
+declarations.</p> 
+ 
+<pre class="code">module m (a, b, c) ;
+  input wire a;    // &lt;-- net declaration in a port declaration
+  ...
+endmodule</pre> 
+ 
+<p>You can also string together net declarations, e.g., by writing <span class="v">wire w1,
+w2;</span>.  In all of these cases, our parser generates a separate 
+<span class="v">vl-vardecl-p</span> object for each declared wire.  When an assignment is also 
+present, the parser creates a corresponding, separate <a href="VL2014____VL-ASSIGN-P.html">vl-assign-p</a> object 
+to contain the assignment.  Hence, each <span class="v">vl-vardecl-p</span> really and truly only 
+represents a declaration.  Similarly, combined variable declarations such as 
+"integer a, b" are split apart into multiple, individual declarations.</p> 
+ 
+<h4>Arrays</h4> 
+ 
+<p>The <span class="v">dims</span> fields is for arrays.  Normally, you do not encounter these. 
+For instance, a wide wire declaration like this is <b>not</b> an array:</p> 
+ 
+<pre class="code">wire [4:0] w;</pre> 
+ 
+<p>Instead, the <span class="v">[4:0]</span> part here is the <span class="v">range</span> of the wire and its 
+<span class="v">dims</span> are just <span class="v">nil</span>.</p> 
+ 
+<p>In contrast, the <span class="v">dims</span> are a list of ranges, also optional, which follow 
+the wire name.  For instance, the arrdims of <span class="v">v</span> below is a singleton list 
+with the range <span class="v">[4:0]</span>.</p> 
+ 
+<pre class="code">wire v [4:0];</pre> 
+ 
+<p>Be aware that range and dims really are <b>different</b> things; <span class="v">w</span> 
+and <span class="v">v</span> are <i>not</i> equivalent except for their names.  In particular, 
+<span class="v">w</span> is a single, 5-bit wire, while <span class="v">v</span> is an array of five one-bit 
+wires.</p> 
+ 
+<p>Things are more complicated when a declaration includes both a range and 
+dims.  For instance</p> 
+ 
+<pre class="code">wire [4:0] a [10:0];</pre> 
+ 
+<p>declares <span class="v">a</span> to be an 11-element array of five-bit wires.  The <span class="v">range</span> 
+for <span class="v">a</span> is <span class="v">[4:0]</span>, and the arrdims are a list with one entry, namely the 
+range <span class="v">[10:0]</span>.</p> 
+ 
+<p>At present, the translator has almost no support for arrdims.  However, the 
+parser should handle them just fine.</p> 
+ 
+ 
+<h4>Vectorness and Signedness</h4> 
+ 
+<p>These are only set to <span class="v">t</span> when the keywords <span class="v">vectored</span> or 
+<span class="v">scalared</span> are explicitly provided; i.e., they may both be <span class="v">nil</span>.</p> 
+ 
+<p>I do not know what these keywords are supposed to mean; the Verilog-2005 
+specification says almost nothing about it, and does not even say what the 
+default is.</p> 
+ 
+<p>According to some random guy on the internet, it's supposed to be a syntax 
+error to try to bit- or part-select from a vectored net.  Maybe I can find a 
+more definitive explanation somewhere.  Hey, in 6.1.3 there are some 
+differences mentioned w.r.t. how delays go to scalared and vectored nets. 
+4.3.2 has a little bit more.</p> 
+ 
+ 
+<h4>Delay</h4> 
+ 
+<p>Net delays are described in 7.14, and indicate the time it takes for any 
+driver on the net to change its value.  The default delay is zero when no delay 
+is specified.  Even so, we represent the delay using a <a href="VL2014____VL-MAYBE-GATEDELAY-P.html">vl-maybe-gatedelay-p</a>, and use <span class="v">NIL</span> when no delay is specified.</p> 
+ 
+<p>Note (from 6.1.3) that when delays are provided in the combined declaration 
+and assignment statement, e.g., </p> 
+ 
+<pre class="code">wire #10 a = 1, b = 2;</pre> 
+ 
+<p>that the delay is to be associated with each assignment, and NOT with the 
+net declaration for <span class="v">a</span>.  See <a href="VL2014____VL-ASSIGN-P.html">vl-assign-p</a> for more information.</p> 
+ 
+<p><b>BOZO</b> consider making it an explicit <a href="VL2014____VL-GATEDELAY-P.html">vl-gatedelay-p</a> and setting 
+it to zero in the parser when it's not specified.</p> 
+ 
+<p><b>Warning:</b> we have not really paid attention to delays, and our 
+transformations probably do not preserve them correctly.</p> 
+ 
+ 
+<h4>Strengths</h4> 
+ 
+<p>If you look at the grammar for net declarations, you may notice drive 
+strengths.  But these are only used when the declaration includes assignments, 
+and in such cases the drive strength is a property of the assignments and is 
+not a property of the declaration.  Hence, there is no drive strength field 
+for net declarations.</p> 
+ 
+<p>The <span class="v">cstrength</span> field is only applicable to <span class="v">trireg</span>-type nets.  It 
+will be <span class="v">nil</span> for all other nets, and will also be <span class="v">nil</span> on <span class="v">trireg</span> 
+nets that do not explicitly give a charge strength.  Note that 
+<span class="v">vl-vardecl-p</span> does not enforce the requirement that only triregs have 
+charge strengths, but the parser does.</p> 
+ 
+<p><b>Warning:</b> we have not really paid attention to charge strengths, and 
+our transformations may not preserve it correctly.</p>
+</body>
+</html>

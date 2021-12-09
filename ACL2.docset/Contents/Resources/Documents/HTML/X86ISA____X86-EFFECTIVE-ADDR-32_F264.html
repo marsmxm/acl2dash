@@ -1,0 +1,223 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>X86-effective-addr-32/64</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=X86ISA____X86-EFFECTIVE-ADDR-32_F264">Click for X86-effective-addr-32/64 in the Full Manual</a></h3>
+
+<p>Effective address calculation with 32-bit and 64-bit addressing.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(x86-effective-addr-32/64 proc-mode p4 temp-rip 
+                          rex-byte r/m mod sib num-imm-bytes x86) 
+ 
+   
+(mv flg i64p-memory-address increment-rip-by x86)</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">rex-byte</span>  Rex byte.</dd> 
+  <dd>
+<span class="tt">r/m</span>  r/m field of ModR/M byte.</dd> 
+  <dd>
+<span class="tt">mod</span>  mod field of ModR/M byte.</dd> 
+  <dd>
+<span class="tt">sib</span>  Sib byte.</dd> 
+  <dd>
+<span class="tt">num-imm-bytes</span>  Number of immediate bytes (0, 1, 2, or 4) 
+                      that follow the sib (or displacement bytes, if any).</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">x86</span>  <font color="#606060">Type <span class="v">(x86p x86)</span>, given <span class="v">(<a href="ACL2____FORCE.html">force</a> (x86p x86))</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>Note that we do not add segment bases 
+    (such as the FS and GS bases, if FS and GS overrides are present) 
+    to the effective address computed in this function. 
+    Addition of those segment base addresses is a part of the 
+    segmentation process --- we handle that in the function <a href="X86ISA____EA-TO-LA.html">ea-to-la</a> that performs the segment address translation.</p> 
+ 
+    <p>Quoting from Intel Vol 1, Sec 3.3.7:</p> 
+ 
+       <p>In 64-bit mode, the effective address components are 
+       added and the effective address is truncated (See for example 
+       the instruction LEA) before adding the full 64-bit segment 
+       base. The base is never truncated, regardless of addressing 
+       mode in 64-bit mode.</p> 
+ 
+      <p>Quoting Intel Vol. 1 Sec. 3.3.7 (Address Calculations in 
+      64-Bit Mode):</p> 
+ 
+        <p>All 16-bit and 32-bit address calculations are 
+        zero-extended in IA-32e mode to form 64-bit addresses. Address 
+        calculations are first truncated to the effective address size 
+        of the current mode (64-bit mode or compatibility mode), as 
+        overridden by any address-size prefix. The result is then 
+        zero-extended to the full 64-bit address width. Because of 
+        this, 16-bit and 32-bit applications running in compatibility 
+        mode can access only the low 4 GBytes of the 64-bit mode 
+        effective addresses. Likewise, a 32-bit address generated in 
+        64-bit mode can access only the low 4 GBytes of the 64-bit 
+        mode effective addresses.</p> 
+ 
+    <p>Also: Intel Vol 1, Section 3.3.7 says that we need 
+    sign-extended displacements in effective address calculations. In 
+    Lisp, sign-extension is implicit.</p> 
+ 
+    <p>In 64-bit mode, instructions such as LEA use this function to 
+    compute the effective address.  LEA, at least, does not check 
+    whether the generated address is canonical or not, which is why we 
+    don't make the canonical-address-p check in this function.</p> 
+ 
+    <p>In 64-bit mode, 
+    we use <span class="v">rgfi-size</span> to read bases as signed linear addresses, 
+    which encode canonical linear addresses, 
+    which are also effective addresses in 64-bit mode. 
+    In 32-bit mode, 
+    we use <span class="v">rr32</span> to read bases as unsigned effective addresses.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>x86-effective-addr-32/64</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ x86-effective-addr-32/64
+ (proc-mode p4 temp-rip
+            rex-byte r/m mod sib num-imm-bytes x86)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (x86)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____TYPE.html">type</a> (integer 0 4) proc-mode)
+          (<a href="COMMON-LISP____TYPE.html">type</a> (signed-byte 48) temp-rip)
+          (<a href="COMMON-LISP____TYPE.html">type</a> (unsigned-byte 8) rex-byte)
+          (<a href="COMMON-LISP____TYPE.html">type</a> (unsigned-byte 3) r/m)
+          (<a href="COMMON-LISP____TYPE.html">type</a> (unsigned-byte 2) mod)
+          (<a href="COMMON-LISP____TYPE.html">type</a> (unsigned-byte 8) sib)
+          (<a href="COMMON-LISP____TYPE.html">type</a> (unsigned-byte 3) num-imm-bytes))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="X86ISA____2BITS-P.html">2bits-p</a> mod)
+                             (<a href="X86ISA____3BITS-P.html">3bits-p</a> r/m)
+                             (<a href="X86ISA____SIB-P.html">sib-p</a> sib))))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'x86-effective-addr-32/64))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+   (((<a href="ACL2____MV.html">mv</a> flg
+         addr displacement increment-rip-by x86)
+     (<a href="COMMON-LISP____CASE.html">case</a>
+      mod
+      (0
+       (<a href="COMMON-LISP____CASE.html">case</a>
+        r/m
+        (4 (<a href="X86ISA____X86-EFFECTIVE-ADDR-FROM-SIB.html">x86-effective-addr-from-sib</a>
+                proc-mode
+                temp-rip rex-byte mod sib x86))
+        (5
+          (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> proc-mode 0)
+              (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?flg0 dword x86)
+                    (rime-size-opt 0 4 temp-rip 1 :x nil x86
+                                   :mem-ptr? nil))
+                   ((<a href="ACL2____MV.html">mv</a> flg next-rip)
+                    (<a href="X86ISA____ADD-TO-_A2IP.html">add-to-*ip</a> 0 temp-rip (<a href="COMMON-LISP_____B2.html">+</a> 4 num-imm-bytes)
+                                x86))
+                   ((when flg) (<a href="ACL2____MV.html">mv</a> flg 0 0 0 x86)))
+                  (<a href="ACL2____MV.html">mv</a> flg0 next-rip dword 4 x86))
+              (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> flg dword x86)
+                    (rime-size-opt proc-mode 4 temp-rip 1 :x nil x86
+                                   :mem-ptr? nil))
+                   ((when flg) (<a href="ACL2____MV.html">mv</a> flg 0 0 0 x86)))
+                  (<a href="ACL2____MV.html">mv</a> nil 0 dword 4 x86))))
+        (otherwise (<a href="ACL2____MV.html">mv</a> nil
+                       (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> proc-mode 0)
+                           (rgfi (<a href="X86ISA____REG-INDEX.html">reg-index</a> r/m rex-byte 0) x86)
+                           (<a href="X86ISA____RR32.html">rr32</a> r/m x86))
+                       0 0 x86))))
+      (1
+       (<a href="COMMON-LISP____CASE.html">case</a>
+         r/m
+         (4 (<a href="X86ISA____X86-EFFECTIVE-ADDR-FROM-SIB.html">x86-effective-addr-from-sib</a>
+                 proc-mode
+                 temp-rip rex-byte mod sib x86))
+         (otherwise
+              (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?flg2 byte2 x86)
+                    (rime-size-opt proc-mode 1 temp-rip 1 :x nil x86
+                                   :mem-ptr? nil))
+                   (reg (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> proc-mode 0)
+                            (rgfi (<a href="X86ISA____REG-INDEX.html">reg-index</a> r/m rex-byte 0) x86)
+                            (<a href="X86ISA____RR32.html">rr32</a> r/m x86))))
+                  (<a href="ACL2____MV.html">mv</a> flg2 reg byte2 1 x86)))))
+      (2
+       (<a href="COMMON-LISP____CASE.html">case</a>
+         r/m
+         (4 (<a href="X86ISA____X86-EFFECTIVE-ADDR-FROM-SIB.html">x86-effective-addr-from-sib</a>
+                 proc-mode
+                 temp-rip rex-byte mod sib x86))
+         (otherwise
+              (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?flg1 dword x86)
+                    (rime-size-opt proc-mode 4 temp-rip 1 :x nil x86
+                                   :mem-ptr? nil))
+                   (reg (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> proc-mode 0)
+                            (rgfi (<a href="X86ISA____REG-INDEX.html">reg-index</a> r/m rex-byte 0) x86)
+                            (<a href="X86ISA____RR32.html">rr32</a> r/m x86))))
+                  (<a href="ACL2____MV.html">mv</a> flg1 reg dword 4 x86)))))
+      (otherwise (<a href="ACL2____MV.html">mv</a> 'mod-value-wrong 0 0 0 x86))))
+    (dst-base (<a href="COMMON-LISP_____B2.html">+</a> addr displacement))
+    (dst-base (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> proc-mode 0)
+                  (<a href="COMMON-LISP____IF.html">if</a> p4 (<a href="X86ISA____N32.html">n32</a> dst-base)
+                      (<a href="X86ISA____N64-TO-I64.html">n64-to-i64</a> (<a href="X86ISA____N64.html">n64</a> dst-base)))
+                  (<a href="X86ISA____N32.html">n32</a> dst-base))))
+   (<a href="ACL2____MV.html">mv</a> flg dst-base increment-rip-by x86))))</pre> 
+<p><b>Theorem: </b>x86p-of-x86-effective-addr-32/64.x86</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ x86p-of-x86-effective-addr-32/64.x86
+ (<a href="ACL2____IMPLIES.html">implies</a>
+    (<a href="ACL2____FORCE.html">force</a> (x86p x86))
+    (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?flg ?i64p-memory-address
+              ?increment-rip-by ?x86)
+          (<a href="X86ISA____X86-EFFECTIVE-ADDR-32_F264.html">x86-effective-addr-32/64</a> proc-mode p4 temp-rip rex-byte
+                                    r/m mod sib num-imm-bytes x86)))
+        (x86p x86)))
+ :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>i64p-mv-nth-1-x86-effective-addr-32/64</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ i64p-mv-nth-1-x86-effective-addr-32/64
+ (<a href="ACL2____SIGNED-BYTE-P.html">signed-byte-p</a>
+  64
+  (<a href="ACL2____MV-NTH.html">mv-nth</a> 1
+          (<a href="X86ISA____X86-EFFECTIVE-ADDR-32_F264.html">x86-effective-addr-32/64</a> proc-mode p4 temp-rip rex-byte
+                                    r/m mod sib num-imm-bytes x86)))
+ :rule-classes
+ (:rewrite
+  (:type-prescription
+   :corollary
+   (<a href="COMMON-LISP____INTEGERP.html">integerp</a>
+     (<a href="ACL2____MV-NTH.html">mv-nth</a>
+          1
+          (<a href="X86ISA____X86-EFFECTIVE-ADDR-32_F264.html">x86-effective-addr-32/64</a> proc-mode p4 temp-rip rex-byte
+                                    r/m mod sib num-imm-bytes x86)))
+   :hints (("Goal" :in-theory '(<a href="ACL2____SIGNED-BYTE-P.html">signed-byte-p</a> integer-range-p))))
+  (:linear
+   :corollary
+   (<a href="COMMON-LISP____AND.html">and</a>
+    (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a>
+     -9223372036854775808
+     (<a href="ACL2____MV-NTH.html">mv-nth</a>
+          1
+          (<a href="X86ISA____X86-EFFECTIVE-ADDR-32_F264.html">x86-effective-addr-32/64</a> proc-mode p4 temp-rip rex-byte
+                                    r/m mod sib num-imm-bytes x86)))
+    (<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 1
+               (<a href="X86ISA____X86-EFFECTIVE-ADDR-32_F264.html">x86-effective-addr-32/64</a>
+                    proc-mode p4 temp-rip
+                    rex-byte r/m mod sib num-imm-bytes x86))
+       9223372036854775808))
+   :hints
+   (("Goal"
+         :in-theory '(<a href="ACL2____SIGNED-BYTE-P.html">signed-byte-p</a> integer-range-p (:e expt)))))))</pre> 
+<p><b>Theorem: </b>natp-mv-nth-2-x86-effective-addr-32/64</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ natp-mv-nth-2-x86-effective-addr-32/64
+ (<a href="ACL2____NATP.html">natp</a>
+  (<a href="ACL2____MV-NTH.html">mv-nth</a> 2
+          (<a href="X86ISA____X86-EFFECTIVE-ADDR-32_F264.html">x86-effective-addr-32/64</a> proc-mode p4 temp-rip rex-byte
+                                    r/m mod sib num-imm-bytes x86)))
+ :rule-classes :type-prescription)</pre> 
+<p><b>Theorem: </b>mv-nth-2-x86-effective-addr-32/64-&lt;=-4</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> mv-nth-2-x86-effective-addr-32/64-&lt;=-4
+        (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 2
+                    (<a href="X86ISA____X86-EFFECTIVE-ADDR-32_F264.html">x86-effective-addr-32/64</a>
+                         proc-mode p4 temp-rip
+                         rex-byte r/m mod sib num-imm-bytes x86))
+            4)
+        :rule-classes :linear)</pre> 
+
+</body>
+</html>

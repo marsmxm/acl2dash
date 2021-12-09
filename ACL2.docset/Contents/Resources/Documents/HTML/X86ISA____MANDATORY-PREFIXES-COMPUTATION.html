@@ -1,0 +1,344 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Mandatory-prefixes-computation</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=X86ISA____MANDATORY-PREFIXES-COMPUTATION">Click for Mandatory-prefixes-computation in the Full Manual</a></h3>
+
+<p>Picking a mandatory prefix</p><p><b>When should we interpret a SIMD prefix (<span class="v">66</span>, <span class="v">F2</span>, 
+ <span class="v">F3</span>) as the mandatory prefix for a given opcode in the two- and three-byte 
+ opcode maps?</b></p> 
+ 
+ <p>Here are some decoding rules for SIMD mandatory prefixes; note that these 
+ do NOT apply for VEX/EVEX-encoded instructions because the mandatory prefixes 
+ are explicitly stated there.  All the examples listed below are from Intel's 
+ XED (x86 Encoder Decoder: <span class="v">https://intelxed.github.io/</span>).</p> 
+ 
+ <ol> 
+ 
+ <li> <p> For opcodes that can take mandatory prefixes, <span class="v">66</span> is ignored when 
+ <span class="v">F2</span>/<span class="v">F3</span> are present. Also, a mandatory prefix does not have to 
+ <b>immediately</b> precede the opcode byte --- see (4) below.</p> 
+ 
+ <p> <b> Examples: </b> </p> 
+ 
+ <pre class="code">(1) xed -64 -d   660f6f00     ;; movdqa xmm0, xmmword ptr [rax] 
+(2) xed -64 -d   f30f6f00     ;; movdqu xmm0, xmmword ptr [rax] 
+(3) xed -64 -d 66f30f6f00     ;; movdqu xmm0, xmmword ptr [rax] (same as (2)) 
+(4) xed -64 -d f3660f6f00     ;; movdqu xmm0, xmmword ptr [rax] (same as (2)) 
+ 
+</pre> 
+ 
+ </li> 
+ 
+ <li> <p> For opcodes that can take mandatory prefixes, the presence of an 
+ unsupported SIMD prefix translates to a reserved instruction; such a prefix 
+ does NOT act as a modifier prefix. </p> 
+ 
+ <p> <b> Examples: </b> Opcode <span class="v">0f 6b</span> has a no-prefix form and <span class="v">66</span> 
+ mandatory prefix form.  When used with <span class="v">f3</span>, it leads to an error; see (3) 
+ below.</p> 
+ 
+ <pre class="code">(1) xed -64 -d     0f6b00     ;; packssdw mmx0, qword ptr [rax] 
+(2) xed -64 -d   660f6b00     ;; packssdw xmm0, xmmword ptr [rax] 
+(3) xed -64 -d f3660f6b00     ;; GENERAL_ERROR Could not decode... 
+ 
+</pre> 
+ 
+ </li> 
+ 
+ </ol> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>64-bit-compute-mandatory-prefix-for-two-byte-opcode$inline</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ 64-bit-compute-mandatory-prefix-for-two-byte-opcode$inline
+ (<a href="X86ISA____OPCODE.html">opcode</a> prefixes)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____TYPE.html">type</a> (unsigned-byte 8) opcode)
+          (<a href="COMMON-LISP____TYPE.html">type</a> (unsigned-byte 52) prefixes))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="X86ISA____PREFIXES-P.html">prefixes-p</a> prefixes)))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__
+        '64-bit-compute-mandatory-prefix-for-two-byte-opcode))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="COMMON-LISP____LET.html">let</a>
+    ((rep-pfx (<a href="COMMON-LISP____THE.html">the</a> (unsigned-byte 8)
+                   (<a href="X86ISA____PREFIXES-_E3REP.html">prefixes-&gt;rep</a> prefixes))))
+    (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQL.html">eql</a> rep-pfx 0))
+        (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> rep-pfx 243)
+                     (<a href="ACL2____AREF1.html">aref1</a> '64-bit-mode-two-byte-f3-ok
+                            *64-bit-mode-two-byte-f3-ok-ar* opcode))
+                (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> rep-pfx 242)
+                     (<a href="ACL2____AREF1.html">aref1</a> '64-bit-mode-two-byte-f2-ok
+                            *64-bit-mode-two-byte-f2-ok-ar*
+                            opcode)))
+            rep-pfx 0)
+        (<a href="COMMON-LISP____LET.html">let</a> ((opr-pfx (<a href="COMMON-LISP____THE.html">the</a> (unsigned-byte 8)
+                            (<a href="X86ISA____PREFIXES-_E3OPR.html">prefixes-&gt;opr</a> prefixes))))
+             (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQL.html">eql</a> opr-pfx 0))
+                 (<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2____AREF1.html">aref1</a> '64-bit-mode-two-byte-66-ok
+                            *64-bit-mode-two-byte-66-ok-ar* opcode)
+                     opr-pfx 0)
+                 0))))))</pre> 
+<p><b>Theorem: </b>return-type-of-64-bit-compute-mandatory-prefix-for-two-byte-opcode</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+  return-type-of-64-bit-compute-mandatory-prefix-for-two-byte-opcode
+  (<a href="ACL2____B_A2.html">b*</a> ((mandatory-prefix (64-bit-compute-mandatory-prefix-for-two-byte-opcode$inline
+                              opcode prefixes)))
+      (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 8 mandatory-prefix))
+  :rule-classes :rewrite)</pre> 
+<p><b>Function: </b>32-bit-compute-mandatory-prefix-for-two-byte-opcode$inline</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ 32-bit-compute-mandatory-prefix-for-two-byte-opcode$inline
+ (<a href="X86ISA____OPCODE.html">opcode</a> prefixes)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____TYPE.html">type</a> (unsigned-byte 8) opcode)
+          (<a href="COMMON-LISP____TYPE.html">type</a> (unsigned-byte 52) prefixes))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="X86ISA____PREFIXES-P.html">prefixes-p</a> prefixes)))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__
+        '32-bit-compute-mandatory-prefix-for-two-byte-opcode))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="COMMON-LISP____LET.html">let</a>
+    ((rep-pfx (<a href="COMMON-LISP____THE.html">the</a> (unsigned-byte 8)
+                   (<a href="X86ISA____PREFIXES-_E3REP.html">prefixes-&gt;rep</a> prefixes))))
+    (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQL.html">eql</a> rep-pfx 0))
+        (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> rep-pfx 243)
+                     (<a href="ACL2____AREF1.html">aref1</a> '32-bit-mode-two-byte-f3-ok
+                            *32-bit-mode-two-byte-f3-ok-ar* opcode))
+                (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> rep-pfx 242)
+                     (<a href="ACL2____AREF1.html">aref1</a> '32-bit-mode-two-byte-f2-ok
+                            *32-bit-mode-two-byte-f2-ok-ar*
+                            opcode)))
+            rep-pfx 0)
+        (<a href="COMMON-LISP____LET.html">let</a> ((opr-pfx (<a href="COMMON-LISP____THE.html">the</a> (unsigned-byte 8)
+                            (<a href="X86ISA____PREFIXES-_E3OPR.html">prefixes-&gt;opr</a> prefixes))))
+             (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQL.html">eql</a> opr-pfx 0))
+                 (<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2____AREF1.html">aref1</a> '32-bit-mode-two-byte-66-ok
+                            *32-bit-mode-two-byte-66-ok-ar* opcode)
+                     opr-pfx 0)
+                 0))))))</pre> 
+<p><b>Theorem: </b>return-type-of-32-bit-compute-mandatory-prefix-for-two-byte-opcode</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+  return-type-of-32-bit-compute-mandatory-prefix-for-two-byte-opcode
+  (<a href="ACL2____B_A2.html">b*</a> ((mandatory-prefix (32-bit-compute-mandatory-prefix-for-two-byte-opcode$inline
+                              opcode prefixes)))
+      (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 8 mandatory-prefix))
+  :rule-classes :rewrite)</pre> 
+<p><b>Function: </b>64-bit-compute-mandatory-prefix-for-0f-38-three-byte-opcode$inline</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ 64-bit-compute-mandatory-prefix-for-0f-38-three-byte-opcode$inline
+ (<a href="X86ISA____OPCODE.html">opcode</a> prefixes)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____TYPE.html">type</a> (unsigned-byte 8) opcode)
+          (<a href="COMMON-LISP____TYPE.html">type</a> (unsigned-byte 52) prefixes))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="X86ISA____PREFIXES-P.html">prefixes-p</a> prefixes)))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__
+      '64-bit-compute-mandatory-prefix-for-0f-38-three-byte-opcode))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="COMMON-LISP____LET.html">let</a>
+     ((rep-pfx (<a href="COMMON-LISP____THE.html">the</a> (unsigned-byte 8)
+                    (<a href="X86ISA____PREFIXES-_E3REP.html">prefixes-&gt;rep</a> prefixes))))
+     (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQL.html">eql</a> rep-pfx 0))
+         (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> rep-pfx 243)
+                      (<a href="ACL2____AREF1.html">aref1</a> '64-bit-mode-0f-38-three-byte-f3-ok
+                             *64-bit-mode-0f-38-three-byte-f3-ok-ar*
+                             opcode))
+                 (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> rep-pfx 242)
+                      (<a href="ACL2____AREF1.html">aref1</a> '64-bit-mode-0f-38-three-byte-f2-ok
+                             *64-bit-mode-0f-38-three-byte-f2-ok-ar*
+                             opcode)))
+             rep-pfx 0)
+         (<a href="COMMON-LISP____LET.html">let</a> ((opr-pfx (<a href="COMMON-LISP____THE.html">the</a> (unsigned-byte 8)
+                             (<a href="X86ISA____PREFIXES-_E3OPR.html">prefixes-&gt;opr</a> prefixes))))
+              (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQL.html">eql</a> opr-pfx 0))
+                  (<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2____AREF1.html">aref1</a> '64-bit-mode-0f-38-three-byte-66-ok
+                             *64-bit-mode-0f-38-three-byte-66-ok-ar*
+                             opcode)
+                      opr-pfx 0)
+                  0))))))</pre> 
+<p><b>Theorem: </b>return-type-of-64-bit-compute-mandatory-prefix-for-0f-38-three-byte-opcode</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ return-type-of-64-bit-compute-mandatory-prefix-for-0f-38-three-byte-opcode
+ (<a href="ACL2____B_A2.html">b*</a> ((mandatory-prefix (64-bit-compute-mandatory-prefix-for-0f-38-three-byte-opcode$inline
+                             opcode prefixes)))
+     (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 8 mandatory-prefix))
+ :rule-classes :rewrite)</pre> 
+<p><b>Function: </b>32-bit-compute-mandatory-prefix-for-0f-38-three-byte-opcode$inline</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ 32-bit-compute-mandatory-prefix-for-0f-38-three-byte-opcode$inline
+ (<a href="X86ISA____OPCODE.html">opcode</a> prefixes)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____TYPE.html">type</a> (unsigned-byte 8) opcode)
+          (<a href="COMMON-LISP____TYPE.html">type</a> (unsigned-byte 52) prefixes))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="X86ISA____PREFIXES-P.html">prefixes-p</a> prefixes)))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__
+      '32-bit-compute-mandatory-prefix-for-0f-38-three-byte-opcode))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="COMMON-LISP____LET.html">let</a>
+     ((rep-pfx (<a href="COMMON-LISP____THE.html">the</a> (unsigned-byte 8)
+                    (<a href="X86ISA____PREFIXES-_E3REP.html">prefixes-&gt;rep</a> prefixes))))
+     (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQL.html">eql</a> rep-pfx 0))
+         (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> rep-pfx 243)
+                      (<a href="ACL2____AREF1.html">aref1</a> '32-bit-mode-0f-38-three-byte-f3-ok
+                             *32-bit-mode-0f-38-three-byte-f3-ok-ar*
+                             opcode))
+                 (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> rep-pfx 242)
+                      (<a href="ACL2____AREF1.html">aref1</a> '32-bit-mode-0f-38-three-byte-f2-ok
+                             *32-bit-mode-0f-38-three-byte-f2-ok-ar*
+                             opcode)))
+             rep-pfx 0)
+         (<a href="COMMON-LISP____LET.html">let</a> ((opr-pfx (<a href="COMMON-LISP____THE.html">the</a> (unsigned-byte 8)
+                             (<a href="X86ISA____PREFIXES-_E3OPR.html">prefixes-&gt;opr</a> prefixes))))
+              (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQL.html">eql</a> opr-pfx 0))
+                  (<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2____AREF1.html">aref1</a> '32-bit-mode-0f-38-three-byte-66-ok
+                             *32-bit-mode-0f-38-three-byte-66-ok-ar*
+                             opcode)
+                      opr-pfx 0)
+                  0))))))</pre> 
+<p><b>Theorem: </b>return-type-of-32-bit-compute-mandatory-prefix-for-0f-38-three-byte-opcode</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ return-type-of-32-bit-compute-mandatory-prefix-for-0f-38-three-byte-opcode
+ (<a href="ACL2____B_A2.html">b*</a> ((mandatory-prefix (32-bit-compute-mandatory-prefix-for-0f-38-three-byte-opcode$inline
+                             opcode prefixes)))
+     (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 8 mandatory-prefix))
+ :rule-classes :rewrite)</pre> 
+<p><b>Function: </b>64-bit-compute-mandatory-prefix-for-0f-3a-three-byte-opcode$inline</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ 64-bit-compute-mandatory-prefix-for-0f-3a-three-byte-opcode$inline
+ (<a href="X86ISA____OPCODE.html">opcode</a> prefixes)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____TYPE.html">type</a> (unsigned-byte 8) opcode)
+          (<a href="COMMON-LISP____TYPE.html">type</a> (unsigned-byte 52) prefixes))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="X86ISA____PREFIXES-P.html">prefixes-p</a> prefixes)))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__
+      '64-bit-compute-mandatory-prefix-for-0f-3a-three-byte-opcode))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="COMMON-LISP____LET.html">let</a>
+     ((rep-pfx (<a href="COMMON-LISP____THE.html">the</a> (unsigned-byte 8)
+                    (<a href="X86ISA____PREFIXES-_E3REP.html">prefixes-&gt;rep</a> prefixes))))
+     (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQL.html">eql</a> rep-pfx 0))
+         (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> rep-pfx 243)
+                      (<a href="ACL2____AREF1.html">aref1</a> '64-bit-mode-0f-3a-three-byte-f3-ok
+                             *64-bit-mode-0f-3a-three-byte-f3-ok-ar*
+                             opcode))
+                 (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> rep-pfx 242)
+                      (<a href="ACL2____AREF1.html">aref1</a> '64-bit-mode-0f-3a-three-byte-f2-ok
+                             *64-bit-mode-0f-3a-three-byte-f2-ok-ar*
+                             opcode)))
+             rep-pfx 0)
+         (<a href="COMMON-LISP____LET.html">let</a> ((opr-pfx (<a href="COMMON-LISP____THE.html">the</a> (unsigned-byte 8)
+                             (<a href="X86ISA____PREFIXES-_E3OPR.html">prefixes-&gt;opr</a> prefixes))))
+              (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQL.html">eql</a> opr-pfx 0))
+                  (<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2____AREF1.html">aref1</a> '64-bit-mode-0f-3a-three-byte-66-ok
+                             *64-bit-mode-0f-3a-three-byte-66-ok-ar*
+                             opcode)
+                      opr-pfx 0)
+                  0))))))</pre> 
+<p><b>Theorem: </b>return-type-of-64-bit-compute-mandatory-prefix-for-0f-3a-three-byte-opcode</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ return-type-of-64-bit-compute-mandatory-prefix-for-0f-3a-three-byte-opcode
+ (<a href="ACL2____B_A2.html">b*</a> ((mandatory-prefix (64-bit-compute-mandatory-prefix-for-0f-3a-three-byte-opcode$inline
+                             opcode prefixes)))
+     (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 8 mandatory-prefix))
+ :rule-classes :rewrite)</pre> 
+<p><b>Function: </b>32-bit-compute-mandatory-prefix-for-0f-3a-three-byte-opcode$inline</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ 32-bit-compute-mandatory-prefix-for-0f-3a-three-byte-opcode$inline
+ (<a href="X86ISA____OPCODE.html">opcode</a> prefixes)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____TYPE.html">type</a> (unsigned-byte 8) opcode)
+          (<a href="COMMON-LISP____TYPE.html">type</a> (unsigned-byte 52) prefixes))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="X86ISA____PREFIXES-P.html">prefixes-p</a> prefixes)))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__
+      '32-bit-compute-mandatory-prefix-for-0f-3a-three-byte-opcode))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="COMMON-LISP____LET.html">let</a>
+     ((rep-pfx (<a href="COMMON-LISP____THE.html">the</a> (unsigned-byte 8)
+                    (<a href="X86ISA____PREFIXES-_E3REP.html">prefixes-&gt;rep</a> prefixes))))
+     (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQL.html">eql</a> rep-pfx 0))
+         (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> rep-pfx 243)
+                      (<a href="ACL2____AREF1.html">aref1</a> '32-bit-mode-0f-3a-three-byte-f3-ok
+                             *32-bit-mode-0f-3a-three-byte-f3-ok-ar*
+                             opcode))
+                 (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> rep-pfx 242)
+                      (<a href="ACL2____AREF1.html">aref1</a> '32-bit-mode-0f-3a-three-byte-f2-ok
+                             *32-bit-mode-0f-3a-three-byte-f2-ok-ar*
+                             opcode)))
+             rep-pfx 0)
+         (<a href="COMMON-LISP____LET.html">let</a> ((opr-pfx (<a href="COMMON-LISP____THE.html">the</a> (unsigned-byte 8)
+                             (<a href="X86ISA____PREFIXES-_E3OPR.html">prefixes-&gt;opr</a> prefixes))))
+              (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQL.html">eql</a> opr-pfx 0))
+                  (<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2____AREF1.html">aref1</a> '32-bit-mode-0f-3a-three-byte-66-ok
+                             *32-bit-mode-0f-3a-three-byte-66-ok-ar*
+                             opcode)
+                      opr-pfx 0)
+                  0))))))</pre> 
+<p><b>Theorem: </b>return-type-of-32-bit-compute-mandatory-prefix-for-0f-3a-three-byte-opcode</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ return-type-of-32-bit-compute-mandatory-prefix-for-0f-3a-three-byte-opcode
+ (<a href="ACL2____B_A2.html">b*</a> ((mandatory-prefix (32-bit-compute-mandatory-prefix-for-0f-3a-three-byte-opcode$inline
+                             opcode prefixes)))
+     (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 8 mandatory-prefix))
+ :rule-classes :rewrite)</pre> 
+<p><b>Function: </b>compute-mandatory-prefix-for-two-byte-opcode$inline</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> compute-mandatory-prefix-for-two-byte-opcode$inline
+       (proc-mode opcode prefixes)
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____TYPE.html">type</a> (integer 0 4) proc-mode)
+                (<a href="COMMON-LISP____TYPE.html">type</a> (unsigned-byte 8) opcode)
+                (<a href="COMMON-LISP____TYPE.html">type</a> (unsigned-byte 52) prefixes))
+       (<a href="COMMON-LISP____CASE.html">case</a> proc-mode
+             (0 (<a href="X86ISA____64-BIT-COMPUTE-MANDATORY-PREFIX-FOR-TWO-BYTE-OPCODE.html">64-bit-compute-mandatory-prefix-for-two-byte-opcode</a>
+                     opcode prefixes))
+             (otherwise (<a href="X86ISA____32-BIT-COMPUTE-MANDATORY-PREFIX-FOR-TWO-BYTE-OPCODE.html">32-bit-compute-mandatory-prefix-for-two-byte-opcode</a>
+                             opcode prefixes))))</pre> 
+<p><b>Theorem: </b>return-type-of-compute-mandatory-prefix-for-two-byte-opcode</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> return-type-of-compute-mandatory-prefix-for-two-byte-opcode
+        (<a href="ACL2____B_A2.html">b*</a> ((mandatory-prefix (compute-mandatory-prefix-for-two-byte-opcode$inline
+                                    proc-mode opcode prefixes)))
+            (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 8 mandatory-prefix))
+        :rule-classes :rewrite)</pre> 
+<p><b>Function: </b>compute-mandatory-prefix-for-0f-38-three-byte-opcode$inline</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> compute-mandatory-prefix-for-0f-38-three-byte-opcode$inline
+       (proc-mode opcode prefixes)
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____TYPE.html">type</a> (integer 0 4) proc-mode)
+                (<a href="COMMON-LISP____TYPE.html">type</a> (unsigned-byte 8) opcode)
+                (<a href="COMMON-LISP____TYPE.html">type</a> (unsigned-byte 52) prefixes))
+       (<a href="COMMON-LISP____CASE.html">case</a> proc-mode
+             (0 (<a href="X86ISA____64-BIT-COMPUTE-MANDATORY-PREFIX-FOR-0F-38-THREE-BYTE-OPCODE.html">64-bit-compute-mandatory-prefix-for-0f-38-three-byte-opcode</a>
+                     opcode prefixes))
+             (otherwise (<a href="X86ISA____32-BIT-COMPUTE-MANDATORY-PREFIX-FOR-0F-38-THREE-BYTE-OPCODE.html">32-bit-compute-mandatory-prefix-for-0f-38-three-byte-opcode</a>
+                             opcode prefixes))))</pre> 
+<p><b>Theorem: </b>return-type-of-compute-mandatory-prefix-for-0f-38-three-byte-opcode</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ return-type-of-compute-mandatory-prefix-for-0f-38-three-byte-opcode
+ (<a href="ACL2____B_A2.html">b*</a> ((mandatory-prefix (compute-mandatory-prefix-for-0f-38-three-byte-opcode$inline
+                             proc-mode opcode prefixes)))
+     (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 8 mandatory-prefix))
+ :rule-classes :rewrite)</pre> 
+<p><b>Function: </b>compute-mandatory-prefix-for-0f-3a-three-byte-opcode$inline</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> compute-mandatory-prefix-for-0f-3a-three-byte-opcode$inline
+       (proc-mode opcode prefixes)
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____TYPE.html">type</a> (integer 0 4) proc-mode)
+                (<a href="COMMON-LISP____TYPE.html">type</a> (unsigned-byte 8) opcode)
+                (<a href="COMMON-LISP____TYPE.html">type</a> (unsigned-byte 52) prefixes))
+       (<a href="COMMON-LISP____CASE.html">case</a> proc-mode
+             (0 (<a href="X86ISA____64-BIT-COMPUTE-MANDATORY-PREFIX-FOR-0F-3A-THREE-BYTE-OPCODE.html">64-bit-compute-mandatory-prefix-for-0f-3a-three-byte-opcode</a>
+                     opcode prefixes))
+             (otherwise (<a href="X86ISA____32-BIT-COMPUTE-MANDATORY-PREFIX-FOR-0F-3A-THREE-BYTE-OPCODE.html">32-bit-compute-mandatory-prefix-for-0f-3a-three-byte-opcode</a>
+                             opcode prefixes))))</pre> 
+<p><b>Theorem: </b>return-type-of-compute-mandatory-prefix-for-0f-3a-three-byte-opcode</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ return-type-of-compute-mandatory-prefix-for-0f-3a-three-byte-opcode
+ (<a href="ACL2____B_A2.html">b*</a> ((mandatory-prefix (compute-mandatory-prefix-for-0f-3a-three-byte-opcode$inline
+                             proc-mode opcode prefixes)))
+     (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 8 mandatory-prefix))
+ :rule-classes :rewrite)</pre> 
+<p><b>Function: </b>compute-mandatory-prefix-for-three-byte-opcode$inline</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> compute-mandatory-prefix-for-three-byte-opcode$inline
+       (proc-mode second-escape-byte opcode prefixes)
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____TYPE.html">type</a> (integer 0 4) proc-mode)
+                (<a href="COMMON-LISP____TYPE.html">type</a> (unsigned-byte 8)
+                      second-escape-byte)
+                (<a href="COMMON-LISP____TYPE.html">type</a> (unsigned-byte 8) opcode)
+                (<a href="COMMON-LISP____TYPE.html">type</a> (unsigned-byte 52) prefixes))
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> second-escape-byte 56)
+                                  (<a href="COMMON-LISP____EQUAL.html">equal</a> second-escape-byte 58))))
+       (<a href="COMMON-LISP____CASE.html">case</a> second-escape-byte
+             (56 (<a href="X86ISA____COMPUTE-MANDATORY-PREFIX-FOR-0F-38-THREE-BYTE-OPCODE.html">compute-mandatory-prefix-for-0f-38-three-byte-opcode</a>
+                      proc-mode opcode prefixes))
+             (58 (<a href="X86ISA____COMPUTE-MANDATORY-PREFIX-FOR-0F-3A-THREE-BYTE-OPCODE.html">compute-mandatory-prefix-for-0f-3a-three-byte-opcode</a>
+                      proc-mode opcode prefixes))
+             (otherwise 0)))</pre> 
+<p><b>Theorem: </b>return-type-of-compute-mandatory-prefix-for-three-byte-opcode</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+   return-type-of-compute-mandatory-prefix-for-three-byte-opcode
+   (<a href="ACL2____B_A2.html">b*</a> ((mandatory-prefix (compute-mandatory-prefix-for-three-byte-opcode$inline
+                               proc-mode
+                               second-escape-byte opcode prefixes)))
+       (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 8 mandatory-prefix))
+   :rule-classes :rewrite)</pre> 
+
+</body>
+</html>

@@ -1,0 +1,155 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Atj-tutorial-tests</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=JAVA____ATJ-TUTORIAL-TESTS">Click for Atj-tutorial-tests in the Full Manual</a></h3>
+
+<p>ATJ tutorial: Generation of Tests.</p><p>This tutorial page describes the <span class="v">:tests</span> option of ATJ, 
+    which generates additional Java code to run tests specified by the user. 
+    We illustrate this option via an example, 
+    but also provide more general explanations. 
+    While this tutorial page describes and exemplifies test generation for the <a href="JAVA____ATJ-TUTORIAL-DEEP.html">deep embedding approach</a>, most notions apply to the shallow embedding as well.</p><h5>Defining Some Tests</h5><p>Consider again the factorial function <span class="v">fact</span> example 
+    in <a href="JAVA____ATJ-TUTORIAL-DEEP.html">atj-tutorial-deep</a>. 
+    Introduce a named constant as follows:</p><pre class="code">(<a href="ACL2____DEFCONST.html">defconst</a> *tests*
+  '(("Test0" (fact 0))
+    ("Test1" (fact 1))
+    ("Test2" (fact 2))
+    ("Test3" (fact 3))
+    ("Test10" (fact 10))
+    ("Test20" (fact 20))
+    ("Test50" (fact 50))
+    ("Test77" (fact 77))
+    ("Test100" (fact 100))))</pre><p>The name of the constant does not have to be <span class="v">*tests*</span>. 
+    Any name will do.</p><p>The above is a list of tests, 
+    each of which is a doublet that consists of 
+    a name (a string) and a ground call of the <span class="v">fact</span> function. 
+    The names in the list must be all distinct, 
+    and may be in any order: 
+    their purpose is to describe the associated tests 
+    in a human-readable and identifiable way. 
+    Each ground call in the list 
+    specifies to check whether 
+    executing the ground call in Java 
+    yields the same result as executing it in ACL2. 
+    The arguments of the ground call must be constants: 
+    they must be or translate to quoted constants; 
+    they cannot be just any terms that happen to be constant 
+    (this requirement might be relaxed in the future).</p><p>Note that each such test does not explicitly specify 
+    the expected result of the ground call. 
+    At run time, 
+    the test will simply compare the ACL2 result with the Java result. 
+    Thus, the user can quickly define many tests 
+    without specifying, or even knowing, the expected results.</p><p>Currently the names of the tests must be non-empty strings 
+    that only contain (uppercase and lowercase) letters and digits. 
+    This makes it easy to turn these names into (parts of) method names, 
+    as explained below.</p><h5>Supplying the Tests to ATJ</h5><p>The tests defined above can be supplied to ATJ as follows:</p><pre class="code">(<a href="JAVA____ATJ.html">java::atj</a> fact :deep t :guards nil :tests *tests*)</pre><p>ATJ's <span class="v">:tests</span> input is evaluated: 
+    in the example above, ATJ thus receives 
+    the list of doublets that <span class="v">*tests*</span> evaluates to. 
+    In general, one can supply any term as the <span class="v">:tests</span> input, 
+    so long as its evaluation yields 
+    a true list of doublets in the format explained above. 
+    For example, the quoted list that defines <span class="v">*tests*</span> 
+    could be supplied directly as the <span class="v">:tests</span> input. 
+    As another example, one could define 
+    several named constants like <span class="v">*tests*</span> above, 
+    say <span class="v">*tests1*</span>, <span class="v">*tests2*</span>, etc., 
+    and supply <span class="v">(<a href="COMMON-LISP____APPEND.html">append</a> *tests1* *tests2* ...)</span> as <span class="v">:tests</span>. 
+    However, supplying a single named constant 
+    (which may well be defined as the <span class="tt"><a href="COMMON-LISP____APPEND.html">append</a></span> of other constants, 
+    each for a different group of tests) 
+    may be the clearest approach.</p><p>The ground call in a test must be that of a target function. 
+    Recall that, as described in <a href="JAVA____ATJ-TUTORIAL-TRANSLATED.html">atj-tutorial-translated</a>, 
+    the target functions are the ones explicitly specified to ATJ 
+    (just <span class="v">fact</span> in the example above). 
+    Currently ATJ does not support tests that involve ground calls of 
+    non-target functions directly or indirectly called by the target functions 
+    (such as <span class="tt"><a href="ACL2____ZP.html">zp</a></span> in the <span class="v">fact</span> example above): 
+    the rationale is that the target functions are the top-level ones, 
+    and thus the ones to be tested. 
+    This restriction can be relaxed if it turns out to be a burden.</p><h5>Generated Test Code</h5><p>As conveyed by the message shown on the screen by ATJ, 
+    three Java files are generated, in the current directory. 
+    The first two files, <span class="v">Acl2Code.java</span> and <span class="v">Acl2CodeEnvironment.java</span>, 
+    are the same as before. 
+    The third file, <span class="v">Acl2CodeTests.java</span>, is new. 
+    Opening the new file reveals that it contains 
+    a single Java public class called <span class="v">Acl2CodeTests</span>. 
+    The file imports all the (public) AIJ classes, 
+    which are in the <span class="v">edu.kestrel.acl2.aij</span> Java package, 
+    and a few classes from the Java standard library.</p><p>The class has a <span class="v">main()</span> method, 
+    and can be therefore run as a Java application. 
+    The <span class="v">main()</span> method accepts 
+    either no inputs or a single integer input, 
+    whose meaning is explained later. 
+    After validating the input(s) 
+    and calling <span class="v">Acl2Code.initialize()</span> 
+    (see <a href="JAVA____ATJ-TUTORIAL-DEEP.html">atj-tutorial-deep</a> for details on the latter), 
+    the <span class="v">main()</span> method 
+    runs all the tests specified in <span class="v">:tests</span>, 
+    one after the other. 
+    The class has a private method <span class="v">test_&lt;name&gt;()</span> 
+    for each test with name <span class="v">&lt;name&gt;</span>; 
+    more details on these private methods are given later. 
+    After running all the test methods, 
+    the <span class="v">main()</span> method prints a summary message 
+    saying whether there were test failures or not.</p><h5>Compiling and Running the Code</h5><p>All the files generated by ATJ can be compiled via</p><pre class="code">javac -cp [books]/kestrel/java/aij/java/out/artifacts/AIJ_jar/AIJ.jar \
+      Acl2Code.java Acl2CodeEnvironment.java Acl2CodeTests.java</pre><p>where <span class="v">[books]/...</span> must be replaced with 
+    a proper path to the AIJ jar file 
+    (see <a href="JAVA____AIJ.html">the documentation of AIJ</a> for instructions on how to obtain that jar file.</p><p>After compiling, the code can be run, without argument, via</p><pre class="code">java -cp [books]/kestrel/java/aij/java/out/artifacts/AIJ_jar/AIJ.jar:. \
+     Acl2CodeTests</pre><p>where again <span class="v">[books]/...</span> must be replaced with a proper path. 
+    As conveyed by the messages printed on the screen, 
+    the tests are run one after the other, and they all pass. 
+    The final message saying that all tests passed 
+    is more useful when there is a large number of tests, 
+    sparing the user from having to visually double-check every line.</p><p>Now try running the same code with a positive integer argument:</p><pre class="code">java -cp [books]/kestrel/java/aij/java/out/artifacts/AIJ_jar/AIJ.jar:. \
+     Acl2CodeTests 10</pre><p>In addition to the messages printed before, 
+    now 10 running times are reported for each test, 
+    along with a minimum, an average, and a maximum. 
+    The numeric argument indicates the number of times to run each test. 
+    These tests run very quickly and thus it is likely that 
+    all the reported time be <span class="v">0.000</span> or perhaps just <span class="v">0.001</span>. 
+    Adding and running longer tests such as <span class="v">(fact 10000)</span> 
+    will show more interesting numbers.</p><h5>A Closer Look at the Test Methods</h5><p>All the private static methods in the test class <span class="v">Acl2CodeTests</span>, 
+    each of which corresponds to one of the user-supplied tests, 
+    have a very similar structure.</p><p>Each test method takes as input a non-negative integer, 
+    which is the positive integer passed to the <span class="v">main()</span> method, if any, 
+    or 0 if no argument is passed to the <span class="v">main()</span> method. 
+    The value 0 means that no execution times should be measured and reported. 
+    A positive value means that 
+    execution times should be measured and reported, 
+    with the positive value specifying how many times the test must be run. 
+    As seen in the example above (when the value was 10), 
+    the execution time of every run is measured and printed, 
+    and minimum, average, and maximum are calculated 
+    over those execution times.</p><p>Whether the test passes or not (aside from execution time considerations) 
+    is determined by each method as follows. 
+    The method first builds 
+    the values of the arguments of the call being tested, 
+    and the value of the expected result of the call. 
+    This expected result value is determined by ATJ 
+    when it processes the test in the <span class="v">:tests</span> input: 
+    ATJ invokes the ACL2 evaluator to obtain each result value, 
+    e.g. it invokes the ACL2 evaluator on the term <span class="v">(fact 10)</span> 
+    to obtain the value 3,628,800, 
+    and generates Java code, in the test method, 
+    that builds the Java representation of that value. 
+    For each repetition of the test, 
+    the method calls the Java code for the function being tested 
+    on the arguments, and compares the result with the expected one.</p><p>Each test method measures the execution time of each repetition 
+    by calling <span class="v">System.currentTimeMillis()</span> just before and just after 
+    the call of the Java code generated for the function, 
+    and by subtracting the two values. 
+    Note that the arguments are built once before the loop 
+    and stored into local variables, which are accessed at each call. 
+    Thus we measure the real time, 
+    which may be affected by various kinds of ``noise'', 
+    in particular any other running processes. 
+    Repeating the tests a number of times (via the numeric argument), 
+    and perhaps by attempting to run the tests 
+    with as few other processes as possible, 
+    should mitigate the noise.</p><div class="box"></div><p><b>Previous:</b> <a href="JAVA____ATJ-TUTORIAL-DEEP-GUARDS.html">Guards in the Deep Embedding Approach</a></p><p><b>Next:</b> <a href="JAVA____ATJ-TUTORIAL-SHALLOW.html">Shallow Embedding Approach</a></p>
+</body>
+</html>

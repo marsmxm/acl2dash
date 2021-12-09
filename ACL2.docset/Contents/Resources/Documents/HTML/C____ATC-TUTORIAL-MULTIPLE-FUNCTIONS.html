@@ -1,0 +1,82 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Atc-tutorial-multiple-functions</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=C____ATC-TUTORIAL-MULTIPLE-FUNCTIONS">Click for Atc-tutorial-multiple-functions in the Full Manual</a></h3>
+
+<p>ATC tutorial: ACL2 representation and generation of multiple C functions.</p><p>As mentioned in <a href="C____ATC-TUTORIAL-INT-PROGRAMS.html">atc-tutorial-int-programs</a>, 
+    there is a one-to-one representational correspondence 
+    between ACL2 functions and C functions. 
+    This tutorial page explains in more details and exemplifies 
+    the representation and generation of multiple functions.</p><p>Consider a C program consisting of multiple functions:</p><pre class="code">int f(int x, int y) {
+    return x &lt; y;
+}
+
+int g (int z) {
+    return f(z, ~z);
+}
+
+int h (int a, int b) {
+    return g(a &amp; b);
+}</pre><p>(We have chosen C operations that are well-defined over all <span class="v">int</span>s 
+    to avoid guards that constrain the ranges of the function parameter.)</p><p>[C:6.2.1] disallows forward references among function definitions. 
+    Specifically, [C:6.2.1/4] says that an external declaration 
+    (i.e. one that is not inside any block), 
+    which includes function definitions, 
+    has a file scope that terminates at the end of the file; 
+    it seems implicit in this that the scope starts with the definition, 
+    and includes the function's body to make (singly) recursive calls possible. 
+    Mutually recursive C function definitions, 
+    and generally C function definitions that call functions 
+    defined later in a file, 
+    are allowed via function declarations (e.g. through header files) 
+    that are not function definitions, 
+    where the scope of the non-definition declaration 
+    starts before the definition. 
+    However, currently ATC only generates C files 
+    without header files or function declarations that are not definitions. 
+    Thus, the generated C functions cannot have forward references.</p><p>These restrictions mean that the C functions exemplified above 
+    must appear exactly in that order in the generated C file. 
+    This order matches ACL2's event order. 
+    The C program above is represented by 
+    the following three ACL2 functions:</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> |f| (|x| |y|)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="C____SINTP.html">c::sintp</a> |z|) (<a href="C____SINTP.html">c::sintp</a> |y|))))
+  (<a href="C____LT-SINT-SINT.html">c::lt-sint-sint</a> |x| |y|))
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> |g| (|z|)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="C____SINTP.html">c::sintp</a> |z|)))
+  (|f| |z| (<a href="C____BITNOT-SINT.html">c::bitnot-sint</a> |z|)))
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> |h| (|a| |b|)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="C____SINTP.html">c::sintp</a> |a|) (<a href="C____SINTP.html">c::sintp</a> |b|))))
+  (|g| (<a href="C____BITAND-SINT-SINT.html">c::bitand-sint-sint</a> |a| |b|)))</pre><p>These three functions must necessarily appear in this order, 
+    but of course they do not have to be contiguous events 
+    in the ACL2 <a href="ACL2____WORLD.html">world</a>, 
+    i.e. there may be any number of events between them.</p><p>The ACL2 functions to be translated to C functions 
+    must be always supplied to ATC in order 
+    (i.e. their order in the ACL2 <a href="ACL2____WORLD.html">world</a> and in the C file). 
+    ATC checks that each supplied function 
+    only calls earlier functions in the list. 
+    This excludes any form of recursion, mutual or single. 
+    (This restriction may be eventually lifted, but for now it applies.)</p><p>For the example above, ATC must be called as follows:</p><pre class="code">(<a href="C____ATC.html">c::atc</a> |f| |g| |h| :output-file ...)</pre><p>Since each function listed only calls earlier functions in the list, 
+    this list is accepted by ATC, 
+    and the C program above is generated.</p><p>As mentioned above, currently ATC generates a single C file. 
+    As seen in previous examples, 
+    this is specified by the <span class="v">:output-file</span> option, 
+    which must be present. 
+    The file should have extension <span class="v">.c</span>, 
+    but ATC does not currently enforce that. 
+    In technical terms, the generated C file is a translation unit [C:5.1.1.1]. 
+    More precisely, the file is a source file, 
+    which is read (by a C implementation, e.g. compiler) 
+    into a preprocessing translation unit, 
+    which becomes a translation unit after preprocessing. 
+    Since ATC currently generates files without preprocessing directives, 
+    preprocessing translation units coincide with translation units 
+    as far as the C code generated by ATC is concerned.</p><div class="box"></div><p><b>Previous:</b> <a href="C____ATC-TUTORIAL-IDENTIFIERS.html">ACL2 representation of C identifiers</a></p><p><b>Next:</b> <a href="C____ATC-TUTORIAL-EVENTS.html">ACL2 events generated by ATC</a></p>
+</body>
+</html>

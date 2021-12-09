@@ -1,0 +1,395 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Arrays</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____ARRAYS">Click for Arrays in the Full Manual</a></h3>
+
+<p>ACL2 arrays and operations on them</p><p>Below we begin a detailed presentation of ACL2 arrays.  ACL2's 
+ single-threaded objects (see <a href="ACL2____STOBJ.html">stobj</a>) provide a similar functionality 
+ that is generally more efficient when there are updates (writes), but is also 
+ more restrictive.</p> 
+ 
+ <p>See <a href="ACL2____ARRAYS-EXAMPLE.html">arrays-example</a> for a brief introduction illustrating the use of 
+ ACL2 arrays.</p> 
+ 
+ <p>ACL2 provides relatively efficient 1- and 2-dimensional arrays.  Arrays are 
+ awkward to provide efficiently in an applicative language because the 
+ programmer rightly expects to be able to ``modify'' an array object with the 
+ effect of changing the behavior of the element accessing function on that 
+ object.  This, of course, does not make any sense in an applicative setting. 
+ The element accessing function is, after all, a function, and its behavior on 
+ a given object is immutable.  To ``modify'' an array object in an applicative 
+ setting we must actually produce a new array object.  Arranging for this to be 
+ done efficiently is a challenge to the implementors of the language.  In 
+ addition, the programmer accustomed to the von Neumann view of arrays must 
+ learn how to use immutable applicative arrays efficiently.</p> 
+ 
+ <p>In this note we explain 1-dimensional arrays.  In particular, we explain 
+ briefly how to create, access, and ``modify'' them, how they are implemented, 
+ and how to program with them.  2-dimensional arrays are dealt with by 
+ analogy.</p> 
+ 
+ <h3>The Logical Description of ACL2 Arrays</h3> 
+ 
+ <p>An ACL2 1-dimensional array is an object that associates arbitrary objects 
+ with certain integers, called ``indices.'' Every array has a dimension, 
+ <span class="v">dim</span>, which is a positive integer.  The indices of an array are the 
+ consecutive integers from <span class="v">0</span> through <span class="v">dim-1</span>.  To obtain the object 
+ associated with the index <span class="v">i</span> in an array <span class="v">a</span>, one uses <span class="v">(<a href="ACL2____AREF1.html">aref1</a> name a
+ i)</span>.  <span class="v">Name</span> is a symbol that is irrelevant to the semantics of <span class="tt"><a href="ACL2____AREF1.html">aref1</a></span> but affects the speed with which it computes.  We will talk more about 
+ array ``names'' later.  To produce a new array object that is like <span class="v">a</span> but 
+ which associates <span class="v">val</span> with index <span class="v">i</span>, one uses <span class="v">(<a href="ACL2____ASET1.html">aset1</a> name a i
+ val)</span>.</p> 
+ 
+ <p>An ACL2 1-dimensional array is actually an alist.  There is no special ACL2 
+ function for creating arrays; they are generally built with the standard list 
+ processing functions <span class="tt"><a href="COMMON-LISP____LIST.html">list</a></span> and <span class="tt"><a href="COMMON-LISP____CONS.html">cons</a></span>.  However, there is a 
+ special ACL2 function, called <span class="tt"><a href="ACL2____COMPRESS1.html">compress1</a></span>, for speeding up access to the 
+ elements of such an alist.  We discuss <span class="tt"><a href="ACL2____COMPRESS1.html">compress1</a></span> later.</p> 
+ 
+ <p>One element of the alist must be the ``header'' of the array.  The <a href="ACL2____HEADER.html">header</a> of a 1-dimensional array with dimension <span class="v">dim</span> is of the form:</p> 
+ 
+ <pre class="code">(:HEADER :DIMENSIONS (dim)
+         :MAXIMUM-LENGTH max
+         :DEFAULT obj ; optional
+         :NAME name   ; optional
+         :ORDER order ; optional values are &lt; (<a href="COMMON-LISP____THE.html">the</a> default), &gt;, or :none/nil
+         ).</pre> 
+ 
+ <p><span class="v">Obj</span> may be any object and is called the ``default value'' of the 
+ array.  <span class="tt"><a href="COMMON-LISP____MAX.html">Max</a></span> must be an integer greater than <span class="v">dim</span>.  <span class="v">Name</span> must 
+ be a symbol.  The <span class="v">:</span><span class="tt"><a href="ACL2____DEFAULT.html">default</a></span> and <span class="v">:name</span> entries are optional; 
+ if <span class="v">:</span><span class="tt"><a href="ACL2____DEFAULT.html">default</a></span> is omitted, the default value is <span class="v">nil</span>.  The 
+ function <span class="tt"><a href="ACL2____HEADER.html">header</a></span>, when given a name and a 1- or 2-dimensional array, 
+ returns the <a href="ACL2____HEADER.html">header</a> of the array.  The functions <span class="tt"><a href="ACL2____DIMENSIONS.html">dimensions</a></span>, 
+ <span class="tt"><a href="ACL2____MAXIMUM-LENGTH.html">maximum-length</a></span>, and <span class="tt"><a href="ACL2____DEFAULT.html">default</a></span> are similar and return the 
+ corresponding fields of the <a href="ACL2____HEADER.html">header</a> of the array.  The role of the 
+ <span class="v">:</span><span class="tt"><a href="ACL2____DIMENSIONS.html">dimensions</a></span> field is obvious: it specifies the legal indices into 
+ the array.  The roles played by the <span class="v">:</span><span class="tt"><a href="ACL2____MAXIMUM-LENGTH.html">maximum-length</a></span> and 
+ <span class="v">:</span><span class="tt"><a href="ACL2____DEFAULT.html">default</a></span> fields are described below.</p> 
+ 
+ <p>Aside from the <a href="ACL2____HEADER.html">header</a>, the other elements of the alist must each be 
+ of the form <span class="v">(i . val)</span>, where <span class="v">i</span> is an integer and <span class="v">0 &lt;= i &lt; dim</span>, 
+ and <span class="v">val</span> is an arbitrary object.</p> 
+ 
+ <p>The <span class="v">:order</span> field of the header is ignored for 2-dimensional arrays. 
+ For 1-dimensional arrays, it specifies the order of keys (<span class="v">i</span>, above) when 
+ the array is compressed as with <span class="tt"><a href="ACL2____COMPRESS1.html">compress1</a></span>, as described below.  An 
+ <span class="v">:order</span> of <span class="v">:none</span> or <span class="v">nil</span> specifies no reordering of the alist by 
+ <span class="tt"><a href="ACL2____COMPRESS1.html">compress1</a></span>, and an order of <span class="v">&gt;</span> specifies reordering by <span class="tt"><a href="ACL2____COMPRESS1.html">compress1</a></span> so that keys are in descending order.  Otherwise, the alist is 
+ reordered by <span class="tt"><a href="ACL2____COMPRESS1.html">compress1</a></span> so that keys are in ascending order.</p> 
+ 
+ <p><span class="v">(<a href="ACL2____AREF1.html">Aref1</a> name a i)</span> is <a href="ACL2____GUARD.html">guard</a>ed so that <span class="v">name</span> must be a symbol, 
+ <span class="v">a</span> must be an array and <span class="v">i</span> must be an index into <span class="v">a</span>.  The value of 
+ <span class="v">(<a href="ACL2____AREF1.html">aref1</a> name a i)</span> is either <span class="v">(<a href="COMMON-LISP____CDR.html">cdr</a> (<a href="COMMON-LISP____ASSOC.html">assoc</a> i a))</span> or else is the default 
+ value of <span class="v">a</span>, depending on whether there is a pair in <span class="v">a</span> whose <span class="tt"><a href="COMMON-LISP____CAR.html">car</a></span> is <span class="v">i</span>.  Note that <span class="v">name</span> is irrelevant to the value of an <span class="tt"><a href="ACL2____AREF1.html">aref1</a></span> expression.  You might <span class="v">:pe aref1</span> to see how simple the definition 
+ is.</p> 
+ 
+ <p><span class="v">(<a href="ACL2____ASET1.html">Aset1</a> name a i val)</span> is <a href="ACL2____GUARD.html">guard</a>ed analogously to the <span class="tt"><a href="ACL2____AREF1.html">aref1</a></span> expression.  The value of the <span class="tt"><a href="ACL2____ASET1.html">aset1</a></span> expression is essentially 
+ <span class="v">(<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> i val) a)</span>.  Again, <span class="v">name</span> is irrelevant.  Note <span class="v">(<a href="ACL2____ASET1.html">aset1</a>
+ name a i val)</span> is an array, <span class="v">a'</span>, with the property that <span class="v">(<a href="ACL2____AREF1.html">aref1</a> name a'
+ i)</span> is <span class="v">val</span> and, except for index <span class="v">i</span>, all other indices into <span class="v">a'</span> 
+ produce the same value as in <span class="v">a</span>.  Note also that if <span class="v">a</span> is viewed as an 
+ alist (which it is) the pair ``binding'' <span class="v">i</span> to its old value is in <span class="v">a'</span> 
+ but ``covered up'' by the new pair.  Thus, the length of an array grows by one 
+ when <span class="tt"><a href="ACL2____ASET1.html">aset1</a></span> is done.</p> 
+ 
+ <p>Because <span class="tt"><a href="ACL2____ASET1.html">aset1</a></span> covers old values with new ones, an array produced by 
+ a sequence of <span class="tt"><a href="ACL2____ASET1.html">aset1</a></span> calls may have many irrelevant pairs in it.  The 
+ function <span class="tt"><a href="ACL2____COMPRESS1.html">compress1</a></span> can remove these irrelevant pairs.  Thus, 
+ <span class="v">(<a href="ACL2____COMPRESS1.html">compress1</a> name a)</span> returns an array that is equivalent (vis-a-vis <span class="tt"><a href="ACL2____AREF1.html">aref1</a></span>) to <span class="v">a</span> but which may be shorter.  For technical reasons, the alist 
+ returned by <span class="tt"><a href="ACL2____COMPRESS1.html">compress1</a></span> may also list the pairs in a different order 
+ than listed in <span class="v">a</span>.</p> 
+ 
+ <p>To prevent arrays from growing excessively long due to repeated <span class="tt"><a href="ACL2____ASET1.html">aset1</a></span> operations, <span class="tt"><a href="ACL2____ASET1.html">aset1</a></span> essentially calls <span class="tt"><a href="ACL2____COMPRESS1.html">compress1</a></span> on the 
+ new alist whenever the length of the new alist exceeds the <span class="v">:</span><span class="tt"><a href="ACL2____MAXIMUM-LENGTH.html">maximum-length</a></span> entry, <span class="tt"><a href="COMMON-LISP____MAX.html">max</a></span>, in the <a href="ACL2____HEADER.html">header</a> of the array.  See 
+ the definition of <span class="tt"><a href="ACL2____ASET1.html">aset1</a></span> (for example by using <span class="v">:</span><span class="tt"><a href="ACL2____PE.html">pe</a></span>).  This 
+ is primarily just a mechanism for freeing up <span class="tt"><a href="COMMON-LISP____CONS.html">cons</a></span> space consumed while 
+ doing <span class="tt"><a href="ACL2____ASET1.html">aset1</a></span> operations.  Note however that this <span class="tt"><a href="ACL2____COMPRESS1.html">compress1</a></span> call 
+ is replaced by a hard error if the header specifies an <span class="v">:order</span> of 
+ <span class="v">:none</span> or <span class="v">nil</span>.</p> 
+ 
+ <p>This completes the logical description of 1-dimensional arrays. 
+ 2-dimensional arrays are analogous.  The <span class="v">:</span><span class="tt"><a href="ACL2____DIMENSIONS.html">dimensions</a></span> entry of the 
+ <a href="ACL2____HEADER.html">header</a> of a 2-dimensional array should be <span class="v">(dim1 dim2)</span>.  A pair of 
+ indices, <span class="v">i</span> and <span class="v">j</span>, is legal iff <span class="v">0 &lt;= i &lt; dim1</span> and <span class="v">0 &lt;= j &lt;
+ dim2</span>.  The <span class="v">:</span><span class="tt"><a href="ACL2____MAXIMUM-LENGTH.html">maximum-length</a></span> must be greater than <span class="v">dim1*dim2</span>. 
+ <span class="tt"><a href="ACL2____AREF2.html">Aref2</a></span>, <span class="tt"><a href="ACL2____ASET2.html">aset2</a></span>, and <span class="tt"><a href="ACL2____COMPRESS2.html">compress2</a></span> are like their 
+ counterparts but take an additional <span class="v">index</span> argument.  Finally, the pairs 
+ in a 2-dimensional array are of the form <span class="v">((i . j) . val)</span>.</p> 
+ 
+ <h3>The Implementation of ACL2 Arrays</h3> 
+ 
+ <p>Very informally speaking, the function <span class="tt"><a href="ACL2____COMPRESS1.html">compress1</a></span> ``creates'' an 
+ ACL2 array that provides fast access, while the function <span class="tt"><a href="ACL2____AREF1.html">aref1</a></span> 
+ ``maintains'' fast access.  We now describe this informal idea more 
+ carefully.</p> 
+ 
+ <p><span class="tt"><a href="ACL2____AREF1.html">Aref1</a></span> is essentially <span class="tt"><a href="COMMON-LISP____ASSOC.html">assoc</a></span>.  If <span class="tt"><a href="ACL2____AREF1.html">aref1</a></span> were 
+ implemented naively the time taken to access an array element would be linear 
+ in the dimension of the array and the number of ``assignments'' to it (the 
+ number of <span class="tt"><a href="ACL2____ASET1.html">aset1</a></span> calls done to create the array from the initial 
+ alist).  This is intolerable; arrays are ``supposed'' to provide constant-time 
+ access and change.</p> 
+ 
+ <p>The apparently irrelevant names associated with ACL2 arrays allow us to 
+ provide constant-time access and change when arrays are used in 
+ ``conventional'' ways.  The implementation of arrays makes it clear what we 
+ mean by ``conventional.''</p> 
+ 
+ <p>Recall that array names are symbols.  Behind the scenes, ACL2 associates 
+ two objects with each ACL2 array name.  The first object is called the 
+ ``semantic value'' of the name and is an alist.  The second object is called 
+ the ``raw lisp array'' and is a Common Lisp array.</p> 
+ 
+ <p>When <span class="v">(<a href="ACL2____COMPRESS1.html">compress1</a> name alist)</span> builds a new alist, <span class="v">a'</span>, it sets the 
+ semantic value of <span class="v">name</span> to that new alist.  Furthermore, it writes into a 
+ Common Lisp array all of the index/value pairs of <span class="v">a'</span>, initializing 
+ unassigned indices with the default value.  In general this is a new array, 
+ which becomes the raw lisp array of <span class="v">name</span>.  However, if a raw lisp array 
+ is already associated with <span class="v">name</span> and is at least as long as the dimension 
+ specified in the <a href="ACL2____HEADER.html">header</a>, then that array is reused and all indices out 
+ of range are ignored.  (Such reuse can be avoided; see <a href="ACL2____FLUSH-COMPRESS.html">flush-compress</a> 
+ for how to remove the existing association of a raw lisp array with a name.) 
+ Either way, <span class="tt"><a href="ACL2____COMPRESS1.html">compress1</a></span> then returns <span class="v">a'</span>, the semantic value, as its 
+ result, as required by the definition of <span class="tt"><a href="ACL2____COMPRESS1.html">compress1</a></span>.</p> 
+ 
+ <p>When <span class="v">(<a href="ACL2____AREF1.html">aref1</a> name a i)</span> is invoked, <span class="tt"><a href="ACL2____AREF1.html">aref1</a></span> first determines 
+ whether the semantic value of <span class="v">name</span> is <span class="v">a</span> (i.e., is <span class="tt"><a href="COMMON-LISP____EQ.html">eq</a></span> to the 
+ alist <span class="v">a</span>).  If so, <span class="tt"><a href="ACL2____AREF1.html">aref1</a></span> can determine the <span class="v">i</span>th element of 
+ <span class="v">a</span> by invoking Common Lisp's <span class="v">aref</span> function on the raw lisp array 
+ associated with name.  Note that no linear search of the alist <span class="v">a</span> is 
+ required; the operation is done in constant time and involves retrieval of two 
+ global variables, an <span class="tt"><a href="COMMON-LISP____EQ.html">eq</a></span> test and <span class="v">jump</span>, and a raw lisp array 
+ access.  In fact, an ACL2 array access of this sort is about 5 times slower 
+ than a C array access.  On the other hand, if <span class="v">name</span> has no semantic value 
+ or if it is different from <span class="v">a</span>, then <span class="tt"><a href="ACL2____AREF1.html">aref1</a></span> determines the answer by 
+ linear search of <span class="v">a</span> as suggested by the <span class="v">assoc-like</span> definition of 
+ <span class="tt"><a href="ACL2____AREF1.html">aref1</a></span>.  Thus, <span class="tt"><a href="ACL2____AREF1.html">aref1</a></span> always returns the axiomatically specified 
+ result.  It returns in constant time if the array being accessed is the 
+ current semantic value of the name used.  The ramifications of this are 
+ discussed after we deal with <span class="tt"><a href="ACL2____ASET1.html">aset1</a></span>.</p> 
+ 
+ <p>When <span class="v">(<a href="ACL2____ASET1.html">aset1</a> name a i val)</span> is invoked, <span class="tt"><a href="ACL2____ASET1.html">aset1</a></span> does two <span class="tt"><a href="COMMON-LISP____CONS.html">cons</a></span>es to create the new array.  Call that array <span class="v">a'</span>.  It will be 
+ returned as the answer.  (In this discussion we ignore the case in which 
+ <span class="tt"><a href="ACL2____ASET1.html">aset1</a></span> does a <span class="tt"><a href="ACL2____COMPRESS1.html">compress1</a></span>.)  However, before returning, <span class="tt"><a href="ACL2____ASET1.html">aset1</a></span> determines if <span class="v">name</span>'s semantic value is <span class="v">a</span>.  If so, it makes 
+ the new semantic value of <span class="v">name</span> be <span class="v">a'</span> and it smashes the raw lisp 
+ array of <span class="v">name</span> with <span class="v">val</span> at index <span class="v">i</span>, before returning <span class="v">a'</span> as 
+ the result.  Thus, after doing an <span class="tt"><a href="ACL2____ASET1.html">aset1</a></span> and obtaining a new semantic 
+ value <span class="v">a'</span>, all <span class="tt"><a href="ACL2____AREF1.html">aref1</a></span>s on that new array will be fast.  Any <span class="tt"><a href="ACL2____AREF1.html">aref1</a></span>s on the old semantic value, <span class="v">a</span>, will be slow.</p> 
+ 
+ <p>To understand the performance implications of this design, consider the 
+ chronological sequence in which ACL2 (Common Lisp) evaluates expressions: 
+ basically inner-most first, left-to-right, call-by-value.  An array use, such 
+ as <span class="v">(<a href="ACL2____AREF1.html">aref1</a> name a i)</span>, is ``fast'' (constant-time) if the alist supplied, 
+ <span class="v">a</span>, is the value returned by the most recently executed <span class="tt"><a href="ACL2____COMPRESS1.html">compress1</a></span> 
+ or <span class="tt"><a href="ACL2____ASET1.html">aset1</a></span> on the name supplied.  In the functional expression of 
+ ``conventional'' array processing, all uses of an array are fast.</p> 
+ 
+ <p>The <span class="v">:name</span> field of the <a href="ACL2____HEADER.html">header</a> of an array is completely 
+ irrelevant.  Our convention is to store in that field the symbol we mean to 
+ use as the name of the raw lisp array.  But no ACL2 function inspects 
+ <span class="v">:name</span> and its primary value is that it allows the user, by inspecting the 
+ semantic value of the array  the alist  to recall the name of 
+ the raw array that probably holds that value.  We say ``probably'' since there 
+ is no enforcement that the alist was compressed under the name in the <a href="ACL2____HEADER.html">header</a> or that all <span class="v">aset</span>s used that name.  Such enforcement would be 
+ inefficient.</p> 
+ 
+ <h3>Some Programming Examples</h3> 
+ 
+ <p>In the following examples we will use ACL2 ``global variables'' to hold 
+ several arrays.  See <a href="ACL2_____04.html">@</a>, and see <a href="ACL2____ASSIGN.html">assign</a>.</p> 
+ 
+ <p>Let the <span class="tt"><a href="ACL2____STATE.html">state</a></span> global variable <span class="v">a</span> be the 1-dimensional 
+ compressed array of dimension <span class="v">5</span> constructed below.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____ASSIGN.html">assign</a> a (<a href="ACL2____COMPRESS1.html">compress1</a> 'demo
+                            '((:header :dimensions (5)
+                                       :maximum-length 15
+                                       :default uninitialized
+                                       :name demo)
+                              (0 . zero))))</pre> 
+ 
+ <p>Then <span class="v">(<a href="ACL2____AREF1.html">aref1</a> 'demo (<a href="ACL2_____04.html">@</a> a) 0)</span> is <span class="v">zero</span> and <span class="v">(<a href="ACL2____AREF1.html">aref1</a> 'demo (<a href="ACL2_____04.html">@</a> a) 1)</span> 
+ is <span class="v">uninitialized</span>.</p> 
+ 
+ <p>Now execute</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____ASSIGN.html">assign</a> b (<a href="ACL2____ASET1.html">aset1</a> 'demo (<a href="ACL2_____04.html">@</a> a) 1 'one))</pre> 
+ 
+ <p>Then <span class="v">(<a href="ACL2____AREF1.html">aref1</a> 'demo (<a href="ACL2_____04.html">@</a> b) 0)</span> is <span class="v">zero</span> and <span class="v">(<a href="ACL2____AREF1.html">aref1</a> 'demo (<a href="ACL2_____04.html">@</a> b) 1)</span> 
+ is <span class="v">one</span>.</p> 
+ 
+ <p>All of the <span class="tt"><a href="ACL2____AREF1.html">aref1</a></span>s done so far have been ``fast.''</p> 
+ 
+ <p>Note that we now have two array objects, one in the global variable <span class="v">a</span> 
+ and one in the global variable <span class="v">b</span>.  <span class="v">B</span> was obtained by assigning to 
+ <span class="v">a</span>.  That assignment does not affect the alist <span class="v">a</span> because this is an 
+ applicative language.  Thus, <span class="v">(<a href="ACL2____AREF1.html">aref1</a> 'demo (<a href="ACL2_____04.html">@</a> a) 1)</span> must <b>still</b> be 
+ <span class="v">uninitialized</span>.  And if you execute that expression in ACL2 you will see 
+ that indeed it is.  However, a rather ugly comment is printed, namely that 
+ this array access is ``slow.''  The reason it is slow is that the raw lisp 
+ array associated with the name <span class="v">demo</span> is the array we are calling <span class="v">b</span>. 
+ To access the elements of <span class="v">a</span>, <span class="tt"><a href="ACL2____AREF1.html">aref1</a></span> must now do a linear search. 
+ Any reference to <span class="v">a</span> as an array is now ``unconventional;'' in a 
+ conventional language like Ada or Common Lisp it would simply be impossible to 
+ refer to the value of the array before the assignment that produced our 
+ <span class="v">b</span>.</p> 
+ 
+ <p>Now let us define a function that counts how many times a given object, 
+ <span class="v">x</span>, occurs in an array.  For simplicity, we will pass in the name and 
+ highest index of the array:</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="COMMON-LISP____DEFUN.html">defun</a> cnt (<a href="ACL2____NAME.html">name</a> a i x)
+         (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard
+                         (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____ARRAY1P.html">array1p</a> name a)
+                              (<a href="COMMON-LISP____INTEGERP.html">integerp</a> i)
+                              (<a href="COMMON-LISP_____E3_D3.html">&gt;=</a> i -1)
+                              (<a href="COMMON-LISP_____C3.html">&lt;</a> i (<a href="COMMON-LISP____CAR.html">car</a> (<a href="ACL2____DIMENSIONS.html">dimensions</a> name a))))
+                         :mode :logic
+                         :measure (<a href="ACL2____NFIX.html">nfix</a> (<a href="COMMON-LISP_____B2.html">+</a> 1 i))))
+         (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="ACL2____ZP.html">zp</a> (<a href="COMMON-LISP____1_B2.html">1+</a> i)) 0) ; return 0 if i is at most -1
+               ((<a href="COMMON-LISP____EQUAL.html">equal</a> x (<a href="ACL2____AREF1.html">aref1</a> name a i))
+                (<a href="COMMON-LISP____1_B2.html">1+</a> (cnt name a (<a href="COMMON-LISP____1-.html">1-</a> i) x)))
+               (t (cnt name a (<a href="COMMON-LISP____1-.html">1-</a> i) x))))</pre> 
+ 
+ <p>To determine how many times <span class="v">zero</span> appears in <span class="v">(<a href="ACL2_____04.html">@</a> b)</span> we can 
+ execute:</p> 
+ 
+ <pre class="code">ACL2 !&gt;(cnt 'demo (<a href="ACL2_____04.html">@</a> b) 4 'zero)</pre> 
+ 
+ <p>The answer is <span class="v">1</span>.  How many times does <span class="v">uninitialized</span> appear in 
+ <span class="v">(<a href="ACL2_____04.html">@</a> b)</span>?</p> 
+ 
+ <pre class="code">ACL2 !&gt;(cnt 'demo (<a href="ACL2_____04.html">@</a> b) 4 'uninitialized)</pre> 
+ 
+ <p>The answer is <span class="v">3</span>, because positions <span class="v">2</span>, <span class="v">3</span> and <span class="v">4</span> of the 
+ array contain that default value.</p> 
+ 
+ <p>Now imagine that we want to assign <span class="v">'two</span> to index <span class="v">2</span> and then count 
+ how many times the 2nd element of the array occurs in the array.  This 
+ specification is actually ambiguous.  In assigning to <span class="v">b</span> we produce a new 
+ array, which we might call <span class="v">c</span>.  Do we mean to count the occurrences in 
+ <span class="v">c</span> of the 2nd element of <span class="v">b</span> or the 2nd element of <span class="v">c</span>?  That is, do 
+ we count the occurrences of <span class="v">uninitialized</span> or the occurrences of <span class="v">two</span>? 
+ If we mean the former the correct answer is <span class="v">2</span> (positions <span class="v">3</span> and 
+ <span class="v">4</span> are <span class="v">uninitialized</span> in <span class="v">c</span>); if we mean the latter, the correct 
+ answer is <span class="v">1</span> (there is only one occurrence of <span class="v">two</span> in <span class="v">c</span>).</p> 
+ 
+ <p>Below are ACL2 renderings of the two meanings, which we call <span class="v">[former]</span> 
+ and <span class="v">[latter]</span>.  (Warning: Our description of these examples, and of an 
+ example <span class="v">[fast former]</span> that follows, assumes that only one of these three 
+ examples is actually executed; for example, they are not executed in sequence. 
+ See ``A Word of Warning'' below for more about this issue.)</p> 
+ 
+ <pre class="code">(cnt 'demo (<a href="ACL2____ASET1.html">aset1</a> 'demo (<a href="ACL2_____04.html">@</a> b) 2 'two) 4 (<a href="ACL2____AREF1.html">aref1</a> 'demo (<a href="ACL2_____04.html">@</a> b) 2))  ; [former]
+
+(<a href="COMMON-LISP____LET.html">let</a> ((c (<a href="ACL2____ASET1.html">aset1</a> 'demo (<a href="ACL2_____04.html">@</a> b) 2 'two)))                           ; [latter]
+  (cnt 'demo c 4 (<a href="ACL2____AREF1.html">aref1</a> 'demo c 2)))</pre> 
+ 
+ <p>Note that in <span class="v">[former]</span> we create <span class="v">c</span> in the second argument of the 
+ call to <span class="v">cnt</span> (although we do not give it a name) and then refer to <span class="v">b</span> 
+ in the fourth argument.  This is unconventional because the second reference 
+ to <span class="v">b</span> in <span class="v">[former]</span> is no longer the semantic value of <span class="v">demo</span>. 
+ While ACL2 computes the correct answer, namely <span class="v">2</span>, the execution of the 
+ <span class="tt"><a href="ACL2____AREF1.html">aref1</a></span> expression in <span class="v">[former]</span> is done slowly.</p> 
+ 
+ <p>A conventional rendering with the same meaning is</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____LET.html">let</a> ((x (<a href="ACL2____AREF1.html">aref1</a> 'demo (<a href="ACL2_____04.html">@</a> b) 2)))                           ; [fast former]
+  (cnt 'demo (<a href="ACL2____ASET1.html">aset1</a> 'demo (<a href="ACL2_____04.html">@</a> b) 2 'two) 4 x))</pre> 
+ 
+ <p>which fetches the 2nd element of <span class="v">b</span> before creating <span class="v">c</span> by 
+ assignment.  It is important to understand that <span class="v">[former]</span> and <span class="v">[fast
+ former]</span> mean exactly the same thing: both count the number of occurrences of 
+ <span class="v">uninitialized</span> in <span class="v">c</span>.  Both are legal ACL2 and both compute the same 
+ answer, <span class="v">2</span>.  Indeed, we can symbolically transform <span class="v">[fast former]</span> into 
+ <span class="v">[former]</span> merely by substituting the binding of <span class="v">x</span> for <span class="v">x</span> in the 
+ body of the <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span>.  But <span class="v">[fast former]</span> can be evaluated faster than 
+ <span class="v">[former]</span> because all of the references to <span class="v">demo</span> use the then-current 
+ semantic value of <span class="v">demo</span>, which is <span class="v">b</span> in the first line and <span class="v">c</span> 
+ throughout the execution of the <span class="v">cnt</span> in the second line.  <span class="v">[Fast
+ former]</span> is the preferred form, both because of its execution speed and its 
+ clarity.  If you were writing in a conventional language you would have to 
+ write something like <span class="v">[fast former]</span> because there is no way to refer to 
+ the 2nd element of the old value of <span class="v">b</span> after smashing <span class="v">b</span> unless it had 
+ been saved first.</p> 
+ 
+ <p>We turn now to <span class="v">[latter]</span>.  It is both clear and efficient.  It creates 
+ <span class="v">c</span> by assignment to <span class="v">b</span> and then it fetches the 2nd element of <span class="v">c</span>, 
+ <span class="v">two</span>, and proceeds to count the number of occurrences in <span class="v">c</span>.  The 
+ answer is <span class="v">1</span>.  <span class="v">[Latter]</span> is a good example of typical ACL2 array 
+ manipulation: after the assignment to <span class="v">b</span> that creates <span class="v">c</span>, <span class="v">c</span> is 
+ used throughout.</p> 
+ 
+ <p>It takes a while to get used to this because most of us have grown 
+ accustomed to the peculiar semantics of arrays in conventional languages.  For 
+ example, in raw lisp we might have written something like the following, 
+ treating <span class="v">b</span> as a ``global variable'':</p> 
+ 
+ <pre class="code">(cnt 'demo (aset 'demo b 2 'two) 4 (aref 'demo b 2))</pre> 
+ 
+ <p>which sort of resembles <span class="v">[former]</span> but actually has the semantics of 
+ <span class="v">[latter]</span> because the <span class="v">b</span> from which <span class="v">aref</span> fetches the 2nd element 
+ is not the same <span class="v">b</span> used in the <span class="v">aset</span>!  The array <span class="v">b</span> is destroyed 
+ by the <span class="v">aset</span> and <span class="v">b</span> henceforth refers to the array produced by the 
+ <span class="v">aset</span>, as written more clearly in <span class="v">[latter]</span>.</p> 
+ 
+ <p>A Word of Warning: Users must exercise care when experimenting with 
+ <span class="v">[former]</span>, <span class="v">[latter]</span> and <span class="v">[fast former]</span>.  Suppose you have just 
+ created <span class="v">b</span> with the assignment shown above,</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____ASSIGN.html">assign</a> b (<a href="ACL2____ASET1.html">aset1</a> 'demo (<a href="ACL2_____04.html">@</a> a) 1 'one))</pre> 
+ 
+ <p>If you then evaluate <span class="v">[former]</span> in ACL2 it will complain that the <span class="tt"><a href="ACL2____AREF1.html">aref1</a></span> is slow and compute the answer, as discussed.  Then suppose you 
+ evaluate <span class="v">[latter]</span> in ACL2.  From our discussion you might expect it to 
+ execute fast  i.e., issue no complaint.  But in fact you will find that 
+ it complains repeatedly.  The problem is that the evaluation of <span class="v">[former]</span> 
+ changed the semantic value of <span class="v">demo</span> so that it is no longer <span class="v">b</span>.  To 
+ try the experiment correctly you must make <span class="v">b</span> be the semantic value of 
+ <span class="v">demo</span> again before the next example is evaluated.  One way to do that is 
+ to execute</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____ASSIGN.html">assign</a> b (<a href="ACL2____COMPRESS1.html">compress1</a> 'demo (<a href="ACL2_____04.html">@</a> b)))</pre> 
+ 
+ <p>before each expression.  Because of issues like this it is often hard to 
+ experiment with ACL2 arrays at the top-level.  We find it easier to write 
+ functions that use arrays correctly and efficiently than to so use them 
+ interactively.</p> 
+ 
+ <p>This last assignment also illustrates a very common use of <span class="tt"><a href="ACL2____COMPRESS1.html">compress1</a></span>.  While it was introduced as a means of removing irrelevant pairs 
+ from an array built up by repeated assignments, it is actually most useful as 
+ a way of insuring fast access to the elements of an array.</p> 
+ 
+ <p>Many array processing tasks can be divided into two parts.  During the 
+ first part the array is built.  During the second part the array is used 
+ extensively but not modified.  If your <a href="ACL2____PROGRAMMING.html">programming</a> task can be so 
+ divided, it might be appropriate to construct the array entirely with list 
+ processing, thereby saving the cost of maintaining the semantic value of the 
+ name while few references are being made.  Once the alist has stabilized, it 
+ might be worthwhile to treat it as an array by calling <span class="tt"><a href="ACL2____COMPRESS1.html">compress1</a></span>, 
+ thereby gaining constant time access to it.</p> 
+ 
+ <p>ACL2's theorem prover uses this technique in connection with its 
+ implementation of the notion of whether a <a href="ACL2____RUNE.html">rune</a> is <a href="ACL2____DISABLE.html">disable</a>d or 
+ not.  Associated with every <a href="ACL2____RUNE.html">rune</a> is a unique integer <span class="v">index</span>, called 
+ its ``nume.''  When each rule is stored, the corresponding nume is stored as a 
+ component of the rule.  <a href="ACL2____THEORIES.html">Theories</a> are lists of <a href="ACL2____RUNE.html">rune</a>s and 
+ membership in the ``current theory'' indicates that the corresponding rule is 
+ <a href="ACL2____ENABLE.html">enable</a>d.  But these lists are very long and membership is a linear-time 
+ operation.  So just before a proof begins we map the list of <a href="ACL2____RUNE.html">rune</a>s in 
+ the current theory into an alist that pairs the corresponding numes with 
+ <span class="v">t</span>.  Then we compress this alist into an array.  Thus, given a rule we can 
+ obtain its nume (because it is a component) and then determine in constant 
+ time whether it is <a href="ACL2____ENABLE.html">enable</a>d.  The array is never modified during the 
+ proof, i.e., <span class="tt"><a href="ACL2____ASET1.html">aset1</a></span> is never used in this example.  From the logical 
+ perspective this code looks quite odd: we have replaced a linear-time 
+ membership test with an apparently linear-time <span class="tt"><a href="COMMON-LISP____ASSOC.html">assoc</a></span> after going to 
+ the trouble of mapping from a list of <a href="ACL2____RUNE.html">rune</a>s to an alist of numes.  But 
+ because the alist of numes is an array, the ``apparently linear-time <span class="tt"><a href="COMMON-LISP____ASSOC.html">assoc</a></span>'' is more apparent than real; the operation is constant-time.</p>
+</body>
+</html>

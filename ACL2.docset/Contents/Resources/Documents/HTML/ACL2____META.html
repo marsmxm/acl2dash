@@ -1,0 +1,386 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Meta</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____META">Click for Meta in the Full Manual</a></h3>
+
+<p>Make a <span class="v">:meta</span> rule (a hand-written simplifier)</p><p>See <a href="ACL2____RULE-CLASSES.html">rule-classes</a> for a general discussion of rule classes, 
+ including how they are used to build rules from formulas and a discussion of 
+ the various keywords in a rule class description.</p> 
+ 
+ <p>Meta rules extend the ACL2 simplifier with hand-written code to transform 
+ certain terms to equivalent ones.  To add a meta rule, the <span class="v">:</span><span class="tt"><a href="ACL2____COROLLARY.html">corollary</a></span> formula must establish that the hand-written ``metafunction'' 
+ preserves the meaning of the transformed term.</p> 
+ 
+ <pre class="code">Examples:
+(<a href="ACL2____DEFTHM.html">defthm</a> fn-correct-1                ; Modify the rewriter to use fn to
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> (evl x a)                  ; transform terms that are calls of
+         (evl (fn x) a))            ; nth or of foo.
+  :rule-classes ((:meta :trigger-fns (<a href="COMMON-LISP____NTH.html">nth</a> foo))))
+
+(<a href="ACL2____DEFTHM.html">defthm</a> fn-correct-2                ; As above, but this illustrates
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a> x)    ; that without loss of generality we
+                (<a href="ACL2____ALISTP.html">alistp</a> a))         ; may restrict x to be shaped like a
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (evl x a)         ; term and a to be an alist.
+                  (evl (fn x) a)))
+  :rule-classes ((:meta :trigger-fns (<a href="COMMON-LISP____NTH.html">nth</a> foo))))
+
+(<a href="ACL2____DEFTHM.html">defthm</a> fn-correct-3                ; As above (with or without the
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a> x)    ; hypotheses on x and a), with the
+                (<a href="ACL2____ALISTP.html">alistp</a> a)          ; additional restriction that the
+                (evl (hyp-fn x) a)) ; meaning of (hyp-fn x) is true in
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (evl x a)         ; the current context.  That is, the
+                  (evl (fn x) a)))  ; applicability of the transformation
+  :rule-classes                     ; may be dependent upon some computed
+  ((:meta :trigger-fns (<a href="COMMON-LISP____NTH.html">nth</a> foo)))) ; hypotheses.</pre> 
+ 
+ <p>While our intention is that the set of ACL2 documentation topics is 
+ self-contained, readers might find it useful to see the following paper for an 
+ introduction to meta reasoning in ACL2.</p> 
+ 
+ <blockquote><p>W. A. Hunt, Jr., R. B. Krug, M. Kaufmann, J S. Moore and 
+ E. W. Smith, ``Meta Reasoning in ACL2.''  TPHOLs 2005, ed. J. Hurd and 
+ T. F. Melham, LNCS 3603, Springer-Verlag, Berlin, 2005, 
+ pp. 163178.</p></blockquote> 
+ 
+ <p>A non-<span class="v">nil</span> list of function symbols must be supplied as the value of 
+ the <span class="v">:trigger-fns</span> field in a <span class="v">:meta</span> rule class object (except that a 
+ macro alias can stand in for a function symbol; see <a href="ACL2____ADD-MACRO-ALIAS.html">add-macro-alias</a>).</p> 
+ 
+ <pre class="code">General Forms:
+(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a> x)        ; this hyp is optional
+              (<a href="ACL2____ALISTP.html">alistp</a> a)              ; this hyp is optional
+              (ev (hyp-fn x ...) a)   ; this hyp is optional
+              ; meta-extract hyps may also be included (see below)
+              )
+         (equiv (ev x a)
+                (ev (fn x ...) a)))</pre> 
+ 
+ <p>where <span class="v">equiv</span> is a known <a href="ACL2____EQUIVALENCE.html">equivalence</a> relation, <span class="v">x</span> and <span class="v">a</span> 
+ are distinct variable names, and <span class="v">ev</span> is an evaluator function (see below), 
+ and <span class="v">fn</span> is a function symbol, as is <span class="v">hyp-fn</span> when provided.  The 
+ arguments to <span class="v">fn</span> and <span class="v">hyp-fn</span> should be identical.  In the most common 
+ case, both take a single argument, <span class="v">x</span>, which denotes the term to be 
+ simplified.  If <span class="v">fn</span> and/or <span class="v">hyp-fn</span> are <a href="ACL2____GUARD.html">guard</a>ed, their <a href="ACL2____GUARD.html">guard</a>s should be trivially implied by <span class="tt"><a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a></span>.  We say the 
+ theorem above is a ``metatheorem'' or ``metalemma'' and <span class="v">fn</span> is a 
+ ``metafunction'', and <span class="v">hyp-fn</span> is a ``hypothesis metafunction''.</p> 
+ 
+ <p>If ``<span class="v">...</span>'' is empty, i.e., the metafunctions take just one argument, 
+ we say they are ``vanilla flavored.''  If ``<span class="v">...</span>'' is non-empty, we say 
+ the metafunctions are ``extended.''  Extended metafunctions can access <span class="tt"><a href="ACL2____STATE.html">state</a></span> and context sensitive information to compute their results, within 
+ certain limits.  We discuss vanilla metafunctions here and recommend a 
+ thorough understanding of them before proceeding (at which time see <a href="ACL2____EXTENDED-METAFUNCTIONS.html">extended-metafunctions</a>).</p> 
+ 
+ <p>If a metafunction application to a term, <span class="v">u</span>, evaluates to a result of 
+ the form <span class="v">(<a href="COMMON-LISP____IF.html">if</a> TEST NEW-TERM u)</span>, then <span class="v">TEST</span> is treated as an ``implicit 
+ hypothesis''.  For discussion of this relatively advanced feature, see <a href="ACL2____META-IMPLICIT-HYPOTHESIS.html">meta-implicit-hypothesis</a>.</p> 
+ 
+ <p>Additional hypotheses are supported, called ``meta-extract hypotheses''. 
+ These allow metafunctions to depend on the validity of certain terms extracted 
+ from the context or the logical <a href="ACL2____WORLD.html">world</a>.  These hypotheses provide a 
+ relatively advanced form of metatheorem so we explain them elsewhere; see 
+ <a href="ACL2____META-EXTRACT.html">meta-extract</a>.</p> 
+ 
+ <p>One might think that metafunctions and (if supplied) hypothesis 
+ metafunctions must be executable: that is, not constrained (i.e., introduced 
+ in the <a href="ACL2____SIGNATURE.html">signature</a> of <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span> <a href="ACL2____EVENTS.html">events</a>), and not <a href="COMMON-LISP____DECLARE.html">declare</a>d <span class="v">:</span><span class="tt"><a href="ACL2____NON-EXECUTABLE.html">non-executable</a></span>.  After all, there is no point in 
+ installing a simplifier that cannot be run!  However, such a restriction is 
+ not enforced, because one could introduce a metafunction using <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span> and then use <span class="tt"><a href="ACL2____DEFATTACH.html">defattach</a></span> to attach it to an executable 
+ function; see <a href="ACL2____DEFATTACH.html">defattach</a>.</p> 
+ 
+ <p>We defer discussion of the case in which there is a hypothesis metafunction 
+ and for now address the case in which the other two hypotheses are 
+ present.</p> 
+ 
+ <p>In the discussion below, we refer to the argument, <span class="v">x</span>, of <span class="v">fn</span> and 
+ <span class="v">hyp-fn</span> as a ``(translated) term,'' i.e., an object satisfying the ACL2 
+ built-in predicate <span class="v">termp</span>.  When these metafunctions are executed by the 
+ simplifier, they will be applied to (the quotations of) terms.  But during the 
+ proof of the metatheorem itself, <span class="v">x</span> may not be the quotation of a term. 
+ If the <span class="tt"><a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a></span> hypothesis is omitted, <span class="v">x</span> may be any object. 
+ Even with the <span class="tt"><a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a></span> hypothesis, <span class="v">x</span> may merely ``look like a 
+ term'' but use non-function symbols or function symbols of incorrect arity. 
+ In any case, the metatheorem is stronger than necessary to allow us to apply 
+ the metafunctions to terms, as we do in the discussion below.  We return later 
+ to the question of proving the metatheorem.</p> 
+ 
+ <p>Suppose the general form of the metatheorem above is proved with the <span class="tt"><a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a></span> and <span class="tt"><a href="ACL2____ALISTP.html">alistp</a></span> hypotheses.  Then when the simplifier 
+ encounters a term, <span class="v">(h t1 ... tn)</span>, that begins with a function symbol, 
+ <span class="v">h</span>, listed in <span class="v">:trigger-fns</span>, it applies the metafunction, <span class="v">fn</span>, to 
+ the quotation of the term, i.e., it evaluates <span class="v">(fn '(h t1 ... tn))</span> to 
+ obtain some result, which can be written as <span class="v">'val</span>.  If <span class="v">'val</span> is 
+ different from <span class="v">'(h t1 ... tn)</span> and <span class="v">val</span> is a well-formed term (see the 
+ next paragraph), then <span class="v">(h t1 ... tn)</span> is replaced by <span class="v">val</span>, which is 
+ then passed along for further rewriting.  Because the metatheorem establishes 
+ the correctness of <span class="v">fn</span> for all terms (even non-terms!), there is no 
+ restriction on which function symbols are listed in the <span class="v">:trigger-fns</span>. 
+ Generally, of course, they should be the symbols that head up the terms 
+ simplified by the metafunction <span class="v">fn</span>.</p> 
+ 
+ <p>Note that the result of applying a metafunction (or a hypothesis 
+ metafunction) must be a term, i.e., must satisfy the predicate <span class="tt"><a href="ACL2____TERMP.html">termp</a></span> 
+ in the current logical <a href="ACL2____WORLD.html">world</a>.  If not, then an error occurs.  See <a href="ACL2____TERM-TABLE.html">term-table</a> for how one obtains some assistance towards testing that <span class="v">val</span> 
+ is indeed a term.  ACL2 actually enforces a stronger requirement, disallowing 
+ calls of certain ``forbidden'' function symbols as described in <span class="tt"><a href="ACL2____SET-SKIP-META-TERMP-CHECKS.html">set-skip-meta-termp-checks</a></span>.  Both of these runtime checks can be avoided by 
+ proving that the metafunction (and the corresponding hypothesis metafunction, 
+ if any) always produces an acceptable term.  See <a href="ACL2____WELL-FORMEDNESS-GUARANTEE.html">well-formedness-guarantee</a>.  Alternatively, with an active trust tag (see 
+ <a href="ACL2____DEFTTAG.html">defttag</a>) you can tell ACL2 to skip these tests; see <span class="tt"><a href="ACL2____SET-SKIP-META-TERMP-CHECKS.html">set-skip-meta-termp-checks</a></span>.</p> 
+ 
+ <p>The ``evaluator'' function, <span class="v">ev</span>, is a function that can evaluate a 
+ certain class of expressions, namely, all of those composed of variables, 
+ constants, and applications of a fixed, finite set of function symbols, 
+ <span class="v">g1</span>, ..., <span class="v">gk</span>.  Generally speaking, the set of function symbols 
+ handled by <span class="v">ev</span> is chosen to be exactly the function symbols recognized and 
+ manipulated by the metafunctions being introduced.  For example, if <span class="v">fn</span> 
+ manipulates expressions in which <span class="v">'</span><span class="tt"><a href="COMMON-LISP____EQUAL.html">equal</a></span> and <span class="v">'</span><span class="tt"><a href="ACL2____BINARY-APPEND.html">binary-append</a></span> occur as function symbols, then <span class="v">ev</span> is generally specified 
+ to handle <span class="tt"><a href="COMMON-LISP____EQUAL.html">equal</a></span> and <span class="tt"><a href="ACL2____BINARY-APPEND.html">binary-append</a></span>.  The actual requirements on 
+ <span class="v">ev</span> become clear when the metatheorem is proved.  The standard way to 
+ introduce an evaluator is to use the ACL2 macro <span class="tt"><a href="ACL2____DEFEVALUATOR.html">defevaluator</a></span>, though 
+ this is not strictly necessary.  See <a href="ACL2____DEFEVALUATOR.html">defevaluator</a> if you want 
+ details.</p> 
+ 
+ <p>[Aside for the logic-minded.] Why are we justified in using metafunctions 
+ this way?  Suppose <span class="v">(fn 'term1)</span> is <span class="v">'term2</span>.  What justifies replacing 
+ <span class="v">term1</span> by <span class="v">term2</span>?  The first step is to assert that <span class="v">term1</span> is 
+ <span class="v">(ev 'term1 a)</span>, where <span class="v">a</span> is an alist that maps <span class="v">'var</span> to <span class="v">var</span>, 
+ for each variable <span class="v">var</span> in <span class="v">term1</span>.  This step is incorrect, because 
+ <span class="v">'term1</span> may contain function symbols other than the ones, <span class="v">g1</span>, ..., 
+ <span class="v">gk</span>, that <span class="v">ev</span> knows how to handle.  But we can grow <span class="v">ev</span> to a 
+ ``larger'' evaluator, <span class="v">ev*</span>, an evaluator for all of the symbols that occur 
+ in <span class="v">term1</span> or <span class="v">term2</span>.  We can prove that <span class="v">ev*</span> satisfies the <a href="ACL2____CONSTRAINT.html">constraint</a>s on <span class="v">ev</span>, provided no <span class="tt"><a href="ACL2____DEFAXIOM.html">defaxiom</a></span> events are adding 
+ constraints to <span class="v">ev</span> (or callers of <span class="v">ev</span>, and recursively); ACL2 checks 
+ this additional property.  Hence, the metatheorem holds for <span class="v">ev*</span> in place 
+ of <span class="v">ev</span>, by functional instantiation.  We can then carry out the proof of 
+ the <a href="ACL2____EQUIVALENCE.html">equivalence</a> of <span class="v">term1</span> and <span class="v">term2</span> as follows: Fix <span class="v">a</span> to 
+ be an alist that maps the quotations of the variables of <span class="v">term1</span> and 
+ <span class="v">term2</span> to themselves.  Then,</p> 
+ 
+ <pre class="code">term1 = (ev* 'term1 a)      ; (1) by construction of ev* and a
+      = (ev* (fn 'term1) a) ; (2) by the metatheorem for ev*
+      = (ev* 'term2 a)      ; (3) by evaluation of fn
+      = term2               ; (4) by construction of ev* and a</pre> 
+ 
+ <p>Note that in line (2) above, where we appeal to the (functional 
+ instantiation of the) metatheorem, we can relieve its (optional) <span class="tt"><a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a></span> and <span class="tt"><a href="ACL2____ALISTP.html">alistp</a></span> hypotheses by appealing to the facts that 
+ <span class="v">term1</span> is a term and <span class="v">a</span> is an alist by construction.  [End of Aside 
+ for the logic-minded.]</p> 
+ 
+ <p>There are subtleties related to the notion of ``growing'' <span class="v">ev</span> to a 
+ ``larger'' evaluator, as mentioned in the paragraph just above.  For 
+ corresponding restrictions on <span class="v">:meta</span> rules, see <a href="ACL2____EVALUATOR-RESTRICTIONS.html">evaluator-restrictions</a>.</p> 
+ 
+ <p>Finally, we turn to the second case, in which there is a hypothesis 
+ metafunction.  In that case, consider as before what happens when the 
+ simplifier encounters a term, <span class="v">(h t1 ... tn)</span>, where <span class="v">h</span> is listed in 
+ <span class="v">:trigger-fns</span>.  This time, after it applies <span class="v">fn</span> to <span class="v">'(h t1 ... tn)</span> 
+ to obtain the quotation of some new term, <span class="v">'val</span>, it then applies the 
+ hypothesis metafunction, <span class="v">hyp-fn</span>.  That is, it evaluates <span class="v">(hyp-fn '(h t1
+ ... tn))</span> to obtain some result, which can be written as <span class="v">'hyp-val</span>.  If 
+ <span class="v">hyp-val</span> is not in fact a term, the metafunction is not used.  Provided 
+ <span class="v">hyp-val</span> is a term, the simplifier attempts to establish (by conventional 
+ backchaining) that this term is non-<span class="v">nil</span> in the current context.  Note 
+ that this backchaining is done just as it is done for hypotheses of <a href="ACL2____REWRITE.html">rewrite</a> (and <a href="ACL2____LINEAR.html">linear</a>) rules, namely, by rewriting with special 
+ attention to calls of certain functions including <span class="tt"><a href="ACL2____FORCE.html">force</a></span>, <span class="tt"><a href="ACL2____CASE-SPLIT.html">case-split</a></span>, <span class="tt"><a href="ACL2____SYNTAXP.html">syntaxp</a></span>, and <span class="tt"><a href="ACL2____BIND-FREE.html">bind-free</a></span>.  If this attempt to 
+ establish this term fails, then the meta rule is not applied.  Otherwise, 
+ <span class="v">(h t1...tn)</span> is replaced by <span class="v">val</span> as in the previous case (where there 
+ was no hypothesis metafunction).</p> 
+ 
+ <p>Why is it justified to make this extension to the case of hypothesis 
+ metafunctions?  First, note that the rule</p> 
+ 
+ <pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a> x)
+              (<a href="ACL2____ALISTP.html">alistp</a> a)
+              (ev (hyp-fn x) a))
+         (<a href="COMMON-LISP____EQUAL.html">equal</a> (ev x a)
+                (ev (fn x) a)))</pre> 
+ 
+ <p>is logically equivalent to the rule</p> 
+ 
+ <pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a> x)
+              (<a href="ACL2____ALISTP.html">alistp</a> a))
+         (<a href="COMMON-LISP____EQUAL.html">equal</a> (ev x a)
+                (ev (new-fn x) a)))</pre> 
+ 
+ <p>where <span class="v">(new-fn x)</span> is defined to be <span class="v">(<a href="COMMON-LISP____LIST.html">list</a> 'if (hyp-fn x) (fn x) x)</span>. 
+ (If we're careful, we realize that this argument depends on making an 
+ extension of <span class="v">ev</span> to an evaluator <span class="v">ev*</span> that handles <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span> and the 
+ functions manipulated by <span class="v">hyp-fn</span>.)  If we write <span class="v">'term</span> for the 
+ quotation of the present term, and if <span class="v">(hyp-fn 'term)</span> and <span class="v">(fn 'term)</span> 
+ are both terms, say <span class="v">hyp1</span> and <span class="v">term1</span>, then by the previous argument we 
+ know it is sound to rewrite term to <span class="v">(<a href="COMMON-LISP____IF.html">if</a> hyp1 term1 term)</span>.  But since we 
+ have established in the current context that <span class="v">hyp1</span> is non-<span class="v">nil</span>, we may 
+ simplify <span class="v">(<a href="COMMON-LISP____IF.html">if</a> hyp1 term1 term)</span> to <span class="v">term1</span>, as desired.</p> 
+ 
+ <p>We now discuss the role of the <span class="tt"><a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a></span> hypothesis. 
+ <span class="v">(<a href="ACL2____PSEUDO-TERMP.html">Pseudo-termp</a> x)</span> checks that <span class="v">x</span> has the shape of a term.  Roughly 
+ speaking, it ensures that <span class="v">x</span> is a symbol, a quoted constant, or a true 
+ list consisting of a <span class="v">lambda</span> expression or symbol followed by some 
+ pseudo-terms.  Among the properties of terms not checked by <span class="tt"><a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a></span> are that variable symbols never begin with ampersand, 
+ <span class="v">lambda</span> expressions are closed, and function symbols are applied to the 
+ correct number of arguments.  See <a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a>.</p> 
+ 
+ <p>There are two possible roles for <span class="tt"><a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a></span> in the development of 
+ a metatheorem: it may be used as the <a href="ACL2____GUARD.html">guard</a> of the metafunction and/or 
+ hypothesis metafunction and it may be used as a hypothesis of the metatheorem. 
+ Generally speaking, the <span class="tt"><a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a></span> hypothesis is included in a 
+ metatheorem only if it makes it easier to prove.  The choice is yours.  (An 
+ extreme example of this is when the metatheorem is invalid without the 
+ hypothesis!)  We therefore address ourselves the question: should a 
+ metafunction have a <span class="tt"><a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a></span> <a href="ACL2____GUARD.html">guard</a>?  A <span class="tt"><a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a></span> 
+ <a href="ACL2____GUARD.html">guard</a> for a metafunction, in connection with other considerations 
+ described below, improves the efficiency with which the metafunction is used 
+ by the simplifier.</p> 
+ 
+ <p>To make a metafunction maximally efficient you should (a) provide it with a 
+ <span class="tt"><a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a></span> <a href="ACL2____GUARD.html">guard</a> and exploit the <a href="ACL2____GUARD.html">guard</a> when possible 
+ in coding the body of the function (see <a href="ACL2____GUARDS-AND-EVALUATION.html">guards-and-evaluation</a>, 
+ especially the section on efficiency issues), (b) verify the <a href="ACL2____GUARD.html">guard</a>s of 
+ the metafunction (see <a href="ACL2____VERIFY-GUARDS.html">verify-guards</a>), and (c) compile the metafunction 
+ (see <a href="ACL2____COMP.html">comp</a>).  When these three steps have been taken the simplifier can 
+ evaluate <span class="v">(fn 'term1)</span> by running the compiled ``primary code'' (see <a href="ACL2____GUARDS-AND-EVALUATION.html">guards-and-evaluation</a>) for <span class="v">fn</span> directly in Common Lisp.  (Note however 
+ that explicit compilation may be suppressed; see <a href="ACL2____COMPILATION.html">compilation</a>.)</p> 
+ 
+ <p>Before discussing efficiency issues further, let us review for a moment the 
+ general case in which we wish to evaluate <span class="v">(fn 'obj)</span> for some <span class="v">:</span><span class="tt"><a href="ACL2____LOGIC.html">logic</a></span> function.  We must first ask whether the <a href="ACL2____GUARD.html">guard</a>s of <span class="v">fn</span> have 
+ been verified.  If not, we must evaluate <span class="v">fn</span> by executing its logic 
+ definition.  This effectively checks the <a href="ACL2____GUARD.html">guard</a>s of every subroutine and 
+ so can be slow.  If, on the other hand, the <a href="ACL2____GUARD.html">guard</a>s of <span class="v">fn</span> have been 
+ verified, then we can run the primary code for <span class="v">fn</span>, provided <span class="v">'obj</span> 
+ satisfies the <a href="ACL2____GUARD.html">guard</a> of <span class="v">fn</span>.  So we must next evaluate the <a href="ACL2____GUARD.html">guard</a> of <span class="v">fn</span> on <span class="v">'obj</span>.  If the <a href="ACL2____GUARD.html">guard</a> is met, then we run the 
+ primary code for <span class="v">fn</span>, otherwise we run the logic code.</p> 
+ 
+ <p>Now in the case of a metafunction for which the three steps above have been 
+ followed, we know the <a href="ACL2____GUARD.html">guard</a> is (implied by) <span class="tt"><a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a></span> and 
+ that it has been verified.  Furthermore, we know without checking that the 
+ <a href="ACL2____GUARD.html">guard</a> is met (because <span class="v">term1</span> is a term and hence <span class="v">'term1</span> is a 
+ <span class="tt"><a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a></span>).  Hence, we can use the compiled primary code 
+ directly.</p> 
+ 
+ <p>We strongly recommend that you compile your metafunctions, as well as all 
+ their subroutines (unless explicit compilation is suppressed; see <a href="ACL2____COMPILATION.html">compilation</a>).  Guard verification is also recommended.</p> 
+ 
+ <p>Finally, we present a very simple example of the use of <span class="v">:meta</span> rules, 
+ based on one provided by Robert Krug.  This example illustrates a trick for 
+ avoiding undesired rewriting after applying a metafunction or any other form 
+ of rewriting.  To elaborate: in general, the term <span class="v">t2</span> obtained by applying 
+ a metafunction to a term <span class="v">t1</span> is then handed immediately to the rewriter, 
+ which descends recursively through the arguments of function calls to rewrite 
+ <span class="v">t2</span> completely.  But if <span class="v">t2</span> shares a lot of structure with <span class="v">t1</span>, 
+ then it might not be worthwhile to rewrite <span class="v">t2</span> immediately.  (A rewrite of 
+ <span class="v">t2</span> will occur anyhow the next time a goal is generated.)  The trick 
+ involves avoiding this rewrite by wrapping <span class="v">t2</span> inside a call of <span class="tt"><a href="ACL2____HIDE.html">hide</a></span>, which in turn is inside a call of a user-defined ``unhiding'' function, 
+ <span class="v">unhide</span>.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> unhide (x)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t))
+  x)
+
+(<a href="ACL2____DEFTHM.html">defthm</a> unhide-hide
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> (unhide (<a href="ACL2____HIDE.html">hide</a> x))
+         x)
+  :hints (("Goal" :expand ((<a href="ACL2____HIDE.html">hide</a> x)))))
+
+(<a href="ACL2____IN-THEORY.html">in-theory</a> (<a href="ACL2____DISABLE.html">disable</a> unhide))
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> my-plus (x y)
+  (<a href="COMMON-LISP_____B2.html">+</a> x y))
+
+(<a href="ACL2____IN-THEORY.html">in-theory</a> (<a href="ACL2____DISABLE.html">disable</a> my-plus))
+
+(<a href="ACL2____DEFEVALUATOR.html">defevaluator</a> evl evl-list
+  ((my-plus x y)
+   (<a href="ACL2____BINARY-_B2.html">binary-+</a> x y)
+   (unhide x)
+   (<a href="ACL2____HIDE.html">hide</a> x)))
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> meta-fn (<a href="ACL2____TERM.html">term</a>)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a> term)))
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____CONSP.html">consp</a> term)
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____LENGTH.html">length</a> term) 3)
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____CAR.html">car</a> term) 'my-plus))
+      `(UNHIDE (<a href="ACL2____HIDE.html">HIDE</a> (<a href="ACL2____BINARY-_B2.html">BINARY-+</a> ,(<a href="COMMON-LISP____CADR.html">cadr</a> term) ,(<a href="COMMON-LISP____CADDR.html">caddr</a> term))))
+    term))
+
+(<a href="ACL2____DEFTHM.html">defthm</a> my-meta-lemma
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> (evl term a)
+         (evl (meta-fn term) a))
+  :hints (("Goal" :in-theory (<a href="ACL2____ENABLE.html">enable</a> my-plus)))
+  :rule-classes ((:meta :trigger-fns (my-plus))))</pre> 
+ 
+ <p>Notice that in the following (silly) conjecture, ACL2 initially does only 
+ does the simplification directed by the metafunction; a second goal is 
+ generated before the commutativity of addition can be applied.  If the above 
+ calls of <span class="v">UNHIDE</span> and <span class="v">HIDE</span> had been stripped off, then <span class="v">Goal'</span> 
+ would have been the term printed in <span class="v">Goal''</span> below.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____THM.html">thm</a>
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (my-plus b a)
+               ccc))
+
+This simplifies, using the :meta rule MY-META-LEMMA and the :rewrite
+rule UNHIDE-HIDE, to
+
+Goal'
+(<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (<a href="COMMON-LISP_____B2.html">+</a> B A) CCC).
+
+This simplifies, using the :rewrite rule COMMUTATIVITY-OF-+, to
+
+Goal''
+(<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (<a href="COMMON-LISP_____B2.html">+</a> A B) CCC).</pre> 
+ 
+ <p>The discussion above probably suffices to make good use of this <span class="v">(UNHIDE
+ (<a href="ACL2____HIDE.html">HIDE</a> ...))</span> trick.  However, we invite the reader who wishes to understand 
+ the trick in depth to evaluate the following form before submitting the <span class="tt"><a href="ACL2____THM.html">thm</a></span> form above.</p> 
+ 
+ <pre class="code">(<a href="ACL2____TRACE_42.html">trace$</a> (<a href="ACL2____REWRITE.html">rewrite</a> :entry (<a href="COMMON-LISP____LIST.html">list</a> (<a href="ACL2____TAKE.html">take</a> 2 arglist))
+                 :exit (<a href="COMMON-LISP____LIST.html">list</a> (<a href="COMMON-LISP____CAR.html">car</a> values)))
+        (rewrite-with-lemma :entry (<a href="COMMON-LISP____LIST.html">list</a> (<a href="ACL2____TAKE.html">take</a> 2 arglist))
+                            :exit (<a href="ACL2____TAKE.html">take</a> 2 values)))</pre> 
+ 
+ <p>The following annotated subset of the trace output (which may appear a bit 
+ different depending on the underlying Common Lisp implementation) explains how 
+ the trick works.</p> 
+ 
+ <pre class="code">    2&gt; (<a href="ACL2____REWRITE.html">REWRITE</a> ((MY-PLUS B A) NIL))&gt;
+      3&gt; (REWRITE-WITH-LEMMA
+              ((MY-PLUS B A)
+               (REWRITE-RULE (:META MY-META-LEMMA)
+                             1822
+                             NIL EQUAL META-FN NIL META NIL NIL)))&gt;
+
+We apply the meta rule, then recursively rewrite the result, which is the
+(UNHIDE (<a href="ACL2____HIDE.html">HIDE</a> ...)) term shown just below.
+
+        4&gt; (<a href="ACL2____REWRITE.html">REWRITE</a> ((UNHIDE (<a href="ACL2____HIDE.html">HIDE</a> (<a href="ACL2____BINARY-_B2.html">BINARY-+</a> B A)))
+                     ((A . A) (B . B))))&gt;
+          5&gt; (<a href="ACL2____REWRITE.html">REWRITE</a> ((<a href="ACL2____HIDE.html">HIDE</a> (<a href="ACL2____BINARY-_B2.html">BINARY-+</a> B A))
+                       ((A . A) (B . B))))&gt;
+
+The HIDE protects its argument from being touched by the rewriter.
+
+          &lt;5 (<a href="ACL2____REWRITE.html">REWRITE</a> (<a href="ACL2____HIDE.html">HIDE</a> (<a href="ACL2____BINARY-_B2.html">BINARY-+</a> B A)))&gt;
+          5&gt; (REWRITE-WITH-LEMMA
+                  ((UNHIDE (<a href="ACL2____HIDE.html">HIDE</a> (<a href="ACL2____BINARY-_B2.html">BINARY-+</a> B A)))
+                   (REWRITE-RULE (:REWRITE UNHIDE-HIDE)
+                                 1806 NIL EQUAL (UNHIDE (<a href="ACL2____HIDE.html">HIDE</a> X))
+                                 X ABBREVIATION NIL NIL)))&gt;
+
+Now we apply UNHIDE-HIDE, then recursively rewrite its right-hand
+side in an environment where X is bound to (<a href="ACL2____BINARY-_B2.html">BINARY-+</a> B A).
+
+            6&gt; (<a href="ACL2____REWRITE.html">REWRITE</a> (X ((X BINARY-+ B A))))&gt;
+
+Notice that at this point X is cached, so REWRITE just returns
+(<a href="ACL2____BINARY-_B2.html">BINARY-+</a> B A).
+
+            &lt;6 (<a href="ACL2____REWRITE.html">REWRITE</a> (<a href="ACL2____BINARY-_B2.html">BINARY-+</a> B A))&gt;
+          &lt;5 (REWRITE-WITH-LEMMA T (<a href="ACL2____BINARY-_B2.html">BINARY-+</a> B A))&gt;
+        &lt;4 (<a href="ACL2____REWRITE.html">REWRITE</a> (<a href="ACL2____BINARY-_B2.html">BINARY-+</a> B A))&gt;
+      &lt;3 (REWRITE-WITH-LEMMA T (<a href="ACL2____BINARY-_B2.html">BINARY-+</a> B A))&gt;
+    &lt;2 (<a href="ACL2____REWRITE.html">REWRITE</a> (<a href="ACL2____BINARY-_B2.html">BINARY-+</a> B A))&gt;</pre>
+</body>
+</html>

@@ -1,0 +1,226 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Bdd-introduction</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____BDD-INTRODUCTION">Click for Bdd-introduction in the Full Manual</a></h3>
+
+<p>Examples illustrating the use of BDDs in ACL2</p><p>See <a href="ACL2____BDD.html">bdd</a> for a brief introduction to BDDs in ACL2 and for 
+ pointers to other documentation on BDDs in ACL2.  Here, we illustrate the use 
+ of BDDs in ACL2 by way of some examples.  For a further example, see <a href="ACL2____IF_A2.html">if*</a>.</p> 
+ 
+ <p>Let us begin with a really simple example.  (We will explain the <span class="v">:bdd</span> 
+ hint <span class="v">(:vars nil)</span> below.)</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____THM.html">thm</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____IF.html">if</a> a b c) (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____NOT.html">not</a> a) c b))
+            :hints (("Goal" :bdd (:vars nil)))) ; Prove with BDDs
+
+[Note:  A hint was supplied for our processing of the goal above.
+Thanks!]
+
+But simplification with BDDs (7 nodes) reduces this to T, using the
+:definitions EQUAL and NOT.
+
+Q.E.D.
+
+Summary
+Form:  ( THM ...)
+Rules: ((:DEFINITION EQUAL) (:DEFINITION NOT))
+Warnings:  None
+Time:  0.18 seconds (prove: 0.05, print: 0.02, other: 0.12)
+
+Proof succeeded.
+ACL2 !&gt;</pre> 
+ 
+ <p>The <span class="v">:bdd</span> hint <span class="v">(:vars nil)</span> indicates that BDDs are to be used on 
+ the indicated goal, and that any so-called ``variable ordering'' may be used: 
+ ACL2 may use a convenient order that is far from optimal.  It is beyond the 
+ scope of the present documentation to address the issue of how the user may 
+ choose good variable orderings.  Someday our implementation of BDDs may be 
+ improved to include heuristically-chosen variable orderings rather than rather 
+ random ones.</p> 
+ 
+ <p>Here is a more interesting example.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> v-not (x)
+; Complement every element of a list of Booleans.
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x)
+      (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____CAR.html">car</a> x)) (v-not (<a href="COMMON-LISP____CDR.html">cdr</a> x)))
+    nil))
+
+; Now we prove a rewrite rule that explains how to open up v-not on
+; a consp.
+(<a href="ACL2____DEFTHM.html">defthm</a> v-not-cons
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> (v-not (<a href="COMMON-LISP____CONS.html">cons</a> x y))
+         (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____NOT.html">not</a> x) (v-not y))))
+
+; Finally, we prove for 7-bit lists that v-not is self-inverting.
+(<a href="ACL2____THM.html">thm</a>
+ (<a href="COMMON-LISP____LET.html">let</a> ((x (<a href="COMMON-LISP____LIST.html">list</a> x0 x1 x2 x3 x4 x5 x6)))
+   (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____BOOLEAN-LISTP.html">boolean-listp</a> x)
+            (<a href="COMMON-LISP____EQUAL.html">equal</a> (v-not (v-not x)) x)))
+ :hints (("Goal" :bdd
+                 ;; Note that this time we specify a variable order.
+                 (:vars (x0 x1 x2 x3 x4 x5 x6)))))</pre> 
+ 
+ <p>It turns out that the variable order doesn't seem to matter in this 
+ example; using several orders we found that 30 nodes were created, and the 
+ proof time was about 1/10 of a second on a (somewhat enhanced) Sparc 2.  The 
+ same proof took about a minute and a half without any <span class="v">:bdd</span> hint!  This 
+ observation is a bit misleading perhaps, since the theorem for arbitrary 
+ <span class="v">x</span>,</p> 
+ 
+ <pre class="code">(<a href="ACL2____THM.html">thm</a>
+ (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____BOOLEAN-LISTP.html">boolean-listp</a> x)
+          (<a href="COMMON-LISP____EQUAL.html">equal</a> (v-not (v-not x)) x)))</pre> 
+ 
+ <p>only takes about 1.5 times as long as the <span class="v">:bdd</span> proof for 7 bits, 
+ above!  Nevertheless, BDDs can be very useful in reducing proof time, 
+ especially when there is no regular structure to facilitate proof by 
+ induction, or when the induction scheme is so complicated to construct that 
+ significant user effort is required to get the proof by induction to go 
+ through.</p> 
+ 
+ <p>Finally, consider the preceding example, with a <span class="v">:bdd</span> hint of (say) 
+ <span class="v">(:vars nil)</span>, but with the rewrite rule <span class="v">v-not-cons</span> above disabled. 
+ In that case, the proof fails, as we see below.  That is because the BDD 
+ algorithm in ACL2 uses hypothesis-free <span class="v">:</span><a href="ACL2____REWRITE.html">rewrite</a> rules, 
+ <span class="v">:</span><span class="tt"><a href="ACL2____EXECUTABLE-COUNTERPART.html">executable-counterpart</a></span><span class="v">s</span>, and nonrecursive definitions, but 
+ it does not use recursive definitions.</p> 
+ 
+ <p>Notice that when we issue the <span class="v">(<a href="ACL2____SHOW-BDD.html">show-bdd</a>)</span> command, the system's 
+ response clearly shows that we need a rewrite rule for simplifying terms of 
+ the form <span class="v">(v-not (<a href="COMMON-LISP____CONS.html">cons</a> ...))</span>.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____THM.html">thm</a>
+        (<a href="COMMON-LISP____LET.html">let</a> ((x (<a href="COMMON-LISP____LIST.html">list</a> x0 x1 x2 x3 x4 x5 x6)))
+          (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____BOOLEAN-LISTP.html">boolean-listp</a> x)
+                   (<a href="COMMON-LISP____EQUAL.html">equal</a> (v-not (v-not x)) x)))
+        :hints (("Goal" :bdd (:vars nil)
+                 :in-theory (<a href="ACL2____DISABLE.html">disable</a> v-not-cons))))
+
+[Note:  A hint was supplied for our processing of the goal above.
+Thanks!]
+
+ACL2 Error in ( THM ...):  Attempted to create V-NOT node during BDD
+processing with an argument that is a call of a bdd-constructor,
+which would produce a non-BDD term (as defined in :DOC
+bdd-algorithm).  See :DOC show-bdd.
+
+Summary
+Form:  ( THM ...)
+Rules: NIL
+Warnings:  None
+Time:  0.58 seconds (prove: 0.13, print: 0.00, other: 0.45)
+
+******** FAILED ********  See :DOC failure  ******** FAILED ********
+ACL2 !&gt;(<a href="ACL2____SHOW-BDD.html">show-bdd</a>)
+
+BDD computation on Goal yielded 17 nodes.
+------------------------------
+
+BDD computation was aborted on Goal, and hence there is no
+falsifying assignment that can be constructed.  Here is a backtrace
+of calls, starting with the top-level call and ending with the one
+that led to the abort.  See :DOC show-bdd.
+
+(<a href="COMMON-LISP____LET.html">LET</a> ((X (<a href="COMMON-LISP____LIST.html">LIST</a> X0 X1 X2 X3 X4 X5 ...)))
+     (<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="ACL2____BOOLEAN-LISTP.html">BOOLEAN-LISTP</a> X)
+              (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (V-NOT (V-NOT X)) X)))
+  alist: ((X6 X6) (X5 X5) (X4 X4) (X3 X3) (X2 X2) (X1 X1) (X0 X0))
+
+(<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (V-NOT (V-NOT X)) X)
+  alist: ((X (<a href="COMMON-LISP____LIST.html">LIST</a> X0 X1 X2 X3 X4 X5 ...)))
+
+(V-NOT (V-NOT X))
+  alist: ((X (<a href="COMMON-LISP____LIST.html">LIST</a> X0 X1 X2 X3 X4 X5 ...)))
+
+(V-NOT X)
+  alist: ((X (<a href="COMMON-LISP____LIST.html">LIST</a> X0 X1 X2 X3 X4 X5 ...)))
+ACL2 !&gt;</pre> 
+ 
+ <p>The term that has caused the BDD algorithm to abort is thus <span class="v">(V-NOT X)</span>, 
+ where <span class="v">X</span> has the value <span class="v">(<a href="COMMON-LISP____LIST.html">LIST</a> X0 X1 X2 X3 X4 X5 ...)</span>, i.e., <span class="v">(<a href="COMMON-LISP____CONS.html">CONS</a>
+ X0 (<a href="COMMON-LISP____LIST.html">LIST</a> X1 X2 X3 X4 X5 ...))</span>.  Thus, we see the utility of introducing a 
+ rewrite rule to simplify terms of the form <span class="v">(V-NOT (<a href="COMMON-LISP____CONS.html">CONS</a> ...))</span>.  The moral 
+ of this story is that if you get an error of the sort shown above, you may 
+ find it useful to execute the command <span class="v">(<a href="ACL2____SHOW-BDD.html">show-bdd</a>)</span> and use the result as 
+ advice that suggests the left hand side of a rewrite rule.</p> 
+ 
+ <p>Here is another sort of failed proof.  In this version we have omitted the 
+ hypothesis that the input is a bit vector.  Below we use <span class="v">show-bdd</span> to see 
+ what went wrong, and use the resulting information to construct a 
+ counterexample.  This failed proof corresponds to a slightly modified input 
+ theorem, in which <span class="v">x</span> is bound to the 4-element list <span class="v">(<a href="COMMON-LISP____LIST.html">list</a> x0 x1 x2
+ x3)</span>.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____THM.html">thm</a>
+        (<a href="COMMON-LISP____LET.html">let</a> ((x (<a href="COMMON-LISP____LIST.html">list</a> x0 x1 x2 x3)))
+          (<a href="COMMON-LISP____EQUAL.html">equal</a> (v-not (v-not x)) x))
+        :hints (("Goal" :bdd
+                 ;; This time we do not specify a variable order.
+                 (:vars nil))))
+
+[Note:  A hint was supplied for our processing of the goal above.
+Thanks!]
+
+ACL2 Error in ( THM ...):  The :BDD hint for the current goal has
+successfully simplified this goal, but has failed to prove it.
+Consider using (<a href="ACL2____SHOW-BDD.html">SHOW-BDD</a>) to suggest a counterexample; see :DOC
+show-bdd.
+
+Summary
+Form:  ( THM ...)
+Rules: NIL
+Warnings:  None
+Time:  0.18 seconds (prove: 0.07, print: 0.00, other: 0.12)
+
+******** FAILED ********  See :DOC failure  ******** FAILED ********
+ACL2 !&gt;(<a href="ACL2____SHOW-BDD.html">show-bdd</a>)
+
+BDD computation on Goal yielded 73 nodes.
+------------------------------
+
+Falsifying constraints:
+((X0 "Some non-nil value")
+ (X1 "Some non-nil value")
+ (X2 "Some non-nil value")
+ (X3 "Some non-nil value")
+ ((<a href="COMMON-LISP____EQUAL.html">EQUAL</a> 'T X0) T)
+ ((<a href="COMMON-LISP____EQUAL.html">EQUAL</a> 'T X1) T)
+ ((<a href="COMMON-LISP____EQUAL.html">EQUAL</a> 'T X2) T)
+ ((<a href="COMMON-LISP____EQUAL.html">EQUAL</a> 'T X3) NIL))
+
+------------------------------
+
+Term obtained from BDD computation on Goal:
+
+(<a href="COMMON-LISP____IF.html">IF</a> X0
+    (<a href="COMMON-LISP____IF.html">IF</a> X1
+        (<a href="COMMON-LISP____IF.html">IF</a> X2 (<a href="COMMON-LISP____IF.html">IF</a> X3 (<a href="COMMON-LISP____IF.html">IF</a> # # #) (<a href="COMMON-LISP____IF.html">IF</a> X3 # #))
+            (<a href="COMMON-LISP____IF.html">IF</a> X2 'NIL (<a href="COMMON-LISP____IF.html">IF</a> X3 # #)))
+        (<a href="COMMON-LISP____IF.html">IF</a> X1 'NIL
+            (<a href="COMMON-LISP____IF.html">IF</a> X2 (<a href="COMMON-LISP____IF.html">IF</a> X3 # #) (<a href="COMMON-LISP____IF.html">IF</a> X2 # #))))
+    (<a href="COMMON-LISP____IF.html">IF</a> X0 'NIL
+        (<a href="COMMON-LISP____IF.html">IF</a> X1 (<a href="COMMON-LISP____IF.html">IF</a> X2 (<a href="COMMON-LISP____IF.html">IF</a> X3 # #) (<a href="COMMON-LISP____IF.html">IF</a> X2 # #))
+            (<a href="COMMON-LISP____IF.html">IF</a> X1 'NIL (<a href="COMMON-LISP____IF.html">IF</a> X2 # #)))))
+
+ACL2 Query (:SHOW-BDD):  Print the term in full?  (N, Y, W or ?):
+n ; I've seen enough.  The assignment shown above suggests
+  ; (though not conclusively) that if we bind x3 to a non-nil
+  ; value other than T, and bind x0, x1, and x2 to t, then we
+  ; this may give us a counterexample.
+ACL2 !&gt;(<a href="COMMON-LISP____LET.html">let</a> ((x0 t) (x1 t) (x2 t) (x3 7))
+         (<a href="COMMON-LISP____LET.html">let</a> ((x (<a href="COMMON-LISP____LIST.html">list</a> x0 x1 x2 x3)))
+           ;; Let's use LIST instead of EQUAL to see how the two
+           ;; lists differ.
+           (<a href="COMMON-LISP____LIST.html">list</a> (v-not (v-not x)) x)))
+((T T T T) (T T T 7))
+ACL2 !&gt;</pre> 
+ 
+ <p>See <a href="ACL2____IF_A2.html">if*</a> for another example.</p>
+</body>
+</html>

@@ -1,0 +1,282 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Define</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____DEFINE">Click for Define in the Full Manual</a></h3>
+
+<p>A very fine alternative to <a href="COMMON-LISP____DEFUN.html">defun</a>.</p><h3>Introduction</h3> 
+ 
+<p><span class="v">define</span> is an extension of <span class="v">defun</span>/<span class="v">defund</span> with:</p> 
+ 
+<ul> 
+ 
+<li>Richer <span class="v">formals</span> lists that permit keyword/optional arguments, embedded 
+guards and documentation, automatically infer <a href="ACL2____STOBJ.html">ACL2::stobj</a> declarations, 
+etc.</li> 
+ 
+<li>A more concise <a href="ACL2____XARGS.html">xargs</a> syntax that also adds control over other 
+settings like <a href="ACL2____SET-IGNORE-OK.html">set-ignore-ok</a>, <a href="ACL2____SET-IRRELEVANT-FORMALS-OK.html">set-irrelevant-formals-ok</a>, and 
+inlining.</li> 
+ 
+<li>A concise syntax for naming return values, documenting them, and proving 
+basic theorems (e.g., type-like theorems) about them.</li> 
+ 
+<li>Integration with <a href="ACL2____XDOC.html">xdoc</a> with function signatures derived and a <a href="ACL2____DEFSECTION.html">defsection</a>-like ability to associate related theorems with your function.</li> 
+ 
+<li>Automatic binding of <span class="v">__function__</span> to the name of the function, which 
+can be useful in error messages (see, e.g., <a href="ACL2____RAISE.html">raise</a>) and, on CCL at least, 
+appears to produce identical compiled output when <span class="v">__function__</span> isn't used 
+in the body.</li> 
+ 
+</ul> 
+ 
+<p>The general form of <span class="v">define</span> is:</p> 
+ 
+<pre class="code">(<a href="ACL2____DEFINE.html">define</a> name formals
+  main-stuff
+  [/// other-events])     ;; optional, starts with the symbol ///</pre> 
+ 
+<p>There's nothing special about the <span class="v">name</span>, it's just the name of the new 
+function to be defined, as in <a href="COMMON-LISP____DEFUN.html">defun</a>.  The other parts all have their own 
+syntax and features to cover, and we address them in turn.</p> 
+ 
+<p>The formal have many features; see <a href="STD____EXTENDED-FORMALS.html">extended-formals</a>.  Besides the 
+ordinary extended-formals utilities, they can also include <span class="v">:type</span> 
+declarations; see <a href="ACL2____TYPE-SPEC.html">ACL2::type-spec</a>.  For instance:</p> 
+ 
+<pre class="code">(x oddp :type integer)
+(y evenp :type (integer 0 *))</pre> 
+ 
+ 
+<h3>The Main Stuff</h3> 
+ 
+<p>After the formals we get to the main part of the definition.  This section 
+is a mixed list that may contain:</p> 
+ 
+<ul> 
+<li>
+<i>Extended options</i> of the form <span class="v">:name value</span>
+</li> 
+<li>Declarations of the form <span class="v">(<a href="COMMON-LISP____DECLARE.html">declare</a> ...)</span>
+</li> 
+<li>Traditional documentation strings, i.e., <span class="v">"..."</span>
+</li> 
+<li>The function's body, a term</li> 
+</ul> 
+ 
+<p>Except for the extended options, this is just like <span class="v">defun</span>.</p> 
+ 
+<p>Extended options can go <b>anywhere</b> between the formals and the special 
+separator <span class="v">///</span> (if any) or the end of the <span class="v">define</span>.  Here is a contrived 
+example:</p> 
+ 
+<pre class="code">(<a href="ACL2____DEFINE.html">define</a> parse-foo (channel n &amp;optional (<a href="ACL2____STATE.html">state</a> 'state))
+
+  :parents (parser) ;; extended option
+
+  ;; declarations/docstrings must come before body, as in defun
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____TYPE.html">type</a> integer n))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> channel))
+  "Traditional doc string that the xdoc system ignores."
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :normalize nil))
+
+  :guard (<a href="COMMON-LISP_____C3.html">&lt;</a> 17 n) ;; extended option
+
+  (<a href="ACL2____B_A2.html">b*</a> ((next (peek-char channel state))  ;; function's body
+       ...)
+     (<a href="ACL2____MV.html">mv</a> result state))
+
+  :measure (file-measure channel state)  ;; more extended opts.
+  :hints (("Goal" ...))
+  :guard-debug t)</pre> 
+ 
+<p>How does this work, exactly?  Ordinarily, <span class="v">defun</span> distinguishes the 
+function's body from documentation strings and declarations using a simple 
+rule: the last item is the function's body, and everything before it must be a 
+declaration or documentation string.  For <span class="v">define</span>, we simply add a 
+preprocessing step:</p> 
+ 
+<ul> 
+<li>First, all of the extended options are extracted.</li> 
+<li>Then, the remaining parts are handled using the ordinary <span class="v">defun</span> rule.</li> 
+</ul> 
+ 
+<p>There is one special case where this approach is <b>incompatible</b> with 
+<span class="v">defun</span>: if your function's body is nothing more than a keyword symbol, 
+e.g.,</p> 
+ 
+<pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> returns-foo (x)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORE.html">ignore</a> x))
+  :foo)</pre> 
+ 
+<p>then it cannot be converted into a <span class="v">define</span> since the body looks like 
+a (malformed) extended option.  I considered workarounds to avoid this, but 
+decided that it is better to just live with not being able to define these 
+kinds of functions.  They are very weird, anyway.</p> 
+ 
+<h4>Basic Extended Options</h4> 
+ 
+<p>All <a href="ACL2____XARGS.html">xargs</a> are available as extended options (though we provide an 
+additional option for <span class="v">:verify-guards</span> --- see below).  In practice this 
+just makes things more concise and better looking, e.g., compare:</p> 
+ 
+<pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> strpos-fast (x y n xl yl)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> ...)
+                  :measure (<a href="ACL2____NFIX.html">nfix</a> ...)))
+  ...)
+vs.
+(<a href="ACL2____DEFINE.html">define</a> strpos-fast (x y n xl yl)
+  :guard (<a href="COMMON-LISP____AND.html">and</a> ...)
+  :measure (<a href="ACL2____NFIX.html">nfix</a> ...)
+  ...)</pre> 
+ 
+<p>See <a href="STD____DEFINE-GUARDS.html">define-guards</a> for discussion of the various ways guards can be 
+given, additionally.</p> 
+ 
+<p>Some additional minor options include:</p> 
+ 
+<dl> 
+ 
+<dt><span class="v">:enabled val</span></dt> 
+ 
+<dd>By default the function will be disabled after the <span class="v">other-events</span> are 
+processed.  If <span class="v">:enabled t</span> is provided, we will leave it enabled, 
+instead.</dd> 
+ 
+<dt><span class="v">:ignore-ok val</span></dt> 
+ 
+<dd>Submits <span class="v">(<a href="ACL2____SET-IGNORE-OK.html">set-ignore-ok</a> val)</span> before the definition.  This option is 
+local to the <span class="v">define</span> only and does not affect the <span class="v">other-events</span>.</dd> 
+ 
+<dt><span class="v">:irrelevant-formals-ok val</span></dt> 
+ 
+<dd>Submits <span class="v">(<a href="ACL2____SET-IRRELEVANT-FORMALS-OK.html">set-irrelevant-formals-ok</a> val)</span> before the definition; local 
+to this <span class="v">define</span> only and not to any <span class="v">other-events</span>.</dd> 
+ 
+<dt><span class="v">:inline val</span></dt> 
+ 
+<dd>By default <span class="v">val</span> is <span class="v">:default</span> and we produce an ordinary function 
+that is neither inline or notinline.  When <span class="v">:inline t</span> is provided, we 
+create an <i>inline</i> function as in <a href="ACL2____DEFUN-INLINE.html">defun-inline</a>; the function will 
+have an ugly name like <span class="v">foo$inline</span>, so we'll also set up a <span class="v">foo</span> macro 
+and appropriate macro aliases.  When <span class="v">:inline nil</span> is provided, we create a 
+<i>notinline</i> function as in <a href="ACL2____DEFUN-NOTINLINE.html">defun-notinline</a>; the function will have 
+an ugly name like <span class="v">foo$notinline</span>, so we will again set up a macro and 
+appropriate macro aliases.</dd> 
+ 
+<dt>
+<span class="v">:parents</span>, <span class="v">:short</span>, <span class="v">:long</span>
+</dt> 
+ 
+<dd>These are <a href="ACL2____DEFXDOC.html">defxdoc</a>-style options for documenting the function.  They 
+are passed to a <span class="v">defsection</span> for this definition.</dd> 
+ 
+<dt><span class="v">:prepwork events</span></dt> 
+ 
+<dd>These are any arbitrary events you want to put before the definition 
+itself, for instance it might include <span class="v">-aux</span> functions or local lemmas 
+needed for termination.</dd> 
+ 
+<dt><span class="v">:t-proof val</span></dt> 
+ 
+<dd>By default, the termination proof is lost after admitting a function. 
+But if <span class="v">:t-proof t</span> is provided, we will create a theorem without 
+any rule-classes that holds the proof of termination for this function and 
+measure.</dd> 
+ 
+<dt><span class="v">:verify-guards val</span></dt> 
+ 
+<dd>The value <span class="v">val</span> can be one of the following: <span class="v">t</span>, <span class="v">nil</span>, or 
+<span class="v">:after-returns</span>.  The first two correspond to what is described in <a href="ACL2____XARGS.html">xargs</a>, but the third option is specific to <span class="v">define</span>.  The keyword 
+<span class="v">:after-returns</span> indicates that the guards of the function are to be 
+verified after the <a href="STD____RETURNS-SPECIFIERS.html">returns-specifiers</a>.</dd> 
+ 
+<dt><span class="v">:no-function bool</span></dt> 
+ 
+<dd>(Advanced/obscure) By default, <span class="v">define</span> will automatically bind 
+<span class="v">__function__</span> to the name of your function.  This binding can change how 
+ACL2 classifies <span class="v">:definition</span> rules by promoting <span class="v">:definition</span> into 
+<span class="v">:abbreviation</span> rules.  When porting legacy libraries to <span class="v">define</span>, this 
+difference can sometimes cause problems in later theorems.  Setting 
+<span class="v">:no-function t</span> will avoid binding <span class="v">__function__</span> for better backwards 
+compatibility.</dd> 
+ 
+<dt><span class="v">:hooks hooks</span></dt> 
+ 
+<dd>(Advanced feature).  Override which <a href="STD____POST-DEFINE-HOOK.html">post-define-hook</a>s are to be 
+executed.  For instance, <span class="v">:hooks nil</span> can be used to disable all such 
+hooks.</dd> 
+ 
+</dl> 
+ 
+<h5>Configuration Object</h5> 
+ 
+<p>A configuration object can also be defined to specify some extended options; 
+here's an example.</p> 
+ 
+<pre class="code">(make-define-config
+    :inline t
+    :no-function t)</pre> 
+ 
+<p>As of now, the following options can be set through the configuration 
+object:</p> 
+ 
+<pre class="code">(:inline :t-proof :no-function
+         :non-executable :enabled
+         :verbosep :progn
+         :ignore-ok :irrelevant-formals-ok
+         :mode :normalize
+         :split-types :well-founded-relation
+         :hooks :ruler-extenders
+         :verify-guards :ret-patbinder)</pre> <br> 
+ 
+<p>A configuration object can be used to set these options across multiple 
+<span class="v">define</span>s.  However, <i>a configuration object's settings are local to a 
+book.</i> Of course, the object can be changed inside a book as many times as 
+you want.</p> 
+ 
+<p>Extended options provided in a <span class="v">define</span> will override those set by the 
+configuration object.  Additionally, the <span class="v">:hooks</span> option in the 
+configuration object will override any default post-define hook specified using 
+<span class="v">add-default-post-define-hook</span>.</p> 
+ 
+<h4>
+<span class="v">Returns</span> Specifications</h4> 
+ 
+<p>See <a href="STD____RETURNS-SPECIFIERS.html">returns-specifiers</a>.</p> 
+ 
+<h3>The Other Events</h3> 
+ 
+<p>The final part of a <span class="v">define</span> is an area for any arbitrary events to be 
+put.  These events will follow the function's definition, but will be submitted 
+<b>before</b> disabling the function.</p> 
+ 
+<p>Any event can be included here, but this space is generally intended for 
+theorems that are "about" the function that has just been defined.  The 
+events in this area will be included in the <a href="ACL2____XDOC.html">xdoc</a>, if applicable, as if 
+they were part of the same <a href="ACL2____DEFSECTION.html">defsection</a>.</p> 
+ 
+<p>Any strings that appear after the <span class="v">///</span> symbol are appended to the 
+<span class="v">:long</span> section of the <span class="v">define</span>'s xdoc, in between the events around 
+it.</p> 
+ 
+<p>To distinguish the <span class="v">other-events</span> from the <span class="v">main-stuff</span>, we use the 
+special symbol <span class="v">///</span> to separate the two.</p> 
+ 
+<p>Why do we use this goofy symbol?  In Common Lisp, <span class="v">///</span> has a special 
+meaning and is used by the Lisp read-eval-print loop.  Because of that, ACL2 
+does not allow you to bind it in <a href="COMMON-LISP____LET.html">let</a> statements or use it as a formal in 
+a definition.  Because of <i>that</i>, we can be sure that <span class="v">///</span> is not the 
+body of any function definition, so it can be reliably used to separate the 
+rest-events.  As bonus features, <span class="v">///</span> is already imported by any <a href="ACL2____DEFPKG.html">package</a> that imports 
+<span class="v">*common-lisp-symbols-from-main-lisp-package*</span>, and even sort of looks like 
+some kind of separator!</p> 
+ 
+ 
+
+</body>
+</html>

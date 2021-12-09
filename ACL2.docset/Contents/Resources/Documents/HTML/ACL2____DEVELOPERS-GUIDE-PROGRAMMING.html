@@ -1,0 +1,205 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Developers-guide-programming</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____DEVELOPERS-GUIDE-PROGRAMMING">Click for Developers-guide-programming in the Full Manual</a></h3>
+
+<p>Programming Considerations</p><p>This chapter discusses some things to keep in mind when modifying 
+ the ACL2 sources.  It is not intended to discuss any particular aspects of the 
+ ACL2 source code, but rather, to highlight some general principles.</p> 
+ 
+ <font color="#800080"> 
+ <p>ALL OF THIS TOPIC IS VERY IMPORTANT.</p> 
+ </font> 
+ 
+ <h3>Keep the user in mind</h3> 
+ 
+ <p>Error and warning messages take time to write, but can (obviously) be 
+ really helpful to users.  Avoid trying to say too much in one message, instead 
+ pointing to one or more <a href="COMMON-LISP____DOCUMENTATION.html">documentation</a> topics for elaboration if 
+ appropriate.</p> 
+ 
+ <p>It is generally fine to change a system utility's behavior or even to 
+ delete its definition.  However, this is discouraged if that utility is 
+ documented; otherwise there could be an annoyed user who is adversely 
+ affected.</p> 
+ 
+ <h3>Program defensively</h3> 
+ 
+ <p>It is a good idea to look for precedents.  See also the discussion of 
+ precedents in the topic, <a href="ACL2____DEVELOPERS-GUIDE-MAINTENANCE.html">developers-guide-maintenance</a>.</p> 
+ 
+ <p>Add assertions and errors when appropriate.  For example, the function 
+ <span class="v">all-runes-in-ttree</span> contains a large <span class="tt"><a href="COMMON-LISP____CASE.html">case</a></span> expression, which covers 
+ each tag that could occur in a tag tree.  The last case is an error whose 
+ message mentions the bad tag together with the values associated with that 
+ tag.</p> 
+ 
+ <p>Check invariants.  For example, the function <span class="v">check-acl2-initialization</span> 
+ checks some properties that are expected to hold at the end of a build; in 
+ particular, it calls <span class="v">check-none-ideal</span>, which reports <a href="ACL2____LOGIC.html">logic</a>-mode 
+ functions that are not <a href="ACL2____GUARD.html">guard</a>-verified.  (If a logic-mode function is 
+ not guard-verified, then it may run slowly.  We don't want built-in functions 
+ to run slowly.)</p> 
+ 
+ <h3>Use installed worlds</h3> 
+ 
+ <p>Fundamental utilities for ACL2 programmers are the function, <span class="tt"><a href="ACL2____GETPROP.html">getprop</a></span>, and its associated abbreviation, <span class="tt"><a href="ACL2____GETPROPC.html">getpropc</a></span>.  <span class="v">Getprop</span> is 
+ defined in the logic to walk through a given logical <a href="ACL2____WORLD.html">world</a>, much as 
+ <span class="tt"><a href="COMMON-LISP____ASSOC.html">assoc</a></span> walks through a given association list.  However, <span class="v">getprop</span> 
+ is defined ``under-the-hood'' with raw Lisp code (see the discussion of 
+ <span class="v">acl2-loop-only</span> in <a href="ACL2____DEVELOPERS-GUIDE-BACKGROUND.html">developers-guide-background</a>) so that if the 
+ world is what we call ``installed'', typically <span class="v">(<a href="ACL2____W.html">w</a> state)</span>, then access is 
+ essentially constant-time.  The ACL2 utilities <span class="v">set-w</span>, <span class="v">set-w!</span>, 
+ <span class="v">extend-world</span>, and <span class="v">retract-world</span> all may be invoked to install 
+ worlds, but it is rarely necessary or even advisable to call these directly. 
+ They are typically used in the implementations of <a href="ACL2____EVENTS.html">events</a>.</p> 
+ 
+ <p>Typically, ACL2 system programming passes along worlds that are installed, 
+ and one needn't think about whether a world is installed or not.  A major 
+ exception is when code recurs through the world, looking for a suitable 
+ triple.  Consider the source code definition of <span class="v">new-verify-guards-fns1</span>; 
+ we include an elided version of it here.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> new-verify-guards-fns1 (wrld installed-wrld acc)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard ...))
+  (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____ENDP.html">endp</a> wrld) ...)
+         ...)
+        ((<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQ.html">eq</a> (<a href="COMMON-LISP____CADAR.html">cadar</a> wrld) 'symbol-class)
+              (<a href="COMMON-LISP____EQ.html">eq</a> (<a href="COMMON-LISP____CDDAR.html">cddar</a> wrld) :COMMON-LISP-COMPLIANT)
+              (<a href="ACL2____GETPROPC.html">getpropc</a> (<a href="COMMON-LISP____CAAR.html">caar</a> wrld) 'predefined nil installed-wrld))
+         (new-verify-guards-fns1 (<a href="COMMON-LISP____CDR.html">cdr</a> wrld)
+                                 installed-wrld
+                                 (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CAAR.html">caar</a> wrld) acc)))
+        (t (new-verify-guards-fns1 (<a href="COMMON-LISP____CDR.html">cdr</a> wrld) installed-wrld acc))))</pre> 
+ 
+ <p>We may reasonably assume from its name that the argument 
+ <span class="v">installed-wrld</span> is an installed world.  That's a good thing, since it 
+ guarantees that the <span class="v">getpropc</span> call above will be fast.  Suppose, by 
+ contrast, that the definition had been made in the following, more 
+ ``straightforward'', manner.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> BAD-new-verify-guards-fns1 (wrld acc)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard ...))
+  (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____ENDP.html">endp</a> wrld) ...)
+         ...)
+        ((<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQ.html">eq</a> (<a href="COMMON-LISP____CADAR.html">cadar</a> wrld) 'symbol-class)
+              (<a href="COMMON-LISP____EQ.html">eq</a> (<a href="COMMON-LISP____CDDAR.html">cddar</a> wrld) :COMMON-LISP-COMPLIANT)
+              (<a href="ACL2____GETPROPC.html">getpropc</a> (<a href="COMMON-LISP____CAAR.html">caar</a> wrld) 'predefined nil wrld))
+         (BAD-new-verify-guards-fns1 (<a href="COMMON-LISP____CDR.html">cdr</a> wrld)
+                                     (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CAAR.html">caar</a> wrld) acc)))
+        (t (BAD-new-verify-guards-fns1 (<a href="COMMON-LISP____CDR.html">cdr</a> wrld) installed-wrld acc))))</pre> 
+ 
+ <p>As we cdr down the given world, we deal with worlds that are not the 
+ installed world.  The <span class="v">getpropc</span> call will then need to walk linearly 
+ through its world until it finds the desired property  typically very 
+ far from constant-time behavior.</p> 
+ 
+ <p>Note that there are occasions for which the world is extended a bit before 
+ properties are obtained, and that's fine.  For example, in the source code 
+ definition of function <span class="v">chk-acceptable-defuns1</span> we find a call 
+ <span class="v">(putprop-x-lst1 names 'symbol-class symbol-class wrld1)</span>, which 
+ contributes to an extension of <span class="v">wrld1</span> that will ultimately be used for 
+ definitional processing, including the termination proof.  The prover makes 
+ many calls of <span class="v">getprop</span> (typically via <span class="v">getpropc</span>) on that extended 
+ world.  Normally this isn't a problem: <span class="v">getprop</span> will then walk linearly 
+ through the new part of the world but will soon hit the installed world, and 
+ then finish its work quickly.  When large <span class="tt"><a href="ACL2____MUTUAL-RECURSION.html">mutual-recursion</a></span> nests are 
+ involved, this could be problematic, except that this issue is taken care of 
+ by the <span class="v">big-mutrec</span> hack; see for example the definition of 
+ <span class="v">defuns-fn1</span>.  But we're getting into the weeds now; our point is that 
+ <span class="v">getprop</span> and <span class="v">getpropc</span> do best with worlds that are installed or are 
+ modest extensions of installed worlds.</p> 
+ 
+ <h3>More generally, program efficiently</h3> 
+ 
+ <p>Program with tail-recursion when possible, as tail-recursive functions are 
+ less likely to cause stack overflows and might also execute more 
+ efficiently.</p> 
+ 
+ <p>Undoubtedly there are many other tips that could be given here on efficient 
+ programming.  Maybe they'll be added over time.</p> 
+ 
+ <h3>Write good comments</h3> 
+ 
+ <p>This is a matter of taste, and tastes vary.  Probably we can all agree that 
+ obvious bits of simple code need not be commented; for example, the code 
+ <span class="v">(<a href="COMMON-LISP____APPEND.html">append</a> lst1 lst2)</span> does not need a comment ``concatenate the two 
+ lists''.  At the other extreme, probably we can all agree that a complex 
+ algorithm deserves a comment.  When in doubt it might be best to write a bit 
+ too much rather than a bit too little.  A good guiding principle is to imagine 
+ yourself reading the code ten or twenty years later; will it make sense?</p> 
+ 
+ <p>NOTE: If a comment is worth putting into a git commit message, then it's 
+ probably worth putting into the source code or documentation.</p> 
+ 
+ <h3>Use good names</h3> 
+ 
+ <p>For new names, avoid common strings so that it's easy to tags-search for 
+ them later.  Good examples include <span class="v">"rune"</span> and <span class="v">"pspv"</span> for the 
+ data structures, ``RUle NamE'' and ``Prover SPecial Variable'' (see the record 
+ <span class="v">prove-spec-var</span>).  (With the Emacs command <span class="v">meta-x tags-apropos</span> you 
+ can see many function names that mention include these two strings.)  A 
+ thesaurus such as <a href="http://thesaurus.com" target="_blank"><nobr>thesaurus.com<img src="../Icon_External_Link.png" title="External link to http://thesaurus.com"></nobr></a> may be 
+ helpful in naming a notion.</p> 
+ 
+ <p>Do not abbreviate excessively.  Good naming examples may be found in the 
+ fields of the record <span class="v">prove-spec-var</span>.  These fields are not well 
+ commented, but the names are helpful; for example, the field name 
+ <span class="v">user-supplied-term</span> is suggestive of the contents of that field, i.e., the 
+ term supplied to the prover by the user.  For another example, the function 
+ <span class="v">rewrite-with-linear</span> hints at its purpose, which is to use linear 
+ arithmetic during rewriting.  If we see a call of this function we can get a 
+ sense of what it's about.  That would be more difficult if the function were 
+ named <span class="v">rwl</span>.</p> 
+ 
+ <p>But this is a matter of taste.  For example, the function 
+ <span class="v">assume-true-false</span> hints at its functionality, which, roughly speaking, is 
+ to extend a <a href="ACL2____TYPE-ALIST.html">type-alist</a> by assuming an <span class="v">IF</span> test either true or 
+ false.  So why is there a function <span class="v">mv-atf</span>?  This is not such a huge 
+ transgression, since it's only used in the implementation of 
+ <span class="v">assume-true-false</span>, so if you see it then your head is probably in a place 
+ where the abbreviation <span class="v">atf</span> makes sense.</p> 
+ 
+ <h3>Add tests</h3> 
+ 
+ <p>This is something that could probably be done more often; as of this 
+ writing, unit testing of specific features is relatively rare or in Lisp 
+ comments.  The <a href="ACL2____COMMUNITY-BOOKS.html">community-books</a> directories <span class="v">books/system/tests/</span> and 
+ <span class="v">books/demos/</span> are places to put small, specific tests, and others exist 
+ elsewhere, for example, the four test files 
+ <span class="v">books/misc/defabsstobj-example-*.lisp</span>.  So there really aren't specific 
+ places to place tests.  If you run the following command in the <span class="v">books/</span> 
+ directory, you will find that there are likely well over 100 books that do 
+ some sort of testing, albeit not necessarily of specific features implemented 
+ in the ACL2 source code (159 of these as of this writing).</p> 
+ 
+ <pre class="code">find . -name '*test*.lisp' -print | fgrep -v quicklisp | wc -l</pre> 
+ 
+ <h3>In general, be careful</h3> 
+ 
+ <p>Of course, that's easier said than done!  But please, at the least, make 
+ some effort to avoid introducing inefficiencies, unclear code, or (especially) 
+ unsoundness.</p> 
+ 
+ <p>Let us consider one example: the question of whether to skip certain checks 
+ when proofs are skipped.  You may want to look for precedents (as discussed 
+ above).  You may find that when <span class="v">(<a href="ACL2____LD-SKIP-PROOFSP.html">ld-skip-proofsp</a> state)</span> is 
+ <span class="v">'include-book</span> or <span class="v">'include-book-with-locals</span>, the function 
+ <span class="v">load-theory-into-enabled-structure</span> avoids a call of 
+ <span class="v">chk-theory-invariant</span> (actually shown as <span class="v">chk-theory-invariant@par</span>; 
+ see the discussion of ACL2(p) in the chapter, <a href="ACL2____DEVELOPERS-GUIDE-BACKGROUND.html">developers-guide-background</a>).  Thus, theory invariants <i>are</i> checked 
+ when <span class="v">(<a href="ACL2____LD-SKIP-PROOFSP.html">ld-skip-proofsp</a> state)</span> is <span class="v">t</span>, i.e., when we are skipping proofs 
+ but not including a book (as discussed in the chapter, <a href="ACL2____DEVELOPERS-GUIDE-LOGIC.html">developers-guide-logic</a>).  The idea here is that when including a certified 
+ book, we check theory-invariants just once, at the end of the book inclusion 
+ process, for efficiency.  So one way to be careful is to do various checks 
+ even when <span class="v">(<a href="ACL2____LD-SKIP-PROOFSP.html">ld-skip-proofsp</a> state)</span> is <span class="v">t</span>, even if these checks are to 
+ be skipped when including books.</p> 
+ 
+ <p>NEXT SECTION: <a href="ACL2____DEVELOPERS-GUIDE-PRIORITIZING.html">developers-guide-prioritizing</a></p>
+</body>
+</html>

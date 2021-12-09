@@ -1,0 +1,606 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Multiplier-verification-demo-2</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=RP____MULTIPLIER-VERIFICATION-DEMO-2">Click for Multiplier-verification-demo-2 in the Full Manual</a></h3>
+
+<p>The second  demo  for   <a href="RP____MULTIPLIER-VERIFICATION.html">Multiplier-Verification</a>  showing  how  an 
+ industrial-design-mimicking module  including a MAC, dot-product  and merged 
+ multipliers can be verified.</p><p> In the first  demo (<a href="RP____MULTIPLIER-VERIFICATION-DEMO-1.html">Multiplier-Verification-demo-1</a>), we have 
+ shown how  our tool can  be used  on an isolated  multiplier.  This is  a good 
+ starting  point;  however,  real-world  applications  of  integer  multipliers 
+ involve more intricate  design strategies. We tried to recreate  some of those 
+ strategies  and   compiled  a   more  complex   multiplier  module   given  in 
+ <span class="v">&lt;your-acl2-directory&gt;/books/projects/rp-rewriter/lib/mult3/demo/integrated_multipliers.sv</span>. You 
+ may            find            this           file            on            <a href="https://github.com/acl2/acl2/blob/master/books/projects/rp-rewriter/lib/mult3/demo/integrated_multipliers.sv" target="_blank"><nobr> GitHub <img src="../Icon_External_Link.png" title="External link to https://github.com/acl2/acl2/blob/master/books/projects/rp-rewriter/lib/mult3/demo/integrated_multipliers.sv"></nobr></a> as well.   This module allocates four identical 
+ 33x33-bit  signed  multipliers,  two  final  stage  adders  and  some  smaller 
+ reduction  trees to  perform  different multiplier  operations. These  include 
+ signed/unsigned  four-laned 32x32-bit  multiply-add (or  multiply-accumulate), 
+ one-lane  64x64-bit  multiply-add,  4-32x32-bit  dot-product  modes  (with  or 
+ without an accumulator). These operations  can be combinational or sequential, 
+ in which case  an accumulator is used to store  results across different clock 
+ cycles. </p> 
+ 
+ 
+<p>  The fact  that  this multiplier  module reuses  the  same smaller  integer 
+ multipliers for different  modes of operations, the design  itself is slightly 
+ more  complicated   which  may   cause  further  challenges   to  verification 
+ systems.  Therefore, we  show  how our  tool  can handle  such  cases and  our 
+ framework to verify them with a similar efficiency as stand-alone multipliers. 
+ The    same    events    we    give     below    are    also    included    in 
+ <span class="v">&lt;your-acl2-directory&gt;/books/projects/rp-rewriter/lib/mult3/demo/demo-2.lisp</span>. </p> 
+ 
+<p> 1.  Include necessary books.  <a href="ACL2____SVL.html">svl</a> system uses  <a href="ACL2____SV.html">sv</a> 
+and <a href="ACL2____VL.html">vl</a> packages. So we start with them. 
+</p> 
+ 
+<pre class="code">(include-book "centaur/sv/top" :dir :system) ;; a big book; takes around 30 seconds 
+(include-book "centaur/vl/loader/top" :dir :system) ;; takes around 10 seconds 
+(include-book "oslib/ls" :dir :system) ;; takes just a few seconds 
+(include-book "centaur/svl/top" :dir :system) ;; takes just a few seconds 
+</pre> 
+ 
+<p> Then, include has the rewrite and meta rules to carry out simplification of 
+multiplier modules: 
+</p> 
+ 
+<pre class="code">(include-book "projects/rp-rewriter/lib/mult3/svl-top" :dir :system) 
+</pre> 
+ 
+ 
+<p> 2. Convert the System Verilog design to SVL design. All three events take a few 
+seconds in total. </p> 
+ 
+<p> Load VL design: </p> 
+  <pre class="code"> <span class="v">(<a href="ACL2____DEFCONSTS.html">acl2::defconsts</a>
+   (*mult-vl-design* state)
+   (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> loadresult state)
+         (<a href="VL____VL-LOAD.html">vl::vl-load</a> (<a href="VL____MAKE-VL-LOADCONFIG.html">vl::make-vl-loadconfig</a>
+                       :start-files '("integrated_multipliers.sv")))))
+     (<a href="ACL2____MV.html">mv</a> (<a href="VL____VL-LOADRESULT-_E3DESIGN.html">vl::vl-loadresult-&gt;design</a> loadresult) state)))
+</span> 
+</pre> 
+ 
+<p> Load SV design: </p> 
+<pre class="code"><span class="v">
+(<a href="ACL2____DEFCONSTS.html">acl2::defconsts</a>
+   (*mul-sv-design*
+    *simplified-good*
+    *simplified-bad*)
+   (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> errmsg sv-design good bad)
+         (<a href="VL____VL-DESIGN-_E3SV-DESIGN.html">vl::vl-design-&gt;sv-design</a> "Integrated_Multiplier"
+                                   *mult-vl-design* (<a href="VL____MAKE-VL-SIMPCONFIG.html">vl::make-vl-simpconfig</a>))))
+     (<a href="COMMON-LISP____AND.html">and</a> errmsg
+          (<a href="ACL2____RAISE.html">acl2::raise</a> "~@0~%" errmsg))
+     (<a href="ACL2____MV.html">mv</a> sv-design good bad)))
+</span> 
+</pre> 
+ 
+<p> Load SVL Design: </p> 
+<pre class="code">(acl2::defconsts (*mult-svl-design* rp::rp-state) 
+                 (svl-flatten-design *mul-sv-design* 
+                                     *mult-vl-design* 
+                                     :dont-flatten :all)) 
+</pre> 
+ 
+ 
+<p>  
+ 
+3. Create rewrite rules for adder modules. 
+ 
+</p> 
+ 
+ 
+<p> For full-adder: </p> 
+<pre class="code">  
+<span class="v">
+(<a href="RP____DEF-RP-RULE.html">def-rp-rule</a> svl-run-phase-of-FullAdder
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____BITP.html">bitp</a> x)
+                (<a href="ACL2____BITP.html">bitp</a> y)
+                (<a href="ACL2____BITP.html">bitp</a> z))
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SVL____SVL-RUN-PHASE-WOG.html">svl::svl-run-phase-wog</a> "fa"
+                                          (<a href="COMMON-LISP____LIST.html">list</a> x y z)
+                                          svl::*empty-state*
+                                          *mult-svl-design*)
+                  (<a href="ACL2____MV.html">mv</a> (s-c-spec (<a href="COMMON-LISP____LIST.html">list</a> x y z))
+                      svl::*empty-state*)))
+  :hints (("Goal"
+           :do-not-induct t
+           :in-theory (<a href="ACL2____E_F2D.html">e/d</a> (<a href="ACL2____BITP.html">bitp</a>)
+                           ()))))
+</span> 
+</pre> 
+<p> For half-adder: </p> 
+<pre class="code">  
+<span class="v">
+(<a href="RP____DEF-RP-RULE.html">def-rp-rule</a> svl-run-phase-of-HalfAdder
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____BITP.html">bitp</a> x)
+                (<a href="ACL2____BITP.html">bitp</a> y))
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SVL____SVL-RUN-PHASE-WOG.html">svl::svl-run-phase-wog</a> "ha"
+                                          (<a href="COMMON-LISP____LIST.html">list</a> x y)
+                                          svl::*empty-state*
+                                          *mult-svl-design*)
+                  (<a href="ACL2____MV.html">mv</a> (s-c-spec (<a href="COMMON-LISP____LIST.html">list</a> x y))
+                      svl::*empty-state*)))
+  :hints (("Goal"
+           :do-not-induct t
+           :in-theory (<a href="ACL2____E_F2D.html">e/d</a> (<a href="ACL2____BITP.html">bitp</a>)
+                           ()))))
+</span> 
+</pre> 
+<p> For the final stage adder: </p> 
+<pre class="code">  
+<span class="v">
+(<a href="RP____DEFTHMRP.html">defthmrp</a> LF_131-final-stage-adder-correct
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> in1)
+                (<a href="COMMON-LISP____INTEGERP.html">integerp</a> in2))
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SVL____SVL-RUN-PHASE-WOG.html">svl::svl-run-phase-wog</a> "LF_131"
+                                          (<a href="COMMON-LISP____LIST.html">list</a> in1 in2)
+                                          svl::*empty-state*
+                                          *mult-svl-design*)
+                  (<a href="ACL2____MV.html">mv</a> (<a href="COMMON-LISP____LIST.html">list</a> (<a href="ACL2____LOGHEAD.html">loghead</a> 132 (<a href="COMMON-LISP_____B2.html">+</a> (<a href="ACL2____LOGHEAD.html">loghead</a> 131 in1)
+                                            (<a href="ACL2____LOGHEAD.html">loghead</a> 131 in2))))
+                      svl::*empty-state*)))
+  :disable-meta-rules (s-c-spec-meta)
+  :enable-rules rp::*adder-rules*)
+</span> 
+</pre> 
+ 
+ 
+ 
+<p> 4. The integrated multiplier module has an input signal called 
+<span class="v">mode</span>. As the name implied, this signal determines the mode of operation 
+(e.g., dot-product or  4-lane multiplication) that the module needs  to run. We 
+create a  new function  also called  <span class="v">mode</span> to calculate  the value  of this 
+signal. This will make  our proofs more readable and easier  to manage. You may 
+find a description of how this signal should be assigned in the comments in the 
+Verilog file.</p> 
+ 
+<pre class="code"><span class="v">
+(<a href="ACL2____DEFINE.html">define</a> mode (<a href="COMMON-LISP_____62KEY.html">&amp;key</a>
+              (acc-on 'nil)
+              (reload-acc 'nil)
+              (signed 'nil)
+              (dot-product 'nil)
+              (four-lanes-lo 'nil)
+              (four-lanes-hi 'nil)
+              (one-lane 'nil))
+  (<a href="ACL2____B_A2.html">b*</a> (((unless (<a href="COMMON-LISP_____D3.html">=</a> 1 (<a href="COMMON-LISP_____B2.html">+</a> (<a href="COMMON-LISP____IF.html">if</a> dot-product 1 0)
+                        (<a href="COMMON-LISP____IF.html">if</a> four-lanes-lo 1 0)
+                        (<a href="COMMON-LISP____IF.html">if</a> four-lanes-hi 1 0)
+                        (<a href="COMMON-LISP____IF.html">if</a> one-lane 1 0))))
+        (<a href="COMMON-LISP____OR.html">or</a> (<a href="ACL2____CW.html">cw</a> "One and only one of dot-product, four-lanes-lo,
+four-lanes-hi and one-lane should be set to 1.~%")
+            (<a href="ACL2____HARD-ERROR.html">hard-error</a> 'mode "" nil)
+            0))
+       (mode 0)
+       (mode (svl::sbits 0 1 (<a href="COMMON-LISP____IF.html">if</a> acc-on 0 1) mode))
+       (mode (svl::sbits 1 1 (<a href="COMMON-LISP____IF.html">if</a> reload-acc 0 1) mode))
+       (mode (svl::sbits 2 1 (<a href="COMMON-LISP____IF.html">if</a> signed 0 1) mode))
+       (mode
+        (<a href="COMMON-LISP____COND.html">cond</a> (dot-product   (svl::sbits 3 2 0 mode))
+              (four-lanes-lo (svl::sbits 3 2 1 mode))
+              (four-lanes-hi (svl::sbits 3 2 2 mode))
+              (t             (svl::sbits 3 2 3 mode)))))
+    mode))
+</span> 
+</pre>  
+ 
+<p> 5.  We  are now ready to  verify the top module  for various multiplication 
+modes. First,  we verify various  combinational modes (one-lane  64x64-bit MAC 
+4-32x32-bit  dot-product, and four-lane  32x32-bit  multiplication  with lower  and 
+higher half truncation), then we show verification for a sequential mode 
+(accumulated dot-product).  </p> 
+ 
+<p> 
+We define our first simulation pattern. Since we are currently only interested 
+in the  combinational functionality,  we set  "clk" to  "0", and  the other 
+signals to some free variables. 
+ 
+  <pre class="code"> <span class="v">
+(<a href="ACL2____DEFCONST.html">defconst</a> *in-binds-one-lane*
+  '(("clk" 0)
+    ("IN1" in1)
+    ("IN2" in2)
+    ("IN3" in3)
+    ("mode" mode)))
+
+(<a href="ACL2____DEFCONST.html">defconst</a> *out-binds*
+  '(("result" result)))
+</span> 
+</pre> 
+</p> 
+ 
+<p>  
+ 
+ Below is our first correctness proof  of a multiplication mode SVL-RUN returns 
+an association list  of all the variables stated in  *out-binds*. In this case, 
+there is only one entry whose key  is 'result'. We state the expression of this 
+signal  in  our  conjecture.  Here  it  is  [in3  +  in2*in1  (both 
+sign-extended)] and the complete result is  truncated at 128 bits.  This is the 
+specification of this multiplication mode.   When writing the specification, it 
+is imperative to have <a href="ACL2____LOGHEAD.html">loghead</a> wrapping the arithmetic functions as 
+seen here. Proving this lemma takes around a second. Alternatively, we could set 
+in3 to  "0", and verify  only the multiplication  function (but not  MAC). In 
+fact, we could set any portion of any input signals to any constants. 
+ 
+<pre class="code"> <span class="v">
+(<a href="RP____DEFTHMRP.html">defthmrp</a> signed-one-lane-mult-is-correct
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> in1)
+                (<a href="COMMON-LISP____INTEGERP.html">integerp</a> in2)
+                (<a href="COMMON-LISP____INTEGERP.html">integerp</a> in3))
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____SVL-RUN.html">svl-run</a> "Integrated_Multiplier"
+                           `((in1 . ,in1)
+                             (in2 . ,in2)
+                             (in3 . ,in3)
+                             (mode . ,(mode :one-lane t
+                                            :signed t)))
+                           *in-binds-one-lane*
+                           *out-binds*
+                           *mult-svl-design*)
+                  `((result . ,(<a href="ACL2____LOGHEAD.html">loghead</a> 128 (<a href="COMMON-LISP_____B2.html">+</a> (<a href="COMMON-LISP_____A2.html">*</a> (sign-ext in1 64)
+                                                  (sign-ext in2 64))
+                                               in3)))))))
+</span> 
+</pre> 
+</p> 
+ 
+<p> 
+ 
+We  can  prove  the  same  for  the mode  for  unsigned  numbers  by  changing  the 
+specification accordingly: 
+<pre class="code"><span class="v">
+(<a href="RP____DEFTHMRP.html">defthmrp</a> unsigned-one-lane-mult-is-correct
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> in1)
+                (<a href="COMMON-LISP____INTEGERP.html">integerp</a> in2)
+                (<a href="COMMON-LISP____INTEGERP.html">integerp</a> in3))
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____SVL-RUN.html">svl-run</a> "Integrated_Multiplier"
+                           `((in1 . ,in1)
+                             (in2 . ,in2)
+                             (in3 . ,in3)
+                             (mode . ,(mode :one-lane t
+                                            :signed nil)))
+                           *in-binds-one-lane*
+                           *out-binds*
+                           *mult-svl-design*)
+                  `((result . ,(<a href="ACL2____LOGHEAD.html">loghead</a> 128 (<a href="COMMON-LISP_____B2.html">+</a> (<a href="COMMON-LISP_____A2.html">*</a> (<a href="ACL2____LOGHEAD.html">loghead</a> 64 in1)
+                                                  (<a href="ACL2____LOGHEAD.html">loghead</a> 64 in2))
+                                               in3)))))))
+
+</span> 
+</pre> 
+</p> 
+ 
+ 
+<p> Now, let's verify  the dot product operation. To make  it more readable, we 
+define another input bindings  alist for the dot product mode.  We split two of 
+the input signals to four lanes. This conjecture, similarly, takes about a second to 
+prove. We omit the proofs for unsigned for brevity. 
+ 
+<pre class="code"><span class="v">
+(<a href="ACL2____DEFCONST.html">defconst</a> *in-binds-dot-product*
+  '(("clk" 0)
+    ("IN1[31:0]" in1_0)
+    ("IN2[31:0]" in2_0)
+    ("IN1[63:32]" in1_1)
+    ("IN2[63:32]" in2_1)
+    ("IN1[95:64]" in1_2)
+    ("IN2[95:64]" in2_2)
+    ("IN1[127:96]" in1_3)
+    ("IN2[127:96]" in2_3)
+    ("IN3" in3)
+    ("mode" mode)))
+
+(<a href="RP____DEFTHMRP.html">defthmrp</a> signed-dot-product-is-correct
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> in1_0)
+                (<a href="COMMON-LISP____INTEGERP.html">integerp</a> in2_0)
+                (<a href="COMMON-LISP____INTEGERP.html">integerp</a> in1_1)
+                (<a href="COMMON-LISP____INTEGERP.html">integerp</a> in2_1)
+                (<a href="COMMON-LISP____INTEGERP.html">integerp</a> in1_2)
+                (<a href="COMMON-LISP____INTEGERP.html">integerp</a> in2_2)
+                (<a href="COMMON-LISP____INTEGERP.html">integerp</a> in1_3)
+                (<a href="COMMON-LISP____INTEGERP.html">integerp</a> in2_3)
+                (<a href="COMMON-LISP____INTEGERP.html">integerp</a> in3))
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____SVL-RUN.html">svl-run</a> "Integrated_Multiplier"
+                           `((in1_0 . ,in1_0)
+                             (in2_0 . ,in2_0)
+                             (in1_1 . ,in1_1)
+                             (in2_1 . ,in2_1)
+                             (in1_2 . ,in1_2)
+                             (in2_2 . ,in2_2)
+                             (in1_3 . ,in1_3)
+                             (in2_3 . ,in2_3)
+                             (in3   . ,in3)
+                             (mode  . ,(mode :dot-product t
+                                             :signed t)))
+                           *in-binds-dot-product*
+                           *out-binds*
+                           *mult-svl-design*)
+                  `((result . ,(<a href="ACL2____LOGHEAD.html">loghead</a> 128 (<a href="COMMON-LISP_____B2.html">+</a> (<a href="COMMON-LISP_____A2.html">*</a> (sign-ext in1_0 32)
+                                                  (sign-ext in2_0 32))
+                                               (<a href="COMMON-LISP_____A2.html">*</a> (sign-ext in1_1 32)
+                                                  (sign-ext in2_1 32))
+                                               (<a href="COMMON-LISP_____A2.html">*</a> (sign-ext in1_2 32)
+                                                  (sign-ext in2_2 32))
+                                               (<a href="COMMON-LISP_____A2.html">*</a> (sign-ext in1_3 32)
+                                                  (sign-ext in2_3 32))
+                                               in3)))))))
+
+</span> 
+</pre> 
+ 
+</p> 
+ 
+<p> Another mode is four-lane multiplication that truncate at the lower half of 
+ multiplication.   Similarly,  we  define   new  input  and  output  simulation 
+ patterns, splitting all three inputs and the output to four lanes: 
+ 
+<pre class="code"><span class="v">
+(<a href="ACL2____DEFCONST.html">defconst</a> *in-binds-four-lanes*
+  '(("clk" 0)
+    ("IN1[31:0]"   in1_0)
+    ("IN2[31:0]"   in2_0)
+    ("IN1[63:32]"  in1_1)
+    ("IN2[63:32]"  in2_1)
+    ("IN1[95:64]"  in1_2)
+    ("IN2[95:64]"  in2_2)
+    ("IN1[127:96]" in1_3)
+    ("IN2[127:96]" in2_3)
+    ("IN3[31:0]"   in3_0)
+    ("IN3[63:32]"  in3_1)
+    ("IN3[95:64]"  in3_2)
+    ("IN3[127:96]" in3_3)
+    ("mode"        mode)))
+
+(<a href="ACL2____DEFCONST.html">defconst</a> *out-binds-four-lanes*
+  '(("result[31:0]"   result0)
+    ("result[63:32]"  result1)
+    ("result[95:64]"  result2)
+    ("result[127:96]" result3)))
+
+(<a href="RP____DEFTHMRP.html">defthmrp</a> signed-four-lanes-lo-is-correct
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> in1_0)
+                (<a href="COMMON-LISP____INTEGERP.html">integerp</a> in2_0)
+                (<a href="COMMON-LISP____INTEGERP.html">integerp</a> in3_0)
+
+                (<a href="COMMON-LISP____INTEGERP.html">integerp</a> in1_1)
+                (<a href="COMMON-LISP____INTEGERP.html">integerp</a> in2_1)
+                (<a href="COMMON-LISP____INTEGERP.html">integerp</a> in3_1)
+
+                (<a href="COMMON-LISP____INTEGERP.html">integerp</a> in1_2)
+                (<a href="COMMON-LISP____INTEGERP.html">integerp</a> in2_2)
+                (<a href="COMMON-LISP____INTEGERP.html">integerp</a> in3_2)
+
+                (<a href="COMMON-LISP____INTEGERP.html">integerp</a> in1_3)
+                (<a href="COMMON-LISP____INTEGERP.html">integerp</a> in2_3)
+                (<a href="COMMON-LISP____INTEGERP.html">integerp</a> in3_3))
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____SVL-RUN.html">svl-run</a> "Integrated_Multiplier"
+                           `((in1_0 . ,in1_0)
+                             (in2_0 . ,in2_0)
+                             (in3_0 . ,in3_0)
+
+                             (in1_1 . ,in1_1)
+                             (in2_1 . ,in2_1)
+                             (in3_1 . ,in3_1)
+
+                             (in1_2 . ,in1_2)
+                             (in2_2 . ,in2_2)
+                             (in3_2 . ,in3_2)
+
+                             (in1_3 . ,in1_3)
+                             (in2_3 . ,in2_3)
+                             (in3_3 . ,in3_3)
+
+                             (mode  . ,(mode :four-lanes-lo t
+                                             :signed t)))
+                           *in-binds-four-lanes*
+                           *out-binds-four-lanes*
+                           *mult-svl-design*)
+                  `((result0 . ,(<a href="ACL2____LOGHEAD.html">loghead</a> 32 (<a href="COMMON-LISP_____B2.html">+</a> (<a href="COMMON-LISP_____A2.html">*</a> (sign-ext in1_0 32)
+                                                  (sign-ext in2_0 32))
+                                               in3_0)))
+                    (result1 . ,(<a href="ACL2____LOGHEAD.html">loghead</a> 32 (<a href="COMMON-LISP_____B2.html">+</a> (<a href="COMMON-LISP_____A2.html">*</a> (sign-ext in1_1 32)
+                                                  (sign-ext in2_1 32))
+                                               in3_1)))
+                    (result2 . ,(<a href="ACL2____LOGHEAD.html">loghead</a> 32 (<a href="COMMON-LISP_____B2.html">+</a> (<a href="COMMON-LISP_____A2.html">*</a> (sign-ext in1_2 32)
+                                                  (sign-ext in2_2 32))
+                                               in3_2)))
+                    (result3 . ,(<a href="ACL2____LOGHEAD.html">loghead</a> 32 (<a href="COMMON-LISP_____B2.html">+</a> (<a href="COMMON-LISP_____A2.html">*</a> (sign-ext in1_3 32)
+                                                  (sign-ext in2_3 32))
+                                               in3_3)))))))
+</span> 
+</pre> 
+ 
+We can  prove a  similar lemma  for unsigned  mode as  well.  Finally,  we have 
+another combinational  mode that is  four-lane multiplication that  truncate at 
+the higher  half.  Function <a href="COMMON-LISP____ASH.html">ash</a>  right or left shift  numbers.  In 
+this case, we right shift the multiplication  result by 32 bits to retrieve the 
+higher end of the result. 
+ 
+<pre class="code"><span class="v">
+(<a href="RP____DEFTHMRP.html">defthmrp</a> signed-four-lanes-hi-is-correct
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> in1_0)
+                (<a href="COMMON-LISP____INTEGERP.html">integerp</a> in2_0)
+                (<a href="COMMON-LISP____INTEGERP.html">integerp</a> in3_0)
+
+                (<a href="COMMON-LISP____INTEGERP.html">integerp</a> in1_1)
+                (<a href="COMMON-LISP____INTEGERP.html">integerp</a> in2_1)
+                (<a href="COMMON-LISP____INTEGERP.html">integerp</a> in3_1)
+
+                (<a href="COMMON-LISP____INTEGERP.html">integerp</a> in1_2)
+                (<a href="COMMON-LISP____INTEGERP.html">integerp</a> in2_2)
+                (<a href="COMMON-LISP____INTEGERP.html">integerp</a> in3_2)
+
+                (<a href="COMMON-LISP____INTEGERP.html">integerp</a> in1_3)
+                (<a href="COMMON-LISP____INTEGERP.html">integerp</a> in2_3)
+                (<a href="COMMON-LISP____INTEGERP.html">integerp</a> in3_3))
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____SVL-RUN.html">svl-run</a> "Integrated_Multiplier"
+                           `((in1_0 . ,in1_0)
+                             (in2_0 . ,in2_0)
+                             (in3_0 . ,in3_0)
+
+                             (in1_1 . ,in1_1)
+                             (in2_1 . ,in2_1)
+                             (in3_1 . ,in3_1)
+
+                             (in1_2 . ,in1_2)
+                             (in2_2 . ,in2_2)
+                             (in3_2 . ,in3_2)
+
+                             (in1_3 . ,in1_3)
+                             (in2_3 . ,in2_3)
+                             (in3_3 . ,in3_3)
+
+                             (mode  . ,(mode :four-lanes-hi t
+                                             :signed t)))
+                           *in-binds-four-lanes*
+                           *out-binds-four-lanes*
+                           *mult-svl-design*)
+                  `((result0 . ,(<a href="ACL2____LOGHEAD.html">loghead</a> 32 (<a href="COMMON-LISP_____B2.html">+</a> (<a href="COMMON-LISP____ASH.html">ash</a> (<a href="COMMON-LISP_____A2.html">*</a> (sign-ext in1_0 32)
+                                                       (sign-ext in2_0 32))
+                                                    -32)
+                                               in3_0)))
+                    (result1 . ,(<a href="ACL2____LOGHEAD.html">loghead</a> 32 (<a href="COMMON-LISP_____B2.html">+</a> (<a href="COMMON-LISP____ASH.html">ash</a> (<a href="COMMON-LISP_____A2.html">*</a> (sign-ext in1_1 32)
+                                                       (sign-ext in2_1 32))
+                                                    -32)
+                                               in3_1)))
+                    (result2 . ,(<a href="ACL2____LOGHEAD.html">loghead</a> 32 (<a href="COMMON-LISP_____B2.html">+</a> (<a href="COMMON-LISP____ASH.html">ash</a> (<a href="COMMON-LISP_____A2.html">*</a> (sign-ext in1_2 32)
+                                                       (sign-ext in2_2 32))
+                                                    -32)
+                                               in3_2)))
+                    (result3 . ,(<a href="ACL2____LOGHEAD.html">loghead</a> 32 (<a href="COMMON-LISP_____B2.html">+</a> (<a href="COMMON-LISP____ASH.html">ash</a> (<a href="COMMON-LISP_____A2.html">*</a> (sign-ext in1_3 32)
+                                                       (sign-ext in2_3 32))
+                                                    -32)
+                                               in3_3)))))))
+</span> 
+</pre> 
+</p> 
+ 
+<p>  
+ 
+Finally, let's  show our  framework on  a sequential  operation. The  design in 
+integrated_multipliers.sv has an  accumulator that can store  the result across 
+different clock  cycles. We can  use this feature to  increase the size  of dot 
+product. So we  create a simulation pattern where we  load the accumulator with 
+an initial  value, and perform two  dot-product operations in two  clock cycles 
+and accumulate the  result. So we create  a 8-32x32-bit dot product  out of the 
+existing 4-32x32-bit one. 
+ 
+<pre class="code"><span class="v">
+(<a href="ACL2____DEFCONST.html">defconst</a> *in-binds-dot-product-with-acc*
+  `(("clk" 0 1 ~)
+    ("IN1[31:0]"   0 0 in1[0] 0 in1[4])
+    ("IN2[31:0]"   0 0 in2[0] 0 in2[4])
+    ("IN1[63:32]"  0 0 in1[1] 0 in1[5])
+    ("IN2[63:32]"  0 0 in2[1] 0 in2[5])
+    ("IN1[95:64]"  0 0 in1[2] 0 in1[6])
+    ("IN2[95:64]"  0 0 in2[2] 0 in2[6])
+    ("IN1[127:96]" 0 0 in1[3] 0 in1[7])
+    ("IN2[127:96]" 0 0 in2[3] 0 in2[7])
+    ("IN3" acc-init-val)
+    ("mode" ,(mode :acc-on t
+                   :dot-product t
+                   :reload-acc t)
+     mode mode mode mode)))
+
+;; result is obtained on the 5th phase.
+(<a href="ACL2____DEFCONST.html">defconst</a> *out-binds-with-acc*
+  '(("result" _ _ _ _ result)))
+
+</span> 
+</pre> 
+</p> 
+<p> In the previous proofs given above, we stated the specification of each 
+mode explicitly in the conjectures. We can alternatively wrap these 
+specifications with new functions for better readability. So we create a dot 
+product specification function as given below. 
+ 
+<pre class="code"><span class="v">
+(<a href="ACL2____DEFINE.html">define</a> dot-product-spec ((in1 integer-listp)
+                          (in2 integer-listp)
+                          (dot-product-size natp)
+                          (signed booleanp)
+                          (acc-init-val integerp)
+                          (acc-size natp))
+  :verify-guards nil
+  :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> dot-product-size (<a href="ACL2____LEN.html">len</a> in1))
+              (<a href="COMMON-LISP____EQUAL.html">equal</a> dot-product-size (<a href="ACL2____LEN.html">len</a> in2)))
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2____ZP.html">zp</a> dot-product-size)
+      (<a href="ACL2____LOGHEAD.html">loghead</a> acc-size acc-init-val)
+    (<a href="COMMON-LISP____LET_A2.html">let*</a> ((dot-product-size (<a href="COMMON-LISP____1-.html">1-</a> dot-product-size)))
+      (<a href="ACL2____LOGHEAD.html">loghead</a> acc-size
+               (<a href="COMMON-LISP_____B2.html">+</a> (<a href="COMMON-LISP____IF.html">if</a> signed
+                      (<a href="COMMON-LISP_____A2.html">*</a> (sign-ext (<a href="COMMON-LISP____NTH.html">nth</a> dot-product-size in1) 32)
+                         (sign-ext (<a href="COMMON-LISP____NTH.html">nth</a> dot-product-size in2) 32))
+                    (<a href="COMMON-LISP_____A2.html">*</a> (<a href="ACL2____LOGHEAD.html">loghead</a> 32 (<a href="COMMON-LISP____NTH.html">nth</a> dot-product-size in1))
+                       (<a href="ACL2____LOGHEAD.html">loghead</a> 32 (<a href="COMMON-LISP____NTH.html">nth</a> dot-product-size in2))))
+                  (dot-product-spec in1
+                                    in2
+                                    dot-product-size
+                                    signed
+                                    acc-init-val
+                                    acc-size)))))
+  ///
+  ;; We need to add the definition rule of this function to RP-Rewriter so that
+  ;; it can know to expand it.
+  (add-rp-rule dot-product-spec))
+</span> 
+</pre> 
+</p> 
+ 
+<p> Then, we can state the correctness for the 8-32x32-bit dot product mode as: 
+<pre class="code"><span class="v">
+(<a href="RP____DEFTHMRP.html">defthmrp</a> signed-dot-product-with-acc-is-correct
+  (<a href="ACL2____B_A2.html">b*</a> ((signed t) ;; set up the parameters first.
+       (acc-size 128)
+       (dot-product-size 8))
+    (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____INTEGER-LISTP.html">integer-listp</a> in1) 
+                  (<a href="ACL2____INTEGER-LISTP.html">integer-listp</a> in2)
+                  (<a href="COMMON-LISP____INTEGERP.html">integerp</a> acc-init-val)
+                  (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____LEN.html">len</a> in1) dot-product-size) ;; necessary to show that
+                  ;; "nth" function returns a valid value (an integer).
+                  (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____LEN.html">len</a> in2) dot-product-size) ;; same as above.
+                  )
+             (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____SVL-RUN.html">svl-run</a> "Integrated_Multiplier"
+                             `(;; will be used in the
+                               ;; first cycle:
+                               (in1[0] . ,(<a href="COMMON-LISP____NTH.html">nth</a> 0 in1))
+                               (in2[0] . ,(<a href="COMMON-LISP____NTH.html">nth</a> 0 in2))
+                               (in1[1] . ,(<a href="COMMON-LISP____NTH.html">nth</a> 1 in1))
+                               (in2[1] . ,(<a href="COMMON-LISP____NTH.html">nth</a> 1 in2))
+                               (in1[2] . ,(<a href="COMMON-LISP____NTH.html">nth</a> 2 in1))
+                               (in2[2] . ,(<a href="COMMON-LISP____NTH.html">nth</a> 2 in2))
+                               (in1[3] . ,(<a href="COMMON-LISP____NTH.html">nth</a> 3 in1))
+                               (in2[3] . ,(<a href="COMMON-LISP____NTH.html">nth</a> 3 in2))
+                               ;; will be used in the
+                               ;; second cycle:
+                               (in1[4] . ,(<a href="COMMON-LISP____NTH.html">nth</a> 4 in1))
+                               (in2[4] . ,(<a href="COMMON-LISP____NTH.html">nth</a> 4 in2))
+                               (in1[5] . ,(<a href="COMMON-LISP____NTH.html">nth</a> 5 in1))
+                               (in2[5] . ,(<a href="COMMON-LISP____NTH.html">nth</a> 5 in2))
+                               (in1[6] . ,(<a href="COMMON-LISP____NTH.html">nth</a> 6 in1))
+                               (in2[6] . ,(<a href="COMMON-LISP____NTH.html">nth</a> 6 in2))
+                               (in1[7] . ,(<a href="COMMON-LISP____NTH.html">nth</a> 7 in1))
+                               (in2[7] . ,(<a href="COMMON-LISP____NTH.html">nth</a> 7 in2))
+                                                     
+                               (acc-init-val . ,acc-init-val)
+                               (mode   . ,(mode :dot-product t
+                                                :acc-on t
+                                                :signed signed)))
+                             *in-binds-dot-product-with-acc*
+                             *out-binds-with-acc*
+                             *mult-svl-design*)
+                    `((result . ,(dot-product-spec in1 in2 dot-product-size 
+                                                   signed acc-init-val acc-size)))))))
+</span> 
+</pre> 
+</p> 
+ 
+ 
+
+</body>
+</html>

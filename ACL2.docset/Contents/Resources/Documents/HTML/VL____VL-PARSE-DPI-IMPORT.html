@@ -1,0 +1,108 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Vl-parse-dpi-import</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL____VL-PARSE-DPI-IMPORT">Click for Vl-parse-dpi-import in the Full Manual</a></h3>
+
+<p>Parses everything in <span class="v">dpi_import_export</span> import line.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(vl-parse-dpi-import atts &amp;key (tokstream 'tokstream) 
+                     (config 'config)) 
+ 
+   
+(mv errmsg? value new-tokstream)</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">config</span>  <font color="#606060">Guard <span class="v">(<a href="VL____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>SystemVerilog-2012:</p> 
+         <pre class="code">dpi_import_export ::=
+   'import' dpi_spec_string [dpi_function_import_property] [ c_identifier '=' ] dpi_function_proto ';'
+ | 'import' dpi_spec_string [dpi_task_import_property]     [ c_identifier '=' ] dpi_task_proto ';'
+ | ... export cases ...
+
+dpi_function_import_property ::= 'context' | 'pure'
+dpi_task_import_property ::= 'context'
+
+dpi_function_proto ::= function_prototype
+dpi_task_proto     ::= task_prototype
+
+function_prototype ::= 'function' data_type_or_void function_identifier [ '(' [tf_port_list] ')' ]
+
+task_prototype ::= 'task' task_identifier [ '(' [tf_port_list] ')' ]</pre> 
+ 
+         <p>We assume we've just eaten the <span class="v">import</span> and we're ready to parse 
+         everything else in <span class="v">dpi_import_export</span>.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>vl-parse-dpi-import-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ vl-parse-dpi-import-fn
+ (atts tokstream config)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL____VL-ATTS-P.html">vl-atts-p</a> atts)))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'vl-parse-dpi-import))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="VL____SEQ.html">seq</a>
+   tokstream
+   (:= (<a href="VL____VL-MATCH-TOKEN.html">vl-match-token</a> :vl-kwd-import))
+   (spec := (<a href="VL____VL-PARSE-DPI-SPEC-STRING.html">vl-parse-dpi-spec-string</a>))
+   (prop := (<a href="VL____VL-PARSE-OPTIONAL-DPI-FUNCTION-IMPORT-PROPERTY.html">vl-parse-optional-dpi-function-import-property</a>))
+   (when (<a href="VL____VL-IS-TOKEN_F3.html">vl-is-token?</a> :vl-idtoken)
+         (c-name := (<a href="VL____VL-PARSE-C-IDENTIFIER.html">vl-parse-c-identifier</a>))
+         (:= (<a href="VL____VL-MATCH-TOKEN.html">vl-match-token</a> :vl-equalsign)))
+   (fntask
+        := (<a href="VL____VL-MATCH-SOME-TOKEN.html">vl-match-some-token</a> '(:vl-kwd-function :vl-kwd-task)))
+   (when (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQ.html">eq</a> (<a href="VL____VL-TOKEN-_E3TYPE.html">vl-token-&gt;type</a> fntask)
+                  :vl-kwd-task)
+              (vl-dpiprop-equiv prop :vl-dpi-pure))
+         (return-raw
+              (<a href="VL____VL-PARSE-ERROR.html">vl-parse-error</a>
+                   "Can't declare DPI imported task to be pure.")))
+   (when (<a href="COMMON-LISP____EQ.html">eq</a> (<a href="VL____VL-TOKEN-_E3TYPE.html">vl-token-&gt;type</a> fntask)
+             :vl-kwd-function)
+         (rettype := (<a href="VL____VL-PARSE-DATATYPE-OR-VOID.html">vl-parse-datatype-or-void</a>)))
+   (name := (<a href="VL____VL-MATCH-TOKEN.html">vl-match-token</a> :vl-idtoken))
+   (:= (<a href="VL____VL-WARN-ABOUT-DEPRECATED-DPI.html">vl-warn-about-deprecated-dpi</a> spec name t))
+   (portdecls := (<a href="VL____VL-PARSE-VERY-OPTIONAL-TF-PORT-LIST.html">vl-parse-very-optional-tf-port-list</a>))
+   (:= (<a href="VL____VL-MATCH-TOKEN.html">vl-match-token</a> :vl-semi))
+   (return
+      (<a href="VL____MAKE-VL-DPIIMPORT.html">make-vl-dpiimport</a> :name (<a href="VL____VL-IDTOKEN-_E3NAME.html">vl-idtoken-&gt;name</a> name)
+                         :c-name (<a href="COMMON-LISP____OR.html">or</a> c-name (<a href="VL____VL-IDTOKEN-_E3NAME.html">vl-idtoken-&gt;name</a> name))
+                         :spec spec
+                         :prop prop
+                         :rettype rettype
+                         :portdecls portdecls
+                         :atts atts
+                         :loc (<a href="VL____VL-TOKEN-_E3LOC.html">vl-token-&gt;loc</a> name))))))</pre> 
+<p><b>Theorem: </b>vl-parse-dpi-import-fails-gracefully</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-parse-dpi-import-fails-gracefully
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 0 (<a href="VL____VL-PARSE-DPI-IMPORT.html">vl-parse-dpi-import</a> atts))
+                 (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 1 (<a href="VL____VL-PARSE-DPI-IMPORT.html">vl-parse-dpi-import</a> atts)))))</pre> 
+<p><b>Theorem: </b>vl-warning-p-of-vl-parse-dpi-import</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-warning-p-of-vl-parse-dpi-import
+        (<a href="ACL2____IFF.html">iff</a> (<a href="VL____VL-WARNING-P.html">vl-warning-p</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 0 (<a href="VL____VL-PARSE-DPI-IMPORT.html">vl-parse-dpi-import</a> atts)))
+             (<a href="ACL2____MV-NTH.html">mv-nth</a> 0 (<a href="VL____VL-PARSE-DPI-IMPORT.html">vl-parse-dpi-import</a> atts))))</pre> 
+<p><b>Theorem: </b>vl-parse-dpi-import-result</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+  vl-parse-dpi-import-result
+  (<a href="ACL2____IMPLIES.html">implies</a>
+       (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____FORCE.html">force</a> (<a href="VL____VL-ATTS-P.html">vl-atts-p</a> atts)))
+       (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL____VL-DPIIMPORT-P.html">vl-dpiimport-p</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 1 (<a href="VL____VL-PARSE-DPI-IMPORT.html">vl-parse-dpi-import</a> atts)))
+              (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 0 (<a href="VL____VL-PARSE-DPI-IMPORT.html">vl-parse-dpi-import</a> atts))))))</pre> 
+<p><b>Theorem: </b>vl-parse-dpi-import-count-strong</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-parse-dpi-import-count-strong
+ (<a href="COMMON-LISP____AND.html">and</a>
+  (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> (vl-tokstream-measure
+           :tokstream (<a href="ACL2____MV-NTH.html">mv-nth</a> 2 (<a href="VL____VL-PARSE-DPI-IMPORT.html">vl-parse-dpi-import</a> atts)))
+      (vl-tokstream-measure))
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 0 (<a href="VL____VL-PARSE-DPI-IMPORT.html">vl-parse-dpi-import</a> atts)))
+           (<a href="COMMON-LISP_____C3.html">&lt;</a> (vl-tokstream-measure
+                   :tokstream (<a href="ACL2____MV-NTH.html">mv-nth</a> 2 (<a href="VL____VL-PARSE-DPI-IMPORT.html">vl-parse-dpi-import</a> atts)))
+              (vl-tokstream-measure))))
+ :rule-classes ((:rewrite) (:linear)))</pre> 
+
+</body>
+</html>

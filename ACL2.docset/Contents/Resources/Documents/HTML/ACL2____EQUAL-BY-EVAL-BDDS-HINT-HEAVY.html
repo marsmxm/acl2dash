@@ -1,0 +1,216 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Equal-by-eval-bdds-hint-heavy</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____EQUAL-BY-EVAL-BDDS-HINT-HEAVY">Click for Equal-by-eval-bdds-hint-heavy in the Full Manual</a></h3>
+
+<p>Experimental "heavyweight" hint.</p><p>Sometimes it is difficult to make use of equalities between BDDs 
+when carrying out the pick-a-point proof.  QS-SUBSET-MODE is one way to 
+approach this.  And the HEAVY hint below is another.  The idea is to replace 
+other equalities between BDDs with what they mean in terms of the 
+arbitrary-values which have just been picked.</p> 
+ 
+<p>BOZO this was a precursor to the defwitness stuff, right?  Should we port 
+this to use defwitness, etc.?</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>lit-find-equality</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> lit-find-equality (lit)
+       (<a href="ACL2____CASE-MATCH.html">case-match</a> lit
+                   (('not ('ubddp . &amp;) . &amp;)
+                    (<a href="ACL2____MV.html">mv</a> nil nil nil))
+                   (('ubddp . &amp;) (<a href="ACL2____MV.html">mv</a> nil nil nil))
+                   (('not ('equal a b . &amp;) . &amp;)
+                    (<a href="ACL2____MV.html">mv</a> 'ineq a b))
+                   (('not a . &amp;) (<a href="ACL2____MV.html">mv</a> 'eq a *nil*))
+                   (('equal a b . &amp;) (<a href="ACL2____MV.html">mv</a> 'eq a b))
+                   (&amp; (<a href="ACL2____MV.html">mv</a> 'ineq lit *nil*))))</pre> 
+<p><b>Function: </b>collect-ubddp-eq-and-ineqs</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ collect-ubddp-eq-and-ineqs
+ (clause whole hyps hist pspv ctx world state)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs state))
+ (<a href="COMMON-LISP____IF.html">if</a>
+  (<a href="COMMON-LISP____ATOM.html">atom</a> clause)
+  (<a href="ACL2____MV.html">mv</a> nil nil nil state)
+  (<a href="ACL2____MV-LET.html">mv-let</a>
+   (eqs ineqs remhyps state)
+   (collect-ubddp-eq-and-ineqs (<a href="COMMON-LISP____CDR.html">cdr</a> clause)
+                               whole hyps hist pspv ctx world state)
+   (<a href="COMMON-LISP____LET.html">let</a>
+    ((conclusion (<a href="COMMON-LISP____CAR.html">car</a> clause)))
+    (<a href="ACL2____MV-LET.html">mv-let</a>
+     (sense lhs rhs)
+     (lit-find-equality conclusion)
+     (<a href="COMMON-LISP____LET.html">let</a>
+      ((lhs-okp (<a href="ACL2____TERM-IS-BDD.html">term-is-bdd</a> lhs
+                             hyps whole hist pspv world ctx state)))
+      (<a href="COMMON-LISP____IF.html">if</a>
+       (<a href="COMMON-LISP____NOT.html">not</a> lhs-okp)
+       (<a href="ACL2____MV.html">mv</a> eqs ineqs
+           (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="ACL2____DUMB-NEGATE-LIT.html">dumb-negate-lit</a> conclusion)
+                 remhyps)
+           state)
+       (<a href="COMMON-LISP____LET.html">let</a>
+          ((rhs-okp
+                (<a href="ACL2____TERM-IS-BDD.html">term-is-bdd</a> rhs
+                             hyps whole hist pspv world ctx state)))
+          (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____NOT.html">not</a> rhs-okp)
+              (<a href="ACL2____MV.html">mv</a> eqs ineqs
+                  (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="ACL2____DUMB-NEGATE-LIT.html">dumb-negate-lit</a> conclusion)
+                        remhyps)
+                  state)
+              (<a href="COMMON-LISP____CASE.html">case</a> sense
+                    (<a href="COMMON-LISP____EQ.html">eq</a> (<a href="ACL2____MV.html">mv</a> (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> lhs rhs) eqs)
+                            ineqs
+                            (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="ACL2____DUMB-NEGATE-LIT.html">dumb-negate-lit</a> conclusion)
+                                  remhyps)
+                            state))
+                    (ineq (<a href="ACL2____MV.html">mv</a> eqs (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> lhs rhs) ineqs)
+                              remhyps state))
+                    (t (<a href="ACL2____MV.html">mv</a> eqs ineqs
+                           (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="ACL2____DUMB-NEGATE-LIT.html">dumb-negate-lit</a> conclusion)
+                                 remhyps)
+                           state))))))))))))</pre> 
+<p><b>Function: </b>collect-eq-hyps</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ collect-eq-hyps (eq-hyps acc)
+ (<a href="COMMON-LISP____IF.html">if</a>
+  (<a href="COMMON-LISP____ATOM.html">atom</a> eq-hyps)
+  acc
+  (collect-eq-hyps
+   (<a href="COMMON-LISP____CDR.html">cdr</a> eq-hyps)
+   (<a href="COMMON-LISP____CONS.html">cons</a>
+       (<a href="COMMON-LISP____CONS.html">cons</a> 'equal
+             (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'eval-bdd
+                         (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CAAR.html">caar</a> eq-hyps)
+                               (<a href="COMMON-LISP____CONS.html">cons</a> 'arbitrary-values 'nil)))
+                   (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'eval-bdd
+                               (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CDAR.html">cdar</a> eq-hyps)
+                                     (<a href="COMMON-LISP____CONS.html">cons</a> 'arbitrary-values 'nil)))
+                         'nil)))
+       acc))))</pre> 
+<p><b>Function: </b>collect-hints</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ collect-hints (eqs hyps)
+ (<a href="COMMON-LISP____IF.html">if</a>
+  (<a href="COMMON-LISP____ATOM.html">atom</a> eqs)
+  nil
+  (<a href="COMMON-LISP____CONS.html">cons</a>
+   (<a href="COMMON-LISP____CONS.html">cons</a>
+    ':use
+    (<a href="COMMON-LISP____CONS.html">cons</a>
+     (<a href="COMMON-LISP____CONS.html">cons</a>
+      ':functional-instance
+      (<a href="COMMON-LISP____CONS.html">cons</a>
+       'equal-by-eval-bdds
+       (<a href="COMMON-LISP____CONS.html">cons</a>
+        (<a href="COMMON-LISP____CONS.html">cons</a> 'bdd-hyps
+              (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'lambda
+                          (<a href="COMMON-LISP____CONS.html">cons</a> 'nil
+                                (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'and hyps) 'nil)))
+                    'nil))
+        (<a href="COMMON-LISP____CONS.html">cons</a>
+         (<a href="COMMON-LISP____CONS.html">cons</a> 'bdd-lhs
+               (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'lambda
+                           (<a href="COMMON-LISP____CONS.html">cons</a> 'nil (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CAAR.html">caar</a> eqs) 'nil)))
+                     'nil))
+         (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'bdd-rhs
+                     (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'lambda
+                                 (<a href="COMMON-LISP____CONS.html">cons</a> 'nil (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CDAR.html">cdar</a> eqs) 'nil)))
+                           'nil))
+               'nil)))))
+     'nil))
+   (collect-hints (<a href="COMMON-LISP____CDR.html">cdr</a> eqs) hyps))))</pre> 
+<p><b>Function: </b>equal-by-eval-bdds-hint-heavy-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ equal-by-eval-bdds-hint-heavy-fn
+ (id clause hist pspv ctx stable world state)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs state)
+          (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> id))
+ (<a href="COMMON-LISP____IF.html">if</a>
+  (<a href="COMMON-LISP____NOT.html">not</a> stable)
+  (<a href="ACL2____VALUE.html">value</a> nil)
+  (<a href="COMMON-LISP____LET_A2.html">let*</a>
+   ((rcnst (<a href="ACL2____ACCESS.html">access</a> prove-spec-var pspv :rewrite-constant))
+    (ens (<a href="ACL2____ACCESS.html">access</a> rewrite-constant
+                 rcnst :current-enabled-structure)))
+   (<a href="COMMON-LISP____IF.html">if</a>
+    (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____ENABLED-NUMEP.html">enabled-numep</a> (fnume '(:rewrite equal-by-eval-bdds)
+                               world)
+                        ens))
+    (<a href="ACL2____VALUE.html">value</a> nil)
+    (<a href="COMMON-LISP____LET.html">let</a>
+     ((hyps (dumb-negate-lit-lst clause)))
+     (<a href="ACL2____MV-LET.html">mv-let</a> (eqs ineqs new-hyps state)
+             (collect-ubddp-eq-and-ineqs
+                  clause
+                  clause hyps hist pspv ctx world state)
+             (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____NOT.html">not</a> eqs)
+                 (<a href="ACL2____VALUE.html">value</a> nil)
+                 (<a href="COMMON-LISP____LET_A2.html">let*</a> ((new-hyps (collect-eq-hyps ineqs new-hyps))
+                        (<a href="ACL2____HINTS.html">hints</a> (collect-hints eqs new-hyps)))
+                       (<a href="ACL2____PROG2_42.html">prog2$</a> nil (<a href="ACL2____VALUE.html">value</a> (<a href="COMMON-LISP____LIST.html">list</a> :or hints)))))))))))</pre> 
+<p><b>Function: </b>equal-by-eval-bdds-inst-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ equal-by-eval-bdds-inst-fn
+ (lhs rhs concl add-hyps instantiate-hyps
+      clause hist pspv ctx world state)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs state))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((clhyps (dumb-negate-lit-lst clause)))
+  (<a href="ACL2____MV-LET.html">mv-let</a>
+   (cleqs clineqs cl-new-hyps state)
+   (collect-ubddp-eq-and-ineqs
+        clause
+        clause clhyps hist pspv ctx world state)
+   (<a href="ACL2____MV-LET.html">mv-let</a>
+    (lhs rhs state)
+    (<a href="COMMON-LISP____COND.html">cond</a>
+     ((<a href="COMMON-LISP____AND.html">and</a> lhs rhs)
+      (<a href="ACL2____MV.html">mv</a> (<a href="COMMON-LISP____CAR.html">car</a> lhs) (<a href="COMMON-LISP____CAR.html">car</a> rhs) state))
+     (concl
+          (<a href="ACL2____ER-LET_A2.html">er-let*</a> ((concl (<a href="ACL2____TRANSLATE.html">translate</a> (<a href="COMMON-LISP____CAR.html">car</a> concl)
+                                      t t t 'equal-by-eval-bdds-inst
+                                      world state)))
+                   (<a href="ACL2____MV-LET.html">mv-let</a> (sense lhs rhs)
+                           (lit-find-equality (<a href="COMMON-LISP____CAR.html">car</a> concl))
+                           (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORE.html">ignore</a> sense))
+                           (<a href="ACL2____MV.html">mv</a> lhs rhs state))))
+     (t (<a href="ACL2____MV.html">mv</a> (<a href="COMMON-LISP____CAAR.html">caar</a> (<a href="COMMON-LISP____LAST.html">last</a> cleqs))
+            (<a href="COMMON-LISP____CDAR.html">cdar</a> (<a href="COMMON-LISP____LAST.html">last</a> cleqs))
+            state)))
+    (<a href="COMMON-LISP____LET_A2.html">let*</a>
+     ((hyps (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____AND.html">and</a> instantiate-hyps (<a href="COMMON-LISP____CAR.html">car</a> instantiate-hyps))
+                (collect-eq-hyps clineqs cl-new-hyps)
+                clhyps))
+      (hyps (<a href="COMMON-LISP____IF.html">if</a> add-hyps (<a href="COMMON-LISP____APPEND.html">append</a> (<a href="COMMON-LISP____CAR.html">car</a> add-hyps) hyps)
+                hyps)))
+     (<a href="COMMON-LISP____LET.html">let</a>
+      ((res
+        (<a href="COMMON-LISP____CONS.html">cons</a>
+         ':use
+         (<a href="COMMON-LISP____CONS.html">cons</a>
+          (<a href="COMMON-LISP____CONS.html">cons</a>
+           ':functional-instance
+           (<a href="COMMON-LISP____CONS.html">cons</a>
+            'equal-by-eval-bdds
+            (<a href="COMMON-LISP____CONS.html">cons</a>
+             (<a href="COMMON-LISP____CONS.html">cons</a> 'bdd-hyps
+                   (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'lambda
+                               (<a href="COMMON-LISP____CONS.html">cons</a> 'nil
+                                     (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'and hyps) 'nil)))
+                         'nil))
+             (<a href="COMMON-LISP____CONS.html">cons</a>
+                (<a href="COMMON-LISP____CONS.html">cons</a> 'bdd-lhs
+                      (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'lambda
+                                  (<a href="COMMON-LISP____CONS.html">cons</a> 'nil (<a href="COMMON-LISP____CONS.html">cons</a> lhs 'nil)))
+                            'nil))
+                (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'bdd-rhs
+                            (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'lambda
+                                        (<a href="COMMON-LISP____CONS.html">cons</a> 'nil (<a href="COMMON-LISP____CONS.html">cons</a> rhs 'nil)))
+                                  'nil))
+                      'nil)))))
+          'nil))))
+      (<a href="ACL2____PROG2_42.html">prog2$</a> (<a href="ACL2____CW.html">cw</a> "res: ~x0~%" res)
+              (<a href="ACL2____VALUE.html">value</a> res))))))))</pre> 
+
+</body>
+</html>

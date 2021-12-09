@@ -1,0 +1,200 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Grammar-parser-implementation</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ABNF____GRAMMAR-PARSER-IMPLEMENTATION">Click for Grammar-parser-implementation in the Full Manual</a></h3>
+
+<p>Implementation of the parser of ABNF grammars.</p><p>This is a recursive-descent, backtracking parser. 
+     There is a parsing function for every rule, 
+     and parsing functions for certain groups, options, and repetitions. 
+     There are also parameterized parsing functions for 
+     terminals (natural numbers) matching 
+     exact values, ranges, and (case-insensitively) characters.</p><h3>Inputs and Outputs</h3><p>Each of these parsing functions 
+     takes as input a list of natural numbers (i.e. terminals), 
+     and returns as outputs 
+     (i) an indication of success or failure, 
+     (ii) the tree or list of trees 
+     obtained from parsing a prefix of the input 
+     (or <span class="v">nil</span> if parsing fails), 
+     and (iii) the remaining suffix of the input that must still be parsed. 
+     The indication of success or failure is 
+     either <span class="v">nil</span> to indicate success, 
+     or a <a href="ACL2____MSG.html">message</a> to describe the failure. 
+     This is consistent with the <i><a href="ACL2____SEQ.html">Seq</a></i> macros, 
+     with which these parsing functions are implemented.</p><p>The <span class="tt"><a href="ABNF____PARSE-GRAMMAR.html">parse-grammar</a></span> top-level function 
+     takes as input a list of natural numbers 
+     and returns as output just a tree, or <span class="v">nil</span> to indicate failure; 
+     this function consumes all the input, failing if there is unparsed input. 
+     The <span class="tt"><a href="ABNF____PARSE-GRAMMAR-FROM-FILE.html">parse-grammar-from-file</a></span> function 
+     takes as input a file name and calls <span class="tt"><a href="ABNF____PARSE-GRAMMAR.html">parse-grammar</a></span> on its content, 
+     returning a tree or <span class="v">nil</span>.</p><p>Each parsing function definition is accompanied by a theorem stating that 
+     the function fixes its input list of natural numbers. 
+     The proof of each such theorem uses, as rewrite rules, 
+     the theorems for the parsing functions called by 
+     the parsing function whose theorem is being proved.</p><h3>Disambiguation and Look-Ahead</h3><p>As explained in the documentation of <span class="tt"><a href="ABNF____PARSE-GRAMMAR_A2.html">parse-grammar*</a></span>, 
+     the grammar of the ABNF concrete syntax [RFC:4] is ambiguous. 
+     The rule <span class="v">rulelist</span> allows strings `<span class="v">c-nl WSP</span>' 
+     either to be split into an ending <span class="v">c-nl</span> under a <span class="v">rule</span> 
+     and a starting <span class="v">WSP</span> under an immediately following <span class="v">(*c-wsp c-nl)</span>, 
+     or to be made into a <span class="v">c-wsp</span> 
+     in the ending part of <span class="v">elements</span> under the <span class="v">rule</span>. 
+     The same kind of choice applies when, 
+     instead of a <span class="v">rule</span> immediately followed by a <span class="v">(*c-wsp c-nl)</span>, 
+     there are two subsequent <span class="v">(*c-wsp c-nl)</span>s: 
+     the string `<span class="v">c-nl WSP</span>' can be 
+     either split between the two <span class="v">(*c-wsp c-nl)</span>s 
+     or put all under the first one. 
+     Indeed, expanding <span class="v">elements</span> in the definiens of <span class="v">rule</span> 
+     gives <span class="v">... *c-wsp c-nl</span>, 
+     which ends in the same way as the group <span class="v">(*c-wsp c-nl)</span>: 
+     this is why the ambiguity applies equally to 
+     a <span class="v">rule</span> immediately followed by a <span class="v">(*c-wsp c-nl)</span> 
+     and to a <span class="v">(*c-wsp c-nl)</span> 
+     immediately followed by a <span class="v">(*c-wsp c-nl)</span>.</p><p>Aside from the <span class="v">rulelist</span> rule, 
+     the rest of the grammar is LL(*):</p><ul>
+<li>In the <span class="v">repeat</span> rule, 
+      a look-ahead of an unbounded number of <span class="v">DIGIT</span>s 
+      is needed to determine the alternative 
+      (the second alternative if <span class="v">"*"</span> is found after the <span class="v">DIGIT</span>s, 
+      otherwise the first alternative).</li>
+<li>In the <span class="v">concatenation</span> rule, 
+      a look-ahead of an unbounded number of <span class="v">c-wsp</span>s 
+      is needed to determine where a <span class="v">concatenation</span> ends 
+      (it does if no <span class="v">repetition</span> is found after the <span class="v">c-wsp</span>s, 
+      otherwise the <span class="v">concatenation</span> 
+      continues with the found <span class="v">repetition</span>).</li>
+</ul><p>Aside from the <span class="v">rulelist</span>, <span class="v">repeat</span>, and <span class="v">concatenation</span> rules, 
+     the rest of the grammar is LL(2):</p><ul>
+<li>In the <span class="v">defined-as</span> rule, 
+      a look-ahead of two symbols 
+      is needed to distinguish <span class="v">"="</span> and <span class="v">"=/"</span>.</li>
+<li>In the <span class="v">element</span> rule, 
+      a look-ahead of two symbols 
+      is needed to distinguish <span class="v">num-val</span> and <span class="v">char-val</span> 
+      (the two symbols are <span class="v">"%"</span> and the one after).</li>
+<li>In the <span class="v">char-val</span> rule, 
+      a look-ahead of two symbols is needed 
+      to distinguish <span class="v">case-insensitive-string</span> and <span class="v">case-sensitive-string</span> 
+      (the two symbols are <span class="v">"%"</span> and the one after).</li>
+</ul><p>In each of the three rules listed above, 
+     the two choices have the first character in common. 
+     Thus, it may seem that these rules are actually LL(1), 
+     by first parsing the first character in common 
+     and then deciding how to proceed based on the next character. 
+     However, each character pair like <span class="v">"=/"</span> and <span class="v">"%s"</span> 
+     is parsed in one shot via one call to <span class="tt"><a href="ABNF____PARSE-ICHAR2.html">parse-ichar2</a></span> 
+     which produces a single leaf tree 
+     with the list of those two character codes, 
+     not via two calls to <span class="tt"><a href="ABNF____PARSE-ICHAR.html">parse-ichar</a></span> 
+     which would produce two leaf trees 
+     each with a singleton list of one character code. 
+     If the rules were formulated as concatenations of single-character strings 
+     (e.g. <span class="v">"=" "/"</span> and <span class="v">"%" "s"</span>) instead, 
+     these rules would be LL(1).</p><p>Aside from the 
+     <span class="v">rulelist</span>, 
+     <span class="v">repeat</span>, 
+     <span class="v">concatenation</span>, 
+     <span class="v">defined-as</span>, 
+     <span class="v">element</span>, and 
+     <span class="v">char-val</span> rules, 
+     the rest of the grammar is LL(1).</p><p>The parser resolves the <span class="v">rulelist</span> ambiguity 
+     by keeping strings `<span class="v">c-nl WSP</span>' as <span class="v">c-wsp</span>s 
+     under <span class="v">rule</span> or 
+     under the first <span class="v">(*c-wsp c-nl)</span> of two subsequent <span class="v">(*c-wsp c-nl)</span>s, 
+     instead of splitting them into a <span class="v">c-nl</span> 
+     to end the <span class="v">rule</span> or 
+     to end the first <span class="v">(*c-wsp c-nl)</span> of two subsequent <span class="v">(*c-wsp c-nl)</span>s, 
+     and a <span class="v">WSP</span> to start the subsequent <span class="v">(*c-wsp c-nl)</span>. 
+     The decision point is when a <span class="v">c-nl</span> is encountered 
+     while parsing the ending <span class="v">*c-wsp</span> of <span class="v">elements</span> 
+     or while parsing the <span class="v">*c-wsp</span> of a <span class="v">(*c-wsp c-nl)</span>: 
+     should the <span class="v">*c-wsp</span> be considered finished 
+     and the <span class="v">c-nl</span> used to end the <span class="v">rule</span> or <span class="v">(*c-wsp c-nl)</span>, 
+     or should the parser attempt to extend the <span class="v">*c-wsp</span> 
+     with an extra <span class="v">c-wsp</span>, if the <span class="v">c-nl</span> is followed by a <span class="v">WSP</span>? 
+     By having <span class="tt"><a href="ABNF____PARSE-_A2CWSP.html">parse-*cwsp</a></span> always try the extra <span class="v">c-wsp</span>, 
+     we never split strings `<span class="v">c-nl WSP</span>'. 
+     Thus, <span class="tt"><a href="ABNF____PARSE-_A2CWSP.html">parse-*cwsp</a></span> tries to parse as many <span class="v">c-wsp</span>s as possible, 
+     like all the other <span class="v">parse-*...</span> parsing functions. 
+     If the <span class="v">c-nl</span> is not followed by a <span class="v">WSP</span>, 
+     the parsing of the extra <span class="v">c-wsp</span> fails 
+     and the only possibility left is to finish the <span class="v">*c-wsp</span> 
+     and use the <span class="v">c-nl</span> to end the <span class="v">rule</span> or the <span class="v">(*c-wsp c-nl)</span>; 
+     there is no ambiguity in this case.</p><p>The look-ahead for the LL(*), LL(2), and LL(1) rules 
+     is handled via backtracking. 
+     The amount of backtracking 
+     is expected to be small in reasonable grammars.</p><h3>Termination</h3><p>The termination of the singly recursive parsing functions 
+     (e.g. <span class="tt"><a href="ABNF____PARSE-_A2BIT.html">parse-*bit</a></span>) 
+     is proved by showing that the size of the input decreases.</p><p>The termination of the mutually recursive parsing functions 
+     (i.e. <span class="tt"><a href="ABNF____PARSE-ALTERNATION.html">parse-alternation</a></span>, <span class="tt"><a href="ABNF____PARSE-CONCATENATION.html">parse-concatenation</a></span>, etc.) 
+     is proved via a lexicographic measure consisting of 
+     the size of the input and an ordering of the parsing functions. 
+     This is explained in the following paragraphs.</p><p>Since <span class="tt"><a href="ABNF____PARSE-ALTERNATION.html">parse-alternation</a></span> calls <span class="tt"><a href="ABNF____PARSE-CONCATENATION.html">parse-concatenation</a></span> 
+     on the same input, 
+     the size of the input alone is not sufficient 
+     to show that the mutually recursive parsing functions terminate. 
+     But <span class="tt"><a href="ABNF____PARSE-CONCATENATION.html">parse-concatenation</a></span> never 
+     (indirectly) calls <span class="tt"><a href="ABNF____PARSE-ALTERNATION.html">parse-alternation</a></span> on the same input: 
+     it has to go through <span class="tt"><a href="ABNF____PARSE-GROUP.html">parse-group</a></span> or <span class="tt"><a href="ABNF____PARSE-OPTION.html">parse-option</a></span>, 
+     which consume a <span class="v">"("</span> or a <span class="v">"["</span> 
+     before calling <span class="tt"><a href="ABNF____PARSE-ALTERNATION.html">parse-alternation</a></span> on, therefore, a smaller input. 
+     So if we order the parsing functions, by assigning numbers to them, 
+     so that <span class="tt"><a href="ABNF____PARSE-ALTERNATION.html">parse-alternation</a></span> has 
+     a larger order number than <span class="tt"><a href="ABNF____PARSE-CONCATENATION.html">parse-concatenation</a></span>, 
+     either the size of the input goes down, 
+     or it stays the same but the parsing function order number goes down. 
+     In other words, the lexicographic measure goes down.</p><p>To establish the relative ordering of the parsing functions, 
+     we look at which ones (may) call which other ones on the same input: 
+     the former must be (assigned) larger (order numbers) than the latter. 
+     Thus, we have the following ordering constraints:</p><ul>
+<li>
+<span class="tt"><a href="ABNF____PARSE-ALTERNATION.html">parse-alternation</a></span> must be 
+      larger than <span class="tt"><a href="ABNF____PARSE-CONCATENATION.html">parse-concatenation</a></span>.</li>
+<li>
+<span class="tt"><a href="ABNF____PARSE-CONCATENATION.html">parse-concatenation</a></span> must be 
+      larger than <span class="tt"><a href="ABNF____PARSE-REPETITION.html">parse-repetition</a></span>.</li>
+<li>
+<span class="tt"><a href="ABNF____PARSE-REPETITION.html">parse-repetition</a></span> must be larger than <span class="tt"><a href="ABNF____PARSE-ELEMENT.html">parse-element</a></span>. 
+      (The former calls the latter on the same input 
+      if <span class="tt"><a href="ABNF____PARSE-_F3REPEAT.html">parse-?repeat</a></span> does not consume any input.)</li>
+<li>
+<span class="tt"><a href="ABNF____PARSE-ELEMENT.html">parse-element</a></span> must be larger than <span class="tt"><a href="ABNF____PARSE-GROUP.html">parse-group</a></span>.</li>
+<li>
+<span class="tt"><a href="ABNF____PARSE-ELEMENT.html">parse-element</a></span> must be larger than <span class="tt"><a href="ABNF____PARSE-OPTION.html">parse-option</a></span>.</li>
+<li>
+<span class="tt"><a href="ABNF____PARSE-ALT-REST.html">parse-alt-rest</a></span> must be larger than 
+      <span class="tt"><a href="ABNF____PARSE-ALT-REST-COMP.html">parse-alt-rest-comp</a></span>.</li>
+<li>
+<span class="tt"><a href="ABNF____PARSE-CONC-REST.html">parse-conc-rest</a></span> must be larger than 
+      <span class="tt"><a href="ABNF____PARSE-CONC-REST-COMP.html">parse-conc-rest-comp</a></span>.</li>
+</ul><p>These constraints provide a partial order on the parsing function, 
+     which we can totalize as follows (from smallest to largest):</p><ol>
+<li><span class="tt"><a href="ABNF____PARSE-CONC-REST-COMP.html">parse-conc-rest-comp</a></span></li>
+<li><span class="tt"><a href="ABNF____PARSE-CONC-REST.html">parse-conc-rest</a></span></li>
+<li><span class="tt"><a href="ABNF____PARSE-ALT-REST-COMP.html">parse-alt-rest-comp</a></span></li>
+<li><span class="tt"><a href="ABNF____PARSE-ALT-REST.html">parse-alt-rest</a></span></li>
+<li><span class="tt"><a href="ABNF____PARSE-OPTION.html">parse-option</a></span></li>
+<li><span class="tt"><a href="ABNF____PARSE-GROUP.html">parse-group</a></span></li>
+<li><span class="tt"><a href="ABNF____PARSE-ELEMENT.html">parse-element</a></span></li>
+<li><span class="tt"><a href="ABNF____PARSE-REPETITION.html">parse-repetition</a></span></li>
+<li><span class="tt"><a href="ABNF____PARSE-CONCATENATION.html">parse-concatenation</a></span></li>
+<li><span class="tt"><a href="ABNF____PARSE-ALTERNATION.html">parse-alternation</a></span></li>
+</ol><p>Note that when a smaller function calls a larger or equal function, 
+     it does so on a smaller input. 
+     In particular: 
+     <span class="tt"><a href="ABNF____PARSE-GROUP.html">parse-group</a></span> and <span class="tt"><a href="ABNF____PARSE-OPTION.html">parse-option</a></span> call <span class="tt"><a href="ABNF____PARSE-ALTERNATION.html">parse-alternation</a></span> 
+     only after consuming a <span class="v">"("</span> or a <span class="v">"["</span>; 
+     <span class="tt"><a href="ABNF____PARSE-ALT-REST-COMP.html">parse-alt-rest-comp</a></span> calls <span class="tt"><a href="ABNF____PARSE-CONCATENATION.html">parse-concatenation</a></span> 
+     only after consuming at least a <span class="v">"/"</span>; and 
+     <span class="tt"><a href="ABNF____PARSE-CONC-REST-COMP.html">parse-conc-rest-comp</a></span> calls <span class="tt"><a href="ABNF____PARSE-REPETITION.html">parse-repetition</a></span> 
+     only after consuming at least one <span class="v">c-wsp</span>, which is never empty.</p><p>The theorems about input lengths 
+     that accompany the parsing function definitions 
+     are used in the termination proofs, 
+     both of the singly recursive functions 
+     and of the mutually recursive functions.</p>
+</body>
+</html>

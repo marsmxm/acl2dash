@@ -1,0 +1,125 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>With-auto-termination</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____WITH-AUTO-TERMINATION">Click for With-auto-termination in the Full Manual</a></h3>
+
+<p>Re-use an existing termination proof automatically.</p><p><b>NOTE</b>: THIS UTILITY HAS BEEN LARGELY SUPERSEDED BY 
+ <span class="v">defunt</span>.  See <a href="ACL2____DEFUNT.html">defunt</a>.</p> 
+ 
+ <p>The following (admittedly, contrived) example shows how to use this 
+ utility.  First define:</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFUND.html">defund</a> my-dec (x) (<a href="COMMON-LISP____1-.html">1-</a> x))
+(<a href="COMMON-LISP____DEFUN.html">defun</a> my-max (x y)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :measure (<a href="COMMON-LISP_____B2.html">+</a> (<a href="ACL2____NFIX.html">nfix</a> x) (<a href="ACL2____NFIX.html">nfix</a> y))
+                  :hints (("Goal" :in-theory (<a href="ACL2____ENABLE.html">enable</a> my-dec)))))
+  (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="ACL2____ZP.html">zp</a> x) y)
+        ((<a href="ACL2____ZP.html">zp</a> y) x)
+        (t (<a href="COMMON-LISP____1_B2.html">1+</a> (my-max (my-dec x) (my-dec y))))))</pre> 
+ 
+ <p>Now consider the following definition.  Its recursion pattern resembles 
+ that of the function above: we recur on the application of <span class="v">my-dec</span> to the 
+ two arguments, assuming both arguments are positive integers.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____WITH-AUTO-TERMINATION.html">with-auto-termination</a>
+        (<a href="COMMON-LISP____DEFUN.html">defun</a> my-sum (a b)
+          (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____POSP.html">posp</a> a) (<a href="ACL2____POSP.html">posp</a> b))
+                 (<a href="COMMON-LISP_____B2.html">+</a> 2 (my-sum (my-dec a) (my-dec b))))
+                ((<a href="ACL2____ZP.html">zp</a> b) a)
+                (t b))))
+ MY-SUM
+ACL2 !&gt;</pre> 
+ 
+ <p>We see that the function has been successfully admitted, since the function 
+ name is returned and there is no error message.  How did this happen?  We can 
+ evaluate <span class="v">:</span><span class="tt"><a href="ACL2____PE.html">pe</a></span><span class="v"> my-sum</span> to see the resulting event, but an 
+ alternative, before submitting the form above, is to ask just to show the 
+ event, without evaluating it, using <span class="v">:show :event</span>:</p> 
+ 
+ <pre class="code">ACL2 !&gt;:u
+ L         3:x(<a href="COMMON-LISP____DEFUN.html">DEFUN</a> MY-MAX (X Y) ...)
+ACL2 !&gt;(<a href="ACL2____WITH-AUTO-TERMINATION.html">with-auto-termination</a>
+        (<a href="COMMON-LISP____DEFUN.html">defun</a> my-sum (a b)
+          (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____POSP.html">posp</a> a) (<a href="ACL2____POSP.html">posp</a> b))
+                 (<a href="COMMON-LISP_____B2.html">+</a> 2 (my-sum (my-dec a) (my-dec b))))
+                ((<a href="ACL2____ZP.html">zp</a> b) a)
+                (t b)))
+        :show :event)
+ (<a href="COMMON-LISP____DEFUN.html">DEFUN</a>
+  MY-SUM (A B)
+  (<a href="COMMON-LISP____DECLARE.html">DECLARE</a>
+      (<a href="ACL2____XARGS.html">XARGS</a> :MEASURE (<a href="ACL2____BINARY-_B2.html">BINARY-+</a> (<a href="ACL2____NFIX.html">NFIX</a> A) (<a href="ACL2____NFIX.html">NFIX</a> B))
+             :HINTS (("Goal" :USE (:INSTANCE (:TERMINATION-THEOREM MY-MAX)
+                                             (Y B)
+                                             (X A))
+                             :IN-THEORY (<a href="ACL2____THEORY.html">THEORY</a> 'AUTO-TERMINATION-THEORY)))))
+  (<a href="COMMON-LISP____COND.html">COND</a> ((<a href="COMMON-LISP____AND.html">AND</a> (<a href="ACL2____POSP.html">POSP</a> A) (<a href="ACL2____POSP.html">POSP</a> B))
+         (<a href="COMMON-LISP_____B2.html">+</a> 2 (MY-SUM (MY-DEC A) (MY-DEC B))))
+        ((<a href="ACL2____ZP.html">ZP</a> B) A)
+        (T B)))
+ACL2 !&gt;</pre> 
+ 
+ <p>We see that ACL2 found a function in the logical <a href="ACL2____WORLD.html">world</a> whose 
+ termination argument justifies the termination of <span class="v">my-sum</span>  namely, 
+ the function <span class="v">my-max</span>.  Then a suitable <span class="v">:</span><span class="tt"><a href="ACL2____MEASURE.html">measure</a></span> and 
+ <span class="v">:</span><span class="tt"><a href="ACL2____HINTS.html">hints</a></span> were generated in order to admit the new event.</p> 
+ 
+ <pre class="code">General Form:
+(<a href="ACL2____WITH-AUTO-TERMINATION.html">with-auto-termination</a>
+ form
+ :theory th ; default (<a href="ACL2____THEORY.html">theory</a> 'auto-termination-theory)
+ :expand ex ; default nil
+ :show s    ; default nil
+ :verbose v ; default :minimal
+ )</pre> 
+ 
+ <p>where <span class="v">form</span> is a call of <span class="tt"><a href="COMMON-LISP____DEFUN.html">defun</a></span> or <span class="tt"><a href="ACL2____DEFUND.html">defund</a></span>, and keyword 
+ arguments, which are not evaluated, have the defaults shown above.  If this 
+ event is successful, then the input definition is modified by adding a 
+ generated <span class="v">declare</span> form, which provides a <span class="v">:measure</span> and <span class="v">:hints</span> 
+ that take advantage of the <a href="ACL2____TERMINATION-THEOREM.html">termination-theorem</a> for an existing function 
+ that was admitted without skipping proofs (see <a href="ACL2____SKIP-PROOFS.html">skip-proofs</a> and <a href="ACL2____SET-LD-SKIP-PROOFS.html">set-ld-skip-proofs</a>).  The <a href="ACL2____HINTS.html">hints</a> include a <span class="v">:use</span> hint for that 
+ earlier termination-theorem, as well as an <span class="v">:in-theory</span> hint and possibly 
+ an <span class="v">:expand</span> hint, as discussed below.  But before adding the new 
+ <span class="v">declare</span> form, any <span class="v">:measure</span> and <span class="v">:hints</span> are removed from the 
+ input form.</p> 
+ 
+ <p>We now describe the keyword arguments.</p> 
+ 
+ <ul> 
+ 
+ <li>
+<span class="v">:theory</span> and <span class="v">:expand</span>  These are probably only necessary in 
+ the case of defining a reflexive function (one with a recursive call within a 
+ recursive call, such as <span class="v">(f (f x))</span>).  These are passed along as 
+ <span class="v">:</span><span class="tt"><a href="ACL2____IN-THEORY.html">in-theory</a></span> and <span class="tt"><a href="ACL2____EXPAND.html">expand</a></span> <a href="ACL2____HINTS.html">hints</a>, respectively, on 
+ <span class="v">"Goal"</span> in the generated <span class="v">declare</span> form.  A convenient special value 
+ for <span class="v">:theory</span> is <span class="v">:current</span>, which is equivalent to supplying the value 
+ <span class="v">(<a href="ACL2____CURRENT-THEORY.html">current-theory</a> :here)</span>.</li> 
+ 
+ <li>
+<span class="v">:show</span>  If this is <span class="v">nil</span> then ACL2 will attempt to admit the 
+ resulting definition.  Otherwise, <span class="v">:show</span> should be either <span class="v">:event</span> or 
+ <span class="v">:dcl</span>, in which case an <a href="ACL2____ERROR-TRIPLE.html">error-triple</a> is returned without changing 
+ the ACL2 <a href="ACL2____WORLD.html">world</a>.  If <span class="v">:show</span> is <span class="v">:event</span>, then the resulting value 
+ will be the generated definition, while if <span class="v">:show</span> is <span class="v">:dcl</span>, then the 
+ resulting value will be just the generated <span class="v">declare</span> form.</li> 
+ 
+ <li>
+<span class="v">:verbose</span>  By default, if a <span class="v">declare</span> form is successfully 
+ generated, then the resulting event will be processed without output from the 
+ prover.  To see output from the prover, use <span class="v">:verbose t</span>.  To avoid even 
+ the little messages about ``Searching'' and ``Reusing'', use <span class="v">:verbose
+ nil</span>.</li> 
+ 
+ </ul> 
+ 
+ <p>See community book <span class="v">kestrel/utilities/auto-termination-tests.lisp</span> for more 
+ examples.</p>
+</body>
+</html>

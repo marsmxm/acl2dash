@@ -1,0 +1,574 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Defattach</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____DEFATTACH">Click for Defattach in the Full Manual</a></h3>
+
+<p>Execute constrained functions using corresponding attached functions</p> 
+ <pre class="code">General Forms:
+(<a href="ACL2____DEFATTACH.html">defattach</a> f g)   ; single attach or, if g is nil, unattach
+(<a href="ACL2____DEFATTACH.html">defattach</a> (f1 g1 :kwd val ...)
+           ...
+           (fk gk :kwd' val' ...)
+           :kwd'' val'' ...)</pre> 
+ 
+ <p>where each indicated keyword-value pair is optional and each keyword is in 
+ the list <span class="v">(:hints :instructions
+        :otf-flg :attach
+        :skip-checks :system-ok)</span>.  More details are in the ``Syntax and 
+ Semantics'' section below.</p> 
+ 
+ <p>A related utility can cause a function call to be evaluated using an 
+ alternate, provably equal function.  See <a href="ACL2____MEMOIZE.html">memoize</a>, option 
+ <span class="v">:INVOKE</span>.</p> 
+ 
+ <p>This <a href="COMMON-LISP____DOCUMENTATION.html">documentation</a> topic is organized into the following 
+ sections:</p> 
+ 
+ <ul> 
+ 
+ <li>Introductory Example.</li> 
+ 
+ <li>Syntax and Semantics of Defattach.</li> 
+ 
+ <li>Three Primary Uses of Defattach.</li> 
+ 
+ <li>Miscellaneous Remarks, with discussion of possible user errors.</li> 
+ 
+ </ul> 
+ 
+ <p>Please see <a href="ACL2____ENCAPSULATE.html">encapsulate</a> if you intend to use <span class="v">defattach</span> but are 
+ not already familiar with the use of <span class="v">encapsulate</span> to introduce constrained 
+ functions.  It may also be helpful to see <a href="ACL2____EVALUATION.html">evaluation</a>.</p> 
+ 
+ <p>See community book <span class="v">books/misc/defattach-example.lisp</span> for a small 
+ example.  it illustrates how <span class="v">defattach</span> may be used to build something 
+ like ``higher-order'' programs, in which constrained functions may be refined 
+ to different executable functions.  More uses of <span class="v">defattach</span> may be found 
+ in the ACL2 source code, specifically, file <span class="v">boot-strap-pass-2-a.lisp</span>.</p> 
+ 
+ <h3>Introductory Example.</h3> 
+ 
+ <p>We begin with a short log illustrating the use of <span class="v">defattach</span>.  Notice 
+ that after evaluating the event <span class="v">(<a href="ACL2____DEFATTACH.html">defattach</a> f g)</span>, a call of the 
+ constrained function <span class="v">f</span> is evaluated by instead calling <span class="v">g</span> on the 
+ arguments.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____ENCAPSULATE.html">encapsulate</a>
+        ((f (x) t :guard (<a href="ACL2____TRUE-LISTP.html">true-listp</a> x)))
+        (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> f (x) x))
+        (<a href="ACL2____DEFTHM.html">defthm</a> f-property
+          (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x) (<a href="COMMON-LISP____CONSP.html">consp</a> (f x)))))
+[... output omitted ...]
+ T
+ACL2 !&gt;(<a href="COMMON-LISP____DEFUN.html">defun</a> g (x)
+         (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x) (<a href="COMMON-LISP____NULL.html">null</a> x))))
+         (<a href="COMMON-LISP____CONS.html">cons</a> 17 (<a href="COMMON-LISP____CAR.html">car</a> x)))
+[... output omitted ...]
+ G
+ACL2 !&gt;(f '(3 4)) ; undefined function error
+
+ACL2 Error in TOP-LEVEL:  ACL2 cannot ev the call of undefined function
+F on argument list:
+
+((3 4))
+
+To debug see :DOC print-gv, see :DOC trace, and see :DOC wet.
+
+ACL2 !&gt;(<a href="ACL2____DEFATTACH.html">defattach</a> f g)
+[... output omitted ...]
+ :ATTACHMENTS-RECORDED
+ACL2 !&gt;(f '(3 4)) ; f is evaluated using g
+(17 . 3)
+ACL2 !&gt;(<a href="ACL2____TRACE_42.html">trace$</a> f g)
+ ((F) (<a href="ACL2____G.html">G</a>))
+ACL2 !&gt;(f '(3 4)) ; f is evaluated using g
+1&gt; (ACL2_*1*_ACL2::F (3 4))
+  2&gt; (ACL2_*1*_ACL2::G (3 4))
+    3&gt; (<a href="ACL2____G.html">G</a> (3 4))
+    &lt;3 (<a href="ACL2____G.html">G</a> (17 . 3))
+  &lt;2 (ACL2_*1*_ACL2::G (17 . 3))
+&lt;1 (ACL2_*1*_ACL2::F (17 . 3))
+(17 . 3)
+ACL2 !&gt;(<a href="ACL2____DEFATTACH.html">defattach</a> f nil) ; unattach f (<a href="COMMON-LISP____REMOVE.html">remove</a> its attachment)
+[... output omitted ...]
+ :ATTACHMENTS-RECORDED
+ACL2 !&gt;(f '(3 4)) ; undefined function error once again
+1&gt; (ACL2_*1*_ACL2::F (3 4))
+
+ACL2 Error in TOP-LEVEL:  ACL2 cannot ev the call of undefined function
+F on argument list:
+
+((3 4))
+
+To debug see :DOC print-gv, see :DOC trace, and see :DOC wet.
+
+ACL2 !&gt;</pre> 
+ 
+ <h3>Syntax and Semantics of Defattach.</h3> 
+ 
+ <p>The log above shows that the event <span class="v">(<a href="ACL2____DEFATTACH.html">defattach</a> f g)</span> allows <span class="v">g</span> to be 
+ used for evaluating calls of <span class="v">f</span>.  From a logical perspective, the 
+ evaluation takes place in the addition to the current session of an 
+ ``attachment equation'' axiom (universally quantified over all <span class="v">x</span>) for 
+ each <span class="v">defattach</span> event:</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____EQUAL.html">equal</a> (f x) (<a href="ACL2____G.html">g</a> x)) ;;; attachment equation axiom for (<a href="ACL2____DEFATTACH.html">defattach</a> f g)</pre> 
+ 
+ <p>Below we explain <span class="v">defattach</span> in some detail.  But it is important to 
+ keep in mind that evaluation with the attachment equations takes place in an 
+ extension of the logical theory of the session.  ACL2 guarantees that this 
+ so-called ``evaluation theory'' remains consistent, assuming the absence of 
+ <span class="tt"><a href="ACL2____DEFAXIOM.html">defaxiom</a></span> <a href="ACL2____EVENTS.html">events</a> from the user.  This guarantee is a consequence 
+ of a more general guarantee: an ACL2 logical <a href="ACL2____WORLD.html">world</a> exists in which 
+ (loosely speaking) the attachment equation for <span class="v">(<a href="ACL2____DEFATTACH.html">defattach</a> f g)</span>, as 
+ <span class="v">(<a href="COMMON-LISP____DEFUN.html">defun</a> f (...) (<a href="ACL2____G.html">g</a> ...))</span>, takes the place of the original defining event 
+ for <span class="v">f</span>, for each <span class="v">defattach</span> event.  This more general guarantee holds 
+ even if there are <span class="tt"><a href="ACL2____DEFAXIOM.html">defaxiom</a></span> events, though as explained below, no 
+ function symbol that syntactically supports a <span class="v">defaxiom</span> formula is allowed 
+ to get an attachment.  A deeper discussion of the logical issues is available 
+ (but not intended to be read by most users) in a long comment in the ACL2 
+ source code labeled ``Essay on Defattach.''</p> 
+ 
+ <pre class="code">Example Forms:
+(<a href="ACL2____DEFATTACH.html">defattach</a> f g)   ; call g in place of calling constrained function f
+(<a href="ACL2____DEFATTACH.html">defattach</a> (f g)) ; same as just above
+(<a href="ACL2____DEFATTACH.html">defattach</a> (f g :hints (("Goal" :in-theory (<a href="ACL2____ENABLE.html">enable</a> foo)))))
+                  ; equivalent to first form above, except with hints for the
+                  ; proof that the guard of f implies the guard of g
+(<a href="ACL2____DEFATTACH.html">defattach</a> (f g :hints (("Goal" :in-theory (<a href="ACL2____ENABLE.html">enable</a> foo)))
+                :otf-flg t))
+                  ; as above, except with an :otf-flg of t for the proof that
+                  ; the guard of f implies the guard of g
+(<a href="ACL2____DEFATTACH.html">defattach</a> (f g)
+           :hints (("Goal" :use my-thm)))
+                  ; equivalent to first form above, except with hints for the
+                  ; proof that the constraints on f hold for g
+(<a href="ACL2____DEFATTACH.html">defattach</a> (f g)
+           :hints (("Goal" :use my-thm))
+           :otf-flg t)
+                  ; as above, except with an :otf-flg of t for the proof that
+                  ; the constraints on f hold for g
+(<a href="ACL2____DEFATTACH.html">defattach</a> (f g)
+           (h j)) ; Attach g to f and attach j to h
+(<a href="ACL2____DEFATTACH.html">defattach</a> (f g :attach nil)
+           (h j)) ; Same as just above, including the same proof obligations,
+                  ; except for one difference: because of :attach nil, calls
+                  ; of f will not be evaluated, i.e., there will be no
+                  ; executable attachment of g to f
+(<a href="ACL2____DEFATTACH.html">defattach</a> (f nil)
+           (h j)) ; Attach j to h and unattach f
+(<a href="ACL2____DEFATTACH.html">defattach</a> (f g :hints (("Goal" :in-theory (<a href="ACL2____ENABLE.html">enable</a> foo))))
+           (h j :hints (("Goal" :in-theory (<a href="ACL2____ENABLE.html">enable</a> bar))))
+           :hints (("Goal" :use my-thm)))
+                  ; Attach g to f and attach j to h, with hints:
+                  ; - For proving that the guard of f implies the guard of g,
+                  ;   enable foo;
+                  ; - For proving that the guard of h implies the guard of j,
+                  ;   enable bar; and
+                  ; - For proving that the constraints on f and h hold for
+                  ;   g and j (respectively), use theorem my-thm.
+
+(<a href="ACL2____DEFATTACH.html">defattach</a> f nil)   ; remove the attachment of f, if any (e.g., g above)
+(<a href="ACL2____DEFATTACH.html">defattach</a> (f nil)) ; same as just above
+
+General Forms:
+(<a href="ACL2____DEFATTACH.html">defattach</a> f g)   ; single attach or, if g is nil, unattach
+(<a href="ACL2____DEFATTACH.html">defattach</a> (f1 g1 :kwd11val11 ...)
+           ...
+           (fk gk :kwdk1 valk1 ...)
+           :kwd1 val1 ...)</pre> 
+ 
+ <p>where each indicated keyword-value pair is optional and each keyword is in 
+ the list <span class="v">(:hints :instructions
+        :otf-flg :attach
+        :skip-checks :system-ok)</span>.  We distinguish between keywords 
+ within the <span class="v">(fi gi :kwdi1 vali1 ...)</span>, which we call <i>guard keywords</i>, 
+ and keywords at the top level, shown above as <span class="v">:kwd1 val1 ...</span>, which we 
+ call <i>top-level keywords</i>.</p> 
+ 
+ <ul> 
+ 
+ <li>The guard keywords are in the list <span class="v">(:hints :instructions :otf-flg :attach)</span>.  The 
+ <span class="v">:</span><span class="tt"><a href="ACL2____HINTS.html">hints</a></span>, <span class="v">:</span><span class="tt"><a href="ACL2____INSTRUCTIONS.html">instructions</a></span>, and <span class="v">:</span><span class="tt"><a href="ACL2____OTF-FLG.html">otf-flg</a></span> 
+ keywords in <span class="v">(fi gi ...)</span> are used in the proofs of the guard proof 
+ obligation for the attachment of <span class="v">gi</span> to <span class="v">fi</span>.  They have their usual 
+ values and meanings, as when used (for example) in <span class="tt"><a href="ACL2____DEFTHM.html">defthm</a></span> <span class="tt"><a href="ACL2____EVENTS.html">events</a></span>.  The value of each <span class="v">:attach</span> keyword is either <span class="v">t</span> or <span class="v">nil</span>. 
+ We discuss the <span class="v">:attach</span> keyword later in this <a href="COMMON-LISP____DOCUMENTATION.html">documentation</a> 
+ topic.</li> 
+ 
+ <li>The top-level keywords <span class="v">:hints</span>, <span class="v">:instructions</span>, and <span class="v">:otf-flg</span> 
+ are used in the constraint proof obligations just as described above for the 
+ guard proof obligations.  When <span class="v">:attach</span> is used as a top-level keyword, 
+ its value serves as a default for entries <span class="v">(fi gi ...)</span> that do not specify 
+ <span class="v">:attach</span>.  <span class="v">:Skip-checks</span> and <span class="v">:system-ok</span> are described below.</li> 
+ 
+ </ul> 
+ 
+ <p>No keyword may occur twice in the same context: that is, neither twice as a 
+ guard keyword in the same <span class="v">(fi gi ...)</span>  entry, nor twice as a top-level 
+ keyword.  Moreover, <span class="v">:instructions</span> may not occur in the same context with 
+ <span class="v">:hints</span> or <span class="v">:otf-flg</span>.</p> 
+ 
+ <p>The argument <span class="v">:skip-checks t</span> enables easy experimentation with 
+ <span class="v">defattach</span>, by permitting use of <span class="v">:</span><span class="tt"><a href="ACL2____PROGRAM.html">program</a></span> mode functions and 
+ the skipping of semantic checks.  Also permitted is <span class="v">:skip-checks nil</span> (the 
+ default) and <span class="v">:skip-checks :cycles</span>, which turns off only the update of the 
+ extended ancestor relation and hence the check for cycles in this relation; 
+ see below.  We do not make any logical claims when the value of 
+ <span class="v">:skip-checks</span> is non-<span class="v">nil</span>; indeed, a trust tag is then required (see 
+ <a href="ACL2____DEFTTAG.html">defttag</a>).  Note that the interaction of <a href="ACL2____MEMOIZATION.html">memoization</a> and 
+ attachments is not tracked for attachments introduced with a non-<span class="v">nil</span> 
+ value of <span class="v">:skip-checks</span>.  For more discussion of <span class="v">:skip-checks t</span>, see 
+ <a href="ACL2____DEFPROXY.html">defproxy</a>; we do not discuss <span class="v">:skip-checks</span> further, here.</p> 
+ 
+ <p>The argument <span class="v">:system-ok t</span> allows attachment to system functions. 
+ Without this argument, the <span class="v">defattach</span> event will fail if any <span class="v">fi</span> is a 
+ built-in ACL2 function.  Rather than supplying this argument directly, it is 
+ recommended to use <span class="tt"><a href="ACL2____DEFATTACH-SYSTEM.html">defattach-system</a></span>, which has the same syntax as 
+ <span class="v">defattach</span> with two exceptions: it adds <span class="v">:system-ok t</span> automatically, 
+ that is, <span class="v">:system-ok</span> is implicit; and it expands to a <span class="tt"><a href="ACL2____LOCAL.html">local</a></span> call 
+ of <span class="v">defattach</span>.  The latter is important so that the attachment does not 
+ affect system behavior outside a book containing the <span class="v">defattach</span> event.  Of 
+ course, if it is truly intended to affect such behavior, the argument 
+ <span class="v">:system-ok t</span> may be given directly to <span class="v">defattach</span>, without a 
+ surrounding use of <span class="v">local</span>.</p> 
+ 
+ <p>The first General Form above is simply an abbreviation for the form 
+ <span class="v">(<a href="ACL2____DEFATTACH.html">defattach</a> (f g))</span>, which is an instance of the second General Form above. 
+ For the second General Form we say that <span class="v">gi</span> is ``attached to'' <span class="v">fi</span> (by 
+ the <span class="v">defattach</span> event) if <span class="v">gi</span> is not <span class="v">nil</span>, and otherwise we say 
+ that <span class="v">fi</span> is ``unattached'' (by the <span class="v">defattach</span> event).  It is also 
+ convenient to refer to <span class="v">&lt;fi,gi&gt;</span> as an ``attachment pair'' (of the event) 
+ if <span class="v">gi</span> is not <span class="v">nil</span>.  We may refer to the set of <span class="v">fi</span> as the 
+ ``attachment nest'' of each <span class="v">fi</span>.</p> 
+ 
+ <p>We start with a brief introduction to the first General Form in the case 
+ that <span class="v">g</span> is not <span class="v">nil</span>.  This form arranges that during evaluation, with 
+ exceptions noted below, every call of the constrained function symbol <span class="v">f</span> 
+ will in essence be replaced by a call of the function symbol <span class="v">g</span> on the 
+ same arguments.  We may then refer to <span class="v">g</span> as the ``attachment of'' <span class="v">f</span>, 
+ or say that ``<span class="v">g</span> is attached to <span class="v">f</span>.''  Notable exceptions, where we do 
+ not use attachments during evaluation, are for macroexpansion, evaluation of 
+ <span class="tt"><a href="ACL2____DEFCONST.html">defconst</a></span> and <span class="tt"><a href="ACL2____DEFPKG.html">defpkg</a></span> terms, evaluation during <span class="tt"><a href="ACL2____TABLE.html">table</a></span> 
+ events, some <a href="ACL2____STOBJ.html">stobj</a> operations including all <a href="ACL2____STOBJ.html">updates</a>, and especially evaluation of ground terms (terms 
+ without free variables) during proofs.  However, even for these cases we allow 
+ the use of attachments in the first argument of <span class="tt"><a href="ACL2____PROG2_42.html">prog2$</a></span> and, more 
+ generally, the next-to-last (i.e., second) argument of <span class="tt"><a href="ACL2____RETURN-LAST.html">return-last</a></span> 
+ when its first argument is not of the form <span class="v">'m</span> for some macro, <span class="v">m</span>.</p> 
+ 
+ <p>To see why attachments are disallowed during evaluation of ground terms 
+ during proofs (except for the <span class="tt"><a href="ACL2____PROG2_42.html">prog2$</a></span> and <span class="tt"><a href="ACL2____RETURN-LAST.html">return-last</a></span> cases 
+ mentioned above), consider the following example.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFSTUB.html">defstub</a> f (x) t)
+(<a href="COMMON-LISP____DEFUN.html">defun</a> g (x) (<a href="COMMON-LISP_____B2.html">+</a> 3 x))
+(<a href="ACL2____DEFATTACH.html">defattach</a> f g)</pre> 
+ 
+ <p>If the form <span class="v">(f 2)</span> is submitted at the ACL2 prompt, the result will be 
+ <span class="v">5</span> because the attachment <span class="v">g</span> of <span class="v">f</span> is called on the argument, 
+ <span class="v">2</span>.  However, during a proof the term <span class="v">(f 2)</span> will not be simplified to 
+ <span class="v">5</span>, since that would be unsound, as there are no axioms about <span class="v">f</span> that 
+ would justify such a simplification.</p> 
+ 
+ <p>For the case that <span class="v">g</span> is <span class="v">nil</span> in the first General Form above, the 
+ result is the removal of the existing attachment to <span class="v">f</span>, if any.  After 
+ this removal, calls of <span class="v">f</span> will once again cause errors saying that ``ACL2 
+ cannot ev the call of undefined function <span class="v">f</span> ...''.  In this case not only 
+ is the previous attachment to <span class="v">f</span> removed; moreover, for every function 
+ symbol <span class="v">f'</span> in the attachment nest of <span class="v">f</span> in the <span class="v">defattach</span> event 
+ that introduced the existing attachment to <span class="v">f</span>, then <span class="v">f'</span> is unattached. 
+ (An example near the end of this <a href="COMMON-LISP____DOCUMENTATION.html">documentation</a> topic shows why this 
+ unattachment needs to be done.) Such removal takes place before the current 
+ <span class="v">defattach</span> is processed, but is restored if the new event fails to be 
+ admitted.</p> 
+ 
+ <p>We focus henceforth on the second General Form.  There must be at least one 
+ attachment, i.e., <span class="v">i</span> must be at least 1.  All keywords are optional; their 
+ role is described below.  The <span class="v">fi</span> must be distinct constrained function 
+ symbols, that is, function symbols all introduced in <a href="ACL2____SIGNATURE.html">signature</a>s of 
+ <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span> <a href="ACL2____EVENTS.html">events</a> (or macros such as <span class="tt"><a href="ACL2____DEFSTUB.html">defstub</a></span> that 
+ generate <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span> events).  Each non-<span class="v">nil</span> <span class="v">gi</span> is a 
+ <span class="v">:</span><span class="tt"><a href="ACL2____LOGIC.html">logic</a></span>-mode function symbol that has had its guards verified, 
+ with the same <a href="ACL2____SIGNATURE.html">signature</a> as <span class="v">fi</span> (though formal parameters for 
+ <span class="v">fi</span> and <span class="v">gi</span> may have different names).  (Note: The macro 
+ <span class="v">defattach!</span>, defined in community book <span class="v">books/misc/defattach-bang</span>, 
+ avoids this restriction.)  This event generates proof obligations and an 
+ ordering check, both described below.  The effect of this event is first to 
+ remove any existing attachments for all the function symbols <span class="v">fi</span>, as 
+ described above for the first General Form, and then to attach each <span class="v">gi</span> to 
+ <span class="v">fi</span>.</p> 
+ 
+ <p>Proof obligations must be checked before making attachments.  For this 
+ discussion we assume that each <span class="v">gi</span> is non-<span class="v">nil</span> (otherwise first remove 
+ all attachment pairs <span class="v">&lt;fi,gi&gt;</span> for which <span class="v">gi</span> is nil).  Let <span class="v">s</span> be 
+ the functional substitution mapping each <span class="v">fi</span> to <span class="v">gi</span>.  For any term 
+ <span class="v">u</span>, we write <span class="v">u\s</span> for the result of applying <span class="v">s</span> to <span class="v">u</span>; that 
+ is, <span class="v">u\s</span> is the ``functional instance'' obtained by replacing each 
+ <span class="v">fi</span> by <span class="v">gi</span> in <span class="v">u</span>.  Let <span class="v">G_fi</span> and <span class="v">G_gi</span> be the guards of 
+ <span class="v">fi</span> and <span class="v">gi</span>, respectively.  Let <span class="v">G_fi'</span> be the result of replacing 
+ each formal of <span class="v">fi</span> by the corresponding formal of <span class="v">gi</span> in <span class="v">G_fi</span>. 
+ ACL2 first proves, for each <span class="v">i</span> (in order), the formula <span class="v">(<a href="ACL2____IMPLIES.html">implies</a> G_fi'
+ G_gi)\s</span>.  If this sequence of proofs succeeds, then the remaining formula 
+ to prove is the functional instance <span class="v">C\s</span> of the conjunction <span class="v">C</span> of the 
+ constraints on the symbols <span class="v">fi</span>; see <a href="ACL2____CONSTRAINT.html">constraint</a>.  This last proof 
+ obligation is thus similar to the one generated by functional instantiation 
+ (see <a href="ACL2____CONSTRAINT.html">constraint</a>).  As with functional instantiation, ACL2 stores the 
+ fact that such proofs have been done so that they are avoided in future events 
+ (see <a href="ACL2____LEMMA-INSTANCE.html">lemma-instance</a>).  Thus, you will likely avoid some proofs with the 
+ sequence</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFATTACH.html">defattach</a> f g)
+(<a href="ACL2____DEFATTACH.html">defattach</a> f nil)
+(<a href="ACL2____DEFATTACH.html">defattach</a> f g)
+(<a href="ACL2____DEFATTACH.html">defattach</a> f nil)
+...</pre> 
+ 
+ <p>rather than the sequence:</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFATTACH.html">defattach</a> f g)
+:u
+(<a href="ACL2____DEFATTACH.html">defattach</a> f g)
+:u
+...</pre> 
+ 
+ <p>It remains to describe an ordering check.  We begin with the following 
+ motivating example.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFSTUB.html">defstub</a> f (x) t) ; constrained function with no constraints
+(<a href="COMMON-LISP____DEFUN.html">defun</a> g (x) (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t)) (<a href="COMMON-LISP____NOT.html">not</a> (f x)))
+(<a href="ACL2____DEFATTACH.html">defattach</a> f g) ; ILLEGAL!</pre> 
+ 
+ <p>Were the above <span class="v">defattach</span> event to succeed, the evaluation theory 
+ (discussed above) would be inconsistent: <span class="v">(f x)</span> equals <span class="v">(<a href="ACL2____G.html">g</a> x)</span> by the 
+ new attachment equation, which in turn equals <span class="v">(<a href="COMMON-LISP____NOT.html">not</a> (f x))</span> by definition 
+ of <span class="v">g</span>.  The evaluation would therefore be meaningless.  Also, from a 
+ practical perspective, there would be an infinite loop resulting from any call 
+ of <span class="v">f</span>.</p> 
+ 
+ <p>We consider a function symbol <span class="v">g</span> to be an ``extended immediate ancestor 
+ of'' a function symbol <span class="v">f</span> if either of the following two criteria is met: 
+ (a) <span class="v">g</span> occurs in the formula that introduces <span class="v">f</span> (i.e., definition body 
+ or constraint) and <span class="v">g</span> is introduced by an event different from (earlier 
+ than) the event introducing <span class="v">f</span>; or (b) <span class="v">g</span> is attached to <span class="v">f</span>.  For 
+ a proposed <span class="v">defattach</span> event, we check that this relation has no cycles, 
+ where for condition (b) we include all attachment pairs that would result, 
+ including those remaining from earlier <span class="v">defattach</span> events.</p> 
+ 
+ <p>Of course, a special case is that no function symbol may be attached to 
+ itself.  Similarly, no function symbol may be attached to any of its 
+ ``siblings''  function symbols introduced by the same event  as 
+ siblings are considered equivalent for purposes of the acyclicity check.</p> 
+ 
+ <h3>Three Primary Uses of Defattach.</h3> 
+ 
+ <p>We anticipate three uses of <span class="v">defattach</span>:</p> 
+ 
+ <ol> 
+ 
+ <li>Constrained function execution</li> 
+ 
+ <li>Sound modification of the ACL2 system</li> 
+ 
+ <li>Program refinement</li> 
+ 
+ </ol> 
+ 
+ <p>We discuss these in turn.</p> 
+ 
+ <ol> 
+ 
+ <li>The example at the beginning of this <a href="COMMON-LISP____DOCUMENTATION.html">documentation</a> illustrates 
+ constrained function execution.</li> 
+ 
+ <li>ACL2 is written essentially in itself.  Thus, there is an opportunity 
+ to attaching to system functions.  For example, encapsulated function 
+ <span class="v">too-many-ifs-post-rewrite</span>, in the ACL2 source code, receives an 
+ attachment of <span class="v">too-many-ifs-post-rewrite-builtin</span>, which implements a 
+ heuristic used in the rewriter.  To find all such examples, search the source 
+ code for the string `-builtin'.<br> 
+ 
+ Over time, we expect to continue replacing ACL2 source code in a similar 
+ manner.  We invite the ACL2 community to assist in this ``open architecture'' 
+ enterprise; feel free to email the ACL2 implementors if you are interested in 
+ such activity.</li> 
+ 
+ <li>Recall that for an attachment pair <span class="v">&lt;f,g&gt;</span>, a proof obligation is 
+ (speaking informally) that <span class="v">g</span> satisfies the constraint on <span class="v">f</span>.  Yet 
+ more informally speaking, <span class="v">g</span> is ``more defined'' than <span class="v">f</span>; we can think 
+ of <span class="v">g</span> as ``refining'' <span class="v">f</span>.  With these informal notions as motivation, 
+ we can view defattach as providing refinement through the following formal 
+ observation: the evaluation theory extends the theory of the ACL2 session, 
+ specifically by the addition of all attachment equations.  For the 
+ logic-inclined, it may be useful to think model-theoretically: The class of 
+ models of the evaluation theory is non-empty but is a subset of the class of 
+ models of the current session theory.</li> 
+ 
+ </ol> 
+ 
+ <h3>Miscellaneous Remarks, with discussion of possible user errors.</h3> 
+ 
+ <p>We conclude with remarks on some details.</p> 
+ 
+ <p>A <span class="v">defattach</span> event is never redundant (see <a href="ACL2____REDUNDANT-EVENTS.html">redundant-events</a>); in 
+ that sense it is analogous to <span class="tt"><a href="ACL2____IN-THEORY.html">in-theory</a></span>.</p> 
+ 
+ <p>As mentioned above, the use of attachments is disabled for evaluation of 
+ ground terms during proofs.  However, attachments can be used on code during 
+ the proof process, essentially when the ``program refinement'' is on theorem 
+ prover code rather than on functions we are reasoning about.  The attachment 
+ to <span class="v">too-many-ifs-post-rewrite</span> described above provides one example of such 
+ attachments.  Meta functions and clause-processor functions can also have 
+ attachments, with the restriction that no common ancestor with the evaluator 
+ can have an attachment; see <a href="ACL2____EVALUATOR-RESTRICTIONS.html">evaluator-restrictions</a>.</p> 
+ 
+ <p>For an attachment pair <span class="v">&lt;f,g&gt;</span>, evaluation of <span class="v">f</span> never consults the 
+ <a href="ACL2____GUARD.html">guard</a> of <span class="v">f</span>.  Rather, control passes to <span class="v">g</span>, whose guard is 
+ checked if necessary.  The proof obligation related to guards, as described 
+ above, guarantees that any legal call of <span class="v">f</span> is also a legal call of 
+ <span class="v">g</span>.  Thus for guard-verified code that results in calls of <span class="v">f</span> in raw 
+ Lisp, it is sound to replace these calls with corresponding calls of 
+ <span class="v">g</span>.</p> 
+ 
+ <p><span class="v">Defattach</span> events are illegal inside any <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span> event with 
+ a non-empty <a href="ACL2____SIGNATURE.html">signature</a> unless they are <a href="ACL2____LOCAL.html">local</a> to the <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span>.</p> 
+ 
+ <p>(Of interest only to users of <span class="tt"><a href="ACL2____APPLY_42.html">apply$</a></span>.)  Special handling is applied 
+ when attempting to attach to a so-called <i>warrant</i>, which is produced by 
+ an appication of <span class="tt"><a href="ACL2____DEFWARRANT.html">defwarrant</a></span> (or <span class="tt"><a href="ACL2____DEFUN_42.html">defun$</a></span>).  In that case it is 
+ legal to attach the function <span class="v">true-apply$-warrant</span> to the warrant, without 
+ any proof obligation.  This attachment is actually performed automatically by 
+ <span class="v">defwarrant</span>, so users (even users of <span class="v">apply$</span>) need not deal 
+ explicitly with such attachments.  However, these attachments make warrants 
+ executable in the loop; for example, after <span class="v">(<a href="ACL2____DEFWARRANT.html">defwarrant</a> foo)</span>, <span class="v">(<a href="ACL2____WARRANT.html">warrant</a>
+ foo)</span> will evaluate to <span class="v">t</span> in the loop.</p> 
+ 
+ <p>We next discuss a restriction based on a notion of a function symbol 
+ syntactically supporting an event.  Function symbol <span class="v">f</span> is <i>ancestral</i> 
+ in event <span class="v">E</span> if either <span class="v">f</span> occurs in <span class="v">E</span>, or (recursively) <span class="v">f</span> 
+ occurs in an event <span class="v">E'</span> that introduces some function symbol <span class="v">g</span> that is 
+ ancestral in <span class="v">E</span>.  We require that no function symbol ancestral in the 
+ formula of a <span class="tt"><a href="ACL2____DEFAXIOM.html">defaxiom</a></span> event may have an attachment.  Theoretical 
+ reasons are discussed in comments in the ACL2 source code, but here we give a 
+ little example showing the need for some such restriction: without it, we show 
+ how to prove <span class="v">nil</span>!</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFN.html">defn</a> g1 () 1)
+(<a href="ACL2____DEFN.html">defn</a> g2 () 2)
+(<a href="ACL2____DEFSTUB.html">defstub</a> f1 () t)
+(<a href="ACL2____DEFSTUB.html">defstub</a> f2 () t)
+(<a href="ACL2____DEFUND.html">defund</a> p (x)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORE.html">ignore</a> x))
+  t)
+(<a href="ACL2____DEFEVALUATOR.html">defevaluator</a> evl evl-list
+  ((p x)))
+(<a href="ACL2____DEFAXIOM.html">defaxiom</a> f1-is-f2
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> (f1) (f2)))
+(<a href="COMMON-LISP____DEFUN.html">defun</a> meta-fn (x)
+  (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____EQUAL.html">equal</a> (f1) (f2))
+         x)
+        (t *nil*)))
+(<a href="ACL2____DEFTHM.html">defthm</a> bad-meta-rule
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> (evl x a)
+         (evl (meta-fn x) a))
+  :rule-classes ((:meta :trigger-fns (p))))
+(<a href="ACL2____DEFATTACH.html">defattach</a> f1 g1)
+(<a href="ACL2____DEFATTACH.html">defattach</a> f2 g2)
+(<a href="ACL2____DEFTHM.html">defthm</a> contradiction
+  nil
+  :hints (("Goal" :use ((:instance (:theorem (<a href="COMMON-LISP____NOT.html">not</a> (p x)))
+                                   (x t)))))
+  :rule-classes nil)</pre> 
+ 
+ <p>The form <span class="v">(<a href="ACL2____ALL-ATTACHMENTS.html">all-attachments</a> (<a href="ACL2____W.html">w</a> state))</span> evaluates to the list of all 
+ attachments except in two cases: <a href="ACL2____WARRANT.html">warrant</a>s, and attachments introduced 
+ with a non-<span class="v">nil</span> value of <span class="v">:skip-checks</span>.  To obtain the attachment to a 
+ function symbol <span class="v">FN</span>, without the above restrictions and with value 
+ <span class="v">nil</span> if there is no attachment to <span class="v">FN</span>: <span class="v">(<a href="COMMON-LISP____CDR.html">cdr</a> (attachment-pair 'FN (<a href="ACL2____W.html">w</a>
+ state)))</span>.</p> 
+ 
+ <p>Next we discuss the <span class="v">:ATTACH</span> keyword.  There is rarely if ever a reason 
+ to specify <span class="v">:ATTACH T</span>, but the following (admittedly contrived) example 
+ shows why it may be necessary to specify <span class="v">:ATTACH NIL</span>.  First we introduce 
+ three new function symbols.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFSTUB.html">defstub</a> f (x) t)
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> g (x)
+  (f x))
+
+(<a href="ACL2____ENCAPSULATE.html">encapsulate</a> ((h (x) t))
+  (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> h (x) (<a href="ACL2____G.html">g</a> x)))
+  (<a href="ACL2____DEFTHM.html">defthm</a> h-prop
+    (<a href="COMMON-LISP____EQUAL.html">equal</a> (h x) (<a href="ACL2____G.html">g</a> x))))</pre> 
+ 
+ <p>Now suppose we want to attach the function <span class="tt"><a href="ACL2____ACL2-NUMBERP.html">ACL2-numberp</a></span> to both 
+ <span class="v">f</span> and <span class="v">h</span>.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFATTACH.html">defattach</a> (f acl2-numberp) (h acl2-numberp))</pre> 
+ 
+ <p>Such an attempt fails, because the following constraint is generated but is 
+ not a theorem: <span class="v">(<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (<a href="ACL2____ACL2-NUMBERP.html">ACL2-NUMBERP</a> X) (<a href="ACL2____G.html">G</a> X))</span>.  Clearly we also need to 
+ attach to <span class="v">g</span> as well.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFATTACH.html">defattach</a> (f acl2-numberp) (h acl2-numberp) (<a href="ACL2____G.html">g</a> acl2-numberp))</pre> 
+ 
+ <p>But this fails for a different reason, as explained by the error 
+ message:</p> 
+ 
+ <pre class="code">ACL2 Error in ( DEFATTACH (F ACL2-NUMBERP) ...):  It is illegal to
+attach to function symbol G, because it was introduced with DEFUN.
+See :DOC defattach.</pre> 
+ 
+ <p>That is: logically, we need to attach <span class="v">acl2-numberp</span> to <span class="v">g</span>, but we 
+ cannot actually attach to <span class="v">g</span> because it was not introduced with <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span> (it was introduced with <span class="tt"><a href="COMMON-LISP____DEFUN.html">defun</a></span>).  So we specify <span class="v">:ATTACH
+ NIL</span> for the attachment to <span class="v">g</span>, saying that no actual attachment should be 
+ made to the code for <span class="v">g</span>, even though for logical purposes we should 
+ consider that <span class="v">g</span> has been given the indicated attachment.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFATTACH.html">defattach</a> (f acl2-numberp) (h acl2-numberp) (<a href="ACL2____G.html">g</a> acl2-numberp :attach nil))</pre> 
+ 
+ <p>Finally, we can check that <span class="v">f</span>, <span class="v">g</span>, and <span class="v">h</span> execute as 
+ expected.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____ASSERT-EVENT.html">assert-event</a> (<a href="COMMON-LISP____AND.html">and</a> (f 3)
+                   (<a href="COMMON-LISP____NOT.html">not</a> (f t))
+                   (<a href="ACL2____G.html">g</a> 3)
+                   (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____G.html">g</a> t))
+                   (h 3)
+                   (<a href="COMMON-LISP____NOT.html">not</a> (h t))))
+ :PASSED
+ACL2 !&gt;</pre> 
+ 
+ <p>We conclude with an example promised above, showing why it is necessary in 
+ general to unattach all function symbols in an existing attachment nest when 
+ unattaching any one of those function symbols.  Consider the following 
+ example.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFSTUB.html">defstub</a> f1 () t)
+(<a href="ACL2____ENCAPSULATE.html">encapsulate</a> ((f2 () t))
+  (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> f2 () (f1)))
+  (<a href="ACL2____DEFTHM.html">defthm</a> f2=f1 (<a href="COMMON-LISP____EQUAL.html">equal</a> (f2) (f1))))
+(<a href="ACL2____ENCAPSULATE.html">encapsulate</a> ((f3 () t))
+  (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> f3 () (f1)))
+  (<a href="ACL2____DEFTHM.html">defthm</a> f3=f1 (<a href="COMMON-LISP____EQUAL.html">equal</a> (f3) (f1))))
+(<a href="COMMON-LISP____DEFUN.html">defun</a> four () (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t)) 4)
+(<a href="COMMON-LISP____DEFUN.html">defun</a> five () (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t)) 5)
+(<a href="ACL2____DEFATTACH.html">defattach</a> (f1 four) (f2 four))
+(<a href="ACL2____DEFATTACH.html">defattach</a> (f1 five) (f3 five))</pre> 
+ 
+ <p>The second <span class="v">defattach</span> erases the existing attachment pair 
+ <span class="v">&lt;f1,four&gt;</span> before installing the new attachment pairs <span class="v">&lt;f1,five&gt;</span> and 
+ <span class="v">&lt;f3,five&gt;</span>.  After the second defattach, both <span class="v">(f1)</span> and <span class="v">(f3)</span> 
+ evaluate to 5.  Now suppose that the attachment pair <span class="v">&lt;f2,four&gt;</span> were not 
+ erased.  Then we would have <span class="v">(f1)</span> evaluating to 5 and <span class="v">(f2)</span> evaluating 
+ to 4, contradicting the constraint <span class="v">f2=f1</span>.  The evaluation theory would 
+ thus be inconsistent, and at a more concrete level, the user might well be 
+ surprised by evaluation results if the code were written with the assumption 
+ specified in the constraint <span class="v">f2=f1</span>.</p>
+</body>
+</html>

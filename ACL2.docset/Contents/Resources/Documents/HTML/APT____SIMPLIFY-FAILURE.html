@@ -1,0 +1,170 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Simplify-failure</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=APT____SIMPLIFY-FAILURE">Click for Simplify-failure in the Full Manual</a></h3>
+
+<p>Ways to address failed invocations of the <span class="v">simplify</span> transformation.</p><p>This topic suggests steps you may take to address failed 
+ invocations of the <span class="v">simplify</span> transformation.</p> 
+ 
+ <h3>Dealing with a guard verification failure</h3> 
+ 
+ <p>When <span class="v">(<a href="APT____SIMPLIFY.html">simplify</a> FN ...)</span> fails at guard verification, then unless option 
+ <span class="v">:print nil</span> is supplied, an attempt to run <span class="v">(<a href="ACL2____VERIFY-GUARDS.html">verify-guards</a> fn)</span> will be 
+ made automatically, with prover output shown as though <span class="v">:print :all</span> had 
+ been supplied.  That way, you can look at checkpoints to come up with helpful 
+ rules, without having to run <span class="v">simplify</span> again (see <a href="ACL2____THE-METHOD.html">ACL2::the-method</a>).</p> 
+ 
+ <p>Note that in some cases, there may be initial attempts at guard 
+ verification that use a somewhat sophisticated <a href="ACL2____PROOF-BUILDER.html">ACL2::proof-builder</a> 
+ macro, one that users are not expected to understand.  This explains why the 
+ retry mentioned above is simply <span class="v">(<a href="ACL2____VERIFY-GUARDS.html">verify-guards</a> fn)</span>, with no hints: this 
+ supports your attempt to make adjustments so that guard verification will 
+ succed for your <span class="v">simplify</span> command.  It might be helpful to try one or more 
+ of the following approaches.</p> 
+ 
+ <ul> 
+ 
+ <li>Prove suitable rules, as noted above, towards removing the checkpoints. 
+ You may wish to specify <span class="v">:guard-hints nil</span> in your new call of 
+ <span class="v">simplify</span>, to match the call <span class="v">(<a href="ACL2____VERIFY-GUARDS.html">verify-guards</a> fn)</span> that generated the 
+ checkpoints that you considered.</li> 
+ 
+ <li>Provide a <span class="v">:guard-hints</span> option, <span class="v">(<a href="APT____SIMPLIFY.html">simplify</a> FN :guard-hints ...)</span> 
+ that specifies a suitable theory and, perhaps, include <span class="v">:use (:guard-theorem
+ FN)</span>.</li> 
+ 
+ <li>Delay guard verification with <span class="v">(<a href="APT____SIMPLIFY.html">simplify</a> FN :verify-guards nil ...)</span>. 
+ Then, after this <span class="v">simplify</span> completes successfully, call <span class="tt"><a href="ACL2____VERIFY-GUARDS.html">verify-guards</a></span> on <span class="v">FN</span>, perhaps with suitable hints as suggested 
+ above.</li> 
+ 
+ <li>If you use <span class="v">:print info</span> or <span class="v">:print :all</span>, you may see a message 
+ like the following. 
+ <pre class="code">Saving proof-builder error state; see :DOC instructions.  To retrieve:
+(<a href="ACL2____RETRIEVE.html">RETRIEVE</a> :ERROR1)</pre> 
+ If you invoke that command in the ACL2 loop, e.g., <span class="v">(<a href="ACL2____RETRIEVE.html">RETRIEVE</a> :ERROR1)</span>, 
+ then you will be in the <a href="ACL2____PROOF-BUILDER.html">ACL2::proof-builder</a>.  You can run the 
+ <span class="v">prove</span> command there and look at the checkpoints.  Consider the following 
+ (admittedly artificial) example. 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> my-consp (x) (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t)) (<a href="COMMON-LISP____CONSP.html">consp</a> x))
+(<a href="COMMON-LISP____DEFUN.html">defun</a> my-cdr (x) (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (my-consp x))) (<a href="COMMON-LISP____CDR.html">cdr</a> x))
+(<a href="COMMON-LISP____DEFUN.html">defun</a> f1 (x)
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x)
+      (<a href="COMMON-LISP____IF.html">if</a> (my-consp (f1 (<a href="COMMON-LISP____CDR.html">cdr</a> x)))
+          (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CAR.html">car</a> x) (f1 (my-cdr x)))
+        x)
+    x))
+(<a href="ACL2____DEFTHM.html">defthm</a> f1-id (<a href="COMMON-LISP____EQUAL.html">equal</a> (f1 x) x))
+(<a href="ACL2____VERIFY-GUARDS.html">verify-guards</a> f1)
+(<a href="ACL2____IN-THEORY.html">in-theory</a> (<a href="ACL2____DISABLE.html">disable</a> my-consp my-cdr (<a href="ACL2____TAU-SYSTEM.html">tau-system</a>)))
+(<a href="APT____SIMPLIFY.html">simplify</a> f1 :print :info)</pre> 
+ If you run <span class="v">(<a href="ACL2____RETRIEVE.html">RETRIEVE</a> :ERROR1)</span> and then submit <span class="v">PROVE</span>, you'll see the 
+ following checkpoint. 
+ <pre class="code">Goal'
+(<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____AND.html">AND</a> (<a href="COMMON-LISP____CONSP.html">CONSP</a> X) (MY-CONSP (<a href="COMMON-LISP____CDR.html">CDR</a> X)))
+         (MY-CONSP X))</pre> 
+ This checkpoint rather clearly suggests enabling <span class="v">my-consp</span>.  Indeed, you 
+ can do that in the proof-builder: the command <span class="v">(<a href="ACL2____IN-THEORY.html">IN-THEORY</a> (<a href="ACL2____ENABLE.html">ENABLE</a>
+ MY-CONSP))</span> followed by <span class="v">PROVE</span> completes the proof in the proof-builder. 
+ With that information you can exit the proof-builder and successfully run the 
+ following command in the ACL2 loop. 
+ <pre class="code">(<a href="APT____SIMPLIFY.html">simplify</a> f1 :guard-hints (("Goal" :in-theory (<a href="ACL2____ENABLE.html">enable</a> my-consp))))</pre> 
+ </li> 
+ 
+ </ul> 
+ 
+ <h3>Applicability condition failure</h3> 
+ 
+ <p>If the failure is in the <span class="v">:assumptions-preserved</span> applicability 
+ condition, consider supplying <span class="v">:hints</span>, first proving useful rules, or 
+ both.</p> 
+ 
+ <h3>Preserving special behavior such as side-effects</h3> 
+ 
+ <p>Maybe your call of <span class="v">simplify</span> succeeded, but the result failed to 
+ preserve a desired call of <span class="tt"><a href="ACL2____PROG2_42.html">prog2$</a></span>, <span class="tt"><a href="ACL2____EC-CALL.html">ec-call</a></span>, <span class="tt"><a href="ACL2____TIME_42.html">time$</a></span>, or 
+ another such operator that provides special behavior.  See <a href="ACL2____RETURN-LAST-BLOCKERS.html">ACL2::return-last-blockers</a>.</p> 
+ 
+ <h3>Recursion and equivalence relations</h3> 
+ 
+ <p>As of this writing, the <span class="v">simplify</span> transformation does not fully support 
+ the use of the <span class="v">:equiv</span> option for recursive definitions, though it might 
+ succeed on occasion.  Consider the following example.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> f (x)
+  (<a href="COMMON-LISP____AND.html">and</a> x 3))
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> g (x)
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x)
+      (<a href="COMMON-LISP____EQUAL.html">equal</a> (g (<a href="COMMON-LISP____CDR.html">cdr</a> x)) (<a href="COMMON-LISP____CAR.html">car</a> (<a href="COMMON-LISP____CONS.html">cons</a> 3 x)))
+    (f x)))
+
+(<a href="APT____SIMPLIFY.html">simplify</a> g :equiv iff)</pre> 
+ 
+ <p>The result is an error with the following message.</p> 
+ 
+ <pre class="code">ACL2 Error in (<a href="APT____SIMPLIFY.html">APT::SIMPLIFY</a> G ...):  An attempt to simplify the definition
+of G has failed, probably because the definition of the new function,
+G$1, is recursive and the equivalence relation specified by :EQUIV
+is IFF, not EQUAL.  See :DOC apt::simplify-failure.</pre> 
+ 
+ <p>By adding the option <span class="v">:show-only t</span>, we can see the generated 
+ definition:</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">DEFUN</a> G$1 (X)
+       (<a href="COMMON-LISP____DECLARE.html">DECLARE</a> (<a href="ACL2____XARGS.html">XARGS</a> :GUARD T
+                       :MEASURE (<a href="ACL2____ACL2-COUNT.html">ACL2-COUNT</a> X)
+                       :VERIFY-GUARDS NIL))
+       (<a href="COMMON-LISP____IF.html">IF</a> (<a href="COMMON-LISP____CONSP.html">CONSP</a> X)
+           (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (G$1 (<a href="COMMON-LISP____CDR.html">CDR</a> X)) 3)
+           (<a href="COMMON-LISP____AND.html">AND</a> X 3)))</pre> 
+ 
+ <p>In this example, the original and proposed simplified definitions are 
+ actually <i>not</i> Boolean equivalent.  But in some cases, they might be 
+ equivalent but ACL2 fails to prove this.</p> 
+ 
+ <p>A solution for these other cases, where equivalence holds but was not 
+ successfully proved, might be first to prove suitable congruence rules, so 
+ that at each recursive call in the simplified definition (usually the new 
+ definition, as in the error above), it suffices to preserve the specified 
+ congruence relation.  This may eventually be worked into a new applicability 
+ condition.  (A comment about this may be found in the source code for 
+ this :doc topic.)</p> 
+ 
+ <h3>General approaches to unsuccessful invocations of <span class="v">simplify</span>
+</h3> 
+ 
+ <p>Here are several ways to get more information about what is happening.</p> 
+ 
+ <ul> 
+ 
+ <li>Use <span class="v">:print :info</span> to get a running commentary and perhaps a more 
+ detailed error.</li> 
+ 
+ <li>Use <span class="v">:print :all</span> to get even more output.  This maximal level of 
+ output may be distracting, but near the end of it you might find useful 
+ simplification checkpoints, for example from a failed attempt to prove the 
+ measure conjecture.  Those checkpoints may serve, as is common when using 
+ ACL2, to help you to discover additional theorems to prove first, in 
+ particular, to be stored as rewrite rules.</li> 
+ 
+ <li>Use <span class="v">show-simplify</span> with the same arguments as you used for 
+ <span class="v">simplify</span>, to get the event form that is actually submitted by your call 
+ of <span class="v">simplify</span>.  Then use <span class="v">:</span><span class="tt"><a href="ACL2____REDO-FLAT.html">redo-flat</a></span> to get to the failed 
+ event, perhaps using <span class="v">:</span><span class="tt"><a href="ACL2____PBT.html">pbt</a></span> to see which event failed by seeing 
+ which events from <span class="v">show-simplify</span> are now in the <a href="ACL2____WORLD.html">world</a>.  Then p 
+ submit that failed event and see if the output helps you to fix your 
+ <span class="v">simplify</span> call.</li> 
+ 
+ </ul> 
+ 
+ <p>(If you have any suggestions for other steps to take upon failure, by all 
+ means add them here or ask someone to do so!)</p> 
+ 
+ 
+</body>
+</html>

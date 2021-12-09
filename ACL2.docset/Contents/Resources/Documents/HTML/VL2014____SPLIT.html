@@ -1,0 +1,63 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Split</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL2014____SPLIT">Click for Split in the Full Manual</a></h3>
+
+<p>Split up expressions by generating new wires.</p><p>The basic idea of this transformation is to introduce temporary 
+variables for sub-expressions, e.g., we might split up:</p> 
+ 
+<pre class="code">assign w = a + b * c + d;</pre> 
+ 
+<p>into a series of simpler assignments, e.g.,</p> 
+ 
+<pre class="code">assign t1 = b * c;
+assign t2 = a + t1;
+assign w = t2 + d;</pre> 
+ 
+<p>Almost true: we split up expressions until they involve either 0 or 1 
+operations.  The twist is that we don't split up expressions that consist of 
+"mere wiring", e.g., concatenation and bit- or part-selects.  More precisely, 
+we don't split up expressions that are already atomic or <i>sliceable</i>; see 
+<a href="VL2014____EXPR-SLICING.html">expr-slicing</a>.</p> 
+ 
+<p>Splitting up expressions involves creating new wire declarations and 
+assignments to those wires.  Sometimes the new modules are much bigger than the 
+old modules.  We have seen cases where tens of thousands of new wires are 
+introduced.  In fact, this transform was one of our initial motivations for 
+<a href="VL2014____VL-NAMEFACTORY-P.html">name factories</a>.</p> 
+ 
+<p><b>Context.</b> I usually think of expression splitting as a kind of 
+preprocessing step that leads toward <a href="VL2014____OCCFORM.html">occform</a>; occform replaces simple 
+assignments (e.g., like those to the temporary wires above) with module 
+instances, but can't deal with complex expressions.</p> 
+ 
+<p><b>Prerequisites.</b> We expect that <a href="VL2014____ARGRESOLVE.html">argresolve</a> has been run and that 
+<a href="VL2014____EXPRESSION-SIZING.html">expression-sizing</a> has already been done.  Unsized expressions or named 
+arguments will generally lead to fatal <a href="VL2014____WARNINGS.html">warnings</a> being added to the 
+module.</p> 
+ 
+<p><b>Soundness Concerns.</b> If submodule ports are mislabeled, we might end 
+up splitting up an input to a module instance that has backflow.  That is, we 
+could do somethign like this:</p> 
+ 
+<pre class="code">submod foo ( ..., .i(a + b), ...);
+  ---&gt;
+wire[3:0] tmp = a + b;
+submod foo ( ..., .i(tmp), ...);</pre> 
+ 
+<p>And if <span class="v">foo</span> drives <span class="v">i</span>, then we might end up with <span class="v">tmp</span> being X 
+sometimes.  Worse would be if the expression was somethign like <span class="v">a ? b :
+1'bz</span>, in which case the submodule could actually end up putting out a value 
+onto <span class="v">tmp</span>.</p> 
+ 
+<p>I don't really think this is a problem.  I think we're saved because, since 
+a new, fresh temporary wire is going to be used, whether or not that temporary 
+is driven from both sides isn't really relevant.  It can't be used anywhere 
+else in the module or affect anything except for exactly this port.</p>
+</body>
+</html>

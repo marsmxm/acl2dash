@@ -1,0 +1,223 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Introduction-to-the-tau-system</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____INTRODUCTION-TO-THE-TAU-SYSTEM">Click for Introduction-to-the-tau-system in the Full Manual</a></h3>
+
+<p>A decision procedure for runtime types</p><p>This doc topic is the main source of information about the tau 
+ system and discusses the general idea behind the procedure and how to exploit 
+ it.</p> 
+ 
+ <p><i>A ``Type-Checker'' for an Untyped Language</i></p> 
+ 
+ <p>Because ACL2 is an untyped language it is impossible to type check it.  All 
+ functions are total.  An <i>n</i>-ary function may be applied to any 
+ combination of <i>n</i> ACL2 objects.  The syntax of ACL2 stipulates that 
+ <span class="v">(</span><i>fn a1...an</i><span class="v">)</span> is a well-formed term if <i>fn</i> is a function 
+ symbol of <i>n</i> arguments and the <i>ai</i> are well-formed terms.  No 
+ mention is made of the ``types'' of terms.  That is what is meant by saying 
+ ACL2 is an untyped language.</p> 
+ 
+ <p>Nevertheless, the system provides a variety of monadic Boolean function 
+ symbols, like <span class="tt"><a href="ACL2____NATP.html">natp</a></span>, <span class="tt"><a href="COMMON-LISP____INTEGERP.html">integerp</a></span>, <span class="tt"><a href="ACL2____ALISTP.html">alistp</a></span>, etc., that 
+ recognize different ``types'' of objects at runtime.  Users typically define 
+ many more such recognizers for domain-specific ``types.''  Because of the 
+ prevalence of such ``types,'' ACL2 must frequently reason about the inclusion 
+ of one ``type'' in another.  It must also reason about the consequences of 
+ functions being defined so as to produce objects of certain ``types'' when 
+ given arguments of certain other ``types.''</p> 
+ 
+ <p>Because the word ``type'' in computer science tends to imply syntactic or 
+ semantic restrictions on functions, we avoid using that word henceforth. 
+ Instead, we just reason about monadic Boolean predicates.  You may wish to 
+ think of ``tau'' as synonymous with ``type'' but without any suggestion of 
+ syntactic or semantic restrictions.</p> 
+ 
+ <p><i>Design Philosophy</i></p> 
+ 
+ <p>The following basic principles were kept in mind when developing tau 
+ checker and may help you exploit it.</p> 
+ 
+ <p>(1) The tau system is supposed to be a lightweight, fast, and helpful 
+ decision procedure for an elementary subset of the logic focused on monadic 
+ predicates and function signatures.</p> 
+ 
+ <p>(2) Most subgoals produced by the theorem prover are not in any decidable 
+ subset of the logic!  Thus, decision procedures fail to prove the vast 
+ majority of the formulas they see and will be net time-sinks if tried too 
+ often no matter how fast they are.</p> 
+ 
+ <p>Tau reasoning is used by the prover as part of <span class="v">preprocess-clause</span>, one 
+ of the first proof techniques the system tries.  The tau system filters out 
+ ``obvious'' subgoals.  The tau system is only tried when subgoals first enter 
+ the waterfall and when they are stable under simplification.</p> 
+ 
+ <p>(3) The tau system is ``benign'' in the sense that the only way it 
+ contributes to a proof is to eliminate (prove!) subgoals.  It does not 
+ rewrite, simplify, or change formulas.  Tau reasoning is not used by the 
+ rewriter.  The tau system either eliminates a subgoal by proving it or leaves 
+ it unchanged.</p> 
+ 
+ <p>(4) It is impossible to infer automatically the relations between arbitrary 
+ recursively defined predicates and functions.  Thus, the tau system's 
+ knowledge of tau relationships and function signatures is gleaned from 
+ theorems stated by the user and proved by the system.</p> 
+ 
+ <p>(5) Users wishing to build effective ``type-checkers'' for their models 
+ must learn how rules affect the tau system's behavior.  There are two main 
+ forms of tau rules: those that reveal inclusion/exclusion relations between 
+ named tau predicates, e.g., that 16-bit naturals are also 32-bit naturals,</p> 
+ 
+ <pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (n16p x) (n32p x)),</pre> 
+ 
+ <p>and signatures for all relevant functions, e.g., writing a 32-bit natural 
+ to a legal slot in a register file produces a register file:</p> 
+ 
+ <pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____NATP.html">natp</a> n)
+              (<a href="COMMON-LISP_____C3.html">&lt;</a> n 16)
+              (n32p val)
+              (register-filep regs))
+         (register-filep (<a href="ACL2____UPDATE-NTH.html">update-nth</a> n val regs))).</pre> 
+ 
+ <p>For a complete description of acceptable forms see <span class="v">:</span><span class="tt"><a href="ACL2____TAU-SYSTEM.html">tau-system</a></span>.</p> 
+ 
+ <p>(6) The tau system is ``greedy'' in its efforts to augment its database. 
+ Its database is potentially augmented when rules of <i>any</i> 
+ <span class="v">:rule-class</span> (see <span class="v">:</span><span class="tt"><a href="ACL2____RULE-CLASSES.html">rule-classes</a></span>) are proved.  For example, if 
+ you make a <span class="v">:</span><span class="tt"><a href="ACL2____REWRITE.html">rewrite</a></span> or <span class="v">:</span><span class="tt"><a href="ACL2____TYPE-PRESCRIPTION.html">type-prescription</a></span> rule which 
+ expresses a relationship between one tau and another (e.g., that <span class="v">(P x)</span> 
+ implies <span class="v">(<a href="ACL2____Q.html">Q</a> x)</span>), ACL2 will build it into the tau database.  The rule-class 
+ <span class="v">:</span><span class="tt"><a href="ACL2____TAU-SYSTEM.html">tau-system</a></span> can be used to add a rule to the tau database without 
+ adding any other kind of rule.</p> 
+ 
+ <p>(7) Greediness is forced into the design by benignity: the tau system may 
+ ``know'' some fact that the rewriter does not, and because tau reasoning is 
+ not used in rewriting, that missing fact must be conveyed to the rewriter 
+ through some other class of rule, e.g., a <span class="v">:</span><span class="tt"><a href="ACL2____REWRITE.html">rewrite</a></span> or 
+ <span class="v">:</span><span class="tt"><a href="ACL2____TYPE-PRESCRIPTION.html">type-prescription</a></span> or <span class="v">:</span><span class="tt"><a href="ACL2____FORWARD-CHAINING.html">forward-chaining</a></span> rule.  By 
+ making the tau system greedy, we allow the user to program the rewriter and 
+ the tau system simultaneously while keeping them separate.  However, this 
+ means you must keep in mind the effects of a rule on <i>both</i> the rewriter 
+ and the tau system and use <span class="v">:</span><span class="tt"><a href="ACL2____TAU-SYSTEM.html">tau-system</a></span> rules explicitly when you 
+ want to ``talk'' just to the tau system.</p> 
+ 
+ <p>(8) Tau rules are built into the database with as much preprocessing as 
+ possible (e.g., the system transitively closes inclusion/exclusion 
+ relationships at rule-storage time) so the checker can be fast.</p> 
+ 
+ <p>(9) For speed, tau does not track dependencies and is not sensitive to the 
+ enabled/disabled status (see <span class="tt"><a href="ACL2____ENABLE.html">enable</a></span> and <span class="tt"><a href="ACL2____DISABLE.html">disable</a></span>) of rules, 
+ other than <a href="ACL2____EXECUTABLE-COUNTERPART.html">executable-counterpart</a> rules.  Once a fact has been built 
+ into the tau database, the only way to prevent that fact from being used is by 
+ disabling the entire tau system, by disabling <span class="v">(:</span><span class="tt"><a href="ACL2____EXECUTABLE-COUNTERPART.html">executable-counterpart</a></span><span class="v"> tau-system)</span>.  If any tau reasoning is used in a 
+ proof, the rune <span class="v">(:</span><span class="tt"><a href="ACL2____EXECUTABLE-COUNTERPART.html">executable-counterpart</a></span><span class="v"> tau-system)</span> is 
+ reported in the <a href="ACL2____SUMMARY.html">summary</a>.  For a complete list of all the runes in the 
+ tau database, evaluate <span class="v">(get-tau-runes (<a href="ACL2____W.html">w</a> state))</span>.  Any of these 
+ associated theorems could have been used.</p> 
+ 
+ <p>These design criteria are not always achieved!  For example, the tau 
+ system's ``greediness'' can be turned off (see <span class="tt"><a href="ACL2____SET-TAU-AUTO-MODE.html">set-tau-auto-mode</a></span>), the 
+ tau database can be regenerated from scratch to ignore disabled rules (see 
+ <span class="tt"><a href="ACL2____REGENERATE-TAU-DATABASE.html">regenerate-tau-database</a></span>), and disabling the <a href="ACL2____EXECUTABLE-COUNTERPART.html">executable-counterpart</a> of a tau predicate symbol will prevent the tau system 
+ from trying to run the predicate on constants.  The tau system's benignity can 
+ be frustrating since it might ``know'' something the rewriter does not.  More 
+ problematically, the tau system is not always ``fast'' and not always 
+ ``benign!''  The typical way tau reasoning can slow a proof down is by 
+ evaluating expensive tau predicates on constants.  The typical way tau 
+ reasoning can hurt a previously successful proof is by proving some subgoals 
+ (!) and thus causing the remaining subgoals to have different <a href="ACL2____CLAUSE-IDENTIFIER.html">clause-identifier</a>s, thus making explicit hints no longer applicable.  We deal 
+ with such problems in <span class="tt"><a href="ACL2____DEALING-WITH-TAU-PROBLEMS.html">dealing-with-tau-problems</a></span>.</p> 
+ 
+ <p><i>Technical Details</i></p> 
+ 
+ <p>The tau system consists of both a database and an algorithm for using the 
+ database.  The database contains theorems that match certain schemas allowing 
+ them to be stored in the tau database.  Roughly speaking the schemas encode 
+ ``inclusion'' and ``exclusion'' relations, e.g., that <span class="v">natp</span> implies 
+ <span class="v">integerp</span> and that <span class="v">integerp</span> implies not <span class="v">consp</span>, and they encode 
+ ``signatures'' of functions, e.g., theorems that relate the output of a 
+ function to the input, provided only tau predicates are involved.</p> 
+ 
+ <p>By ``tau predicates'' we mean the application of a monadic Boolean-valued 
+ function symbol, the equality of something to a quoted constant, an arithmetic 
+ ordering relation between something and a rational constant, or the logical 
+ negation of such a term.  Here are some examples of tau predicates:</p> 
+ 
+ <pre class="code">(<a href="ACL2____NATP.html">natp</a> i)
+(<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x))
+(<a href="COMMON-LISP____EQUAL.html">equal</a> y 'MONDAY)
+(<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQL.html">eql</a> 23 k))
+(<a href="COMMON-LISP_____C3.html">&lt;</a> 8 max)
+(<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> max 24)</pre> 
+ 
+ <p>Synonyms for <span class="tt"><a href="COMMON-LISP____EQUAL.html">equal</a></span> include <span class="tt"><a href="COMMON-LISP_____D3.html">=</a></span>, <span class="tt"><a href="COMMON-LISP____EQ.html">eq</a></span>, and <span class="tt"><a href="COMMON-LISP____EQL.html">eql</a></span>. 
+ Note that negated equalities are also allowed.  The arithmetic ordering 
+ relations that may be used are <span class="tt"><a href="COMMON-LISP_____C3.html">&lt;</a></span>, <span class="tt"><a href="COMMON-LISP_____C3_D3.html">&lt;=</a></span>, <span class="tt"><a href="COMMON-LISP_____E3_D3.html">&gt;=</a></span>, and <span class="tt"><a href="COMMON-LISP_____E3.html">&gt;</a></span>.  One of the arguments to every arithmetic ordering relation must be an 
+ integer or rational constant for the term to be treated as a tau 
+ predicate.</p> 
+ 
+ <p>A ``tau'' is a data object representing a set of signed (positive or 
+ negative) tau predicates whose meaning is the conjunction of the literals in 
+ the set.</p> 
+ 
+ <p>When we say that a term ``has'' a given tau we mean the term satisfies all 
+ of the recognizers in that tau.</p> 
+ 
+ <p>The tau algorithm is a decision procedure for the logical theory described 
+ (only) by the rules in the database.  The algorithm takes a term and a list of 
+ assumptions mapping subterms (typically variable symbols) to tau, and returns 
+ the tau of the given term.</p> 
+ 
+ <p>When the system is called upon to decide whether a term satisfies a given 
+ monadic predicate, it computes the tau of the term and asks whether the 
+ predicate is in that set.  More generally, to determine if a term satisfies a 
+ tau, <i>s</i>, we compute a tau, <i>r</i>, for the term and ask whether 
+ <i>s</i> is a subset of <i>r</i>.  To determine whether a constant, <i>c</i>, 
+ satisfies tau <i>s</i> we apply each of the literals in <i>s</i> to <i>c</i>. 
+ Evaluation might, of course, be time-consuming for complex user-defined 
+ predicates.</p> 
+ 
+ <p>The tau database contains rules derived from definitions and theorems 
+ stated by the user.  See <span class="v">:</span><span class="tt"><a href="ACL2____TAU-SYSTEM.html">tau-system</a></span> for a description of the 
+ acceptable forms of tau rules.</p> 
+ 
+ <p>To shut off the greedy augmentation of the tau database, see <a href="ACL2____SET-TAU-AUTO-MODE.html">set-tau-auto-mode</a>.  This may be of use to users who wish to tightly control 
+ the rules in the tau database.  To add a rule to the tau database without 
+ adding any other kind of rule, use the rule class <span class="v">:</span><span class="tt"><a href="ACL2____TAU-SYSTEM.html">tau-system</a></span>.</p> 
+ 
+ <p>There are some slight complexities in the design related to how we handle 
+ events with both <span class="v">:tau-system</span> corollaries and corollaries of other 
+ <span class="v">:rule-classes</span>, see <span class="tt"><a href="ACL2____SET-TAU-AUTO-MODE.html">set-tau-auto-mode</a></span>.</p> 
+ 
+ <p>To prevent tau reasoning from being used, disable the <span class="v">:</span><span class="tt"><a href="ACL2____EXECUTABLE-COUNTERPART.html">executable-counterpart</a></span> of <span class="v">tau-system</span>, i.e., execute</p> 
+ 
+ <pre class="code">(<a href="ACL2____IN-THEORY.html">in-theory</a> (<a href="ACL2____DISABLE.html">disable</a> (:executable-counterpart tau-system)))</pre> 
+ 
+ <p>or, equivalently,</p> 
+ 
+ <pre class="code">(<a href="ACL2____IN-THEORY.html">in-theory</a> (<a href="ACL2____DISABLE.html">disable</a> (<a href="ACL2____TAU-SYSTEM.html">tau-system</a>)))</pre> 
+ 
+ <p>To prevent tau from being used in the proof of a particular subgoal, 
+ locally disable the <span class="v">:</span><span class="tt"><a href="ACL2____EXECUTABLE-COUNTERPART.html">executable-counterpart</a></span> of <span class="v">tau-system</span> 
+ with a local <span class="v">:in-theory</span> hint (see <a href="ACL2____HINTS.html">hints</a>).</p> 
+ 
+ <p>The event command <span class="tt"><a href="ACL2____TAU-STATUS.html">tau-status</a></span> is a macro that can be used to toggle 
+ both whether tau reasoning is globally enabled and whether the tau database is 
+ augmented greedily.  For example, the event</p> 
+ 
+ <pre class="code">(<a href="ACL2____TAU-STATUS.html">tau-status</a> :system nil :auto-mode nil)</pre> 
+ 
+ <p>prevents the tau system from being used in proofs and prevents the 
+ augmentation of the tau database by rules other than those explicitly labeled 
+ <span class="v">:</span><span class="tt"><a href="ACL2____TAU-SYSTEM.html">tau-system</a></span>.</p> 
+ 
+ <p>To see what the tau system ``knows'' about a given function symbol see 
+ <a href="ACL2____TAU-DATA.html">tau-data</a>.  To see the entire tau database, see <a href="ACL2____TAU-DATABASE.html">tau-database</a>.  To 
+ regenerate the tau database using only the runes listed in the current enabled 
+ theory, see <a href="ACL2____REGENERATE-TAU-DATABASE.html">regenerate-tau-database</a>.</p>
+</body>
+</html>

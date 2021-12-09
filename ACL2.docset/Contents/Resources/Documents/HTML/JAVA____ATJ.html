@@ -1,0 +1,536 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Atj</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=JAVA____ATJ">Click for Atj in the Full Manual</a></h3>
+
+<p>ATJ (<b>A</b>CL2 <b>T</b>o <b>J</b>ava) 
+          is a Java code generator for ACL2.</p><p>This manual page contains user-level reference documentation for ATJ. 
+     If you are new to ATJ, you should start with the <a href="JAVA____ATJ-TUTORIAL.html">tutorial</a>, which provides user-level information 
+     on how ATJ works and how to use ATJ effectively. 
+     Some of the material in this manual page 
+     will likely be moved to the tutorial, 
+     which is in progress.</p><h3>Introduction</h3><p>ATJ translates ACL2 to Java, 
+     enabling ACL2 code to be used in Java code 
+     (in the sense explained below).</p><p>For instance, ATJ is useful 
+     to generate Java code at the end of an <a href="APT____APT.html">APT</a> program synthesis derivation.</p><p>This manual page provides reference documentation for ATJ. 
+     A separate tutorial in being written, as noted above. 
+     See the files under <span class="v">[books]/kestrel/java/atj/tests/</span> 
+     for examples of use of ATJ.</p><h3>Scope</h3><p>ATJ translates ACL2 named functions to corresponding Java code 
+     whose execution mimics the execution of the ACL2 functions.</p><p>The ACL2 functions accepted by ATJ may manipulate any ACL2 value: <a href="ACL2____CHARACTERS.html">characters</a>, <a href="ACL2____STRINGS.html">strings</a>, <a href="ACL2____SYMBOLS.html">symbols</a>, <a href="ACL2____NUMBERS.html">numbers</a>, and <a href="ACL2____CONSES.html">cons pairs</a>. The Java code that corresponds to the ACL2 functions 
+     manipulates Java representations of the ACL2 values.</p><p>ATJ accepts all the ACL2 functions that 
+     (1) have either an <a href="ACL2____UBODY.html">unnormalized body</a> or an attachment and 
+     (2) either do not have raw Lisp code 
+     or have raw Lisp code but belong to a whitelist 
+     (but also see the <span class="v">:ignore-whitelist</span> option below). 
+     The ACL2 functions with raw Lisp code 
+     are the ones for which <span class="tt"><a href="ACL2____RAWP.html">rawp</a></span> holds; 
+     of these, the ones in the whitelist 
+     are the ones for which <span class="tt"><a href="ACL2____PURE-RAW-P.html">pure-raw-p</a></span> holds. 
+     The unnormalized body of the functions in the whitelist 
+     is functionally equivalent to their raw Lisp code. 
+     The Java code that corresponds to 
+     the ACL2 functions that satisfy conditions (1) and (2) above, 
+     mimics the computations described by their unnormalized body. 
+     In the case of functions 
+     without an unnormalized body but with an attachment, 
+     (a call of) the attached function (on the formal arguments) 
+     plays the role of the unnormalized body.</p><p>ATJ also accepts the ACL2 function <span class="tt"><a href="ACL2____RETURN-LAST.html">return-last</a></span> 
+     (which has raw Lisp code and is not in the whitelist), 
+     but only when its first argument is 
+     <span class="v">acl2::mbe-raw1</span> or <span class="v">acl2::progn</span>. 
+     Calls of the form <span class="v">(<a href="ACL2____RETURN-LAST.html">return-last</a> 'acl2::mbe1-raw ...)</span> 
+     are translated representations of calls of <span class="tt"><a href="ACL2____MBE.html">mbe</a></span>; 
+     ATJ translates to Java 
+     either the <span class="v">:logic</span> or the <span class="v">:exec</span> part of these calls, 
+     as detailed below. 
+     Calls of the form <span class="v">(<a href="ACL2____RETURN-LAST.html">return-last</a> 'acl2::progn ...)</span> 
+     are translated representations 
+     of calls of <span class="tt"><a href="ACL2____PROG2_42.html">prog2$</a></span> and <span class="tt"><a href="ACL2____PROGN_42.html">progn$</a></span>; 
+     ATJ translates to Java the last argument of these calls, 
+     as detailed below.</p><p>ATJ also accepts all the <a href="ACL2____PRIMITIVE.html">ACL2 primitive functions</a>. The Java code that corresponds to these ACL2 functions 
+     has the input/output behavior documented for these functions.</p><p>ATJ accepts both logic-mode and program-mode functions.</p><p>Some ACL2 functions have side effects when executed, 
+     e.g. <span class="tt"><a href="ACL2____HARD-ERROR.html">hard-error</a></span> prints an error message 
+     and returns control to the top level. 
+     All the ACL2 functions with side effects have raw Lisp code 
+     and are not in the whitelist mentioned above. 
+     Therefore, the generated Java code 
+     does not mimic any of the side effects exhibited by ACL2 functions. 
+     In particular, calls of <span class="tt"><a href="ACL2____PROG2_42.html">prog2$</a></span> and <span class="tt"><a href="ACL2____PROGN_42.html">progn$</a></span> are accepted 
+     (as explained above about <span class="tt"><a href="ACL2____RETURN-LAST.html">return-last</a></span> 
+     with first argument <span class="v">acl2::progn</span>) 
+     only if their non-last arguments are free of side effects. 
+     Support for translating ACL2 functions with side effects 
+     to Java code that mimics those side effects 
+     may be added in the future.</p><p>ATJ does not accept functions that access <a href="ACL2____STOBJ.html">stobjs</a>. Support for stobjs, and destructive updates of stobjs, 
+     may be added in the future.</p><p>ATJ does not translate <a href="COMMON-LISP____DEFMACRO.html">macro definitions</a> to Java code. 
+     However, the use of macros in function bodies is fully supported, 
+     because ATJ operates on ACL2 translated terms, 
+     where macros are expanded.</p><p>ATJ does not translate <a href="ACL2____DEFCONST.html">named constant definitions</a> to Java code. 
+     However, the use of named constants in function bodies is fully supported, 
+     because ATJ operates on ACL2 translated terms, 
+     where constants are expanded.</p><p>The generated Java code can be called by external Java code, 
+     but not vice versa. 
+     The ability to have the generated Java code call external Java code 
+     may be added in the future; 
+     this may involve the use of ACL2 stubs corresponding to 
+     the Java code to be invoked by the (Java-translated) ACL2 code.</p><p>External Java code can call the generated Java code 
+     on (Java representations of) explicit ACL2 values. 
+     Access to global variables 
+     like <span class="tt"><a href="ACL2____STATE.html">state</a></span> or user-defined <a href="ACL2____STOBJ.html">stobjs</a> is therefore not supported; 
+     in particular, the generated Java code has no access to 
+     the ACL2/Lisp environment. 
+     Support for global variables, in particular <span class="tt"><a href="ACL2____STATE.html">state</a></span>, 
+     may be added in the future.</p><h3>Approach</h3><p>ATJ is supported by <a href="JAVA____AIJ.html">AIJ</a>, which is a deep embedding in Java 
+     of the executable subset of ACL2 
+     (subject to the limitations outlined above).</p><p>ATJ translates the target ACL2 functions into Java representations, 
+     based on their unnormalized bodies or attachments. 
+     It does so recursively, 
+     starting from the top-level functions specified by the user 
+     and stopping at the ACL2 functions that 
+     either are implemented natively in AIJ 
+     or (under certain conditions; see below) 
+     represent Java primitive operations or primitive array operations. 
+     If a function is encountered that 
+     is not natively implemented in AIJ 
+     and has no unnormalized body and no attachment, 
+     ATJ stops with an error. 
+     If a function is encountered that has raw Lisp code 
+     and is not in the whitelist 
+     (except for the treament of <span class="tt"><a href="ACL2____RETURN-LAST.html">return-last</a></span> explained above), 
+     ATJ stops with an error.</p><p>ATJ generates Java code with public methods to 
+     (1) initialize the AIJ's Java representation of the ACL2 environment and 
+     (2) call the Java representations of the ACL2 functions 
+     on Java representations of ACL2 values 
+     (see the `Generated Java Code' section for details). 
+     AIJ provides public classes and methods to translate 
+     certain Java values to AIJ's Java representations of ACL2 values 
+     and vice versa. 
+     Thus, by loading into the Java Virtual Machine 
+     both AIJ and the Java code generated by ATJ, 
+     external Java code can ``use'' ACL2 code.</p><p>ATJ generates either deeply embedded or shallowly embedded 
+     Java representations of the ACL2 functions. 
+     The choice is controlled by a user option.</p><h4>Deep Embedding</h4><p>In the deep embedding approach, 
+     ATJ generates Java code to build 
+     the deeply embedded ACL2 functions, 
+     and to call and execute them via AIJ's interpreter.</p><p>This deep embedding approach is simple and thus fairly high-assurance. 
+     On the other hand, the Java code is not efficient or idiomatic. 
+     However, the approach may work well for some simple applications.</p><h4>Shallow Embedding</h4><p>In the shallow embedding approach, 
+     ATJ generates Java code that mimics the computations of 
+     the shallowly embedded ACL2 functions, 
+     one Java method for each ACL2 function. 
+     These methods are executed without using AIJ's interpreter. 
+     However, the shallowly embedded ACL2 functions still use 
+     AIJ's representation of the ACL2 values 
+     and AIJ's native implementations of ACL2 functions. 
+     Under certain conditions, 
+     the shallowly embedded ACL2 functions use Java values 
+     that are not AIJ's Java representations of ACL2 values; 
+     see below for details.</p><p>This shallow embedding approach 
+     is more complex than the deep embedding approach, 
+     but produces code that is more efficient and more idiomatic.</p><h3>General Form</h3><pre class="code">(<a href="JAVA____ATJ.html">atj</a> fn1 ... fnp
+     :deep             ...
+     :guards           ...
+     :java-package     ...
+     :java-class       ...
+     :output-dir       ...
+     :tests            ...
+     :ignore-whitelist ...
+     :verbose          ...
+  )</pre><h3>Inputs</h3><p><span class="v">fn1</span>, ..., <span class="v">fnp</span></p><blockquote>
+<p>Names of the target ACL2 functions to be translated to Java.</p>
+<p>Each <span class="v">fni</span> must be a symbol that names a function that 
+      either has an unnormalized body 
+      and no raw Lisp code (unless it is in the whitelist; 
+      but also see the <span class="v">:ignore-whitelist</span> option below), 
+      or has an attachment, 
+      or is natively implemented in AIJ. 
+      Each of these functions must have 
+      no input or output <a href="ACL2____STOBJ.html">stobjs</a>. 
+      Each of these functions must transitively call 
+      (in the unnormalized body or attachment, 
+      if not natively implemented in AIJ) 
+      only functions that satisfy the same constraints, 
+      except for calls of <span class="tt"><a href="ACL2____RETURN-LAST.html">return-last</a></span> as described below.</p>
+<p>None of the <span class="v">fni</span> functions may be <span class="tt"><a href="ACL2____RETURN-LAST.html">return-last</a></span>. 
+      However, the <span class="v">fni</span> functions may transitively call <span class="tt"><a href="ACL2____RETURN-LAST.html">return-last</a></span>, 
+      under two possible conditions:</p>
+<ul>
+<li>The first argument of <span class="tt"><a href="ACL2____RETURN-LAST.html">return-last</a></span> is <span class="v">acl2::mbe-raw1</span>, 
+       i.e. the call results from the translation of <span class="tt"><a href="ACL2____MBE.html">mbe</a></span>. 
+       Even though Java code is generated 
+       for one of the second and third arguments but not for the other one 
+       (based on the <span class="v">:guars</span> input; see below), 
+       the restrictions on called functions, 
+       and in particular the absence of side effects, 
+       are enforced on all the argument of the call.</li>
+<li>The first argument of <span class="tt"><a href="ACL2____RETURN-LAST.html">return-last</a></span> is <span class="v">acl2::progn</span>, 
+       i.e. the call results from the translation of 
+       <span class="tt"><a href="ACL2____PROG2_42.html">prog2$</a></span> or <span class="tt"><a href="ACL2____PROGN_42.html">progn$</a></span>. 
+       Even though Java code is generated 
+       for the last argument of the call 
+       but not for the previous one(s), 
+       the restrictions on called functions, 
+       and in particular the absence of side effects, 
+       are enforced on all the argument of the call.</li>
+</ul>
+<p>If the <span class="v">:deep</span> input is <span class="v">nil</span> and the <span class="v">:guards</span> input is <span class="v">t</span>, 
+      then none of the <span class="v">fni</span> may be 
+      one of the functions listed in <span class="tt"><a href="JAVA_____A2ATJ-JPRIM-FNS_A2.html">*atj-jprim-fns*</a></span> or 
+      one of the functions listed in <span class="tt"><a href="JAVA_____A2ATJ-JPRIMARR-FNS_A2.html">*atj-jprimarr-fns*</a></span>. 
+      These functions are treated specially 
+      in the shallow embedding when guard satisfaction is assumed (see below).</p>
+<p>There must be at least one function, i.e. <span class="v">p</span> &gt; 0. 
+      All the <span class="v">fni</span> names must be distinct.</p>
+</blockquote><p><span class="v">:deep</span>  default <span class="v">nil</span></p><blockquote>
+<p>Chooses the deep or shallow embedding approach described above:</p>
+<ul>
+<li>
+<span class="v">t</span>, for the deep embedding.</li>
+<li>
+<span class="v">nil</span>, for the shallow embedding.</li>
+</ul>
+</blockquote><p><span class="v">:guards</span>  default <span class="v">t</span></p><blockquote>
+<p>Specifies whether the generated code 
+      should assume that all the guards are satisfied or not:</p>
+<ul>
+<li>
+<span class="v">t</span>, to assume that they are satisfied. 
+       In this case, the generated code may run faster; 
+       in particular, only the <span class="v">:exec</span> part of <span class="tt"><a href="ACL2____MBE.html">mbe</a></span> is executed. 
+       Furthermore, if the <span class="v">:deep</span> input is <span class="v">nil</span>, 
+       the Java methods in the generated code 
+       have the argument and return types 
+       specified via <span class="tt"><a href="JAVA____ATJ-MAIN-FUNCTION-TYPE.html">atj-main-function-type</a></span> 
+       and <span class="tt"><a href="JAVA____ATJ-OTHER-FUNCTION-TYPE.html">atj-other-function-type</a></span> 
+       (see the `Generated Java Code' section for more information), 
+       and the generated Java code may manipulate 
+       Java primitive values and Java primitive arrays directly.</li>
+<li>
+<span class="v">nil</span>, to not assume that the guards are satisfied. 
+       In this case, the generated code runs ``in the logic''; 
+       in particular, only the <span class="v">:logic</span> part of <span class="tt"><a href="ACL2____MBE.html">mbe</a></span> is executed.</li>
+</ul>
+<p>Regardless of the value of this input, 
+      the generated code never checks guards. 
+      The difference is whether guards are ignored altogether 
+      (i.e. execution ``in the logic'') 
+      or assumed to hold 
+      (i.e. possibly faster execution). 
+      This input should be <span class="v">t</span> only when generating Java code 
+      from guard-verified ACL2 code. 
+      Furthermore, external Java code that calls the generated code 
+      should do so only with values that satisfy 
+      the guards of the called ACL2 functions, if this input is <span class="v">t</span>. 
+      Otherwise, erroneous computations may occur.</p>
+</blockquote><p><span class="v">:java-package</span>  default <span class="v">nil</span></p><blockquote>
+<p>Name of the Java package of the generated Java code.</p>
+<p>It must be either an ACL2 string or <span class="v">nil</span>. 
+      If it is an ACL2 string, 
+      it must be a valid Java package name consisting of only ASCII characters; 
+      it must also be distinct from AIJ's Java package name, 
+      i.e. <span class="v">edu.kestrel.acl2.aij</span>. 
+      If this input is <span class="v">nil</span>, the generated Java code 
+      is in an unnamed Java package.</p>
+</blockquote><p><span class="v">:java-class</span>  default <span class="v">nil</span></p><blockquote>
+<p>Name of the generated Java class.</p>
+<p>It must be either an ACL2 string or <span class="v">nil</span>. 
+      If it is an ACL2 string, 
+      it must be a valid Java class name consisting of only ASCII characters. 
+      If this input is <span class="v">nil</span>, 
+      the generated Java class is called <span class="v">Acl2Code</span>.</p>
+<p>An additional auxiliary class is generated, 
+      whose name is obtained by appending <span class="v">Environment</span> 
+      at the end of the name of the main class. 
+      This auxiliary class contains boilerplate code 
+      to build a Java representation of the ACL2 environment 
+      (i.e. ACL2 package definitions, 
+      and also ACL2 function definitions if the <span class="v">:deep</span> input is <span class="v">t</span>).</p>
+<p>If the <span class="v">:tests</span> input (see below) is not <span class="v">nil</span>, 
+      a third Java class for testing is generated, 
+      whose name is obtained by appending <span class="v">Tests</span> 
+      at the end of the name of the main class.</p>
+</blockquote><p><span class="v">:output-dir</span>  default <span class="v">"."</span></p><blockquote>
+<p>Path of the directory where 
+      the generated Java files are created.</p>
+<p>It must be an ACL2 string that is 
+      a valid path to a directory in the file system; 
+      the path may be absolute, 
+      or relative to 
+      the <a href="ACL2____CBD.html">current working directory</a>.</p>
+<p>One file per class is generated: 
+      two files if the <span class="v">:tests</span> input is <span class="v">nil</span>, 
+      three files otherwise. 
+      The name of each generated file 
+      is the name of the corresponding class followed by <span class="v">.java</span>. 
+      If the file already exists, it is overwritten.</p>
+</blockquote><p><span class="v">:tests</span>  default <span class="v">nil</span></p><blockquote>
+<p>Optional tests to generate Java code for.</p>
+<p>This input must evaluate to a list of doublets 
+      <span class="v">((name1 term1) ... (nameq termq))</span>, 
+      where each <span class="v">namej</span> is a string consisting of only letters and digits, 
+      and each <span class="v">termj</span> is an untranslated ground term 
+      whose translation is <span class="v">(fn in1 in2 ...)</span>, 
+      where <span class="v">fn</span> is among the target functions <span class="v">fn1</span>, ..., <span class="v">fnp</span>, 
+      <span class="v">fn</span> returns single results (i.e. not <a href="ACL2____MV.html">multiple results</a>) (support for generating tests for functions that return multiple results 
+      will be added in the future), 
+      and each <span class="v">in</span> among <span class="v">in1</span>, <span class="v">in2</span> 
+      satisfies the following conditions:</p>
+<ul>
+<li>If <span class="v">:deep</span> is <span class="v">t</span> or <span class="v">:guards</span> is <span class="v">nil</span>, 
+       then <span class="v">in</span> must be a quoted constant.</li>
+<li>If <span class="v">:deep</span> is <span class="v">nil</span> and <span class="v">:guards</span> is <span class="v">t</span>, 
+       then requirements on <span class="v">in</span> depend on the type assigned, 
+       via <span class="tt"><a href="JAVA____ATJ-MAIN-FUNCTION-TYPE.html">atj-main-function-type</a></span>, 
+       to the input of <span class="v">fn</span> corresponding to <span class="v">in</span>:<ul>
+<li>If the type is <span class="v">:a...</span>, 
+         then <span class="v">in</span> must be a quoted constant.</li>
+<li>If the type is <span class="v">:jboolean</span>, 
+         then <span class="v">in</span> must be a term <span class="v">(<a href="JAVA____BOOLEAN-VALUE.html">java::boolean-value</a> &lt;boolean&gt;)</span> 
+         where <span class="v">&lt;boolean&gt;</span> is a quoted boolean (i.e. <span class="v">t</span> or <span class="v">nil</span>).</li>
+<li>If the type is <span class="v">:jchar</span>, 
+         then <span class="v">in</span> must be a term <span class="v">(<a href="JAVA____CHAR-VALUE.html">java::char-value</a> &lt;char&gt;)</span> 
+         where <span class="v">&lt;char&gt;</span> is a quoted unsigned 16-bit integer.</li>
+<li>If the type is <span class="v">:jbyte</span>, 
+         then <span class="v">in</span> must be a term <span class="v">(<a href="JAVA____BYTE-VALUE.html">java::byte-value</a> &lt;byte&gt;)</span> 
+         where <span class="v">&lt;byte&gt;</span> is a quoted signed 8-bit integer.</li>
+<li>If the type is <span class="v">:jshort</span>, 
+         then <span class="v">in</span> must be a term <span class="v">(<a href="JAVA____SHORT-VALUE.html">java::short-value</a> &lt;short&gt;)</span> 
+         where <span class="v">&lt;short&gt;</span> is a quoted signed 16-bit integer.</li>
+<li>If the type is <span class="v">:jint</span>, 
+         then <span class="v">in</span> must be a term <span class="v">(<a href="JAVA____INT-VALUE.html">java::int-value</a> &lt;int&gt;)</span> 
+         where <span class="v">&lt;int&gt;</span> is a quoted signed 32-bit integer.</li>
+<li>If the type is <span class="v">:jlong</span>, 
+         then <span class="v">in</span> must be a term <span class="v">(<a href="JAVA____LONG-VALUE.html">java::long-value</a> &lt;long&gt;)</span> 
+         where <span class="v">&lt;long&gt;</span> is a quoted signed 64-bit integer.</li>
+<li>If the type is <span class="v">:jboolean[]</span>, 
+         then <span class="v">in</span> must be a term 
+         <span class="v">(<a href="JAVA____BOOLEAN-ARRAY-NEW-INIT.html">java::boolean-array-new-init</a> &lt;booleans&gt;)</span> 
+         where <span class="v">&lt;booleans&gt;</span> is the translation of 
+         a term <span class="v">(<a href="COMMON-LISP____LIST.html">list</a> &lt;elem1&gt; &lt;elem2&gt; ...)</span> 
+         where each <span class="v">&lt;elem&gt;</span> is a term <span class="v">(<a href="JAVA____BOOLEAN-VALUE.html">java::boolean-value</a> &lt;boolean&gt;)</span> 
+         as in the case above in which the type is <span class="v">:jboolean</span>.</li>
+<li>If the type is <span class="v">:jchar[]</span>, 
+         then <span class="v">in</span> must be a term 
+         <span class="v">(<a href="JAVA____CHAR-ARRAY-NEW-INIT.html">java::char-array-new-init</a> &lt;chars&gt;)</span> 
+         where <span class="v">&lt;chars&gt;</span> is the translation of 
+         a term <span class="v">(<a href="COMMON-LISP____LIST.html">list</a> &lt;elem1&gt; &lt;elem2&gt; ...)</span> 
+         where each <span class="v">&lt;elem&gt;</span> is a term <span class="v">(<a href="JAVA____CHAR-VALUE.html">java::char-value</a> &lt;char&gt;)</span> 
+         as in the case above in which the type is <span class="v">:jchar</span>.</li>
+<li>If the type is <span class="v">:jbyte[]</span>, 
+         then <span class="v">in</span> must be a term 
+         <span class="v">(<a href="JAVA____BYTE-ARRAY-NEW-INIT.html">java::byte-array-new-init</a> &lt;bytes&gt;)</span> 
+         where <span class="v">&lt;bytes&gt;</span> is the translation of 
+         a term <span class="v">(<a href="COMMON-LISP____LIST.html">list</a> &lt;elem1&gt; &lt;elem2&gt; ...)</span> 
+         where each <span class="v">&lt;elem&gt;</span> is a term <span class="v">(<a href="JAVA____BYTE-VALUE.html">java::byte-value</a> &lt;byte&gt;)</span> 
+         as in the case above in which the type is <span class="v">:jbyte</span>.</li>
+<li>If the type is <span class="v">:jshort[]</span>, 
+         then <span class="v">in</span> must be a term 
+         <span class="v">(<a href="JAVA____SHORT-ARRAY-NEW-INIT.html">java::short-array-new-init</a> &lt;short&gt;)</span> 
+         where <span class="v">&lt;short&gt;</span> is the translation of 
+         a term <span class="v">(<a href="COMMON-LISP____LIST.html">list</a> &lt;elem1&gt; &lt;elem2&gt; ...)</span> 
+         where each <span class="v">&lt;elem&gt;</span> is a term <span class="v">(<a href="JAVA____SHORT-VALUE.html">java::short-value</a> &lt;short&gt;)</span> 
+         as in the case above in which the type is <span class="v">:jshort</span>.</li>
+<li>If the type is <span class="v">:jint[]</span>, 
+         then <span class="v">in</span> must be a term 
+         <span class="v">(<a href="JAVA____INT-ARRAY-NEW-INIT.html">java::int-array-new-init</a> &lt;ints&gt;)</span> 
+         where <span class="v">&lt;ints&gt;</span> is the translation of 
+         a term <span class="v">(<a href="COMMON-LISP____LIST.html">list</a> &lt;elem1&gt; &lt;elem2&gt; ...)</span> 
+         where each <span class="v">&lt;elem&gt;</span> is a term <span class="v">(<a href="JAVA____INT-VALUE.html">java::int-value</a> &lt;int&gt;)</span> 
+         as in the case above in which the type is <span class="v">:jint</span>.</li>
+<li>If the type is <span class="v">:jlong[]</span>, 
+         then <span class="v">in</span> must be a term 
+         <span class="v">(<a href="JAVA____LONG-ARRAY-NEW-INIT.html">java::long-array-new-init</a> &lt;longs&gt;)</span> 
+         where <span class="v">&lt;longs&gt;</span> is the translation of 
+         a term <span class="v">(<a href="COMMON-LISP____LIST.html">list</a> &lt;elem1&gt; &lt;elem2&gt; ...)</span> 
+         where each <span class="v">&lt;elem&gt;</span> is a term <span class="v">(<a href="JAVA____LONG-VALUE.html">java::long-value</a> &lt;long&gt;)</span> 
+         as in the case above in which the type is <span class="v">:jlong</span>.</li>
+</ul>
+</li>
+</ul>
+<p>All the <span class="v">namej</span> strings must be distinct.</p>
+<p>Each doublet <span class="v">(namej termj)</span> specifies a test, 
+      in which the result of <span class="v">(fn in1 in2 ...)</span> calculated by ACL2 
+      is compared with the result of the same call 
+      calculated via the generated Java code for <span class="v">fn</span>. 
+      These tests can be run via additional generated Java code 
+      (see below).</p>
+<p>Note that the <span class="v">:tests</span> input is evaluated.</p>
+<p>Test inputs of the form 
+      <span class="v">(<a href="JAVA____BOOLEAN-VALUE.html">java::boolean-value</a> &lt;boolean&gt;)</span>, 
+      <span class="v">(<a href="JAVA____CHAR-VALUE.html">java::char-value</a> &lt;char&gt;)</span>, 
+      <span class="v">(<a href="JAVA____BYTE-VALUE.html">java::byte-value</a> &lt;byte&gt;)</span>, 
+      <span class="v">(<a href="JAVA____SHORT-VALUE.html">java::short-value</a> &lt;short&gt;)</span>, 
+      <span class="v">(<a href="JAVA____INT-VALUE.html">java::int-value</a> &lt;int&gt;)</span>, 
+      <span class="v">(<a href="JAVA____LONG-VALUE.html">java::long-value</a> &lt;long&gt;)</span>, 
+      <span class="v">(<a href="JAVA____BOOLEAN-ARRAY-NEW-INIT.html">java::boolean-array-new-init</a> &lt;booleans&gt;)</span>, 
+      <span class="v">(<a href="JAVA____CHAR-ARRAY-NEW-INIT.html">java::char-array-new-init</a> &lt;chars&gt;)</span>, 
+      <span class="v">(<a href="JAVA____BYTE-ARRAY-NEW-INIT.html">java::byte-array-new-init</a> &lt;bytes&gt;)</span>, 
+      <span class="v">(<a href="JAVA____SHORT-ARRAY-NEW-INIT.html">java::short-array-new-init</a> &lt;shorts&gt;)</span>, 
+      <span class="v">(<a href="JAVA____INT-ARRAY-NEW-INIT.html">java::int-array-new-init</a> &lt;ints&gt;)</span>, or 
+      <span class="v">(<a href="JAVA____LONG-ARRAY-NEW-INIT.html">java::long-array-new-init</a> &lt;longs&gt;)</span> 
+      can be used only for ACL2 functions that have 
+      the ATJ type 
+      <span class="v">:jboolean</span>, 
+      <span class="v">:jchar</span>, 
+      <span class="v">:jbyte</span>, 
+      <span class="v">:jshort</span>, 
+      <span class="v">:jint</span>, 
+      <span class="v">:jlong</span>, 
+      <span class="v">:jboolean[]</span>, 
+      <span class="v">:jchar[]</span>, 
+      <span class="v">:jbyte[]</span>, 
+      <span class="v">:jshort[]</span>, 
+      <span class="v">:jint[]</span>, or 
+      <span class="v">:jlong[]</span> 
+      assigned to the corresponding argument 
+      via <span class="tt"><a href="JAVA____ATJ-MAIN-FUNCTION-TYPE.html">atj-main-function-type</a></span>.</p>
+</blockquote><p><span class="v">:ignore-whitelist</span>  default <span class="v">nil</span>.</p><blockquote><p>If <span class="v">t</span>, this tells ATJ to ignore 
+      the whitelist of functions with raw Lisp code, 
+      i.e. to accept any function with raw Lisp code, 
+      provided that it has an unnormalized body. 
+      This means that any side effects that happen in ACL2 execution 
+      will not happen in the generated Java code. 
+      This should be only used in special circumstances, 
+      e.g. when the non-whitelisted functions 
+      are unreachable under guard verification.</p></blockquote><p><span class="v">:verbose</span>  default <span class="v">nil</span></p><blockquote>
+<p>Controls the amount of screen output:</p>
+<ul>
+<li>
+<span class="v">t</span>, to show all the output.</li>
+<li>
+<span class="v">nil</span>, to suppress all the non-error output.</li>
+</ul>
+</blockquote><h3>Generated Java Code</h3><p>ATJ generates a Java file that contains 
+     a single public class named as specified by the <span class="v">:java-class</span> input, 
+     in the package specified by the <span class="v">:java-package</span> input.</p><pre class="code">// if :deep is t:
+public class &lt;name&gt; {
+    ...
+    public static void initialize() ...
+    public static Acl2Value
+        call(Acl2Symbol function, Acl2Value[] arguments) ...
+}
+
+// if :deep is nil:
+public class &lt;name&gt; {
+    ...
+    public static void initialize() ...
+    public static class &lt;pkg&gt; {
+        public static &lt;type&gt; &lt;fn&gt;(&lt;type&gt; ...) ...
+    }
+    // other public static classes with public static methods
+}</pre><p>This Java class has a public static method <span class="v">initialize</span> 
+     to initialize the relevant portions of the ACL2 environment. 
+     This public method must be called just once, 
+     before calling the other public methods described below. 
+     This <span class="v">initialize</span> method should be also called 
+     before calling any of the public methods provided by AIJ, 
+     because AIJ itself relies on this initialization to work properly. 
+     This method is actually empty, 
+     but calling it ensures that the class is initialized: 
+     it is the class's static initializer 
+     that performs the actual initialization.</p><p>In the deep embedding approach, 
+     the Java class also has a public static method <span class="v">call</span> 
+     to call an ACL2 function on some ACL2 values. 
+     The method takes as arguments 
+     the name of the ACL2 function to call 
+     and an array of ACL2 values, 
+     and returns an ACL2 value. 
+     The called ACL2 function must be among <span class="v">fn1</span>, ..., <span class="v">fnp</span> 
+     and the functions that they transitively call, 
+     or it may be natively implemented in AIJ.</p><p>In the shallow embedding approach, 
+     the Java class contains public static methods 
+     for the functions among <span class="v">fn1</span>, ..., <span class="v">fnp</span>, 
+     the functions that they transitively call 
+     (except for the functions in 
+     <span class="tt"><a href="JAVA_____A2ATJ-JPRIM-FNS_A2.html">*atj-jprim-fns*</a></span> and <span class="tt"><a href="JAVA_____A2ATJ-JPRIMARR-FNS_A2.html">*atj-jprimarr-fns*</a></span>, 
+     when <span class="v">:deep</span> is <span class="v">nil</span> and <span class="v">:guards</span> is <span class="v">t</span>) 
+     and the ACL2 functions natively implemented in AIJ 
+     (the latter are just wrappers of the native implementations). 
+     Each method has the same number of parameters as the ACL2 function. 
+     If <span class="v">:guards</span> is <span class="v">nil</span>, 
+     there is exactly one method for each ACL2 function; 
+     that method's arguments all have types <span class="v">Acl2Value</span>, 
+     while the return type is 
+     either <span class="v">Acl2Value</span> if the function returns a single result 
+     or <span class="v">MV_Acl2Value_..._Acl2Value</span> if the function returns <a href="ACL2____MV.html">multiple results</a> where <span class="v">_Acl2Value</span> is repeated for the number of results. 
+     If <span class="v">:guards</span> is <span class="v">t</span>, 
+     for each ACL2 function there are as many overloaded methods 
+     as the number of function types associated to the function 
+     via <span class="tt"><a href="JAVA____ATJ-MAIN-FUNCTION-TYPE.html">atj-main-function-type</a></span> 
+     and <span class="tt"><a href="JAVA____ATJ-OTHER-FUNCTION-TYPE.html">atj-other-function-type</a></span>: 
+     each of these function types determines the argument and return types 
+     of the corresponding overloaded method, 
+     with each argument having the corresponding function input type 
+     and the return type being 
+     either the single output type if the function returns a single result 
+     or <span class="v">MV_&lt;type1&gt;_..._&lt;typen&gt;</span> if the function returns <a href="ACL2____MV.html">multiple results</a> where each <span class="v">&lt;typei&gt;</span> is determined from 
+     the corresponding function output type. 
+     These methods are declared in nested public classes, 
+     one class for each ACL2 package: 
+     each function's method is in the corresponding package's class. 
+     The mapping between these Java class and method names 
+     and the corresponding ACL2 package and function names 
+     is displayed if <span class="v">:verbose</span> is <span class="v">t</span>.</p><p>ATJ also generated a Java file that contains 
+     a single package-private class whose name is 
+     the name of the main class (described above) followed by <span class="v">Environment</span>. 
+     This additional Java class contains code 
+     to initialize the ACL2 environment: 
+     this code is executed by invoking 
+     the <span class="v">initialize()</span> method of the main class described above.</p><h4>Optional Test Class</h4><p>If the <span class="v">:tests</span> input (see above) is not <span class="v">nil</span>, 
+     ATJ also generates an additional Java file that contains 
+     a single public class named as specified in 
+     the description of the <span class="v">:java-class</span> input above, 
+     in the package specified by the <span class="v">:java-package</span> input.</p><pre class="code">public class &lt;name&gt;Tests {
+   ...
+    public static void main(String[] args) ...
+}</pre><p>This Java class includes code 
+     for each test <span class="v">(namej termj)</span> 
+     specified via the <span class="v">:tests</span> input (see above). 
+     The code for each test prints <span class="v">namej</span>, 
+     evaluates the call <span class="v">(fn qc1 1c2 ...)</span> (which <span class="v">termj</span> translates to) 
+     in AIJ (via the <span class="v">call</span> public method described above), 
+     compares the resulting value with the one that ACL2 returns 
+     (which is calculated when ATJ is run), 
+     and prints a success or failure message 
+     depending on whether the comparison succeeds or fails.</p><p>This Java class has a public static <span class="v">main</span> method that 
+     calls the <span class="v">initialize</span> public method described above 
+     and then executes the code to run the tests described just above. 
+     Thus, this test class can be invoked as a Java application. 
+     This <span class="v">main</span> method also prints a final message saying whether 
+     all the tests passed or there were any failures. 
+     If all the tests passed, the method exits the JVM with return code 0; 
+     otherwise, it exits the JVM with return code 1, 
+     which is an error code when the test class 
+     is invoked as a Java application in a shell script.</p><h4>Java Version</h4><p>ATJ generates Java 8 code. 
+     This means that the code can be compiled 
+     using a compiler for Java 8 or later.</p><h3>Compiling and Running the Java Code</h3><p>The generated Java code can be compiled and run as any other Java code. 
+     The <span class="v">.jar</span> file for <a href="JAVA____AIJ.html">AIJ</a> must be in the classpath: 
+     this file is at 
+     <span class="v">[books]/kestrel/java/aij/java/out/artifacts/AIJ_jar/AIJ.jar</span>. 
+     The files <span class="v">compile.sh</span> and <span class="v">run.sh</span> 
+     under <span class="v">[books]/kestrel/java/atj/tests/</span> 
+     contains examples of command to compile and run the code. 
+     See <a href="JAVA____AIJ.html">the AIJ documentation</a> for instructions on how to generate the <span class="v">.jar</span> file.</p><p>When the <span class="v">:deep</span> input is <span class="v">t</span>, 
+     (the Java representations of) the ACL2 functions 
+     are evaluated via AIJ's recursive interpreter: 
+     evaluating recursive ACL2 functions on sufficiently large inputs 
+     may cause a stack overflow error in Java. 
+     When the <span class="v">:deep</span> input is <span class="v">nil</span>, 
+     recursive ACL2 functions are translated to recursive Java methods, 
+     except for tail-recursive functions, which are translated to loops: 
+     calling these recursive methods on sufficiently large inputs 
+     may cause a stack overflow error in Java. 
+     These stack overflow issues may be mitigated 
+     by passing a larger stack size to the Java Virtual Machine 
+     (via the <span class="v">-Xss</span> option to the <span class="v">java</span> command; 
+     see the comments in the file <span class="v">[books]/kestrel/atj/tests/run.sh</span>), 
+     or, when <span class="v">:deep</span> is <span class="v">nil</span>, 
+     by making all the recursive ACL2 functions tail-recursive 
+     (e.g. via <a href="APT____TAILREC.html">APT's tail recursion transformation</a>) prior to generating Java code.</p>
+</body>
+</html>

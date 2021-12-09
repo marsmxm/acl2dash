@@ -1,0 +1,87 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Deflock</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____DEFLOCK">Click for Deflock in the Full Manual</a></h3>
+
+<p>Define a wrapper macro that provides mutual exclusion in ACL2(p)</p><p>This <a href="COMMON-LISP____DOCUMENTATION.html">documentation</a> topic relates to the experimental 
+ extension of ACL2 supporting parallel evaluation and proof; see <a href="ACL2____PARALLELISM.html">parallelism</a>.</p> 
+ 
+ <pre class="code">Example Form:
+(<a href="ACL2____DEFLOCK.html">deflock</a> *my-lock*)
+
+General Form:
+(<a href="ACL2____DEFLOCK.html">deflock</a> *symbol*)</pre> 
+ 
+ <p>where <span class="v">*symbol*</span> is a symbol whose first and last characters are both 
+ the character <span class="v">#\*</span>.</p> 
+ 
+ <p>A call of this macro generates a definition of another macro, named 
+ <span class="v">with-&lt;modified-lock-symbol&gt;</span>, where <span class="v">&lt;modified-lock-symbol&gt;</span> is the 
+ given symbol with the leading and trailing <span class="v">*</span> characters removed.  This 
+ newly defined macro will guarantee mutually exclusive execution when called in 
+ the body of the raw Lisp definition of a function, as is typically the case 
+ for <a href="ACL2____GUARD.html">guard</a>-verified functions, for <span class="v">:</span><span class="tt"><a href="ACL2____PROGRAM.html">program</a></span> mode functions, 
+ and for calls of macro <span class="tt"><a href="ACL2____TOP-LEVEL.html">top-level</a></span>.  (See <a href="ACL2____GUARD-EVALUATION-TABLE.html">guard-evaluation-table</a> 
+ for details of how raw Lisp code might not be invoked when guard-checking (see 
+ <a href="ACL2____SET-GUARD-CHECKING.html">set-guard-checking</a>) has value <span class="v">:none</span> or <span class="v">:all</span>.)  Note that this 
+ macro is also simply the identity when invoked directly in the top-level loop; 
+ see <a href="ACL2____TOP-LEVEL.html">top-level</a> for a way to avoid this issue, and see <a href="ACL2____PARALLELISM-AT-THE-TOP-LEVEL.html">parallelism-at-the-top-level</a> for a general discussion of this issue for calls 
+ of <a href="ACL2____PARALLELISM.html">parallelism</a> primitives.</p> 
+ 
+ <p>To see how mutual exclusion is guaranteed, consider the raw Lisp code 
+ generated for the macro, <span class="v">with-&lt;modified-lock-symbol&gt;</span>, that is introduced 
+ by a call of <span class="v">deflock</span>.  This code uses a lock (with the given 
+ <span class="v">*symbol*</span> as its name), which guarantees that for any two forms that are 
+ each in the scope of a call of <span class="v">with-&lt;modified-lock-symbol&gt;</span>, the forms do 
+ not execute concurrently.</p> 
+ 
+ <p>Note that a call of <span class="v">deflock</span> expands into the application of <span class="v">progn</span> 
+ to two events, as illustrated below.</p> 
+ 
+ <pre class="code">ACL2 !&gt;:trans1 (<a href="ACL2____DEFLOCK.html">deflock</a> *my-cw-lock*)
+ (<a href="COMMON-LISP____PROGN.html">PROGN</a> (<a href="ACL2____TABLE.html">TABLE</a> LOCK-TABLE '*MY-CW-LOCK* T)
+        (<a href="COMMON-LISP____DEFMACRO.html">DEFMACRO</a> WITH-MY-CW-LOCK (<a href="COMMON-LISP_____62REST.html">&amp;REST</a> ARGS)
+                  (<a href="COMMON-LISP____LIST_A2.html">LIST*</a> 'WITH-LOCK '*MY-CW-LOCK* ARGS)))
+ACL2 !&gt;</pre> 
+ 
+ <p>Thus, <span class="v">deflock</span> forms are legal embedded event forms (see <a href="ACL2____EMBEDDED-EVENT-FORM.html">embedded-event-form</a>) for <a href="ACL2____BOOKS.html">books</a> as well as <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span> and 
+ <span class="tt"><a href="COMMON-LISP____PROGN.html">progn</a></span> <a href="ACL2____EVENTS.html">events</a>.</p> 
+ 
+ <p>The following log shows a lock in action.  Recall that locks work as 
+ expected in <a href="ACL2____GUARD.html">guard</a>-verified and <span class="v">:</span><span class="tt"><a href="ACL2____PROGRAM.html">program</a></span> mode functions; 
+ they do not, however, work in <span class="v">:</span><span class="tt"><a href="ACL2____LOGIC.html">logic</a></span> mode functions that have not 
+ been guard-verified, as illustrated below.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____DEFLOCK.html">deflock</a> *my-cw-lock*)
+[[.. output omitted ..]]
+ WITH-MY-CW-LOCK
+ACL2 !&gt;(<a href="COMMON-LISP____DEFUN.html">defun</a> foo (n)
+         (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____NATP.html">natp</a> n) :verify-guards nil))
+         (<a href="ACL2____PLET.html">plet</a> ((x1 (with-my-cw-lock (<a href="ACL2____CW.html">cw</a> "~x0" (<a href="COMMON-LISP____MAKE-LIST.html">make-list</a> n))))
+                (x2 (with-my-cw-lock (<a href="ACL2____CW.html">cw</a> "~x0" (<a href="COMMON-LISP____MAKE-LIST.html">make-list</a> n)))))
+               (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____NULL.html">null</a> x1) (<a href="COMMON-LISP____NULL.html">null</a> x2))))
+[[.. output omitted ..]]
+ FOO
+ACL2 !&gt;(foo 20)
+(NIL NIL NIL NIL( NIL NIL NIL NIL NIL NILNIL  NIL NILNIL  NIL NILNIL
+     NIL NILNIL NIL  NIL NILNIL  NIL NIL
+NIL      NILNIL  NIL NILNIL )
+NIL NIL NIL NIL NIL NIL NIL NIL)
+T
+ACL2 !&gt;(<a href="ACL2____VERIFY-GUARDS.html">verify-guards</a> foo)
+[[.. output omitted ..]]
+ FOO
+ACL2 !&gt;(foo 20)
+(NIL NIL NIL NIL NIL NIL NIL NIL NIL NIL
+     NIL NIL NIL NIL NIL NIL NIL NIL NIL NIL)
+(NIL NIL NIL NIL NIL NIL NIL NIL NIL NIL
+     NIL NIL NIL NIL NIL NIL NIL NIL NIL NIL)
+T
+ACL2 !&gt;</pre>
+</body>
+</html>

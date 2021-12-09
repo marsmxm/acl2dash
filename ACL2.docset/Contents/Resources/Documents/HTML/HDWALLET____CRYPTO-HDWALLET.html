@@ -1,0 +1,166 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Crypto-hdwallet</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=HDWALLET____CRYPTO-HDWALLET">Click for Crypto-hdwallet in the Full Manual</a></h3>
+
+<p>A hierarchical deterministic wallet for cryptocurrencies.</p><h3>Overview</h3><p>This wallet is a simple proof of concept: 
+     it is not meant as a product 
+     to use with keys that control access to significant assets. 
+     Nonetheless, due to its formal basis in the ACL2 theorem prover, 
+     it could serve as a starting point for 
+     a high-assurance wallet product.</p><p>This wallet is meant for use on an air-gapped machine. 
+     It provides two basic functions: key generation and transaction signing. 
+     Thus, keys can be generated and used for signing transacions: 
+     the data of the transaction to sign and the signed transaction 
+     must be passed between the air-gapped machine where this wallet runs 
+     and an Internet-connected machine that submits the signed transactions. 
+     The private keys never leave the air-gapped machine. 
+     Currently, the wallet does not encrypt these keys, which are stored in 
+     plaintext in the file system: therefore, the air-gapped machine should 
+     use disk encryption to protect the keys at rest. 
+     Currently keys and transactions only for the Ethereum mainnet are supported.</p><p>The wallet is hierarchical deterministic, according to <a href="BITCOIN____BIP32.html">BIP 32</a>. It uses a mnemonic word sequence according to <a href="BITCOIN____BIP39.html">BIP 39</a>. Its internal structure is compliant with <a href="BITCOIN____BIP43.html">BIP 43</a> and <a href="BITCOIN____BIP44.html">BIP 44</a>.</p><p>The wallet can be run by a command line interface shell script 
+     that runs a Docker image containing the wallet code. 
+     For details on obtaining, installing, and running the wallet see <a href="https://github.com/acl2/acl2/tree/master/books/kestrel/hdwallet/README.md" target="_blank"><nobr>the README in GitHub<img src="../Icon_External_Link.png" title="External link to https://github.com/acl2/acl2/tree/master/books/kestrel/hdwallet/README.md"></nobr></a>. The following is a technical discussion of the current wallet design.</p><h3>State</h3><p>The state of the wallet consists of zero or more private keys 
+     derived from a seed as in BIP 32. 
+     The seed is derived from an entropy value, or a corresponding mnemonic, 
+     as in BIP 39. 
+     Internally, each key has a path of the form</p><pre class="code">m / 44' / 60' / 0' / 0 / address_index</pre><p>where:</p><ul>
+<li>
+<span class="v">44'</span> is the BIP 43 purpose index for BIP 44.</li>
+<li>
+<span class="v">60'</span> is the coin type index for the Ethereum mainnet, 
+      as prescribed by <a href="https://github.com/satoshilabs/slips/blob/master/slip-0044.md" target="_blank"><nobr>SLIP (Satoshi Labs Improvement Proposal) 44<img src="../Icon_External_Link.png" title="External link to https://github.com/satoshilabs/slips/blob/master/slip-0044.md"></nobr></a>. This wallet currently supports 
+      transactions only for the Ethereum mainnet, 
+      as mentioned above.</li>
+<li>
+<span class="v">0'</span> is the default account index, according to BIP 44. 
+      The wallet currently supports only this default account.</li>
+<li>
+<span class="v">0</span> is the external chain index, according to BIP 44. 
+      For Ethereum, unlike Bitcoin, 
+      there should be no need for an internal chain index, 
+      since transactions involve no change back to the payer.</li>
+<li>
+<span class="v">address_index</span> is an address index 0, 1, 2, ... 
+      Each of these has an associated Ethereum account and address.</li>
+</ul><p>Thus, the BIP 32 key tree in the wallet consists of 
+     a ``line'' from the root key to the external chain key, 
+     with zero or more children under that.</p><p>The state of the wallet also includes a counter 
+     for the number of address indices used so far. 
+     This is normally one above the largest address index in the key tree, 
+     except for the rare cases in which an address key derivation fails 
+     and that index must be skipped. 
+     This counter is normally redundant, but not always.</p><h3>Initialization</h3><p>The wallet provides two commands to initialize the wallet. 
+     The first command initializes the wallet 
+     from an entropy value and a passphrase, 
+     as described in BIP 39. 
+     Besides creating the initial key tree (initially without address keys), 
+     this command also outputs the mnemonic corresponding to the entropy value. 
+     This may be used by the second initialization command 
+     to reconstruct (i.e. re-initialize) the wallet, 
+     from the mnemonic and the passphrase, 
+     also as described in BIP 39.</p><p>It is expected that the user will initially use the first initialization command, 
+     and use the second initialization command only if and when the wallet must be re-created. 
+     The wallet currently does not provide facilities 
+     to generate a securely random entropy: 
+     the user must use external means for that, 
+     and pass the entropy to the wallet.</p><p>In rare cases, the initialization of the wallet from entropy and passphrase 
+     may fail, due to the failure to derive some key 
+     on the ``line'' from the root (master) key to the external chain key. 
+     In this case, the user must try again 
+     with a slightly different entropy or passphrase. 
+     Obviously, 
+     if a particular entropy and passphrase succeed in creating the wallet 
+     with the first initialization command, 
+     then the mnemonic corresponding to that entropy and the same passphrase 
+     will also succeed in creating the same wallet 
+     using the second initialization command.</p><h3>Key Generation</h3><p>Once the wallet is initialized as explained above, 
+     the user must create one or more address keys 
+     in order to sign transactions (see below). 
+     The wallet provides a command to generate the next address key, 
+     namely the key whose index is the aforementioned counter 
+     that is part of the wallet state along with the key tree. 
+     Since the counter is initially 0, 
+     the first address key to be generated is the one with index 0, 
+     then index 1, then index 2, etc.</p><p>Normally, the generation of an address key succeeds. 
+     In this case, besides modifying the internal state of the wallet, 
+     the command also outputs the index of the key 
+     (so that the user does not need to keep track of the counter, 
+     or next index), 
+     as well as the Ethereum address corresponding to the key. 
+     The address is derived from the public key 
+     (as explained in the Ethereum Yellow Paper), 
+     which is derived from the private key 
+     (as known in elliptic curve cryptography).</p><p>In rare cases, the generation of an address key may fail. 
+     In this case, the address index is simply skipped, 
+     and the counter (i.e. next key) is advanced 
+     so that the command can be tried again to generate the next key.</p><h3>Transaction Signing</h3><p>Once at least one address key has been generated 
+     (normally the one with index 0), 
+     the command to sign transactions can be used. 
+     The index of the address key to use for the signature 
+     is passed to the signing command by the user.</p><p>The signing command also takes as inputs 
+     the following components of the transaction 
+     (see the Ethereum Yellow Paper for details):</p><ul>
+<li>The nonce associated to the Ethereum address. 
+      This is stored in the state of the Ethereum network, 
+      but since this wallet is air-gapped, 
+      the user must keep track of the nonce, 
+      and supply it to the signing command.</li>
+<li>The gas price for processing the transaction. 
+      This is under the user's discretion.</li>
+<li>The gas limit for processing the transaction. 
+      This should be accurately estimated by the user, 
+      plausibly with the aid of some tools external to the wallet.</li>
+<li>The recipient address. 
+      The address may be that of a contract 
+      or of an externally owned account; 
+      the wallet supports both.</li>
+<li>The value to transmit to the recipient, in Wei.</li>
+<li>The data (a sequence of bytes) to pass to the recipient. 
+      This makes sense when the recipient is a contract, 
+      as opposed to an externally owned account.</li>
+</ul><p>The command outputs the bytes of the signed transaction, RLP-encoded. 
+     This is the form in which the transaction 
+     must be submitted to the Ethereum network. 
+     Since this wallet is air-gapped, 
+     the user must copy the output of this command 
+     and use an Internet-connected machine 
+     to actually submit the transaction.</p><p>In rare cases, the signing of the transaction may fail. 
+     Since the elliptic curve signature scheme used by this wallet 
+     is deterministic, 
+     re-trying the same command will fail again. 
+     Instead, the user could try to change slightly 
+     some non-critical component of the transaction, 
+     such as the gas limit.</p><h3>Persistence</h3><p>This wallet runs in ``batch'' mode: 
+     each command starts up the wallet, 
+     which terminates at the end of the command. 
+     The state of the wallet must be therefore stored persistently, 
+     in a file in the file system. 
+     The ACL2 constant <span class="tt"><a href="HDWALLET_____A2STAT-FILEPATH_A2.html">*stat-filepath*</a></span> holds the path to this file: 
+     it is currently set to a relative path in this directory, 
+     but it can be easily changed of course.</p><p>Currently the file stores the wallet state in plaintext, 
+     i.e. not encrypted. 
+     Future versions of the wallet will likely use AES encryption. 
+     However, recall that this wallet is meant for an air-gapped machine: 
+     at rest, the wallet state can be protected by disk encryption. 
+     Thus, even if the machine is stolen, 
+     it should not be possible to recover the wallet state, 
+     assuming that the disk encryption is protected by a  strong password.</p><h3>Error Handling</h3><p>The wallet carefully validates all the user inputs 
+     and provides informative error messages when the inputs are invalid. 
+     The wallet also provides informative error messages 
+     when some internal cryptographic operation fails 
+     due to a rare but possible event (as mentioned above). 
+     There is just one exception to this approach to error handling: 
+     in order to load/save the wallet state from/to the file, 
+     the wallet implementation uses ACL2's 
+     <span class="tt"><a href="ACL2____SERIALIZE-READ.html">serialize-read</a></span> and <span class="tt"><a href="ACL2____SERIALIZE-WRITE.html">serialize-write</a></span>, 
+     which may throw hard errors in some cases. 
+     Thus, it is currently possible, but hopefully rare, 
+     to get an ACL2 hard error from the wallet.</p>
+</body>
+</html>

@@ -1,0 +1,149 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Mutual-recursion-proof-example</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____MUTUAL-RECURSION-PROOF-EXAMPLE">Click for Mutual-recursion-proof-example in the Full Manual</a></h3>
+
+<p>A small proof about mutually recursive functions</p><p>Sometimes one wants to reason about mutually recursive functions. 
+ Although this is possible in ACL2, it can be a bit awkward.  This example is 
+ intended to give some ideas about how one can go about such proofs.</p> 
+ 
+ <p>For an introduction to mutual recursion in ACL2, see <a href="ACL2____MUTUAL-RECURSION.html">mutual-recursion</a>.</p> 
+ 
+ <p>We begin by defining two mutually recursive functions: one that collects 
+ the variables from a <a href="ACL2____TERM.html">term</a>, the other that collects the variables from a 
+ list of <a href="ACL2____TERM.html">term</a>s.  We actually imagine the <a href="ACL2____TERM.html">term</a> argument to be a 
+ <span class="v">pseudo-termp</span>; see <a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a>.</p> 
+ 
+ <pre class="code">(<a href="ACL2____MUTUAL-RECURSION.html">mutual-recursion</a>
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> free-vars1 (<a href="ACL2____TERM.html">term</a> ans)
+  (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____ATOM.html">atom</a> term)
+         (<a href="ACL2____ADD-TO-SET-EQ.html">add-to-set-eq</a> term ans))
+        ((<a href="ACL2____FQUOTEP.html">fquotep</a> term) ans)
+        (t (free-vars1-lst (<a href="COMMON-LISP____CDR.html">cdr</a> term) ans))))
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> free-vars1-lst (lst ans)
+  (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____ATOM.html">atom</a> lst) ans)
+        (t (free-vars1-lst (<a href="COMMON-LISP____CDR.html">cdr</a> lst)
+                           (free-vars1 (<a href="COMMON-LISP____CAR.html">car</a> lst) ans)))))
+
+)</pre> 
+ 
+ <p>Now suppose that we want to prove the following theorem.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> symbol-listp-free-vars1-try-1
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a> x)
+                (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> ans))
+           (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> (free-vars1 x ans))))</pre> 
+ 
+ <p>Often ACL2 can generate a proof by induction based on the structure of 
+ definitions of function symbols occurring in the conjecture.  In this case, 
+ ACL2 chooses to use an induction scheme suggested by <span class="v">(<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> ans)</span>, 
+ and sadly, that doesn't work.  If one were doing this proof with pencil and 
+ paper, one would be more likely to prove a combination of the conjecture above 
+ and an analogous conjecture about free-vars1-lst.  Feel free to try a pencil 
+ and paper proof!  Or you can read on, to see how one can get ACL2 to do such a 
+ proof after all.</p> 
+ 
+ <p>The trick is to define a function that suggests an appropriate induction. 
+ The induction suggested is based on the if-then-else structure of the 
+ function's definition, where inductive hypotheses are generated for recursive 
+ calls  below we explain how that works for this function.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> symbol-listp-free-vars1-induction (x ans)
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ATOM.html">atom</a> x)
+; then we just make sure x and ans aren't considered irrelevant:
+      (<a href="COMMON-LISP____LIST.html">list</a> x ans)
+    (<a href="COMMON-LISP____LIST.html">list</a> (symbol-listp-free-vars1-induction (<a href="COMMON-LISP____CAR.html">car</a> x) ans)
+          (symbol-listp-free-vars1-induction (<a href="COMMON-LISP____CDR.html">cdr</a> x) ans)
+          (symbol-listp-free-vars1-induction (<a href="COMMON-LISP____CDR.html">cdr</a> x)
+                                             (free-vars1 (<a href="COMMON-LISP____CAR.html">car</a> x) ans)))))</pre> 
+ 
+ <p>The if-then-else structure of this function generates two cases.  In one 
+ case, <span class="v">(<a href="COMMON-LISP____ATOM.html">atom</a> x)</span> is true, and the theorem to be proved should be proved 
+ under no additional hypotheses except for <span class="v">(<a href="COMMON-LISP____ATOM.html">atom</a> x)</span>; in other words, 
+ <span class="v">(<a href="COMMON-LISP____ATOM.html">atom</a> x)</span> gives us the base case of the induction.  In the other case, 
+ <span class="v">(<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____ATOM.html">atom</a> x))</span> is assumed together with three instances of the theorem to 
+ be proved, one for each recursive call.  So, one instance substitutes <span class="v">(<a href="COMMON-LISP____CAR.html">car</a>
+ x)</span> for <span class="v">x</span>; one substitutes <span class="v">(<a href="COMMON-LISP____CDR.html">cdr</a> x)</span> for <span class="v">x</span>; and the third 
+ substitutes <span class="v">(<a href="COMMON-LISP____CDR.html">cdr</a> x)</span> for <span class="v">x</span> and <span class="v">(free-vars1 (<a href="COMMON-LISP____CAR.html">car</a> x) ans)</span> for 
+ <span class="v">ans</span>.  If you think about how you would go about a hand proof of the 
+ theorem to follow, you'll likely come up with a similar scheme.</p> 
+ 
+ <p>We now prove the two theorems together as a conjunction, because the 
+ inductive hypotheses for one are sometimes needed in the proof of the other 
+ (even when you do this proof on paper!).</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> symbol-listp-free-vars1
+  (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a> x)
+                     (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> ans))
+                (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> (free-vars1 x ans)))
+       (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____PSEUDO-TERM-LISTP.html">pseudo-term-listp</a> x)
+                     (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> ans))
+                (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> (free-vars1-lst x ans))))
+  :hints
+  (("Goal" :induct (symbol-listp-free-vars1-induction x ans))))</pre> 
+ 
+ <p>The above works, but we conclude by illustrating a more efficient approach, 
+ in which we restrict to appropriate inductive hypotheses for each case.</p> 
+ 
+ <pre class="code">(<a href="ACL2____UBT.html">ubt</a> 'symbol-listp-free-vars1-induction)
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> symbol-listp-free-vars1-induction (flg x ans)
+
+; Flg is nil if we are ``thinking'' of a single term.
+
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ATOM.html">atom</a> x) ; whether x is a single term or a list of terms
+      (<a href="COMMON-LISP____LIST.html">list</a> x ans)
+    (<a href="COMMON-LISP____IF.html">if</a> flg ; i.e., if x is a list of terms
+        (<a href="COMMON-LISP____LIST.html">list</a> (symbol-listp-free-vars1-induction nil (<a href="COMMON-LISP____CAR.html">car</a> x) ans)
+              (symbol-listp-free-vars1-induction t
+                                                 (<a href="COMMON-LISP____CDR.html">cdr</a> x)
+                                                 (free-vars1 (<a href="COMMON-LISP____CAR.html">car</a> x) ans)))
+      (symbol-listp-free-vars1-induction t (<a href="COMMON-LISP____CDR.html">cdr</a> x) ans))))</pre> 
+ 
+ <p>We now state the theorem as a conditional, so that it can be proved nicely 
+ using the <a href="ACL2____INDUCTION.html">induction</a> scheme that we have just coded.  The prover will 
+ not store an <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span> <a href="ACL2____TERM.html">term</a> as a <a href="ACL2____REWRITE.html">rewrite</a> rule, but that's OK 
+ (provided we tell it not to try), because we're going to derive the 
+ corollaries of interest later and make <b>them</b> into <a href="ACL2____REWRITE.html">rewrite</a> 
+ rules.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> symbol-listp-free-vars1-flg
+  (<a href="COMMON-LISP____IF.html">if</a> flg
+      (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____PSEUDO-TERM-LISTP.html">pseudo-term-listp</a> x)
+                    (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> ans))
+               (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> (free-vars1-lst x ans)))
+    (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a> x)
+                  (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> ans))
+             (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> (free-vars1 x ans))))
+  :hints
+  (("Goal" :induct (symbol-listp-free-vars1-induction flg x ans)))
+  :rule-classes nil)</pre> 
+ 
+ <p>And finally, we may derive the theorems we are interested in as immediate 
+ corollaries.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> symbol-listp-free-vars1
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a> x)
+                (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> ans))
+           (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> (free-vars1 x ans)))
+  :hints (("Goal" :by (:instance symbol-listp-free-vars1-flg
+                                 (flg nil)))))
+
+(<a href="ACL2____DEFTHM.html">defthm</a> symbol-listp-free-vars1-lst
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____PSEUDO-TERM-LISTP.html">pseudo-term-listp</a> x)
+                (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> ans))
+           (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> (free-vars1-lst x ans)))
+  :hints (("Goal" :by (:instance symbol-listp-free-vars1-flg
+                                 (flg t)))))</pre> 
+ 
+ <p>You may find <a href="ACL2____COMMUNITY-BOOKS.html">community-books</a> that help you to automate this kind of 
+ reasoning about mutually recursive functions.  See for example <a href="ACL2____MAKE-FLAG.html">make-flag</a>.</p>
+</body>
+</html>

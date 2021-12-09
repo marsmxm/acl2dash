@@ -1,0 +1,243 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Introduction-to-rewrite-rules-part-2</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____INTRODUCTION-TO-REWRITE-RULES-PART-2">Click for Introduction-to-rewrite-rules-part-2 in the Full Manual</a></h3>
+
+<p>How to arrange rewrite rules</p><p>You should design your rewrite rules to canonicalize the terms in 
+ your problem, that is, your rules should drive terms into some normal form so 
+ that different but equivalent terms are rewritten into the preferred shape, 
+ making equivalent terms identical.  You are very familiar with this idea from 
+ algebra, where you learned to normalize polynomials.  Thus, when you see 
+ <i>(2x + 6)(3x - 9)</i> you automatically normalize it, by ``multiplying out 
+ and collecting like terms,'' to get <i>(6x^2 - 54)</i>.  This normalization 
+ strategy allows you to recognize equivalent terms presented differently, such 
+ as <i>6(x^2 - 9)</i>.</p> 
+ 
+ <p>The ACL2 user is responsible for making up the rules.  (Standard ``books'' 
+  files of ACL2 definitions and theorems  can often provide rules 
+ for some sets of functions, e.g., arithmetic.)  This is a heavy burden on you 
+ but it means you are in charge of your own normal forms.  For example, if you 
+ use the function <span class="v">nthcdr</span>, which returns the <span class="v">n</span>th <span class="v">cdr</span> of a list, 
+ you might see both <span class="v">(<a href="COMMON-LISP____CDR.html">cdr</a> (<a href="COMMON-LISP____NTHCDR.html">nthcdr</a> i x))</span> and <span class="v">(<a href="COMMON-LISP____NTHCDR.html">nthcdr</a> i (<a href="COMMON-LISP____CDR.html">cdr</a> x))</span>.  These 
+ two expressions are equivalent but not identical.  You will want to decide 
+ which you want to see and prove the rewrite rule that converts the other to 
+ that preferred form.</p> 
+ 
+ <p>Most good users develop an implicit ordering on terms and rewrite ``heavy'' 
+ terms to ``lighter'' ones.  This ensures that there are no loops in their 
+ rewrite rules.  But this ordering changes according to the user and the 
+ problem.</p> 
+ 
+ <p>Generally, the lightest terms are primitives such as <span class="v">IF</span>, <span class="v">EQUAL</span>, 
+ arithmetic, etc.  Functions defined without explicit recursion tend to be 
+ ignored because they are just expanded away (but see below).  Recursively 
+ defined functions tend to be heavier than any other recursive function used in 
+ their definitions, so, for example, if <span class="v">rev</span> is defined in terms of 
+ <span class="v">append</span>, <span class="v">rev</span> is heavier than <span class="v">append</span>.  But the size and subtlety 
+ of recursively defined functions also affects their place in the ordering.</p> 
+ 
+ <p>But rewrite rules are surprisingly subtle.  Recall that a rewrite rule can 
+ be made from a formula of this form:</p> 
+ 
+ <pre class="code">(IMPLIES (AND <i>hyp1</i> ... <i>hypk</i>) 
+         (<i>eqv</i> <i>lhs</i> <i>rhs</i>)) 
+</pre> 
+ 
+ <p>where <i>eqv</i> is either <span class="v">EQUAL</span> or <span class="v">IFF</span>, and <i>lhs</i> is a call 
+ of a function other than <span class="v">IF</span>.  In such a rule, <i>lhs</i> is the pattern 
+ responsible for triggering the rule, the <i>hypi</i> are conditions which must 
+ be satisfied by the context of the target being rewritten, and <i>rhs</i> is 
+ the replacement.  The replacement only happens if the rule is enabled, the 
+ pattern matches, the conditions are satisfied, and (in the case of an <span class="v">IFF</span> 
+ rule) the target occurs propositionally.  There are other heuristic 
+ restrictions that we won't discuss here.</p> 
+ 
+ <p>So how should you phrase a theorem in order to make it an effective 
+ rule?</p> 
+ 
+ <p>General Principles:</p> 
+ 
+ <p>* <b>Strengthen the Formula</b>: The fewer hypotheses a formula has the 
+ better the rewrite rule formed from it.  The more general the left-hand side 
+ the better the rule.  The fewer free variables in the hypothesis, the better. 
+ The idea is to form a rule that fires predictably.  Later in this tutorial 
+ you'll get some practice formulating strong rules.</p> 
+ 
+ <p>* <b>Choosing the Conclusion</b>: If a lemma is an implication, you have to 
+ choose what the conclusion will be. (You'll also have to ``orient'' that 
+ conclusion by choosing a left-hand side and a right-hand side, but we discuss 
+ that below).  You can swap the conclusion and any hypothesis by negating both, 
+ producing a different conclusion.  There are generally two (possibly 
+ conflicting) heuristics for deciding which part of the formula should be the 
+ conclusion:</p> 
+ 
+ <p><i>Choosing the Conclusion Heuristic 1</i>: Can you make the conclusion be 
+ an <span class="v">EQUAL</span> or <span class="v">IFF</span> expression that has a ``heavy term'' on one side? 
+ That will make a rule that replaces the heavy term with a lighter one.  We 
+ discuss this situation more below.</p> 
+ 
+ <p><i>Choosing the Conclusion Heuristic 2</i>: Can you make the conclusion be 
+ a non-propositional term that contains all the variables mentioned in the 
+ hypotheses?  By ``non-propositional'' we mean a term that is not just the 
+ propositional combination (e.g., with <span class="v">AND</span> or <span class="v">OR</span>) of other terms but 
+ instead some call of some ``heavy'' function?  If your conclusion contains all 
+ the variables mentioned in the hypotheses, matching it will instantiate all 
+ the variables in the hypotheses.  That way ACL2 will not have to guess 
+ instantiations of unbound variables when it tries to relieve the hypotheses. 
+ It is not very good at guessing.</p> 
+ 
+ <p>* <b>Orienting the Conclusion</b>: If the conclusion is an <span class="v">EQUAL</span> or an 
+ <span class="v">IFF</span>, you have to decide which is the left-hand side and which is the 
+ right.  If the conclusion is <span class="v">(<a href="COMMON-LISP____NOT.html">NOT</a></span> <i>lhs</i><span class="v">)</span>, then the left-hand 
+ side is <i>lhs</i> and the right-hand side is <span class="v">NIL</span>.  If the conclusion is 
+ not an <span class="v">EQUAL</span>, an <span class="v">IFF</span>, or a <span class="v">NOT</span> then the conclusion itself will 
+ be the left-hand side and the right-hand side will be <span class="v">T</span>.  If your lemma 
+ was created by looking at Key Checkpoints while using The Method, the 
+ left-hand side should match some term in that checkpoint.</p> 
+ 
+ <p>Remember, the left-hand side is the ``trigger'' that will make the rule 
+ fire.  It is the pattern that ACL2 will be looking for.</p> 
+ 
+ <p>* <b>Pay attention to the free variables</b>: Look at the variables that 
+ occur in the pattern (the left-hand side) and compare them to the variables 
+ that occur in the hypotheses.  Does some hypothesis contain a variable, say 
+ <i>v</i>, that is not in the pattern?  We call <i>v</i> a <i>free variable</i> 
+ because it will not be assigned a value (``bound'') by the process of pattern 
+ matching.  ACL2 will have to guess a value for <i>v</i>.  If some hypothesis 
+ contains <i>v</i> as a free variable, ask whether more than one hypothesis 
+ contains <i>v</i>?  ACL2 uses the first hypothesis containing a free <i>v</i> 
+ to guide its guess for <i>v</i>.  To ``guess'' a value for <i>v</i>, ACL2 uses 
+ that hypothesis as a pattern and tries to match it against the assumptions in 
+ the checkpoint formula being proved.  This means that key hypothesis must be 
+ in normal form, to match the rewritten assumptions of the goal.  It also means 
+ that you should reorder the hypotheses to put the most unusual hypothesis 
+ containing a free <i>v</i> first in the list of conjuncts.  For example, if 
+ <span class="v">v</span> is free in two hypotheses, <span class="v">(<a href="ACL2____NATP.html">natp</a> v)</span> and <span class="v">(<a href="COMMON-LISP____MEMBER.html">member</a> (<a href="COMMON-LISP____NTHCDR.html">nthcdr</a> v a)
+ b)</span>, then we recommend putting the <span class="v">member</span> term first.  There are likely 
+ to be many terms in the goal satisfying the <span class="v">natp</span> hypothesis  or 
+ none if <span class="v">natp</span> has expanded to an integer inequality  while there 
+ are likely to be few terms satisfying the <span class="v">member</span> hypothesis, especially 
+ if <span class="v">a</span> and <span class="v">b</span> are bound by the left-hand side of the rule.</p> 
+ 
+ <p>Here are some (possibly conflicting) heuristics for choosing the left-hand 
+ side:</p> 
+ 
+ <p><i>Choose a Left-Hand Side that Occurs in a Key Checkpoint</i>: If you use 
+ the Method you will tend to do this anyway, because you'll see terms in the 
+ Key Checkpoints that you want to get rid of.  But many moderately experienced 
+ users ``look ahead'' to how the proof will go and formulate a few anticipatory 
+ rules with the idea of guiding ACL2 down the preferred path to the proof. 
+ When you do that, you risk choosing left-hand sides that won't actually arise 
+ in the problem.  So when you formulate anticipatory rules, pay special 
+ attention to the functions and terms you put in the left-hand sides.  The next 
+ few paragraphs deal with specific cases.</p> 
+ 
+ <p><i>Avoid Non-Recursive Functions in the Left-Hand Side</i>: If the 
+ left-hand side contains a call of a defined function whose definition is not 
+ recursive, then it will almost never match any target in the formula being 
+ rewritten unless the function is disabled.  Suppose for example you have 
+ defined <span class="v">SQ</span> so that <span class="v">(SQ x)</span> is <span class="v">(<a href="COMMON-LISP_____A2.html">*</a> x x)</span>.  Suppose you considered 
+ choosing a left-hand side like <span class="v">(<a href="COMMON-LISP_____B2.html">+</a> (SQ x) (SQ y))</span>.  Suppose you hoped it 
+ would hit the target <span class="v">(<a href="COMMON-LISP_____B2.html">+</a> (SQ A) (SQ B))</span> in some formula.  But when ACL2 
+ simplifies the formula, it will first rewrite that target to</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP_____B2.html">+</a> (<a href="COMMON-LISP_____A2.html">*</a> A A) (<a href="COMMON-LISP_____A2.html">*</a> B B))</pre> 
+ 
+ <p>by expanding the definition of <span class="v">SQ</span>, since it could do so without 
+ introducing any recursive calls.  But now the target won't match your rule. 
+ By choosing a left-hand side that occurs in a Key Checkpoint (and is not one 
+ of a handful of abbreviations ACL2 uses in its output like <span class="v">AND</span>, 
+ <span class="v">NOT</span>), you'll avoid this problem since <span class="v">SQ</span> will have already been 
+ expanded before the Key Checkpoint is printed.</p> 
+ 
+ <p><i>Disable Non-Recursive Functions</i>: If you insist on a left-hand side 
+ that contains calls of non-recursive functions, remember to disable those 
+ non-recursive functions after you've proved all the rules you want about them. 
+ By disabling <span class="v">SQ</span> you can prevent ACL2 from expanding the definition as it 
+ did above.  Sometimes you will define a function non-recursively to formalize 
+ some concept that is common in your application and you will want to create a 
+ sort of algebra of rules about the function.  By all means do so, so you can 
+ conduct your formal reasoning in terms of the concepts you're informally 
+ manipulating.  But after proving the required laws, disable the non-recursive 
+ concept so that ACL2 just uses your laws and not the messy definition.</p> 
+ 
+ <p><i>Choose a Left-Hand Side Already in Simplest Form</i>: This is a 
+ generalization of the advice above.  If any rule will rewrite your left-hand 
+ side, it will prevent your rule from matching any target.  For example, if you 
+ write a left-hand side like <span class="v">(foo (<a href="COMMON-LISP____CAR.html">car</a> (<a href="COMMON-LISP____CONS.html">cons</a> x y)))</span> then it would never 
+ match any target!  The reason is that even if <span class="v">(FOO (<a href="COMMON-LISP____CAR.html">CAR</a> (<a href="COMMON-LISP____CONS.html">CONS</a> A B)))</span> did 
+ occur in some goal formula, before ACL2 would try your rule about <span class="v">foo</span> it 
+ will use the obvious rule about <span class="v">CAR</span> and <span class="v">CONS</span> to transform your 
+ imagined target to <span class="v">(FOO A)</span>.  Thus, your rule would not match.  So you 
+ have to keep in mind <i>all your other rules</i> when you choose a left-hand 
+ side (and when you choose the hypotheses to guide free variable selection). 
+ If you always choose a pattern that matches a term in a Key Checkpoint, you 
+ avoid this problem.  Also see <a href="ACL2____COMMUNITY-BOOKS.html">community-books</a> example 
+ <span class="v">books/demos/knuth-bendix-problem-1.lisp</span>.</p> 
+ 
+ <p><i>Make Sure the Left-Hand Side is ``Heavier'' than the Right</i>: 
+ Sometimes this is obvious, as when you choose <span class="v">(<a href="ACL2____REV.html">REV</a> (<a href="ACL2____REV.html">REV</a> x))</span> for the 
+ left-hand side and <span class="v">x</span> for the right.  But what do you about <span class="v">(<a href="ACL2____REV.html">REV</a>
+ (<a href="COMMON-LISP____APPEND.html">APPEND</a> x y))</span> versus <span class="v">(<a href="COMMON-LISP____APPEND.html">APPEND</a> (<a href="ACL2____REV.html">REV</a> y) (<a href="ACL2____REV.html">REV</a> x))</span>?  Most of the time we 
+ choose to drive the heaviest function (in this case <span class="v">REV</span>) down toward the 
+ variables, lifting the lighter function (<span class="v">APPEND</span>) up so that we can reason 
+ about the lighter function's interaction with the surrounding ``matrix'' of 
+ the formula.  So we'd rewrite <span class="v">(<a href="ACL2____REV.html">REV</a> (<a href="COMMON-LISP____APPEND.html">APPEND</a> x y))</span> to <span class="v">(<a href="COMMON-LISP____APPEND.html">APPEND</a> (<a href="ACL2____REV.html">REV</a> y)
+ (<a href="ACL2____REV.html">REV</a> x))</span>, not vice versa.</p> 
+ 
+ <p><i>Alternative Ways to Talk About the Same Thing</i>: If your problem and 
+ specification use two different ways to talk about the same thing, choose one 
+ form and rewrite the other into that form.  For example, the ACL2 built-in 
+ <span class="v">nth</span> returns the nth element of a list, and the built-in function 
+ <span class="v">nthcdr</span> returns the nth <span class="v">cdr</span> of a list.  They are defined 
+ independently.  But <span class="v">(<a href="COMMON-LISP____NTH.html">nth</a> n x)</span> is the same thing as <span class="v">(<a href="COMMON-LISP____CAR.html">car</a> (<a href="COMMON-LISP____NTHCDR.html">nthcdr</a> n
+ x))</span>.  Since <span class="v">nth</span> can be expressed in terms of <span class="v">nthcdr</span> but not vice 
+ versa, it is clear we should prove <span class="v">(<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____NTH.html">nth</a> n x) (<a href="COMMON-LISP____CAR.html">car</a> (<a href="COMMON-LISP____NTHCDR.html">nthcdr</a> n x)))</span> 
+ as a rewrite rule if both <span class="v">nth</span> and <span class="v">nthcdr</span> are involved in the 
+ problem.</p> 
+ 
+ <p><i>Don't Let Computational Efficiency Dictate the Terms</i>: If you have 
+ two functions that are equivalent (perhaps one was defined to be 
+ computationally more efficient), prove their equivalence as a rewrite rule 
+ that eliminates the more complicated function.  An extreme example would be a 
+ model that uses a sophisticated data structure (like a balanced binary tree, 
+ red-black tree, ordered array, or hash table) to implement something simple 
+ like an association of keys to values.  By proving the equivalence as stated 
+ you can eliminate the messy function early and do the bulk of your reasoning 
+ in terms of its simple specification.</p> 
+ 
+ <p>The best ACL2 users become very good at keeping all these things in mind 
+ when designing their rewrite rules.  Practice makes perfect.  Don't be afraid 
+ during your learning of ACL2 to undo the rules you first invented and try to 
+ make better ones.</p> 
+ 
+ <p>Finally, be patient!  There will be times when you think to yourself ``Why 
+ should I spend my time thinking of rules that guide ACL2?  I know the proof!'' 
+ There are two reasons.  First, you may ``know'' the proof but you may well be 
+ wrong and part-way through this whole exercise you may realize that you're 
+ missing a major hypothesis or special case that breaks your whole conception 
+ of the problem.  The proof is in the details.  Second, most of the time the 
+ library of rules you develop in this process will be used over and over again 
+ on variants of the main problem in the months and years ahead.  This is 
+ sometimes called the <i>proof maintenance</i> problem.  Theorems don't suffer 
+ bit rot!  But the artifacts you're modeling change and you will need to prove 
+ new versions of old theorems.  A good general purpose library makes this much 
+ easier.</p> 
+ 
+ <p>We now recommend that you practice inventing strong rules; see <a href="ACL2____STRONG-REWRITE-RULES.html">strong-rewrite-rules</a>.</p> 
+ 
+ <p>For advice on handling specific kinds of formulas and definitions, see 
+ <a href="ACL2____SPECIFIC-KINDS-OF-FORMULAS-AS-REWRITE-RULES.html">specific-kinds-of-formulas-as-rewrite-rules</a>.</p> 
+ 
+ <p>For more information about the rewriter works and how rules are created, 
+ see <a href="ACL2____FURTHER-INFORMATION-ON-REWRITING.html">further-information-on-rewriting</a>.</p> 
+ 
+ <p>If you are working your way through the tutorial introduction to the 
+ theorem prover, use your browser's <b>Back Button</b> to return to <a href="ACL2____INTRODUCTION-TO-THE-THEOREM-PROVER.html">introduction-to-the-theorem-prover</a>.</p>
+</body>
+</html>

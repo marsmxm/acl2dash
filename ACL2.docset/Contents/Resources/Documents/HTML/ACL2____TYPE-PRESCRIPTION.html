@@ -1,0 +1,190 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Type-prescription</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____TYPE-PRESCRIPTION">Click for Type-prescription in the Full Manual</a></h3>
+
+<p>Make a rule that specifies the type of a term</p><p>See <a href="ACL2____RULE-CLASSES.html">rule-classes</a> for a general discussion of rule classes, 
+ including how they are used to build rules from formulas and a discussion of 
+ the various keywords in a rule class description.  In this topic we focus on 
+ user-defined type-prescription rules, but note that ACL2 also introduces 
+ type-prescription rules when introducing a function with <span class="tt"><a href="COMMON-LISP____DEFUN.html">defun</a></span>; see 
+ <a href="ACL2____TYPE-PRESCRIPTION-DEBUGGING.html">type-prescription-debugging</a> for discussion of how to influence the 
+ generation of such rules.</p> 
+ 
+ <pre class="code">Examples:
+(<a href="ACL2____DEFTHM.html">defthm</a> integerp-foo                       ; Assumes that foo has been
+  (<a href="COMMON-LISP____INTEGERP.html">integerp</a> (foo x y))                     ; defined; then, states that
+  :rule-classes :type-prescription)        ; (foo x y) is of type integer.
+
+(<a href="ACL2____DEFTHM.html">defthm</a> characterp-nth-type-prescription   ; (<a href="COMMON-LISP____NTH.html">Nth</a> n lst) is of type character
+  (<a href="ACL2____IMPLIES.html">implies</a>                                 ; provided the hypotheses can be
+   (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____CHARACTER-LISTP.html">character-listp</a> lst)              ; established by type reasoning.
+        (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> 0 n)
+        (<a href="COMMON-LISP_____C3.html">&lt;</a> n (<a href="ACL2____LEN.html">len</a> lst)))
+   (<a href="COMMON-LISP____CHARACTERP.html">characterp</a> (<a href="COMMON-LISP____NTH.html">nth</a> n lst)))
+  :rule-classes :type-prescription)
+
+(<a href="ACL2____DEFTHM.html">defthm</a> characterp-nth-type-prescription-alt ; equivalent to the above
+  (<a href="ACL2____IMPLIES.html">implies</a>
+   (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____CHARACTER-LISTP.html">character-listp</a> lst)
+        (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> 0 n)
+        (<a href="COMMON-LISP_____C3.html">&lt;</a> n (<a href="ACL2____LEN.html">len</a> lst)))
+   (<a href="COMMON-LISP____CHARACTERP.html">characterp</a> (<a href="COMMON-LISP____NTH.html">nth</a> n lst)))
+  :rule-classes ((:type-prescription :typed-term (<a href="COMMON-LISP____NTH.html">nth</a> n lst))))
+
+(<a href="ACL2____DEFTHM.html">defthm</a> demodulize-type-for-quote-value  ; (Demodulize a lst 'value ans) is ;
+  (<a href="ACL2____IMPLIES.html">implies</a>                               ; either a nonnegative integer or ;
+   (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____ATOM.html">atom</a> a)                         ; of the same type as ans, provided ;
+        (<a href="ACL2____TRUE-LISTP.html">true-listp</a> lst)                 ; the hyps can be established by type ;
+        (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> a lst))            ; reasoning ;
+   (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> (demodulize a lst 'value ans))
+            (<a href="COMMON-LISP_____E3_D3.html">&gt;=</a> (demodulize a lst 'value ans) 0))
+       (<a href="COMMON-LISP____EQUAL.html">equal</a> (demodulize a lst 'value ans) ans)))
+  :rule-classes :type-prescription)</pre> 
+ 
+ <p>To specify the term whose type (see <a href="ACL2____TYPE-SET.html">type-set</a>) is described by the 
+ rule, provide that term as the value of the <span class="v">:typed-term</span> field of the rule 
+ class object.</p> 
+ 
+ <pre class="code">General Form (after preprocessing; see below):
+(<a href="ACL2____IMPLIES.html">implies</a> hyps
+         (<a href="COMMON-LISP____OR.html">or</a> type-restriction1-on-pat
+             ...
+             type-restrictionk-on-pat
+             (<a href="COMMON-LISP____EQUAL.html">equal</a> pat var1)
+             ...
+             (<a href="COMMON-LISP____EQUAL.html">equal</a> pat varj)))</pre> 
+ 
+ <p>where <span class="v">pat</span> is the application of some function symbol to some 
+ arguments, each <span class="v">type-restrictioni-on-pat</span> is a term involving <span class="v">pat</span> and 
+ containing no variables outside of the occurrences of <span class="v">pat</span>, and each 
+ <span class="v">vari</span> is one of the variables of <span class="v">pat</span>.  Generally speaking, the 
+ <span class="v">type-restriction</span> terms ought to be terms that inform us as to the type of 
+ <span class="v">pat</span>.  Ideally, they should be ``primitive recognizing expressions'' about 
+ <span class="v">pat</span>; see <a href="ACL2____COMPOUND-RECOGNIZER.html">compound-recognizer</a>.  We describe preprocessing at the 
+ end of this topic.</p> 
+ 
+ <p>If the <span class="v">:typed-term</span> is not provided in the rule class object, it is 
+ computed heuristically by looking for a term in the conclusion whose type is 
+ being restricted.  An error is caused if no such term is found.</p> 
+ 
+ <p>Roughly speaking, the effect of adding such a rule is to inform the ACL2 
+ typing mechanism that <span class="v">pat</span> has the type described by the conclusion, when 
+ the hypotheses are true.  In particular, the type of <span class="v">pat</span> is within the 
+ union of the types described by the several disjuncts.  The ``type described 
+ by'' <span class="v">(<a href="COMMON-LISP____EQUAL.html">equal</a> pat vari)</span> is the type of <span class="v">vari</span>.</p> 
+ 
+ <p>More operationally, when asked to determine the type of a term that is an 
+ instance of <span class="v">pat</span>, ACL2 will first attempt to establish the hypotheses. 
+ <b>This is done by type reasoning alone, not rewriting!</b> However, if some 
+ hypothesis is a call of <span class="tt"><a href="ACL2____FORCE.html">force</a></span>, then forcing may occur, which may 
+ ultimately invoke the rewriter; see <a href="ACL2____FORCE.html">force</a> and see <a href="ACL2____CASE-SPLIT.html">case-split</a>. 
+ So-called free variables in hypotheses are treated specially; see <a href="ACL2____FREE-VARIABLES.html">free-variables</a>.  Provided the hypotheses are established by type reasoning, 
+ ACL2 then unions the types described by the <span class="v">type-restrictioni-on-pat</span> 
+ terms together with the types of those subexpressions of <span class="v">pat</span> identified 
+ by the <span class="v">vari</span>.  The final type computed for a term is the intersection of 
+ the types implied by each applicable rule.  Type prescription rules may be 
+ disabled.</p> 
+ 
+ <p>You can limit the recursive establishment of hypotheses of rules; see <a href="ACL2____SET-BACKCHAIN-LIMIT.html">set-backchain-limit</a>.</p> 
+ 
+ <p>Because only type reasoning is used to establish the hypotheses of 
+ <span class="v">:type-prescription</span> rules, some care must be taken with the hypotheses. 
+ Suppose, for example, that the non-recursive function <span class="v">my-statep</span> is 
+ defined as</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> my-statep (x)
+  (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____TRUE-LISTP.html">true-listp</a> x)
+       (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____LEN.html">len</a> x) 2)))</pre> 
+ 
+ <p>and suppose <span class="v">(my-statep s)</span> occurs as a hypothesis of a 
+ <span class="v">:type-prescription</span> rule that is being considered for use in the proof 
+ attempt for a conjecture with the hypothesis <span class="v">(my-statep s)</span>.  Since the 
+ hypothesis in the conjecture is rewritten, it will become the conjunction of 
+ <span class="v">(<a href="ACL2____TRUE-LISTP.html">true-listp</a> s)</span> and <span class="v">(<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____LEN.html">len</a> s) 2)</span>.  Those two terms will be 
+ assumed to have type <span class="v">t</span> in the context in which the 
+ <span class="v">:type-prescription</span> rule is tried.  But type reasoning will be unable to 
+ deduce that <span class="v">(my-statep s)</span> has type <span class="v">t</span> in this context.  Thus, either 
+ <span class="v">my-statep</span> should be disabled (see <a href="ACL2____DISABLE.html">disable</a>) during the proof 
+ attempt or else the occurrence of <span class="v">(my-statep s)</span> in the 
+ <span class="v">:type-prescription</span> rule should be replaced by the conjunction into which 
+ it rewrites.</p> 
+ 
+ <p>While this example makes it clear how non-recursive predicates can cause 
+ problems, non-recursive functions in general can cause problems.  For example, 
+ if <span class="v">(mitigate x)</span> is defined to be <span class="v">(<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____RATIONALP.html">rationalp</a> x) (<a href="COMMON-LISP____1-.html">1-</a> x) x)</span> then 
+ the hypothesis <span class="v">(pred (mitigate s))</span> in the conjecture will rewrite, 
+ opening <span class="v">mitigate</span> and splitting the conjecture into two subgoals, one in 
+ which <span class="v">(<a href="COMMON-LISP____RATIONALP.html">rationalp</a> s)</span> and <span class="v">(pred (<a href="COMMON-LISP____1-.html">1-</a> x))</span> are assumed and the other in 
+ which <span class="v">(<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____RATIONALP.html">rationalp</a> s))</span> and <span class="v">(pred x)</span> are assumed.  But <span class="v">(pred
+ (mitigate s))</span> will not be typed as <span class="v">t</span> in either of these contexts.  The 
+ moral is: beware of non-recursive functions occurring in the hypotheses of 
+ <span class="v">:type-prescription</span> rules.</p> 
+ 
+ <p>Because of the freedom one has in forming the conclusion of a 
+ type-prescription, we have to use heuristics to recover the pattern, <span class="v">pat</span>, 
+ whose type is being specified.  In some cases our heuristics may not identify 
+ the intended term and the <span class="v">:type-prescription</span> rule will be rejected as 
+ illegal because the conclusion is not of the correct form.  When this happens 
+ you may wish to specify the <span class="v">pat</span> directly.  This may be done by using a 
+ suitable rule class token.  In particular, when the token 
+ <span class="v">:type-prescription</span> is used it means ACL2 is to compute pat with its 
+ heuristics; otherwise the token should be of the form <span class="v">(:type-prescription
+ :typed-term pat)</span>, where <span class="v">pat</span> is the term whose type is being 
+ specified.</p> 
+ 
+ <p>The defun event may generate a <span class="v">:type-prescription</span> rule.  Suppose 
+ <span class="v">fn</span> is the name of the function concerned.  Then <span class="v">(:type-prescription
+ fn)</span> is the rune given to the type-prescription, if any, generated for 
+ <span class="v">fn</span> by <span class="tt"><a href="COMMON-LISP____DEFUN.html">defun</a></span>.  (The trivial rule, saying <span class="v">fn</span> has unknown type, 
+ is not stored, but <span class="tt"><a href="COMMON-LISP____DEFUN.html">defun</a></span> still allocates the rune and the corollary of 
+ this rune is known to be <span class="v">t</span>.)</p> 
+ 
+ <p>We close with a discussion of how, before a term is parsed into a 
+ <span class="v">:type-prescription</span> rule, it is preprocessed.  We describe this 
+ preprocessing in some detail below, but first consider the following 
+ (contrived) example.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> append-tp-example
+  (<a href="COMMON-LISP____LET.html">let</a> ((result (<a href="COMMON-LISP____APPEND.html">append</a> x y)))
+    (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____NAT-LISTP.html">nat-listp</a> x)
+             (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____LET.html">let</a> ((second-hyp (<a href="ACL2____INTEGER-LISTP.html">integer-listp</a> y)))
+                        second-hyp)
+                      (<a href="ACL2____TRUE-LISTP.html">true-listp</a> result))))
+  :rule-classes :type-prescription)</pre> 
+ 
+ <p>This theorem is parsed into a type-prescription rule with the following 
+ hypotheses and conclusion.</p> 
+ 
+ <pre class="code">(<a href="ACL2____NAT-LISTP.html">nat-listp</a> x) ; first hypothesis
+((<a href="COMMON-LISP____LAMBDA.html">lambda</a> (second-hyp) second-hyp) (<a href="ACL2____INTEGER-LISTP.html">integer-listp</a> y)) ; second hypothesis
+(<a href="ACL2____TRUE-LISTP.html">true-listp</a> (<a href="ACL2____BINARY-APPEND.html">binary-append</a> x y)) ; conclusion</pre> 
+ 
+ <p>Notice that the top-level <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span> was expanded, i.e., <span class="v">(<a href="COMMON-LISP____APPEND.html">append</a> x y)</span> 
+ was substituted for <span class="v">result</span>  more accurately, <span class="v">(<a href="ACL2____BINARY-APPEND.html">binary-append</a> x
+ y)</span> was substituted for <span class="v">result</span>, since <span class="tt"><a href="COMMON-LISP____APPEND.html">append</a></span> is a macro that 
+ abbreviates <span class="tt"><a href="ACL2____BINARY-APPEND.html">binary-append</a></span>.  Also notice that the two hypotheses were 
+ ``flattened'' in the sense that they were gathered up into a list.  Finally, 
+ notice that the <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span> in the second hypothesis was not expanded (it was 
+ merely translated to internal form, using <span class="v">LAMBDA</span>).  If you actually 
+ submit the theorem above, you will get warnings, which you may choose to 
+ ignore; the application of <span class="v">type-prescription</span> rules is somewhat subtle, so 
+ if you use them then you may wish to experiment to see which forms work best 
+ for you.</p> 
+ 
+ <p>Here is the detail promised above, for parsing a term into a 
+ <span class="v">:type-prescription</span> rule.  There are two steps.  (1) ACL2 first translates 
+ the term, expanding all macros (see <a href="ACL2____TRANS.html">trans</a>) and also removing <a href="ACL2____GUARD-HOLDERS.html">guard-holders</a>.  (2) Then the the translated term is traversed top-down, 
+ expanding away <span class="v">lambda</span>s (<span class="tt"><a href="COMMON-LISP____LET.html">let</a></span>, <span class="tt"><a href="COMMON-LISP____LET_A2.html">let*</a></span>, and <span class="tt"><a href="ACL2____MV-LET.html">mv-let</a></span> 
+ expressions) and flattening the <span class="tt"><a href="ACL2____IMPLIES.html">implies</a></span> structure, until the 
+ conclusion is exposed; then the conclusion's <span class="v">lambda</span>s are also expanded 
+ away.  The simplest way to understand (2) may be to look at the definition of 
+ ACL2 source function <span class="v">unprettyify-tp</span>, which implements Step (2), say by 
+ evaluating <span class="v">:</span><span class="tt"><a href="ACL2____PE.html">pe</a></span><span class="v"> unprettyify-tp</span>.</p>
+</body>
+</html>

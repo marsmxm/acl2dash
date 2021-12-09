@@ -1,0 +1,153 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Vl-make-n-bit-mux</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL2014____VL-MAKE-N-BIT-MUX">Click for Vl-make-n-bit-mux in the Full Manual</a></h3>
+
+<p>Generate a wide multiplexor module.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(vl-make-n-bit-mux n approxp)  mods</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">n</span>  <font color="#606060">Guard <span class="v">(<a href="ACL2____POSP.html">posp</a> n)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">approxp</span>  <font color="#606060">Guard <span class="v">(<a href="ACL2____BOOLEANP.html">booleanp</a> approxp)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">mods</span>  A non-empty module list.  The first module in the list 
+                       is the desired module; the other modules are any 
+                       necessary supporting modules.<br><font color="#606060">Type <span class="v">(<a href="VL2014____VL-MODULELIST-P.html">vl-modulelist-p</a> mods)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>We generate a module that is written using gates and which is a 
+conservative approximation of the following:</p> 
+ 
+<pre class="code">module VL_N_BIT_MUX (out, sel, a, b);  // or VL_N_BIT_APPROX_MUX
+  output [N-1:0] out;
+  input sel;
+  input [N-1:0] a;
+  input [N-1:0] b;
+
+  assign out = sel ? a : b;
+endmodule</pre> 
+ 
+<p>We generate a "regular" or "approx" versions depending on <span class="v">approxp</span>. 
+Either version is a conservative, inexact approximations of the Verilog 
+semantics of the conditional operator, because we cannot really preserve 
+<span class="v">Z</span>s appropriately using gates.  Perhaps the semantics of <span class="v">?:</span> are not 
+exactly synthesizable?</p> 
+ 
+<p>When <span class="v">approxp</span> is NIL, we try to model Verilog's semantics as closely as 
+possible; in this case <span class="v">X ? 1 : 1</span> and <span class="v">X ? 0 : 0</span> produce 1 and 0, 
+respectively.  But when <span class="v">approxp</span> is T, we conservatively produce X in these 
+cases, instead.</p> 
+ 
+<p>For some years we implemented both kinds of muxes using gates, roughly as</p> 
+ 
+<ul> 
+ <li>
+<span class="v">out[i] = (sel &amp; a[i]) | (~sel &amp; b[i])</span>, for approx muxes, or</li> 
+ <li>
+<span class="v">out[i] = (sel &amp; a[i]) | (~sel &amp; b[i]) | (a[i] &amp; b[i])</span> otherwise</li> 
+</ul> 
+ 
+<p>But we later (October 2013) realized a bizarre inconsistency in the way that 
+approx-muxes handled things.  In particular:</p> 
+ 
+<ul> 
+ 
+<li>If both a[i] and b[i] are 0, then the approx-mux expression produces a good 
+0 output (because the AND gates propagate the zero.)  However,</li> 
+ 
+<li>If both a[i] and b[i] are 1, then the approx-mux expression produces an X 
+because the AND gates can't optimize things.</li> 
+ 
+</ul> 
+ 
+<p>Since our general intent is to model arbitrary mux implementations with 
+approx muxes, this optimistic treatment for 0 seems suspicious or incorrect. 
+We ultimately decided to adopt both kinds of muxes as new VL <a href="VL2014____PRIMITIVES.html">primitives</a> 
+rather than implement them with gates.  See <a href="VL2014_____A2VL-1-BIT-APPROX-MUX_A2.html">*vl-1-bit-approx-mux*</a> and 
+<a href="VL2014_____A2VL-1-BIT-MUX_A2.html">*vl-1-bit-mux*</a> for details.</p> 
+ 
+<p>You might expect that it's better to set <span class="v">approxp</span> to NIL and get the 
+behavior that is closest to Verilog.  But the more conservative version may 
+generally produce smaller AIGs since the output doesn't depend upon the inputs 
+when the select is X.  So, we generally set <span class="v">approxp</span> to T.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>vl-make-n-bit-mux</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ vl-make-n-bit-mux (n approxp)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____POSP.html">posp</a> n) (<a href="ACL2____BOOLEANP.html">booleanp</a> approxp))))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'vl-make-n-bit-mux))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+   ((n (lposfix n))
+    (onebitmux (<a href="COMMON-LISP____IF.html">if</a> approxp
+                   *vl-1-bit-approx-mux* *vl-1-bit-mux*))
+    ((when (<a href="COMMON-LISP____EQL.html">eql</a> n 1)) (<a href="COMMON-LISP____LIST.html">list</a> onebitmux))
+    (name (<a href="STR____CAT.html">cat</a> "VL_" (natstr n)
+               "_BIT_"
+               (<a href="COMMON-LISP____IF.html">if</a> approxp "APPROX_MUX" "MUX")))
+    ((<a href="ACL2____MV.html">mv</a> out-expr
+         out-port out-portdecl out-vardecl)
+     (<a href="VL2014____VL-OCCFORM-MKPORT.html">vl-occform-mkport</a> "out" :vl-output n))
+    ((<a href="ACL2____MV.html">mv</a> sel-expr
+         sel-port sel-portdecl sel-vardecl)
+     (<a href="VL2014____VL-PRIMITIVE-MKPORT.html">vl-primitive-mkport</a> "sel" :vl-input))
+    ((<a href="ACL2____MV.html">mv</a> a-expr a-port a-portdecl a-vardecl)
+     (<a href="VL2014____VL-OCCFORM-MKPORT.html">vl-occform-mkport</a> "a" :vl-input n))
+    ((<a href="ACL2____MV.html">mv</a> b-expr b-port b-portdecl b-vardecl)
+     (<a href="VL2014____VL-OCCFORM-MKPORT.html">vl-occform-mkport</a> "b" :vl-input n))
+    (out-wires (<a href="VL2014____VL-MAKE-LIST-OF-BITSELECTS.html">vl-make-list-of-bitselects</a> out-expr 0 (<a href="COMMON-LISP____-.html">-</a> n 1)))
+    (a-wires (<a href="VL2014____VL-MAKE-LIST-OF-BITSELECTS.html">vl-make-list-of-bitselects</a> a-expr 0 (<a href="COMMON-LISP____-.html">-</a> n 1)))
+    (b-wires (<a href="VL2014____VL-MAKE-LIST-OF-BITSELECTS.html">vl-make-list-of-bitselects</a> b-expr 0 (<a href="COMMON-LISP____-.html">-</a> n 1)))
+    (insts
+         (vl-simple-inst-list onebitmux
+                              "bit" out-wires (<a href="ACL2____REPLICATE.html">replicate</a> n sel-expr)
+                              a-wires b-wires))
+    (<a href="COMMON-LISP____MOD.html">mod</a> (<a href="VL2014____MAKE-VL-MODULE.html">make-vl-module</a>
+              :name name
+              :origname name
+              :ports (<a href="COMMON-LISP____LIST.html">list</a> out-port sel-port a-port b-port)
+              :portdecls (<a href="COMMON-LISP____LIST.html">list</a> out-portdecl
+                               sel-portdecl a-portdecl b-portdecl)
+              :vardecls (<a href="COMMON-LISP____LIST.html">list</a> out-vardecl
+                              sel-vardecl a-vardecl b-vardecl)
+              :modinsts insts
+              :minloc *vl-fakeloc*
+              :maxloc *vl-fakeloc*)))
+   (<a href="COMMON-LISP____LIST.html">list</a> mod onebitmux))))</pre> 
+<p><b>Theorem: </b>vl-modulelist-p-of-vl-make-n-bit-mux</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-modulelist-p-of-vl-make-n-bit-mux
+        (<a href="ACL2____B_A2.html">b*</a> ((mods (<a href="VL2014____VL-MAKE-N-BIT-MUX.html">vl-make-n-bit-mux</a> n approxp)))
+            (<a href="VL2014____VL-MODULELIST-P.html">vl-modulelist-p</a> mods))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>type-of-vl-make-n-bit-mux</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> type-of-vl-make-n-bit-mux
+        (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____TRUE-LISTP.html">true-listp</a> (<a href="VL2014____VL-MAKE-N-BIT-MUX.html">vl-make-n-bit-mux</a> n approxp))
+             (<a href="COMMON-LISP____CONSP.html">consp</a> (<a href="VL2014____VL-MAKE-N-BIT-MUX.html">vl-make-n-bit-mux</a> n approxp)))
+        :rule-classes :type-prescription)</pre> 
+<p><b>Theorem: </b>vl-make-n-bit-mux-of-pos-fix-n</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-make-n-bit-mux-of-pos-fix-n
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL2014____VL-MAKE-N-BIT-MUX.html">vl-make-n-bit-mux</a> (<a href="ACL2____POS-FIX.html">pos-fix</a> n) approxp)
+               (<a href="VL2014____VL-MAKE-N-BIT-MUX.html">vl-make-n-bit-mux</a> n approxp)))</pre> 
+<p><b>Theorem: </b>vl-make-n-bit-mux-pos-equiv-congruence-on-n</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-make-n-bit-mux-pos-equiv-congruence-on-n
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____POS-EQUIV.html">acl2::pos-equiv</a> n n-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL2014____VL-MAKE-N-BIT-MUX.html">vl-make-n-bit-mux</a> n approxp)
+                        (<a href="VL2014____VL-MAKE-N-BIT-MUX.html">vl-make-n-bit-mux</a> n-equiv approxp)))
+        :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>vl-make-n-bit-mux-of-bool-fix-approxp</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-make-n-bit-mux-of-bool-fix-approxp
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL2014____VL-MAKE-N-BIT-MUX.html">vl-make-n-bit-mux</a> n (<a href="ACL2____BOOL-FIX.html">acl2::bool-fix</a> approxp))
+               (<a href="VL2014____VL-MAKE-N-BIT-MUX.html">vl-make-n-bit-mux</a> n approxp)))</pre> 
+<p><b>Theorem: </b>vl-make-n-bit-mux-iff-congruence-on-approxp</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-make-n-bit-mux-iff-congruence-on-approxp
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____IFF.html">iff</a> approxp approxp-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL2014____VL-MAKE-N-BIT-MUX.html">vl-make-n-bit-mux</a> n approxp)
+                        (<a href="VL2014____VL-MAKE-N-BIT-MUX.html">vl-make-n-bit-mux</a> n approxp-equiv)))
+        :rule-classes :congruence)</pre> 
+
+</body>
+</html>

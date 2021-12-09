@@ -1,0 +1,115 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Open-output-channel!</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____OPEN-OUTPUT-CHANNEL_12">Click for Open-output-channel! in the Full Manual</a></h3>
+
+<p>When trust tags are needed to open output channels</p><p>Use this function in place of <span class="v">open-output-channel</span> if you want 
+ to open a channel for output at times this would otherwise be prohibited, for 
+ example during <span class="tt"><a href="ACL2____MAKE-EVENT.html">make-event</a></span> expansion and <span class="tt"><a href="ACL2____CLAUSE-PROCESSOR.html">clause-processor</a></span> <a href="ACL2____HINTS.html">hints</a>.  If this functionality doesn't quite seem like what you need, take a 
+ look at the definition of <span class="v">open-output-channel!</span> in axioms.lisp, 
+ specifically the binding of <span class="tt"><a href="ACL2____STATE.html">state</a></span> global variable <span class="v">writes-okp</span>. 
+ The following example, taken from (no longer available) community book 
+ <span class="v">books/hons-archive/hons-archive.lisp</span>, illustrates the latter 
+ approach.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> har-zip! (x filename &amp;key sortp)
+  "See :doc hons-archive"
+  `(<a href="ACL2____MV-LET.html">mv-let</a> (erp val state)
+           (<a href="ACL2____PROGN_12.html">progn!</a>
+            :state-global-bindings
+            ((temp-touchable-vars t set-temp-touchable-vars))
+            (<a href="ACL2____STATE-GLOBAL-LET_A2.html">state-global-let*</a>
+             ((writes-okp t))
+             (<a href="COMMON-LISP____LET.html">let</a> ((<a href="ACL2____STATE.html">state</a> (har-zip-fn ,x ,filename ,sortp state)))
+               (<a href="ACL2____MV.html">mv</a> nil nil state))))
+           (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORE.html">ignore</a> erp val))
+           state))</pre> 
+ 
+ <p>The book below illustrates the soundness loophole plugged in ACL2 
+ Version_3.2 related to file writes during book certification.</p> 
+ 
+ <pre class="code">; The following example is adapted (with only very slight changes)
+; from one written by Peter Dillinger.  It illustrates the prohibition
+; against writing files enforced by with-output-channel during book
+; certification (more specifically, during make-event expansion).
+
+; This book certifies in ACL2 Version_3.1 before the fix discussed in the
+; paragraph about it being ``possible to write files during book
+; certification'' in :DOC NOTE-3-2.  The fix was actually made to ACL2
+; function open-output-channel.
+
+; After the fix, in order for certification to succeed one needs to do
+; two things.  First, in raw lisp:
+;   (push :after-writes-okp-fix *features*)
+; Second, certify with this command:
+;   (<a href="ACL2____CERTIFY-BOOK.html">certify-book</a> "writes-okp" 0 nil :ttags (:writes-okp))
+
+(<a href="COMMON-LISP____IN-PACKAGE.html">in-package</a> "ACL2")
+
+(<a href="ACL2____LOCAL.html">local</a>
+ (<a href="COMMON-LISP____DEFUN.html">defun</a> write-objects-to-channel (obj-lst chan state)
+   (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :mode :program
+                   :stobjs state
+                   :guard (<a href="ACL2____TRUE-LISTP.html">true-listp</a> obj-lst)))
+   (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____CONSP.html">consp</a> obj-lst)
+       (<a href="ACL2____PPROGN.html">pprogn</a> (<a href="ACL2____PRINT-OBJECT_42.html">print-object$</a> (<a href="COMMON-LISP____CAR.html">car</a> obj-lst) chan state)
+               (write-objects-to-channel (<a href="COMMON-LISP____CDR.html">cdr</a> obj-lst) chan state)
+               state)
+     state)))
+
+#+after-writes-okp-fix
+(<a href="ACL2____DEFTTAG.html">defttag</a> :writes-okp)
+
+(<a href="ACL2____LOCAL.html">local</a>
+ (<a href="COMMON-LISP____DEFUN.html">defun</a> write-objects-to-file (obj-lst filename state)
+   (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :mode :program
+                   :stobjs state
+                   :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____STRINGP.html">stringp</a> filename)
+                               (<a href="ACL2____TRUE-LISTP.html">true-listp</a> obj-lst))))
+   (<a href="ACL2____MV-LET.html">mv-let</a> (chan state)
+           #-after-writes-okp-fix
+           (<a href="ACL2____OPEN-OUTPUT-CHANNEL.html">open-output-channel</a> filename :object state)
+           #+after-writes-okp-fix
+           (<a href="ACL2____OPEN-OUTPUT-CHANNEL_12.html">open-output-channel!</a> filename :object state)
+           (<a href="COMMON-LISP____IF.html">if</a> chan
+               (<a href="ACL2____PPROGN.html">pprogn</a> (write-objects-to-channel obj-lst chan state)
+                       (<a href="ACL2____CLOSE-OUTPUT-CHANNEL.html">close-output-channel</a> chan state)
+                       (<a href="ACL2____VALUE.html">value</a> :done))
+             (<a href="ACL2____ER.html">er</a> soft 'write-object-to-file
+                 "Could not open for writing: ~x0"
+                 filename)))))
+
+(<a href="ACL2____LOCAL.html">local</a>
+ (<a href="ACL2____DEFCONST.html">defconst</a> *nil.lisp*
+   '((<a href="COMMON-LISP____IN-PACKAGE.html">in-package</a> "ACL2")
+     (<a href="ACL2____DEFTHM.html">defthm</a> bad nil :rule-classes nil))))
+
+(<a href="ACL2____LOCAL.html">local</a>
+ (<a href="ACL2____DEFCONST.html">defconst</a> *nil.cert*
+   '((<a href="COMMON-LISP____IN-PACKAGE.html">IN-PACKAGE</a> "ACL2")
+     "ACL2 Version 3.1"
+     :BEGIN-PORTCULLIS-CMDS
+     :END-PORTCULLIS-CMDS
+     NIL
+     (("/home/peterd/test/nil.lisp" "nil" "nil"
+       ((:SKIPPED-PROOFSP) (:AXIOMSP) (:TTAGS)) . 134094174))
+     62589544
+     )))
+
+(<a href="ACL2____LOCAL.html">local</a>
+ (<a href="ACL2____MAKE-EVENT.html">make-event</a> (<a href="ACL2____ER-PROGN.html">er-progn</a>
+              (write-objects-to-file *nil.lisp* "nil.lisp" state)
+              (write-objects-to-file *nil.cert* "nil.cert" state)
+              (<a href="ACL2____VALUE.html">value</a> '(<a href="ACL2____VALUE-TRIPLE.html">value-triple</a> :invisible)))))
+
+(<a href="ACL2____LOCAL.html">local</a> (<a href="ACL2____INCLUDE-BOOK.html">include-book</a>
+        "nil" :load-compiled-file nil))
+
+(<a href="ACL2____DEFTHM.html">defthm</a> bad nil :rule-classes nil)</pre>
+</body>
+</html>

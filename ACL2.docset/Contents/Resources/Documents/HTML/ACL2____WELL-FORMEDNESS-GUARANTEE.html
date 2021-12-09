@@ -1,0 +1,243 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Well-formedness-guarantee</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____WELL-FORMEDNESS-GUARANTEE">Click for Well-formedness-guarantee in the Full Manual</a></h3>
+
+<p>Guarantee that a metafunction or clause-processor returns a 
+ well-formed answer</p><p>A <span class="v">:well-formedness-guarantee</span> is a keyword attribute available 
+ in the <span class="v">:</span><span class="tt"><a href="ACL2____META.html">meta</a></span> and <span class="v">:</span><span class="tt"><a href="ACL2____CLAUSE-PROCESSOR.html">clause-processor</a></span> <span class="v">:</span><span class="tt"><a href="ACL2____RULE-CLASSES.html">rule-classes</a></span>.  By default, when a metafunction or clause processor is 
+ applied, ACL2 checks that the output is well-formed (and does not contain 
+ certain ``forbidden'' functions; see <span class="tt"><a href="ACL2____SET-SKIP-META-TERMP-CHECKS.html">set-skip-meta-termp-checks</a></span>).  By 
+ providing a <span class="v">:well-formedness-guarantee</span> when you store a <span class="v">:meta</span> or 
+ <span class="v">:clause-processor</span> rule, you can cause ACL2 to skip these runtime 
+ checks.</p> 
+ 
+ <p>This is considered an advanced feature that requires that you prove certain 
+ theorems; this is probably only worthwhile if your metafunctions or clause 
+ processors produce very large terms.  Henceforth, we assume you are familiar 
+ with metafunctions and clause processors.</p> 
+ 
+ <p>This topic first exhibits a simple example of a well-formedness guarantee 
+ for a metafunction.  This example is really an outline; a self-contained, 
+ runnable example may be found in the <a href="ACL2____COMMUNITY-BOOKS.html">community-books</a> in file 
+ <span class="v">books/demos/meta-wf-guarantee-example.lisp</span>.  Then we describe the 
+ acceptable values of the <span class="v">:well-formedness-guarantee</span> keyword of both the 
+ <span class="v">:meta</span> and <span class="v">:clause-processor</span> rule-classes.  Next we show the forms of 
+ the theorems you must prove to provide such guarantees.  Finally, we discuss 
+ the runtime effects of providing such guarantees.</p> 
+ 
+ <h4>Example</h4> 
+ 
+ <p>Suppose that <span class="v">fn</span> is a vanilla metafunction that rewrites terms with top 
+ function symbol <span class="v">TARGET</span>, of <span class="tt"><a href="ACL2____ARITY.html">arity</a></span> 1.  The event storing <span class="v">fn</span> as 
+ a metafunction would normally be something like this: 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> fn-is-correct
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a> x)
+                (<a href="ACL2____ALISTP.html">alistp</a> a))
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (evl x a)
+                  (evl (fn x) a)))
+  :rule-classes
+  ((:meta :trigger-fns (TARGET))))</pre> 
+ 
+ where <span class="v">evl</span> is an evaluator for all the function symbols known to <span class="v">fn</span>. 
+ Suppose that to prove this theorem, <span class="v">evl</span> must be able to interpret the 
+ symbols <span class="v">TARGET</span>, <span class="v">CONS</span>, and <span class="v">IF</span>.  While the metatheorem for 
+ <span class="v">fn</span> establishes that <span class="v">fn</span> returns something with the same 
+ ``meaning'' (under <span class="v">evl</span>) as its input, it does not answer the question: 
+ does <span class="v">fn</span> return a well-formed term, all of whose function symbols are in 
+ <span class="v">:</span><span class="tt"><a href="ACL2____LOGIC.html">logic</a></span> mode?  Given the above <span class="v">:rule-class</span>, whenever the 
+ simplifier fires the <span class="v">:meta</span> rule <span class="v">fn-is-correct</span> by applying <span class="v">fn</span> to 
+ a term, it checks that the value, <span class="v">val</span>, is well-formed, by evaluating 
+ <span class="v">(<a href="ACL2____LOGIC-TERMP.html">logic-termp</a> val (<a href="ACL2____W.html">w</a> state))</span>.  The function <span class="tt"><a href="ACL2____LOGIC-TERMP.html">logic-termp</a></span> checks 
+ that its argument is a <a href="ACL2____TERM.html">term</a> all of whose function symbols are in 
+ <span class="v">:logic</span> mode.</p> 
+ 
+ <p><b>Function: </b>logic-termp</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> logic-termp (x wrld)
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (plist-worldp-with-formals wrld)))
+       (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____TERMP.html">termp</a> x wrld)
+            (<a href="ACL2____LOGIC-FNSP.html">logic-fnsp</a> x wrld)))</pre> 
+ 
+ <p>The <span class="v">logic-termp</span> check can be avoided if, before you store the rule 
+ <span class="v">fn-is-correct</span>, you prove: 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> fn-is-well-formed
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____LOGIC-TERMP.html">logic-termp</a> x w)
+                (<a href="ACL2____ARITIES-OKP.html">arities-okp</a> '((TARGET . 1)
+                               (<a href="COMMON-LISP____CONS.html">CONS</a> . 2)
+                               (<a href="COMMON-LISP____IF.html">IF</a> . 3))
+                             w))
+           (<a href="ACL2____LOGIC-TERMP.html">logic-termp</a> (fn x) w))
+  :rule-classes nil)</pre> 
+ 
+ and then you store <span class="v">fn-is-correct</span> this way: 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> fn-is-correct
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a> x)
+                (<a href="ACL2____ALISTP.html">alistp</a> a))
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (evl x a)
+                  (evl (fn x) a)))
+  :rule-classes
+  ((:meta :trigger-fns (TARGET)
+          :well-formedness-guarantee fn-is-well-formed)))</pre> 
+ </p> 
+ 
+ <h4>Acceptable Values</h4> 
+ 
+ <p>Now we describe the values you may provide with the 
+ <span class="v">:well-founded-guarantee</span> keyword of the <span class="v">:meta</span> and the 
+ <span class="v">:clause-processor</span> rule-classes. 
+ 
+ <pre class="code">General Forms:
+:well-formedness-guarantee thm-name1
+:well-formedness-guarantee (thm-name1)
+:well-formedness-guarantee (thm-name1 thm-name2)</pre> 
+ 
+ where both <span class="v">thm-name1</span> and <span class="v">thm-name2</span> are the names of previously 
+ proved ``well-formedness theorems'' (see the next section); furthermore, 
+ <span class="v">thm-name1</span> must be about the metafunction or clause processor being 
+ introduced, and <span class="v">thm-name2</span> must be about the hypothesis metafunction (if 
+ any) associated with the metafunction.  For <span class="v">:meta</span> rules, all three forms 
+ are accepted, but the last form is required if the <span class="v">:meta</span> rule involves a 
+ hypothesis metafunction.  That is, to provide a 
+ <span class="v">:well-formedness-guarantee</span> for a metatheorem with a hypothesis 
+ metafunction, you must supply both <span class="v">thm-name1</span> and <span class="v">thm-name2</span>.  For 
+ <span class="v">:clause-processor</span> rules, you must use the first form.</p> 
+ 
+ <p>Each well-formedness theorem provides an ``arity alist'' that specifies the 
+ assumed arities of the function symbols known to the metafunction or clause 
+ processor.  The arities shown for the function symbols listed in that alist 
+ must be the same as the arities of those functions in the actual ACL2 logical 
+ <a href="ACL2____WORLD.html">world</a> current at the time the <span class="v">:meta</span> or <span class="v">:clause-processor</span> is 
+ stored.  Moreover, the function symbols in that alist must all be in 
+ <span class="v">:</span><span class="tt"><a href="ACL2____LOGIC.html">logic</a></span> mode.</p> 
+ 
+ <p>Furthermore, none of the function symbols in the arity alists should be 
+ ``forbidden'' function symbols as explained in <span class="tt"><a href="ACL2____SET-SKIP-META-TERMP-CHECKS.html">set-skip-meta-termp-checks</a></span>.</p> 
+ 
+ <p>When the <span class="v">:meta</span> or <span class="v">:clause-processor</span> rule is stored, notes are 
+ made that will prevent the function symbols on the arity alists from becoming 
+ untouchable (and thus forbidden).  See <span class="tt"><a href="ACL2____PUSH-UNTOUCHABLE.html">push-untouchable</a></span>.</p> 
+ 
+ <p>The only way a function's arity or forbidden status can change, or that a 
+ function can transition out of <span class="v">:logic</span> mode, is if the user has engaged in 
+ redefinition or activated a trust tag to add or remove untouchables.  Thus, 
+ the restrictions above are unimportant to most users.</p> 
+ 
+ <h4>Well-Formedness Theorems</h4> 
+ 
+ <p>Theorems must be proved to establish that metafunctions and clause 
+ processors return well-formed results.  These are called ``well-formedness 
+ theorems.''  Note: To say a theorem is a ``well-formedness theorem'' is a 
+ remark about the shape of the formula, not its rule-class.  There is no 
+ <span class="v">:well-formedness-theorem</span> rule-class and a well-formedness theorem may be 
+ stored with any <span class="v">:</span><span class="tt"><a href="ACL2____RULE-CLASSES.html">rule-classes</a></span> that accept the syntax of the 
+ formula or as <span class="v">:rule-classes</span> <span class="v">nil</span>.  Indeed, if one of your 
+ metafunctions uses another function to produce a subterm of the metafunction's 
+ answer, you might need to prove a well-formedness theorem for the sub-function 
+ and make it a <span class="v">:rewrite</span> rule.</p> 
+ 
+ <p>Well-formedness theorems for metafunctions and clause processors are 
+ similar but slightly different.  We deal with metafunctions and their 
+ corresponding hypothesis metafunctions (if any) first.  The shapes of the 
+ well-formedness theorems for a metafunction and hypothesis metafunction are 
+ identical, but remember that you must prove a well-formedness theorem for both 
+ the metafunction and the associated hypothesis metafunction.  So suppose 
+ <span class="v">fn</span> is a metafunction or a hypothesis metafunction and let <span class="v">(fn x ...)</span> 
+ be a legal call on distinct variable symbols.  (Recall that extended 
+ metafunctions and their hypothesis functions can take three arguments.)  Then 
+ the general form a well-formedness theorem for <span class="v">fn</span> states that <span class="v">fn</span> 
+ returns a <span class="tt"><a href="ACL2____TERMP.html">termp</a></span> when given one, provided the arities of certain 
+ function symbols are as expected: 
+ 
+ <pre class="code">General Form of Well-Formedness Theorem for a Metafunction:
+(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____LOGIC-TERMP.html">logic-termp</a> x w)
+              (<a href="ACL2____ARITIES-OKP.html">arities-okp</a> '&lt;alist&gt; w))
+         (<a href="ACL2____LOGIC-TERMP.html">logic-termp</a> (fn x ...) w))</pre> 
+ 
+ where <span class="v">&lt;alist&gt;</span> is an alist pairing function symbols with their assumed 
+ arities as illustrated in the opening example.  Note that the first argument 
+ of <span class="v">arities-okp</span> in the theorem is a quoted constant.  You may omit or 
+ reorder the hypotheses above and you may use different variable symbols in 
+ place of <span class="v">x</span> and <span class="v">w</span>, but they must be distinct and different from the 
+ variables in the ``<span class="v">...</span>.''</p> 
+ 
+ <p>An example of <span class="v">&lt;alist&gt;</span> is <span class="v">((TARGET . 1) (<a href="COMMON-LISP____CONS.html">CONS</a> . 2) (<a href="COMMON-LISP____IF.html">IF</a> . 3))</span>. 
+ Generally, the <span class="v">&lt;alist&gt;</span> you provide should assign arities to every symbol 
+ known to <span class="v">fn</span>, i.e., every function symbol known to the evaluator used in 
+ your correctness theorem.  If you inspect the definition of <span class="tt"><a href="ACL2____TERMP.html">termp</a></span> you 
+ will see that it uses <span class="v">w</span> to obtain arities of the function symbols in 
+ <span class="v">x</span>.  The <span class="tt"><a href="ACL2____ARITIES-OKP.html">arities-okp</a></span> hypothesis restricts <span class="v">w</span> to worlds where 
+ the function symbols known to <span class="v">fn</span> have the arities you expect and are in 
+ <span class="v">:</span><span class="tt"><a href="ACL2____LOGIC.html">logic</a></span>-mode.  For example, given the <span class="v">(<a href="ACL2____ARITIES-OKP.html">arities-okp</a> '&lt;alist&gt;
+ w)</span> hypothesis for the <span class="v">&lt;alist&gt;</span> above, the theorem prover will rewrite 
+ <span class="v">(<a href="ACL2____ARITY.html">arity</a> 'IF w)</span> to 3.  By default <span class="tt"><a href="ACL2____ARITY.html">arity</a></span> and <span class="tt"><a href="ACL2____ARITIES-OKP.html">arities-okp</a></span> are 
+ disabled; and the following rewrite rules, which are part of ACL2's initial 
+ <a href="ACL2____WORLD.html">world</a>, will take care of calls like <span class="v">(<a href="ACL2____ARITY.html">arity</a> 'IF w)</span> and <span class="v">(<a href="ACL2____LOGICP.html">logicp</a>
+ fn w)</span>.</p> 
+ 
+ <p><b>Theorem: </b>arities-okp-implies-arity</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> arities-okp-implies-arity
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____ARITIES-OKP.html">arities-okp</a> user-table w)
+                      (<a href="COMMON-LISP____ASSOC.html">assoc</a> fn user-table))
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____ARITY.html">arity</a> fn w)
+                        (<a href="COMMON-LISP____CDR.html">cdr</a> (<a href="COMMON-LISP____ASSOC.html">assoc</a> fn user-table)))))</pre> 
+ 
+ <p><b>Theorem: </b>arities-okp-implies-logicp</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> arities-okp-implies-logicp
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____ARITIES-OKP.html">arities-okp</a> user-table w)
+                      (<a href="COMMON-LISP____ASSOC.html">assoc</a> fn user-table))
+                 (<a href="ACL2____LOGICP.html">logicp</a> fn w)))</pre> 
+ 
+ <p>Now we turn to the well-formedness theorem for a clause processor, 
+ <span class="v">cl-proc</span>.  Let <span class="v">(cl-proc x ...)</span> be a legal call on distinct variable 
+ symbols.  The theorem establishes that <span class="v">cl-proc</span> returns a list of clauses 
+ when given a clause, provided certain functions have the expected arities. 
+ But the recognizer for a clause is the function <span class="tt"><a href="ACL2____LOGIC-TERM-LISTP.html">logic-term-listp</a></span> and 
+ the recognizer for a list of clauses is <span class="tt"><a href="ACL2____LOGIC-TERM-LIST-LISTP.html">logic-term-list-listp</a></span>:</p> 
+ 
+ <pre class="code">General Forms of Well-Formedness Theorem for a Clause Processor
+(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____LOGIC-TERM-LISTP.html">logic-term-listp</a> x w)
+              (<a href="ACL2____ARITIES-OKP.html">arities-okp</a> '&lt;alist&gt; w))
+         (<a href="ACL2____LOGIC-TERM-LIST-LISTP.html">logic-term-list-listp</a> (cl-proc x ...) w))
+
+(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____LOGIC-TERM-LISTP.html">logic-term-listp</a> x w)
+              (<a href="ACL2____ARITIES-OKP.html">arities-okp</a> '&lt;alist&gt; w))
+         (<a href="ACL2____LOGIC-TERM-LIST-LISTP.html">logic-term-list-listp</a> (clauses-result (cl-proc x ...)) w))</pre> 
+ 
+ <p>The first form above is for a <span class="v">cl-proc</span> that returns a single value and 
+ the second form is for a <span class="v">cl-proc</span> that returns multiple values.</p> 
+ 
+ <p>The discussion about metafunctions, above, applies here as well. 
+ <span class="v">&lt;Alist&gt;</span> is an alist pairing function symbols with their assumed arities. 
+ You may omit or reorder the hypotheses and you may use different variable 
+ symbols in place of <span class="v">x</span> and <span class="v">w</span>, but they must be distinct and different 
+ from the variables in the ``<span class="v">...</span>.''</p> 
+ 
+ <h4>Runtime Effects</h4> 
+ 
+ <p>In the absence of a <span class="v">:well-formedness-guarantee</span>, if a metafunction or 
+ clause processor is applied during a proof and produces <span class="v">val</span>, then certain 
+ checks are made on <span class="v">val</span> before it is used in the proof attempt.  In the 
+ case of a metafunction, <span class="v">(<a href="ACL2____LOGIC-TERMP.html">logic-termp</a> val (<a href="ACL2____W.html">w</a> state))</span> is checked and 
+ <span class="v">val</span> is scanned to ensure that it contains no forbidden function symbols. 
+ In the case of a clause processor, <span class="v">(<a href="ACL2____LOGIC-TERM-LIST-LISTP.html">logic-term-list-listp</a> val (<a href="ACL2____W.html">w</a> state))</span> 
+ is checked and <span class="v">val</span> is scanned to ensure that it contains no forbidden 
+ function symbols.</p> 
+ 
+ <p>If <span class="v">val</span> is large (e.g., because the input is large), these checks can 
+ take more time than the metafunction or clause processor did to produce 
+ <span class="v">val</span>!  It is for this reason that we provide for 
+ <span class="v">:well-formedness-guarantee</span>s.</p> 
+ 
+ <p>When a <span class="v">:well-formedness-guarantee</span> is provided no checks are made on 
+ <span class="v">val</span>.  However, ACL2 will check that the arity alist(s) involved in the 
+ guarantee still correctly shows the arities of the function symbols listed. 
+ Because those function symbols were not forbidden when the guarantee was made 
+ and are prohibited from being forbidden thereafter, no check is necessary to 
+ ensure that no forbidden symbols are introduced into the proof.</p>
+</body>
+</html>

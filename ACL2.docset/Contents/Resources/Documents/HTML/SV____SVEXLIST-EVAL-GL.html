@@ -1,0 +1,175 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Svexlist-eval-gl</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=SV____SVEXLIST-EVAL-GL">Click for Svexlist-eval-gl in the Full Manual</a></h3>
+
+<p>Equivalent of svexlist-eval intended to work well under GL symbolic execution.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(svexlist-eval-gl x env symbolic-params)  *</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">x</span>  Svex expressions to evaluate.<br><font color="#606060">Guard <span class="v">(<a href="SV____SVEXLIST-P.html">svexlist-p</a> x)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">env</span>  Bindings of variables to <a href="SV____4VEC.html">4vec</a> values.<br><font color="#606060">Guard <span class="v">(<a href="SV____SVEX-ENV-P.html">svex-env-p</a> env)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">symbolic-params</span>  Alist giving symbolic execution parameters; see below.<br><font color="#606060">Guard <span class="v">(<a href="ACL2____ALISTP.html">alistp</a> symbolic-params)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+ 
+ 
+<p>This function is provably equivalent to <a href="SV____SVEXLIST-EVAL.html">svexlist-eval</a>, but is 
+tailored to perform well under symbolic execution.  For symbolic execution, we 
+assume that the inputs to this function other than <span class="v">env</span> are fully concrete, 
+and that <span class="v">env</span> is symbolic only in its values, not its keys or its shape.</p> 
+ 
+ 
+<p>The <span class="v">symbolic-params</span> input is logically irrelevant, but allows important 
+optimizations for symbolic execution performance, discussed further below.  It 
+is safe (but not necessarily optimal) to call this with symbolic-params equal 
+<span class="v">NIL</span>.</p> 
+ 
+<h4>Behavior under Symbolic Execution</h4> 
+ 
+<ol> 
+ 
+<li>Applies rewriting to the supplied svex expressions, if <span class="v">:SIMPLIFY</span> is 
+bound to a non-nil value in the <span class="v">symbolic-params</span> input -- see <a href="SV____SVEXLIST-REWRITE-FIXPOINT.html">svexlist-rewrite-fixpoint</a>.</li> 
+ 
+<li>If <span class="v">:boolmasks</span> is bound in the symbolic-params, compares the given 
+<span class="v">env</span> with the bound value, which should be an alist.  If there is a pair 
+<span class="v">(<a href="SV____NAME.html">name</a> . mask)</span> in the boolmasks alist for which the binding for <span class="v">name</span> 
+in env is not Boolean-valued on the bits set to 1 in <span class="v">mask</span>, then fail out 
+of symbolic simulation.  (In AIG mode, the masked bits must be 
+<i>syntactically</i> Boolean-valued -- practically speaking, this means the 
+upper/lower parts should result from the same computation.)</li> 
+ 
+<li>If <span class="v">:VARS</span> is bound in symbolic-params, it should be bound to a list of 
+input variables of the SVTV.  Unions this list with the variables bound in 
+<span class="v">env</span> to obtain the full list of variables to bind as inputs to the SVTV. 
+Or if <span class="v">:ALLVARS</span> is bound in symbolic params, all the variables in the svex 
+expressions are used instead.</li> 
+ 
+<li>Compiles the svex list <span class="v">x</span> into <a href="SV____A4VEC.html">a4vec</a> objects, a symbolic 
+analogue of <a href="SV____4VEC.html">4vec</a> but with each bit an AIG -- see <a href="SV____SVEXLIST-_E3A4VECS-FOR-VARLIST.html">svexlist-&gt;a4vecs-for-varlist</a>.  This computation uses the assumptions, checked 
+in the two steps above, that only the variables in <span class="v">vars</span> are non-X, and 
+that the masked bits in <span class="v">boolmasks</span> are Boolean-valued. These assumptions 
+can reduce the complexity of the generated AIGs.  (Note everything used in this 
+computation is concrete -- the <span class="v">env</span> isn't involved.)</li> 
+ 
+<li>Creates an alist binding the AIG variables used in the above step to the 
+appropriate symbolic bits from <span class="v">env</span>.</li> 
+ 
+<li>Symbolically evaluates each of the a4vec objects from step 4 under the 
+bindings from step 5 using GL's symbolic simulator of <a href="ACL2____AIG-EVAL.html">aig-eval</a>. 
+This results in GL-native symbolic 4vec objects, which is the result we 
+want.</li> 
+ 
+</ol> 
+ 
+<h4>Optimization using the Extra Arguments</h4> 
+ 
+<p>Performance of symbolic execution (and SAT solving, when in AIG mode) is 
+related to the size of the AIGs produced by the svex to AIG 
+transformation (step 4, above).  Two ways to decrease that size are (1) to turn 
+certain variables into constant Xes, if it is known that they're irrelevant, 
+and (2) to assume certain bits of some variables are Boolean-valued, which 
+means it can be represented by just one AIG variable rather than two.</p> 
+ 
+<p>Another performance consideration is that the transformation to AIGs is 
+itself sometimes significant.  Especially for theorems proved by 
+case-splitting, it is important not to need to repeat this transformation for 
+each case.  The function that does the transformation is memoized, but it is 
+important in this case that it always be called with the same arguments.</p> 
+ 
+<p>The <span class="v">vars</span> list pertains to optimization (1): if not present in the list, 
+a variable in the svex expressions will just be replaced with an X.  Therefore, 
+in general it's best to use exactly the set of variables bound in the 
+environment.  However, it may not be worth it to redo the AIG conversion each 
+time the environment's bound variables changes, so we take <span class="v">vars</span> 
+separately.</p> 
+ 
+<p>The <span class="v">boolmasks</span> allows optimization (2).  It is best for symbolic 
+execution performance to bind every variable in <span class="v">vars</span> to -1, but this may 
+fail if the <span class="v">env</span> is not constructed in such a way that the values are 
+obviously 2-vectors.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>svexlist-eval-gl</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ svexlist-eval-gl (x env symbolic-params)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="SV____SVEXLIST-P.html">svexlist-p</a> x)
+                             (<a href="SV____SVEX-ENV-P.html">svex-env-p</a> env)
+                             (<a href="ACL2____ALISTP.html">alistp</a> symbolic-params))))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'svexlist-eval-gl))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+   ((env (<a href="ACL2____MAKE-FAST-ALIST.html">make-fast-alist</a> (<a href="SV____SVEX-ENV-FIX.html">svex-env-fix</a> env)))
+    (svars (<a href="SV____SVEXLIST-VARS-FOR-SYMBOLIC-EVAL.html">svexlist-vars-for-symbolic-eval</a> x env symbolic-params))
+    (x (<a href="SV____SVEXLIST-X-OUT-UNUSED-VARS.html">svexlist-x-out-unused-vars</a>
+            x svars
+            (<a href="SV____SYMBOLIC-PARAMS-X-OUT-COND.html">symbolic-params-x-out-cond</a> symbolic-params)))
+    (x (<a href="SV____MAYBE-SVEXLIST-REWRITE-FIXPOINT.html">maybe-svexlist-rewrite-fixpoint</a>
+            x
+            (<a href="COMMON-LISP____CDR.html">cdr</a> (<a href="COMMON-LISP____ASSOC.html">assoc</a> :simplify symbolic-params))))
+    (boolmasks
+     (<a href="ACL2____MAKE-FAST-ALIST.html">make-fast-alist</a>
+      (<a href="ACL2____HONS-COPY.html">hons-copy</a>
+         (<a href="ACL2____EC-CALL.html">ec-call</a> (<a href="SV____SVAR-BOOLMASKS-FIX.html">svar-boolmasks-fix</a>
+                       (<a href="COMMON-LISP____CDR.html">cdr</a> (<a href="COMMON-LISP____ASSOC.html">assoc</a> :boolmasks symbolic-params)))))))
+    ((unless (<a href="SV____SVEX-ENV-CHECK-BOOLMASKS.html">svex-env-check-boolmasks</a> boolmasks env))
+     (<a href="ACL2____B_A2.html">b*</a>
+      ((?ign
+           (<a href="ACL2____CW.html">cw</a> "ERROR: some bits assumed to be Boolean were not~%"))
+       (?ign (gl::gl-error 'boolcheck-failed)))
+      (gl::gl-hide (<a href="SV____SVEXLIST-EVAL.html">svexlist-eval</a> x env))))
+    ((<a href="ACL2____MV.html">mv</a> err a4vecs)
+     (<a href="ACL2____TIME_42.html">time$</a> (<a href="SV____SVEXLIST-_E3A4VECS-FOR-VARLIST.html">svexlist-&gt;a4vecs-for-varlist</a> x svars boolmasks)
+            :msg "; svex-&gt;aigs: ~st sec, ~sa bytes.~%"))
+    ((when err)
+     (<a href="ACL2____B_A2.html">b*</a> ((?ign (<a href="ACL2____CW.html">cw</a> "ERROR gathering AIG bits for variables: ~@0~%"
+                    err))
+          (?ign (gl::gl-error 'a4env-failed)))
+         (gl::gl-hide (<a href="SV____SVEXLIST-EVAL.html">svexlist-eval</a> x env))))
+    ((<a href="ACL2____MV.html">mv</a> ?err aig-env)
+     (<a href="ACL2____TIME_42.html">time$</a>
+         (<a href="SV____SVEXLIST-_E3A4VEC-AIG-ENV-FOR-VARLIST.html">svexlist-&gt;a4vec-aig-env-for-varlist</a> x svars boolmasks env)
+         :msg "; env -&gt; aig env: ~st sec, ~sa bytes.~%"))
+    (?ign (<a href="ACL2____FAST-ALIST-FREE.html">fast-alist-free</a> env))
+    (aig-env (<a href="ACL2____MAKE-FAST-ALIST.html">make-fast-alist</a> aig-env))
+    (ans (<a href="SV____A4VECLIST-EVAL.html">a4veclist-eval</a> a4vecs aig-env)))
+   (<a href="ACL2____FAST-ALIST-FREE.html">fast-alist-free</a> aig-env)
+   ans)))</pre> 
+<p><b>Theorem: </b>svexlist-eval-gl-is-svexlist-eval</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> svexlist-eval-gl-is-svexlist-eval
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SV____SVEXLIST-EVAL-GL.html">svexlist-eval-gl</a> x env symbolic-params)
+               (<a href="SV____SVEXLIST-EVAL.html">svexlist-eval</a> x env)))</pre> 
+<p><b>Theorem: </b>svexlist-eval-for-symbolic-redef</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> svexlist-eval-for-symbolic-redef
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SV____SVEXLIST-EVAL-FOR-SYMBOLIC.html">svexlist-eval-for-symbolic</a> x env symbolic-params)
+               (<a href="SV____SVEXLIST-EVAL-GL.html">svexlist-eval-gl</a> x env symbolic-params)))</pre> 
+<p><b>Theorem: </b>svexlist-eval-gl-of-svexlist-fix-x</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> svexlist-eval-gl-of-svexlist-fix-x
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SV____SVEXLIST-EVAL-GL.html">svexlist-eval-gl</a> (<a href="SV____SVEXLIST-FIX.html">svexlist-fix</a> x)
+                                 env symbolic-params)
+               (<a href="SV____SVEXLIST-EVAL-GL.html">svexlist-eval-gl</a> x env symbolic-params)))</pre> 
+<p><b>Theorem: </b>svexlist-eval-gl-svexlist-equiv-congruence-on-x</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+    svexlist-eval-gl-svexlist-equiv-congruence-on-x
+    (<a href="ACL2____IMPLIES.html">implies</a> (<a href="SV____SVEXLIST-EQUIV.html">svexlist-equiv</a> x x-equiv)
+             (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SV____SVEXLIST-EVAL-GL.html">svexlist-eval-gl</a> x env symbolic-params)
+                    (<a href="SV____SVEXLIST-EVAL-GL.html">svexlist-eval-gl</a> x-equiv env symbolic-params)))
+    :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>svexlist-eval-gl-of-svex-env-fix-env</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> svexlist-eval-gl-of-svex-env-fix-env
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SV____SVEXLIST-EVAL-GL.html">svexlist-eval-gl</a> x (<a href="SV____SVEX-ENV-FIX.html">svex-env-fix</a> env)
+                                 symbolic-params)
+               (<a href="SV____SVEXLIST-EVAL-GL.html">svexlist-eval-gl</a> x env symbolic-params)))</pre> 
+<p><b>Theorem: </b>svexlist-eval-gl-svex-env-equiv-congruence-on-env</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+    svexlist-eval-gl-svex-env-equiv-congruence-on-env
+    (<a href="ACL2____IMPLIES.html">implies</a> (<a href="SV____SVEX-ENV-EQUIV.html">svex-env-equiv</a> env env-equiv)
+             (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SV____SVEXLIST-EVAL-GL.html">svexlist-eval-gl</a> x env symbolic-params)
+                    (<a href="SV____SVEXLIST-EVAL-GL.html">svexlist-eval-gl</a> x env-equiv symbolic-params)))
+    :rule-classes :congruence)</pre> 
+
+</body>
+</html>

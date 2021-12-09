@@ -1,0 +1,126 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Gratuitous-lambda-object-restrictions</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____GRATUITOUS-LAMBDA-OBJECT-RESTRICTIONS">Click for Gratuitous-lambda-object-restrictions in the Full Manual</a></h3>
+
+<p>Enforcement of logically unnecessary restrictions on <span class="v">:FN</span> slots</p><p>When a form is submitted to the ACL2's read-eval-print loop the 
+  terms in it are translated (``macroexpanded'') into ACL2's internal form, in 
+  which abbreviations like <span class="v">(<a href="COMMON-LISP____CADR.html">cadr</a> x)</span> are expanded away and constants are 
+  always quoted.  See <a href="ACL2____TERM.html">term</a> for details of the internal form.</p> 
+ 
+  <p>But translation also enforces a logically unnecessary restriction in 
+  argument positions of <a href="ACL2____ILK.html">ilk</a> <span class="v">:FN</span>.  If a quoted <span class="v">consp</span> object 
+  whose <span class="v">car</span> is the symbol <span class="v">LAMBDA</span> occurs in a <span class="v">:FN</span> slot, translate 
+  insists that the object satisfy <span class="tt"><a href="ACL2____WELL-FORMED-LAMBDA-OBJECTP.html">well-formed-lambda-objectp</a></span>. 
+  Well-formedness implies tameness, so any <span class="v">LAMBDA</span> object that passes this 
+  translate-time test will have the ``expected behavior'' under <span class="v">apply$</span>. 
+  If an quoted ill-formed ``LAMBDA-like'' object is passed into a <span class="v">:FN</span> 
+  slot, an error is signalled.</p> 
+ 
+  <p>This is logically unnecessary because, like all ACL2 functions, 
+  <span class="v">apply$</span> can be called on any objects.  Indeed, ill-formed 
+  <span class="v">LAMBDA</span>-like objects induce some kind of default behavior by <span class="v">apply$</span> 
+  and can, sometimes, deliver non-erroneous values.</p> 
+ 
+  <p>But ground <span class="v">apply$</span> terms can be evaluated more quickly on well-formed 
+  <span class="v">LAMBDA</span> objects than on ill-formed ones.  See for example the dicussion 
+  of performance in <span class="tt"><a href="ACL2____PRINT-CL-CACHE.html">print-cl-cache</a></span>.  So this retriction is really 
+  motivated by a desire to encourage the exclusive use of well-formed 
+  <span class="v">LAMBDA</span> objects.</p> 
+ 
+  <p>Why would you want to call <span class="v">apply$</span> on ill-formed input?  The answer is 
+  that you might be trying to explore the semantics of <span class="v">apply$</span> by example. 
+  Since this is a time-honored methodology, we have made it possible to 
+  circumvent the translate-time check if you insist on feeding an ill-formed 
+  object into a <span class="v">:FN</span> slot.  Soundness is not imperiled but execution may 
+  slow down.</p> 
+ 
+  <p><i>Warning</i>: Using an ill-formed <span class="v">LAMBDA</span> object in a <span class="v">:FN</span> slot 
+  in a <span class="v">defun</span> will make it impossible to warrant the newly defined function 
+  because it will not pass the stringent tests necessary to analyze its ilks. 
+  See <span class="tt"><a href="ACL2____DEFWARRANT.html">defwarrant</a></span>.  Basically these bypasses are intended primarily for 
+  top-level input to ACL2's read-eval-print loop.</p> 
+ 
+  <p>There are two ways to bypass the check.  Bypass 1 is to construct the 
+  object in place rather than supply a quoted constant.  This can be as simple 
+  as consing a <span class="v">LAMBDA</span> onto the rest of your ill-formed constant.  This, of 
+  course, costs one cons at eval-time.  Bypass 2 is to cons the ill-formed object 
+  together in a <span class="tt"><a href="ACL2____DEFCONST.html">defconst</a></span> and then use the defined constant symbol in 
+  the <span class="v">:FN</span> slot.  We illustrate these and other points below.</p> 
+ 
+  <pre class="code">; Here we show the error that occurs if you use an ill-formed
+; @('LAMBDA') object in a @(':FN') slot.
+
+ACL2 !&gt;(<a href="ACL2____APPLY_42.html">apply$</a> '(<a href="COMMON-LISP____LAMBDA.html">lambda</a> (t) (<a href="COMMON-LISP____CONS.html">cons</a> t t)) '(a))
+
+ACL2 Error in TOP-LEVEL: The second element of a well-formed
+LAMBDA object or lambda$ term must be a true list of distinct
+legal variable symbols and (T) is not.  See :DOC
+gratuitous-lambda-object-restrictions for a workaround if you
+really mean to have an ill-formed LAMBDA-like constant in your
+code.  Note: this error occurred in the context
+(<a href="ACL2____APPLY_42.html">APPLY$</a> '(<a href="COMMON-LISP____LAMBDA.html">LAMBDA</a> (T) (<a href="COMMON-LISP____CONS.html">CONS</a> T T)) '(A)).
+
+; Bypass 1:  Cons the ill-formed object together in place.
+
+ACL2 !&gt;(<a href="ACL2____APPLY_42.html">apply$</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'lambda '((t) (<a href="COMMON-LISP____CONS.html">cons</a> t t))) '(a))
+(A . A)
+
+; Bypass 1 (more attractive but perhaps too subtle): Use
+; backquote.  This looks prettier, indeed, it is almost
+; unnoticeable!  But it does more eval-time consing.
+
+ACL2 !&gt;(<a href="ACL2____APPLY_42.html">apply$</a> `(<a href="COMMON-LISP____LAMBDA.html">lambda</a> (t) (<a href="COMMON-LISP____CONS.html">cons</a> t t)) '(a))
+(A . A)
+
+; Bypass 2:  Use defconst first.  No runtime consing.
+
+ACL2 !&gt;(<a href="ACL2____DEFCONST.html">defconst</a> *my-ill-formed-lambda*
+          `(<a href="COMMON-LISP____LAMBDA.html">lambda</a> (t) (<a href="COMMON-LISP____CONS.html">cons</a> t t)))
+...output elided...
+
+ACL2 !&gt;(<a href="ACL2____APPLY_42.html">apply$</a> *my-ill-formed-lambda* '(a))
+(A . A)
+
+; You can, of course, use these bypasses when defining new
+; functions.
+
+ACL2 !&gt;(<a href="COMMON-LISP____DEFUN.html">defun</a> foo (x) (<a href="ACL2____APPLY_42.html">apply$</a> *my-ill-formed-lambda* (<a href="COMMON-LISP____LIST.html">list</a> x)))
+...successful defun output elided...
+
+; You can then execute the new function, possibly slowly.
+
+ACL2 !&gt;(foo 'b)
+(B . B)
+
+; But you can't warrant the new function because defwarrant
+; can't determine the ilks.
+
+ACL2 !&gt;(<a href="ACL2____DEFWARRANT.html">defwarrant</a> foo)
+
+ACL2 Error in DEFWARRANT: FOO will not be warranted because
+a :FN slot in its body is occupied by a quoted cons object,
+'(<a href="COMMON-LISP____LAMBDA.html">LAMBDA</a> (T) (<a href="COMMON-LISP____CONS.html">CONS</a> T T)), that is not a well-formed,
+fully-translated, closed ACL2 lambda object. ...
+
+; Thus, you can't apply$ 'foo either.
+
+ACL2 !&gt;(<a href="ACL2____APPLY_42.html">apply$</a> 'foo '(c))
+
+ACL2 Error in TOP-LEVEL: The value of APPLY$-USERFN is not
+specified on FOO because FOO has not been warranted.</pre> 
+ 
+  <p>By the way, <span class="v">:FN</span> slots are treated differently in another way by 
+  translate: <span class="tt"><a href="ACL2____LAMBDA_42.html">lambda$</a></span> terms are <i>only</i> allowed in <span class="v">:FN</span> slots. 
+  This restriction is necessary for ACL2's correct operation.  <span class="v">Lambda$</span> 
+  expands differently in the logic than it does in the underlying Common Lisp. 
+  If <span class="v">lambda$</span> terms were allowed to occur anywhere, this difference could 
+  be detected by the difference between proved behavior and computed behavior 
+  and could be used to render ACL2 unsound.</p>
+</body>
+</html>

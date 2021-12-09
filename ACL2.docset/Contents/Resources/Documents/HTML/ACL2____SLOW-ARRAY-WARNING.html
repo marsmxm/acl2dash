@@ -1,0 +1,104 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Slow-array-warning</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____SLOW-ARRAY-WARNING">Click for Slow-array-warning in the Full Manual</a></h3>
+
+<p>A warning or error issued when <a href="ACL2____ARRAYS.html">arrays</a> are used inefficiently</p><p>If you use ACL2 <a href="ACL2____ARRAYS.html">arrays</a> you may sometimes see a <b>slow 
+ array</b> warning.  We explain below what that warning means and some likely 
+ ``mistakes'' it may signify.</p> 
+ 
+ <p>First, we note that you can control whether or not you get a warning and, 
+ if so, whether or not a break (error from which you can continue; see <a href="ACL2____BREAK_42.html">break$</a>) ensues:</p> 
+ 
+ <pre class="code">(<a href="ACL2____ASSIGN.html">assign</a> slow-array-action :warning) ; warn on slow array access (<a href="ACL2____DEFAULT.html">default</a>)
+(<a href="ACL2____ASSIGN.html">assign</a> slow-array-action :break)   ; warn as above, and then call break$
+(<a href="ACL2____ASSIGN.html">assign</a> slow-array-action nil) ; do not warn or break on slow array access</pre> 
+ 
+ <p>If you are using ACL2 arrays, then you probably care about performance, in 
+ which case it is probably best to avoid the <span class="v">nil</span> setting.  Below we assume 
+ the default behavior: a warning, but no break.</p> 
+ 
+ <p>The discussion in the documentation for <a href="ACL2____ARRAYS.html">arrays</a> defines what we mean 
+ by the semantic value of a name.  As noted there, behind the scenes ACL2 
+ maintains the invariant that with some names there is associated a pair 
+ consisting of an ACL2 array <span class="v">alist</span>, called the semantic value of the name, 
+ and an equivalent raw lisp array.  Access to ACL2 array elements, as in 
+ <span class="v">(<a href="ACL2____AREF1.html">aref1</a> name alist i)</span>, is executed in constant time when the array alist 
+ is the semantic value of the name, because we can just use the corresponding 
+ raw lisp array to obtain the answer.  <span class="tt"><a href="ACL2____ASET1.html">Aset1</a></span> and <span class="tt"><a href="ACL2____COMPRESS1.html">compress1</a></span> 
+ modify the raw lisp array appropriately to maintain the invariant.</p> 
+ 
+ <p>If <span class="tt"><a href="ACL2____AREF1.html">aref1</a></span> is called on a name and alist, and the alist is not the 
+ then-current semantic value of the name, the correct result is computed but it 
+ requires linear time because the alist must be searched.  When this happens, 
+ <span class="tt"><a href="ACL2____AREF1.html">aref1</a></span> prints a <b>slow array</b> warning message to the comment 
+ window.  <span class="tt"><a href="ACL2____ASET1.html">Aset1</a></span> behaves similarly because the array it returns will 
+ cause the <b>slow array</b> warning every time it is used.</p> 
+ 
+ <p>From the purely logical perspective there is nothing ``wrong'' about such 
+ use of <a href="ACL2____ARRAYS.html">arrays</a> and it may be spurious to print a warning message.  But 
+ because <a href="ACL2____ARRAYS.html">arrays</a> are generally used to achieve efficiency, the <b>slow 
+ array</b> warning often means the user's intentions are not being realized. 
+ Sometimes merely performance expectations are not met; but the message may 
+ mean that the functional behavior of the program is different than 
+ intended.</p> 
+ 
+ <p>Here are some ``mistakes'' that might cause this behavior.  In the 
+ following we suppose the message was printed by <span class="tt"><a href="ACL2____ASET1.html">aset1</a></span> about an array 
+ named <span class="v">name</span>.  Suppose the alist supplied <span class="tt"><a href="ACL2____ASET1.html">aset1</a></span> is <span class="v">alist</span>.</p> 
+ 
+ <p>(1) <span class="tt"><a href="ACL2____COMPRESS1.html">Compress1</a></span> was never called on <span class="v">name</span> and <span class="v">alist</span>.  That 
+ is, perhaps you created an alist that is an <span class="tt"><a href="ACL2____ARRAY1P.html">array1p</a></span> and then proceeded 
+ to access it with <span class="tt"><a href="ACL2____AREF1.html">aref1</a></span> but never gave ACL2 the chance to create a raw 
+ lisp array for it.  After creating an alist that is intended for use as an 
+ array, you must do <span class="v">(<a href="ACL2____COMPRESS1.html">compress1</a> name alist)</span> and pass the resulting 
+ <span class="v">alist'</span> as the array.</p> 
+ 
+ <p>(2) <span class="v">Name</span> is misspelled.  Perhaps the array was compressed under the 
+ name <span class="v">'delta-1</span> but accessed under <span class="v">'delta1</span>?</p> 
+ 
+ <p>(3) An <span class="tt"><a href="ACL2____ASET1.html">aset1</a></span> was done to modify <span class="v">alist</span>, producing a new array, 
+ <span class="v">alist'</span>, but you subsequently used <span class="v">alist</span> as an array.  Inspect all 
+ <span class="v">(<a href="ACL2____ASET1.html">aset1</a> name ...)</span> occurrences and make sure that the alist modified is 
+ never used subsequently (either in that function or any other).  It is good 
+ practice to adopt the following syntactic style.  Suppose the alist you are 
+ manipulating is the value of the local variable <span class="v">alist</span>.  Suppose at some 
+ point in a function definition you wish to modify <span class="v">alist</span> with <span class="tt"><a href="ACL2____ASET1.html">aset1</a></span>.  Then write</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____LET.html">let</a> ((alist (<a href="ACL2____ASET1.html">aset1</a> name alist i val))) ...)</pre> 
+ 
+ <p>and make sure that the subsequent function body is entirely within the 
+ scope of the <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span>.  Any uses of <span class="v">alist</span> subsequently will refer to 
+ the new alist and it is impossible to refer to the old alist.  Note that if 
+ you write</p> 
+ 
+ <pre class="code">(foo (<a href="COMMON-LISP____LET.html">let</a> ((alist (<a href="ACL2____ASET1.html">aset1</a> name alist i val))) ...)  ; arg 1
+     (bar alist))                                  ; arg 2</pre> 
+ 
+ <p>you have broken the rules, because in <span class="v">arg 1</span> you have modified 
+ <span class="v">alist</span> but in <span class="v">arg 2</span> you refer to the old value.  An appropriate 
+ rewriting is to lift the <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span> out:</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____LET.html">let</a> ((alist (<a href="ACL2____ASET1.html">aset1</a> name alist alist i val)))
+  (foo ...                                         ; arg 1
+       (bar alist)))                               ; arg 2</pre> 
+ 
+ <p>Of course, this may not mean the same thing.</p> 
+ 
+ <p>(4) A function which takes <span class="v">alist</span> as an argument and modifies it with 
+ <span class="tt"><a href="ACL2____ASET1.html">aset1</a></span> fails to return the modified version.  This is really the same 
+ as (3) above, but focuses on function interfaces.  If a function takes an 
+ array <span class="v">alist</span> as an argument and the function uses <span class="tt"><a href="ACL2____ASET1.html">aset1</a></span> (or a 
+ subfunction uses <span class="tt"><a href="ACL2____ASET1.html">aset1</a></span>, etc.), then the function probably ``ought'' to 
+ return the result produced by <span class="tt"><a href="ACL2____ASET1.html">aset1</a></span>.  The reasoning is as follows.  If 
+ the array is passed into the function, then the caller is holding the array. 
+ After the function modifies it, the caller's version of the array is obsolete. 
+ If the caller is going to make further use of the array, it must obtain the 
+ latest version, i.e., that produced by the function.</p>
+</body>
+</html>

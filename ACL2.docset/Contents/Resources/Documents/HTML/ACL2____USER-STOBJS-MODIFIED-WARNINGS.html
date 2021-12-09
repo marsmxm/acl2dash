@@ -1,0 +1,212 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>User-stobjs-modified-warnings</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____USER-STOBJS-MODIFIED-WARNINGS">Click for User-stobjs-modified-warnings in the Full Manual</a></h3>
+
+<p>Interactions of <span class="tt"><a href="ACL2____TRANS-EVAL.html">trans-eval</a></span> with <a href="ACL2____STOBJ.html">stobj</a>s that violate 
+ applicative semantics</p><p>The utility, <span class="tt"><a href="ACL2____TRANS-EVAL.html">trans-eval</a></span>, may be called to evaluate 
+ arbitrary ACL2 forms.  It can thus be useful for writers of tools.  This topic 
+ discusses certain <a href="ACL2____WARNINGS.html">warnings</a> that may be issued by <span class="v">trans-eval</span> for 
+ <a href="ACL2____STOBJ.html">stobj</a> updates that may violate applicative semantics.  Also see <a href="ACL2____TRANS-EVAL-AND-LOCALLY-BOUND-STOBJS.html">trans-eval-and-locally-bound-stobjs</a> for how <span class="v">trans-eval</span> relates to 
+ updates of locally bound stobjs.</p> 
+ 
+ <p>Please see <a href="ACL2____TRANS-EVAL.html">trans-eval</a> and <a href="ACL2____TRANS-EVAL-AND-STOBJS.html">trans-eval-and-stobjs</a> for relevant 
+ background.</p> 
+ 
+ <p>Consider the following log.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(foo st state)
+
+ACL2 Warning [User-stobjs-modified] in FOO:  A call of the ACL2 evaluator
+on the term (UPDATE-FLD '4 ST) has modified the user stobj ST.  See
+:DOC user-stobjs-modified-warnings.
+
+(4 &lt;state&gt; &lt;st&gt;)
+ACL2 !&gt;</pre> 
+ 
+ <p>The warning is intended to indicate that a <a href="ACL2____STOBJ.html">stobj</a> has been modified 
+ even though that stobj was accessed indirectly, through the ACL2 <a href="ACL2____STATE.html">state</a>. 
+ If you see such a warning, it is probably caused by a utility that you are 
+ invoking.  At this time there are no special tools for identifying which tool 
+ is issuing those warnings, but the ``context'' on the first line of the 
+ warning  <span class="v">FOO</span>, above  may give a clue.</p> 
+ 
+ <p>Below we discuss the following events, which were evaluated before 
+ producing the log above.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFSTOBJ.html">defstobj</a> st fld)
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> foo (st state)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (st state)
+                  :mode :program))
+  (<a href="COMMON-LISP____LET.html">let</a> ((st (update-fld 3 st)))
+    (<a href="ACL2____MV-LET.html">mv-let</a> (erp val state)
+      (<a href="ACL2____TRANS-EVAL.html">trans-eval</a> '(update-fld 4 st) 'foo state nil)
+      (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORE.html">ignore</a> erp val))
+      (<a href="ACL2____MV.html">mv</a> (fld st) state st))))</pre> 
+ 
+ <p>After submitting these two forms, we can submit to ACL2 the form <span class="v">(foo st
+ state)</span> to produce the log displayed near the top of this topic.  That log is 
+ actually very surprising if you think about it, since the <span class="v">trans-eval</span> call 
+ in the definition of <span class="v">foo</span> modifies only the <span class="v">state</span> parameter, not the 
+ <span class="v">st</span> parameter, and yet the value <span class="v">st</span> has changed: <span class="v">(fld st)</span> has 
+ changed from 3 to 4, while evaluating code in which <span class="v">st</span> does not occur 
+ free!  Let us discuss this point further.</p> 
+ 
+ <p>First consider the definition of <span class="v">foo</span>.  Now <span class="v">trans-eval</span> returns an 
+ <a href="ACL2____ERROR-TRIPLE.html">error-triple</a>, say <span class="v">(<a href="ACL2____MV.html">mv</a> erp val state)</span>, where <span class="v">erp</span> and <span class="v">val</span> 
+ are ordinary (non-<a href="ACL2____STOBJ.html">stobj</a>) values.  In particular, <span class="v">trans-eval</span> does 
+ not return the user-defined stobj, <span class="v">st</span>.  It ``should'' follow, then, that 
+ the only modification to <span class="v">st</span> before returning is by the form 
+ <span class="v">(update-fld 3 st)</span>.  So the final value of <span class="v">(fld st)</span> ``should'' be 3; 
+ yet, it is 4, not 3!  So the first return value of 4, above, can very 
+ reasonably be considered to violate applicative semantics.  ACL2 acknowledges 
+ this concern  that is, the concern that an operation (i.e., <span class="v">fld</span>) 
+ now gives a different result on an object (i.e., <span class="v">st</span>) that ``should'' not 
+ have changed, thus violating normal applicative semantics  by printing 
+ the warning displayed above.</p> 
+ 
+ <p>To see how this can happen, consider that in raw Lisp the stobj, <span class="v">st</span>, 
+ is actually a one-element array whose unique value is <span class="v">(fld st)</span>.  The 
+ <span class="v">trans-eval</span> call in <span class="v">foo</span> replaces that element, in this case 3, with a 
+ new value, in this case 4.  It does this <i>destructively</i>: the memory 
+ location of <span class="v">st</span> is not changed.  Thus, evaluation of <span class="v">(fld st)</span> after 
+ the <span class="v">trans-eval</span> call now returns the new array element, which is 4.</p> 
+ 
+ <p>Worse yet, there are similar cases where there is <i>no</i> such violation 
+ of applicative semantics!  We return to this point later below.  First we 
+ provide some additional discussion of such warnings, as well as observations 
+ for tool writers who want to eliminate the warnings.</p> 
+ 
+ <p>In general, such a warning is printed whenever the <span class="v">stobjs-out</span> returned 
+ in the <span class="v">car</span> of the value, as discussed above, contains a user-defined 
+ stobj name, that is, a non-<span class="v">nil</span> value other than <span class="v">state</span>.</p> 
+ 
+ <p>Fortunately, this behavior can only happen with <span class="v">:</span><span class="tt"><a href="ACL2____PROGRAM.html">program</a></span>-mode 
+ functions; <span class="v">trans-eval</span> will never be in <span class="v">:</span><span class="tt"><a href="ACL2____LOGIC.html">logic</a></span> mode, and 
+ therefore, neither will its callers.  Nevertheless, even without proving 
+ <span class="v">nil</span> one might reasonably be frustrated by this sort of violation of 
+ applicative semantics.  The warning is, at least, an acknowledgement of this 
+ situation.</p> 
+ 
+ <p>We next discuss how to write tools that avoid producing such warnings, and 
+ the advisability (or not) of doing so.</p> 
+ 
+ <p>There may be cases in which you want to write a tool that calls 
+ <span class="v">trans-eval</span> and modifies user-defined stobjs, but you don't want the users 
+ of your tool to see the warning, perhaps because you are convinced that no 
+ stobj parameter is modified indirectly using <span class="v">trans-eval</span>.  Think carefully 
+ about whether you really don't want them to see the warning!  After all, they 
+ may be relying on normal applicative semantics, even with <span class="v">:program</span>-mode 
+ functions.</p> 
+ 
+ <p>If indeed you want to avoid warnings, you can call the function 
+ <span class="v">trans-eval-no-warning</span> exactly as you call <span class="v">trans-eval</span>.  For example, 
+ if you replace <span class="v">trans-eval</span> by <span class="v">trans-eval-no-warning</span> in the definition 
+ above, and then you evaluate <span class="v">(foo st state)</span>, you will not see the warning 
+ printed above.  Again, consider whether you really want to suppress that 
+ warning.</p> 
+ 
+ <p>Remark pertaining to <span class="v">(<a href="ACL2____LD.html">ld</a> ...)</span>.  There is another alternative to 
+ <span class="v">trans-eval</span>, <span class="v">trans-eval-default-warning</span>.  This alternative behaves 
+ like <span class="v">trans-eval</span> when the <span class="v">ld</span> special, 
+ <span class="v">ld-user-stobjs-modified-warning</span>, is <span class="v">t</span>; otherwise it behaves like 
+ <span class="v">trans-eval-no-warning</span>.  See <a href="ACL2____LD.html">ld</a>.  There are several calls of 
+ <span class="v">trans-eval-default-warning</span> in the ACL2 source code: in function 
+ <span class="v">ld-read-eval-print</span>, which evaluates on behalf of the top-level loop, and 
+ in some functions that support <a href="ACL2____EVENTS.html">events</a>, such as those supporting the 
+ proof-builder.  But for user-level code it may be more appropriate to call 
+ <span class="v">trans-eval</span> so that violations of applicative semantics are reported. 
+ These warnings are unimportant for the top-level calls of <span class="v">trans-eval</span> that 
+ implement the ACL2 read-eval-print loop, because one expects stobjs to be 
+ updated by evaluation.  End of Remark.</p> 
+ 
+ <p>For <a href="ACL2____TRANS-EVAL.html">trans-eval</a> and <span class="v">trans-eval-default-warning</span>, the normal way 
+ of inhibiting warnings is supported: <span class="v">(<a href="ACL2____SET-INHIBIT-WARNINGS.html">set-inhibit-warnings</a>
+ "User-stobjs-modified")</span>.</p> 
+ 
+ <p>We now elaborate on a point made briefly above, that there are cases where 
+ the usual violation of applicative semantics does not take place.  This 
+ happens when the underlying raw Lisp stobj is actually replaced, which happens 
+ when there is a single stobj field that is either an array being resized or a 
+ hash table being initialized (with the ``clear'' or ``init'' function); see 
+ <a href="ACL2____DEFSTOBJ.html">defstobj</a>.  Consider the following example.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFSTOBJ.html">defstobj</a> st2 (ar :type (<a href="COMMON-LISP____ARRAY.html">array</a> t (10)) :resizable t))
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> foo2 (st2 state)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (st2 state)
+                  :mode :program))
+  (<a href="COMMON-LISP____LET.html">let</a> ((st2 (update-ari 3 'old st2)))
+    (<a href="ACL2____MV-LET.html">mv-let</a> (erp val state)
+      (<a href="ACL2____TRANS-EVAL.html">trans-eval</a> '(<a href="COMMON-LISP____LET.html">let</a> ((st2 (resize-ar 20 st2)))
+                     (update-ari 3 'new st2))
+                  'foo state nil)
+      (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORE.html">ignore</a> erp val))
+      (<a href="ACL2____MV.html">mv</a> (ari 3 st2) state st2))))</pre> 
+ 
+ <p>After submitting these forms, evaluation of the form <span class="v">(foo2 st2 state)</span> 
+ produces <span class="v">(OLD &lt;state&gt; &lt;st2&gt;)</span>.  But based on the first example, <span class="v">foo</span>, 
+ we might expect that destructive modification of <span class="v">st2</span> would result instead 
+ in <span class="v">(NEW &lt;state&gt; &lt;st2&gt;)</span>.  Indeed, if the first argument of <span class="v">trans-eval</span> 
+ in the definition of <span class="v">foo2</span> is instead <span class="v">(update-ari 3 'new st2))</span>, then 
+ the result is <span class="v">(NEW &lt;state&gt; &lt;st2&gt;)</span>.  So why do we get the OLD result using 
+ the definition of <span class="v">foo2</span> displayed above?</p> 
+ 
+ <p>The reason is that when a stobj has a single field, and that field is an 
+ array or hash table, then in raw Lisp the stobj <i>is</i> exactly that field. 
+ When we call <span class="v">resize-ar</span>, the entire array is rebuilt, and thus the stobj 
+ is at a new memory location.  To be precise: After the resizing, then the 
+ value of <span class="v">st2</span> in the <span class="v">user-stobj-alist</span> of the ACL2 state is a new 
+ stobj: the actual parameter <span class="v">st2</span> of <span class="v">foo2</span> is not destructively 
+ modified.  Thus, normal applicative semantics apply: the final value of 
+ <span class="v">(fld st2)</span> is independent of the replacement of <span class="v">st2</span> in the 
+ <span class="v">user-stobj-alist</span> hence is still 3 (from the first update).</p> 
+ 
+ <p>We close with a more realistic example. 
+ (It is based on our experience modifying the definition of the macro, 
+ <span class="v">local-test</span>, in <a href="ACL2____COMMUNITY-BOOK.html">community-book</a> 
+ <span class="v">books/system/tests/nested-stobj-tests.lisp</span>, when we changed ACL2 so that 
+ the stobj is the entire array field when there is only that one field.)  The 
+ <span class="tt"><a href="ACL2____MAKE-EVENT.html">make-event</a></span> call below fails, because the resizing operation replaces 
+ the stobj in the global <span class="v">user-stobj-alist</span> of the ACL2 <a href="ACL2____STATE.html">state</a>, but 
+ the call of <span class="v">EQUAL</span> still references the original stobj.  This failure is 
+ thus exactly as expected for an applicative semantics.  However, it fails only 
+ because the resize operation is not destructive: it replaces the entire 
+ stobj.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFSTOBJ.html">defstobj</a> st3 (ar3 :type (<a href="COMMON-LISP____ARRAY.html">array</a> t (10)) :resizable t))
+
+; Fails (see discussion above):
+(<a href="ACL2____MAKE-EVENT.html">make-event</a>
+ (<a href="ACL2____ER-PROGN.html">er-progn</a> (<a href="ACL2____TRANS-EVAL.html">trans-eval</a> '(<a href="COMMON-LISP____LET.html">let</a> ((st3 (resize-ar3 30 st3)))
+                          (update-ar3i 24 'done st3))
+                       'top
+                       state t)
+           (<a href="ACL2____VALUE.html">value</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (ar3i 24 st3) 'done))
+           (<a href="ACL2____VALUE.html">value</a> '(<a href="ACL2____VALUE-TRIPLE.html">value-triple</a> :success))))
+
+; Passes because by now, the user-stobj-alist has been updated by
+; the top-level call of trans-eval to implement the ACL2
+; read-eval-print loop:
+(<a href="ACL2____ASSERT-EVENT.html">assert-event</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (ar3i 24 st3) 'done))
+
+; The following version passes because the second trans-eval call
+; below references the value of st3 in the user-stobj-alist that was
+; produced by the first trans-eval call below.
+(<a href="ACL2____MAKE-EVENT.html">make-event</a>
+ (<a href="ACL2____ER-PROGN.html">er-progn</a> (<a href="ACL2____TRANS-EVAL.html">trans-eval</a> '(<a href="COMMON-LISP____LET.html">let</a> ((st3 (resize-ar3 40 st3)))
+                          (update-ar3i 34 'new st3))
+                       'top state t)
+           (<a href="ACL2____TRANS-EVAL.html">trans-eval</a> '(<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (ar3i 34 st3) 'new)
+                            (<a href="ACL2____VALUE.html">value</a> nil)
+                          (<a href="ACL2____ER.html">er</a> soft 'top "Failed!"))
+                       'top state t)
+           (<a href="ACL2____VALUE.html">value</a> '(<a href="ACL2____VALUE-TRIPLE.html">value-triple</a> :success))))</pre>
+</body>
+</html>

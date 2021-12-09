@@ -1,0 +1,99 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Seed-random$</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____SEED-RANDOM_42">Click for Seed-random$ in the Full Manual</a></h3>
+
+<p>Influence the random numbers produced by <a href="ACL2____RANDOM_42.html">random$</a>.</p><p>General form:</p> 
+ 
+<pre class="code">(<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "centaur/misc/seed-random" :dir :system)
+(seed-random name
+             [:freshp t/nil]  ;; default t
+             )</pre> 
+ 
+<p>Hypothetical example:</p> 
+ 
+<pre class="code">(seed-random 'foo) ;; randomly seed the generator, name this seed 'foo
+(<a href="ACL2____RANDOM_42.html">random$</a> 50 state) --&gt; (<a href="ACL2____MV.html">mv</a> 31 state)
+(<a href="ACL2____RANDOM_42.html">random$</a> 50 state) --&gt; (<a href="ACL2____MV.html">mv</a> 49 state)
+(<a href="ACL2____RANDOM_42.html">random$</a> 50 state) --&gt; (<a href="ACL2____MV.html">mv</a> 2 state)
+(<a href="ACL2____RANDOM_42.html">random$</a> 50 state) --&gt; (<a href="ACL2____MV.html">mv</a> 23 state)
+(<a href="ACL2____RANDOM_42.html">random$</a> 50 state) --&gt; (<a href="ACL2____MV.html">mv</a> 15 state)
+
+(seed-random 'foo) ;; return to the seed named 'foo
+(<a href="ACL2____RANDOM_42.html">random$</a> 50 state) --&gt; (<a href="ACL2____MV.html">mv</a> 31 state)
+(<a href="ACL2____RANDOM_42.html">random$</a> 50 state) --&gt; (<a href="ACL2____MV.html">mv</a> 49 state)
+(<a href="ACL2____RANDOM_42.html">random$</a> 50 state) --&gt; (<a href="ACL2____MV.html">mv</a> 2 state)
+
+(seed-random 'bar :freshp nil) ;; copy current seed, name it 'bar
+(<a href="ACL2____RANDOM_42.html">random$</a> 50 state) --&gt; (<a href="ACL2____MV.html">mv</a> 23 state)
+(<a href="ACL2____RANDOM_42.html">random$</a> 50 state) --&gt; (<a href="ACL2____MV.html">mv</a> 15 state)
+
+(seed-random 'foo) ;; return to 'foo
+(<a href="ACL2____RANDOM_42.html">random$</a> 50 state) --&gt; (<a href="ACL2____MV.html">mv</a> 31 state)
+
+(seed-random 'bar) ;; return to 'bar
+(<a href="ACL2____RANDOM_42.html">random$</a> 50 state) --&gt; (<a href="ACL2____MV.html">mv</a> 23 state)
+(<a href="ACL2____RANDOM_42.html">random$</a> 50 state) --&gt; (<a href="ACL2____MV.html">mv</a> 15 state)</pre> 
+ 
+<p>Logically, <span class="v">seed-random$</span> ignores its arguments and just returns 
+<span class="v">nil</span>.  We leave it enabled and would think it odd to ever prove a theorem 
+about it.</p> 
+ 
+<p>Under the hood, <span class="v">seed-random$</span> influences the behavior of <a href="ACL2____RANDOM_42.html">random$</a>. 
+Note that in its implementation, the ACL2 function <span class="v">(<a href="ACL2____RANDOM_42.html">random$</a> limit state)</span> 
+basically just calls <span class="v">(random limit)</span> to produce its result.  To understand 
+<span class="v">seed-random$</span>, it is useful to recall some features of Common Lisp:</p> 
+ 
+<ul> 
+ 
+<li>A <span class="v">random-state</span> is an implementation-defined data type that is used by 
+the <span class="v">random</span> function to produce random numbers.</li> 
+ 
+<li>In particular, <span class="v">(random limit &amp;optional random-state)</span> can use some 
+particular <span class="v">random-state</span> or, by default, uses whatever <span class="v">random-state</span> is 
+currently bound to the special variable <span class="v">*random-state*</span>.</li> 
+ 
+<li>A fresh, "randomly initialized" <span class="v">random-state</span> can be produced with 
+<span class="v">(make-random-state t)</span>.</li> 
+ 
+<li>The current <span class="v">*random-state*</span> can be copied with <span class="v">(make-random-state
+nil)</span>.</li> 
+ 
+</ul> 
+ 
+<p>So, what does <span class="v">seed-random$</span> do?</p> 
+ 
+<p>We maintain a hidden association list that maps names to random-states. 
+These names can be any ACL2 objects, but we typically use symbols.</p> 
+ 
+<p>When <span class="v">seed-random$</span> is called with a name that is already bound to some 
+state, we just restore <span class="v">*random-state*</span> to this state.  This effectively 
+resets the random number generator so that it produces the same random numbers 
+as before.</p> 
+ 
+<p>When <span class="v">seed-random$</span> is called with a name that has not been bound yet, 
+its behavior depends on the optional <span class="v">freshp</span> keyword-argument.</p> 
+ 
+<p>When <span class="v">freshp</span> is <span class="v">t</span> (the default), we construct a "randomly 
+initialized" <span class="v">random-state</span>, bind <span class="v">name</span> to it, and install it as 
+<span class="v">*random-state*</span>.  In other words, when <span class="v">foo</span> has never been used as a 
+name before, <span class="v">(<a href="ACL2____SEED-RANDOM_42.html">seed-random$</a> 'foo)</span> effectively initializes the random number 
+generator to a truly random state.</p> 
+ 
+<p>On the other hand, when <span class="v">freshp</span> is <span class="v">nil</span> we simply copy and name the 
+current <span class="v">*random-state*</span>.  It appears that, at least on CCL, the 
+<span class="v">*random-state*</span> starts the same upon every invocation of ACL2.  Hence, if 
+you launch ACL2 and then immediately invoke</p> 
+ 
+<pre class="code">(seed-random 'seed :freshp nil)</pre> 
+ 
+<p>you can obtain a sequence of random numbers that you can return to even 
+after restarting ACL2, and which can be returned to at any time during the 
+session by just calling <span class="v">(seed-random 'seed)</span>.</p>
+</body>
+</html>

@@ -1,0 +1,114 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Read-var</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=C____READ-VAR">Click for Read-var in the Full Manual</a></h3>
+
+<p>Read a variable in a computation state.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(read-var var compst)  result</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">var</span>  <font color="#606060">Guard <span class="v">(<a href="C____IDENTP.html">identp</a> var)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">compst</span>  <font color="#606060">Guard <span class="v">(<a href="C____COMPUSTATEP.html">compustatep</a> compst)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">result</span>  <font color="#606060">Type <span class="v">(<a href="C____VALUE-RESULTP.html">value-resultp</a> result)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>If there are no frames, we return an error: 
+     the variable is not found. 
+     In the future, the computation state may be extended 
+     with file-scope (i.e. global) variables, which are not in frames; 
+     when that happens, variables will be looked up there, 
+     if they are not found in the top frame.</p><p>It should be the case that variables are looked up 
+     only when executing code in function bodies, 
+     and therefore when the frame stack is not empty. 
+     Thus, it could make sense for this ACL2 function 
+     to require the non-emptiness of the frame stack in the guard. 
+     However, that would require <span class="tt"><a href="C____EXEC-EXPR-PURE.html">exec-expr-pure</a></span> to have that guard, 
+     but in the future we may want to use <span class="tt"><a href="C____EXEC-EXPR-PURE.html">exec-expr-pure</a></span> 
+     to evaluate constant expressions used as initializers 
+     in external object definitions, 
+     which happens with an empty frame stack. 
+     So we avoid that guard here.</p><p>If the frame stack is not empty, 
+     we look in the scopes of the top frame from left to right, 
+     i.e. from innermost to outermost. 
+     If we find a variable with that name, we return its value. 
+     Otherwise we return an error.</p><p>We do not look at other frames, 
+     because the variables in other frames are not in scope 
+     for the C function in the top frame.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>read-var-aux</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+     read-var-aux (var scopes)
+     (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="C____IDENTP.html">identp</a> var)
+                                 (<a href="C____SCOPE-LISTP.html">scope-listp</a> scopes))))
+     (<a href="COMMON-LISP____LET.html">let</a> ((__function__ 'read-var-aux))
+          (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+          (<a href="ACL2____B_A2.html">b*</a> (((when (<a href="COMMON-LISP____ENDP.html">endp</a> scopes))
+                (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :read-var-not-found (<a href="C____IDENT-FIX.html">ident-fix</a> var))))
+               (<a href="C____SCOPE.html">scope</a> (<a href="COMMON-LISP____CAR.html">car</a> scopes))
+               (pair (<a href="OMAP____IN.html">omap::in</a> (<a href="C____IDENT-FIX.html">ident-fix</a> var)
+                               (<a href="C____SCOPE-FIX.html">scope-fix</a> scope)))
+               ((when (<a href="COMMON-LISP____NOT.html">not</a> pair))
+                (read-var-aux var (<a href="COMMON-LISP____CDR.html">cdr</a> scopes))))
+              (<a href="COMMON-LISP____CDR.html">cdr</a> pair))))</pre> 
+<p><b>Theorem: </b>value-resultp-of-read-var-aux</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> value-resultp-of-read-var-aux
+        (<a href="ACL2____B_A2.html">b*</a> ((result (read-var-aux var scopes)))
+            (<a href="C____VALUE-RESULTP.html">value-resultp</a> result))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>read-var-aux-of-ident-fix-var</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> read-var-aux-of-ident-fix-var
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (read-var-aux (<a href="C____IDENT-FIX.html">ident-fix</a> var) scopes)
+               (read-var-aux var scopes)))</pre> 
+<p><b>Theorem: </b>read-var-aux-ident-equiv-congruence-on-var</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> read-var-aux-ident-equiv-congruence-on-var
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="C____IDENT-EQUIV.html">ident-equiv</a> var var-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (read-var-aux var scopes)
+                        (read-var-aux var-equiv scopes)))
+        :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>read-var-aux-of-scope-list-fix-scopes</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> read-var-aux-of-scope-list-fix-scopes
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (read-var-aux var (<a href="C____SCOPE-LIST-FIX.html">scope-list-fix</a> scopes))
+               (read-var-aux var scopes)))</pre> 
+<p><b>Theorem: </b>read-var-aux-scope-list-equiv-congruence-on-scopes</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> read-var-aux-scope-list-equiv-congruence-on-scopes
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="C____SCOPE-LIST-EQUIV.html">scope-list-equiv</a> scopes scopes-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (read-var-aux var scopes)
+                        (read-var-aux var scopes-equiv)))
+        :rule-classes :congruence)</pre> 
+<p><b>Function: </b>read-var</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ read-var (var compst)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="C____IDENTP.html">identp</a> var)
+                             (<a href="C____COMPUSTATEP.html">compustatep</a> compst))))
+ (<a href="COMMON-LISP____LET.html">let</a>
+   ((__function__ 'read-var))
+   (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+   (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP_____E3.html">&gt;</a> (<a href="C____COMPUSTATE-FRAMES-NUMBER.html">compustate-frames-number</a> compst) 0)
+       (read-var-aux var (<a href="C____FRAME-_E3SCOPES.html">frame-&gt;scopes</a> (<a href="C____TOP-FRAME.html">top-frame</a> compst)))
+       (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :read-var-empty-frame-stack (<a href="C____IDENT-FIX.html">ident-fix</a> var))))))</pre> 
+<p><b>Theorem: </b>value-resultp-of-read-var</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> value-resultp-of-read-var
+        (<a href="ACL2____B_A2.html">b*</a> ((result (<a href="C____READ-VAR.html">read-var</a> var compst)))
+            (<a href="C____VALUE-RESULTP.html">value-resultp</a> result))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>read-var-of-ident-fix-var</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> read-var-of-ident-fix-var
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____READ-VAR.html">read-var</a> (<a href="C____IDENT-FIX.html">ident-fix</a> var) compst)
+               (<a href="C____READ-VAR.html">read-var</a> var compst)))</pre> 
+<p><b>Theorem: </b>read-var-ident-equiv-congruence-on-var</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> read-var-ident-equiv-congruence-on-var
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="C____IDENT-EQUIV.html">ident-equiv</a> var var-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____READ-VAR.html">read-var</a> var compst)
+                        (<a href="C____READ-VAR.html">read-var</a> var-equiv compst)))
+        :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>read-var-of-compustate-fix-compst</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> read-var-of-compustate-fix-compst
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____READ-VAR.html">read-var</a> var (<a href="C____COMPUSTATE-FIX.html">compustate-fix</a> compst))
+               (<a href="C____READ-VAR.html">read-var</a> var compst)))</pre> 
+<p><b>Theorem: </b>read-var-compustate-equiv-congruence-on-compst</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> read-var-compustate-equiv-congruence-on-compst
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="C____COMPUSTATE-EQUIV.html">compustate-equiv</a> compst compst-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____READ-VAR.html">read-var</a> var compst)
+                        (<a href="C____READ-VAR.html">read-var</a> var compst-equiv)))
+        :rule-classes :congruence)</pre> 
+
+</body>
+</html>

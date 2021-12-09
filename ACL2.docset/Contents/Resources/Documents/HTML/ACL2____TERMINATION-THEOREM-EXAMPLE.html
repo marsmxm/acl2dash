@@ -1,0 +1,245 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Termination-theorem-example</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____TERMINATION-THEOREM-EXAMPLE">Click for Termination-theorem-example in the Full Manual</a></h3>
+
+<p>How to use a previously-proved measure theorem</p><p>See <a href="ACL2____LEMMA-INSTANCE.html">lemma-instance</a> for a discussion of 
+ <span class="v">:termination-theorem</span> and <span class="v">:termination-theorem!</span> lemma instances, and 
+ see <a href="ACL2____TTHM.html">tthm</a> for a related user-level query utility.  In this topic, we 
+ illustrate the use of such lemma instances to take advantage of a measure 
+ theorem already proved for an existing definition, when attempting to admit a 
+ new definition.  We present two examples: a basic one, and then another that 
+ shows how an existing termination theorem can be automatically functionally 
+ instantiated.  For a related utility, see <a href="ACL2____MAKE-TERMINATION-THEOREM.html">make-termination-theorem</a>.</p> 
+ 
+ <p>The following very simple example is contrived but should get the main idea 
+ across.  Suppose that the following event was previously executed, for example 
+ when including a book, in order to define the log base 10 of <span class="v">x</span>.</p> 
+ 
+ <pre class="code">(<a href="ACL2____ENCAPSULATE.html">encapsulate</a>
+  ()
+  (<a href="ACL2____LOCAL.html">local</a> (<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "arithmetic-5/top" :dir :system))
+  (<a href="COMMON-LISP____DEFUN.html">defun</a> log10 (x) ; log base 10 of x
+    (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____OR.html">or</a> (<a href="ACL2____ZP.html">zp</a> x)
+            (<a href="COMMON-LISP_____C3.html">&lt;</a> x 10))
+        0
+      (<a href="COMMON-LISP____1_B2.html">1+</a> (log10 (<a href="COMMON-LISP____FLOOR.html">floor</a> x 10))))))</pre> 
+ 
+ <p>Now suppose we want to admit the following definition, whose recursion 
+ pattern is similar to that above.  The simplest way might be to include the 
+ same book as above, but perhaps that is impossible because the <a href="ACL2____FORMULA.html">formula</a> 
+ for some name in that book conflicts with the formula for that name in the 
+ current session.  Without that book, it could be challenging to develop lemmas 
+ that allow the termination proof to succeed for this proposed definition.  So 
+ we provide a hint, specifying the use of the termination theorem already 
+ proved for <span class="v">log10</span>, as follows.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> base10-digits (x)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :hints
+                  (("Goal" :use ((:termination-theorem log10))))))
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____OR.html">or</a> (<a href="ACL2____ZP.html">zp</a> x)
+          (<a href="COMMON-LISP_____C3.html">&lt;</a> x 10))
+      (<a href="COMMON-LISP____LIST.html">list</a> x)
+    (<a href="COMMON-LISP____APPEND.html">append</a> (base10-digits (<a href="COMMON-LISP____FLOOR.html">floor</a> x 10))
+            (<a href="COMMON-LISP____LIST.html">list</a> (<a href="COMMON-LISP____MOD.html">mod</a> x 10)))))</pre> 
+ 
+ <p>With this hint, the termination proof succeeds, printing the following line 
+ in the event <a href="ACL2____SUMMARY.html">summary</a>.</p> 
+ 
+ <pre class="code">Hint-events: ((:USE LOG10))</pre> 
+ 
+ <p>This line says that the only <span class="v">:use</span> hint was based on the event 
+ <span class="v">log10</span>.  This may surprise you; perhaps you would expect to see something 
+ instead such as <span class="v">(:USE (:TERMINATION-THEOREM LOG10))</span>.  However, the 
+ <span class="v">Hint-events</span> field of the summary is intended only to show the names of 
+ <a href="ACL2____EVENTS.html">events</a> that support the hints.  For example, if you replace the 
+ <span class="v">:use</span> hint in the example above with</p> 
+ 
+ <pre class="code">:use ((:rewrite car-cons) (:termination-theorem log10))</pre> 
+ 
+ <p>then the <span class="v">Hint-events</span> <a href="ACL2____SUMMARY.html">summary</a> line will be as follows.</p> 
+ 
+ <pre class="code">Hint-events: ((:USE CAR-CONS) (:USE LOG10))</pre> 
+ 
+ <p>Similarly, proof output for a <span class="v">:use</span> hint (provided when not in <a href="ACL2____GAG-MODE.html">gag-mode</a>) is also given at the level of events.  For the definition above, we 
+ get the following output.</p> 
+ 
+ <pre class="code">We augment the goal with the hypothesis provided by the :USE hint.
+The hypothesis can be obtained from LOG10.  We are left with the following
+subgoal.</pre> 
+ 
+ <p>Again, perhaps one would expect to see ``<span class="v">obtained from the termination
+ theorem for LOG10</span>''.  But for the modified hint shown above, using 
+ <span class="v">(:rewrite car-cons)</span>, we similarly see only event names, not a <a href="ACL2____RUNE.html">rune</a>.</p> 
+ 
+ <pre class="code">These hypotheses can be obtained from CAR-CONS and LOG10.</pre> 
+ 
+ <p>Next, we consider an example where a function symbol being defined occurs 
+ in the measure theorem.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> left (x)
+  (<a href="COMMON-LISP____CAR.html">car</a> x))
+(<a href="COMMON-LISP____DEFUN.html">defun</a> right (x)
+  (<a href="COMMON-LISP____CAR.html">car</a> x))
+(<a href="COMMON-LISP____DEFUN.html">defun</a> first-natp (x)
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ATOM.html">atom</a> x)
+      (<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2____NATP.html">natp</a> x) x nil)
+    (<a href="COMMON-LISP____OR.html">or</a> (first-natp (left x))
+        (first-natp (right x)))))</pre> 
+ 
+ <p>The measure (termination) theorem for <span class="v">first-natp</span> is as follows.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____AND.html">AND</a> (<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____NOT.html">NOT</a> (<a href="COMMON-LISP____ATOM.html">ATOM</a> X))
+              (<a href="ACL2____O_C3.html">O&lt;</a> (<a href="ACL2____ACL2-COUNT.html">ACL2-COUNT</a> (LEFT X))
+                  (<a href="ACL2____ACL2-COUNT.html">ACL2-COUNT</a> X)))
+     (<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____AND.html">AND</a> (<a href="COMMON-LISP____NOT.html">NOT</a> (<a href="COMMON-LISP____ATOM.html">ATOM</a> X))
+                   (<a href="COMMON-LISP____NOT.html">NOT</a> (FIRST-NATP (LEFT X))))
+              (<a href="ACL2____O_C3.html">O&lt;</a> (<a href="ACL2____ACL2-COUNT.html">ACL2-COUNT</a> (RIGHT X))
+                  (<a href="ACL2____ACL2-COUNT.html">ACL2-COUNT</a> X))))</pre> 
+ 
+ <p>Now suppose the functions <span class="v">left</span> and <span class="v">right</span> are <a href="ACL2____DISABLE.html">disable</a>d and we then 
+ try to admit the analogous definition below.  This sort of situation may be 
+ common; imagine a library of books in which <span class="v">first-natp</span> is defined 
+ followed by disabling of <span class="v">left</span> and <span class="v">right</span>, and we have included that 
+ book in hopes of re-using the termination theorem.</p> 
+ 
+ <pre class="code">(<a href="ACL2____IN-THEORY.html">in-theory</a> (<a href="ACL2____DISABLE.html">disable</a> left right))
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> first-symbolp (x)
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ATOM.html">atom</a> x)
+      (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> x) x nil)
+    (<a href="COMMON-LISP____OR.html">or</a> (first-symbolp (left x))
+        (first-symbolp (right x)))))</pre> 
+ 
+ <p>This time the termination theorem is as follows.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____AND.html">AND</a> (<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____NOT.html">NOT</a> (<a href="COMMON-LISP____ATOM.html">ATOM</a> X))
+              (<a href="ACL2____O_C3.html">O&lt;</a> (<a href="ACL2____ACL2-COUNT.html">ACL2-COUNT</a> (LEFT X))
+                  (<a href="ACL2____ACL2-COUNT.html">ACL2-COUNT</a> X)))
+     (<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____AND.html">AND</a> (<a href="COMMON-LISP____NOT.html">NOT</a> (<a href="COMMON-LISP____ATOM.html">ATOM</a> X))
+                   (<a href="COMMON-LISP____NOT.html">NOT</a> (FIRST-SYMBOLP (LEFT X))))
+              (<a href="ACL2____O_C3.html">O&lt;</a> (<a href="ACL2____ACL2-COUNT.html">ACL2-COUNT</a> (RIGHT X))
+                  (<a href="ACL2____ACL2-COUNT.html">ACL2-COUNT</a> X))))</pre> 
+ 
+ <p>Notice that this theorem is not an immediate consequence of the termination 
+ theorem for <span class="v">first-natp</span>, because of the call <span class="v">first-symbolp</span> in the 
+ latter that replaces the call <span class="v">first-natp</span> in the former.  ACL2 provides 
+ support to work around this difficulty, however.  When you give a 
+ <span class="v">:termination-theorem</span> <a href="ACL2____LEMMA-INSTANCE.html">lemma-instance</a> in your :hints for the 
+ termination proof, then ACL2 automatically replaces the old function symbol 
+ (here, <span class="v">first-natp</span>) in the old termination theorem by the new function 
+ symbol (here, <span class="v">first-symbolp</span>), before applying the hint.  So the following 
+ definition is admitted, because the old termination theorem, thus modified, is 
+ exactly the new termination theorem.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> first-symbolp (x)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :hints
+                  (("Goal" :by (:termination-theorem first-natp)))))
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ATOM.html">atom</a> x)
+      (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> x) x nil)
+    (<a href="COMMON-LISP____OR.html">or</a> (first-symbolp (left x))
+        (first-symbolp (right x)))))</pre> 
+ 
+ <p>Such a substitution is made provided the old and new function symbols each 
+ have the same number of formal parameters.  In general a <span class="v">:termination-theorem</span> 
+ may be used for admitting either a singly-recursive function or a nest of 
+ mutually-recursion functions; the general criterion is that the number of 
+ formals must match for corresponding functions.</p> 
+ 
+ <p>The functional substitution can be provided explicitly.  The following 
+ example has identical behavior to that above.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> first-symbolp (x)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :hints
+                  (("Goal" :by (:termination-theorem
+                                first-natp
+                                ((first-natp first-symbolp)))))))
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ATOM.html">atom</a> x)
+      (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> x) x nil)
+    (<a href="COMMON-LISP____OR.html">or</a> (first-symbolp (left x))
+        (first-symbolp (right x)))))</pre> 
+ 
+ <p>Finally, note that a <span class="v">:by</span> hint is not guaranteed to work; a <span class="v">:use</span> 
+ hint may be a bit slower, and may require the use of <span class="v">:instance</span> (see <a href="ACL2____LEMMA-INSTANCE.html">lemma-instance</a>, but it can be more reliable.</p> 
+ 
+ <p>We conclude with a remark about what happens when the termination theorem 
+ does not exist, even though (as required) the indicated function symbol is in 
+ <a href="ACL2____LOGIC.html">logic</a> mode.  (For example, imagine that you are generating such hints 
+ programmatically, without analyzing whether the indicated function symbol was 
+ defined using recursion.)  In that case, using <span class="v">:termination-theorem</span> will 
+ fail.  Here, for example, is what happens if <span class="v">f</span> was defined 
+ non-recursively.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="COMMON-LISP____DEFUN.html">defun</a> g (x)
+         (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :hints
+                         (("Goal" :use ((:termination-theorem f))))))
+         (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x)
+             (<a href="ACL2____G.html">g</a> (<a href="COMMON-LISP____CDDR.html">cddr</a> x))
+           x))
+
+
+ACL2 Error in ( DEFUN G ...):  The object (:TERMINATION-THEOREM F)
+is an ill-formed lemma instance because there is no termination theorem
+for F.  The function F is not recursive.  See :DOC lemma-instance.
+
+
+Summary
+Form:  ( DEFUN G ...)
+Rules: NIL
+Time:  0.00 seconds (prove: 0.00, print: 0.00, other: 0.00)
+
+ACL2 Error in ( DEFUN G ...):  See :DOC failure.
+
+******** FAILED ********
+ACL2 !&gt;</pre> 
+ 
+ <p>The alternative, <span class="v">:termination-theorem!</span>, is provided in order to avoid 
+ this sort of error.  Here is the corresponding (edited) log, with <a href="ACL2____GAG-MODE.html">gag-mode</a> off.  Notice that since there is no termination theorem stored for 
+ <span class="v">f</span>, the <span class="v">:use</span> hint specifies the use of <span class="v">T</span> for the termination 
+ theorem.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="COMMON-LISP____DEFUN.html">defun</a> g (x)
+         (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :hints
+                         (("Goal" :use ((:termination-theorem! f))))))
+         (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x)
+             (<a href="ACL2____G.html">g</a> (<a href="COMMON-LISP____CDDR.html">cddr</a> x))
+           x))
+
+For the admission of G we will use the relation O&lt; (which is known
+to be well-founded on the domain recognized by O-P) and the measure
+(<a href="ACL2____ACL2-COUNT.html">ACL2-COUNT</a> X).  The non-trivial part of the measure conjecture is
+
+Goal
+(<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____CONSP.html">CONSP</a> X)
+         (<a href="ACL2____O_C3.html">O&lt;</a> (<a href="ACL2____ACL2-COUNT.html">ACL2-COUNT</a> (<a href="COMMON-LISP____CDDR.html">CDDR</a> X))
+             (<a href="ACL2____ACL2-COUNT.html">ACL2-COUNT</a> X))).
+
+[Note:  A hint was supplied for our processing of the goal above.
+Thanks!]
+
+We augment the goal with the hypothesis provided by the :USE hint.
+The hypothesis can be obtained from F.  We are left with the following
+subgoal.
+
+Goal'
+(<a href="ACL2____IMPLIES.html">IMPLIES</a> T
+         (<a href="COMMON-LISP____OR.html">OR</a> (<a href="COMMON-LISP____NOT.html">NOT</a> (<a href="COMMON-LISP____CONSP.html">CONSP</a> X))
+             (<a href="ACL2____O_C3.html">O&lt;</a> (<a href="ACL2____ACL2-COUNT.html">ACL2-COUNT</a> (<a href="COMMON-LISP____CDDR.html">CDDR</a> X))
+                 (<a href="ACL2____ACL2-COUNT.html">ACL2-COUNT</a> X)))).
+
+By case analysis we reduce the conjecture to
+
+[[.. output elided ..]]
+
+Hint-events: ((:USE F))
+Time:  0.02 seconds (prove: 0.01, print: 0.01, other: 0.00)
+Prover steps counted:  1121
+ G
+ACL2 !&gt;</pre>
+</body>
+</html>

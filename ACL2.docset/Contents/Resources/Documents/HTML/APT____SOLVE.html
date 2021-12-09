@@ -1,0 +1,440 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Solve</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=APT____SOLVE">Click for Solve in the Full Manual</a></h3>
+
+<p>APT solving transformation: 
+          directly determine a solution to a specification.</p><h3>Introduction</h3><p>Program synthesis, i.e. deriving a program from a specification, 
+      can be viewed as a form of constraint solving: 
+      the specification expresses the constraints, 
+      and the synthesized program is a solution to the constraints. 
+      In some cases, 
+      this kind of constraint satisfaction problem can be solved directly, 
+      e.g. via inference techniques. 
+      This transformation attempts to solve a specification directly, 
+      producing a satisfying program if successful.</p><p>A specification is a predicate over target programs, 
+      so that a solution to a specification is indeed a program. 
+      The programs may be deeply or shallowly embedded in the ACL2 logic, 
+      according to the <a href="https://www.isa-afp.org/entries/Pop_Refinement.html" target="_blank"><nobr>pop-refinement<img src="../Icon_External_Link.png" title="External link to https://www.isa-afp.org/entries/Pop_Refinement.html"></nobr></a> and <a href="http://eptcs.web.cse.unsw.edu.au/paper.cgi?ACL22015.3" target="_blank"><nobr>shallow pop-refinement<img src="../Icon_External_Link.png" title="External link to http://eptcs.web.cse.unsw.edu.au/paper.cgi?ACL22015.3"></nobr></a> approaches, respectively. 
+      Currently, this solving transformation operates on 
+      specifications over shallowly embedded programs, 
+      i.e. second-order predicates in ACL2. 
+      Currently, this solving transformation expects 
+      these predicates to be expressed using <a href="SOFT____SOFT.html">SOFT</a>, but the transformation may be extended, in the future, 
+      to operate on second-order predicates expressed via 
+      the built-in <span class="tt"><a href="ACL2____APPLY_42.html">apply$</a></span>.</p><p>A range of direct solving methods may be employed: 
+      rewriting, 
+      narrowing (i.e. computing sufficient conditions), 
+      witness finding via resolution, 
+      SMT solving, 
+      SAT solving, 
+      etc. 
+      Currently this solving transformation 
+      only supports (two forms of) rewriting, 
+      but there are plans to extend it to additional methods. 
+      Note that some of the methods listed above 
+      correspond to the sketching approach to program synthesis, 
+      which can therefore be a valuable tool in APT's arsenal.</p><p>This transformation also supports a manual solving method, 
+      in which the user provides the solution, 
+      possibly with hints to prove its correctness. 
+      While this is not an automatic method like the ones described above, 
+      it may be useful when the automatic methods fail, 
+      or when the solution happens to be simple to find and to prove. 
+      Using this transformation with the manual solving method 
+      is generally more convenient than writing out the full refinement step: 
+      in particular, this transformation automates 
+      the generation and proof of the refinement theorem 
+      (i.e. that the new specification implies the old one) 
+      from the proof that the manually provided solution 
+      satisfies the (old) specification.</p><p>Solving methods that require tools that are not part of ACL2 
+      can be modularly and selectively used 
+      by including the files in which the callers of such tools reside. 
+      This solving transformation, as part of input validation, 
+      checks that (the file of) the specified solving method has been loaded 
+      (more precisely, it checks that the function symbol of the caller 
+      is present in the ACL2 world). 
+      The caller is called via reflection by the solving transformation.</p><p>The <span class="v">solve</span> <a href="res/kestrel-apt-design-notes/solve.pdf" target="_blank"><nobr>design notes<img src="../Icon_External_Link.png" title="External link to res/kestrel-apt-design-notes/solve.pdf"></nobr></a>, which use <a href="res/kestrel-design-notes/notation.pdf" target="_blank"><nobr>this notation<img src="../Icon_External_Link.png" title="External link to res/kestrel-design-notes/notation.pdf"></nobr></a>, provide the mathematical concepts and template proofs 
+      upon which this transformation is based. 
+      These notes should be read alongside this reference documentation, 
+      which refers to them in some places.</p><h3>General Form</h3><pre class="code">(<a href="APT____SOLVE.html">solve</a> old
+       :method                 ; no default
+       :method-rules           ; default nil
+       :solution-name          ; default :auto
+       :solution-enable        ; default nil
+       :solution-guard         ; default t
+       :solution-guard-hints   ; default nil
+       :solution-body          ; no default
+       :solution-hints         ; default nil
+       :new-name               ; default :auto
+       :new-enable             ; default :auto
+       :old-if-new-name        ; default from table
+       :old-if-new-enable      ; default from table
+       :verify-guards          ; default :auto
+       :print                  ; default :result
+       :show-only              ; default nil
+  )</pre><h3>Inputs</h3><p><span class="v">old</span></p><blockquote>
+<p>Denotes the target function to transform.</p>
+<p>It must be the name of a function, 
+      or a <a href="ACL2____NUMBERED-NAMES.html">numbered name</a> 
+      with a wildcard index that 
+      <a href="ACL2____RESOLVE-NUMBERED-NAME-WILDCARD.html">resolves</a> 
+      to the name of a function. 
+      In the rest of this documentation page, for expository convenience, 
+      it is assumed that <span class="v">old</span> is the name of the denoted function.</p>
+<p><span class="v">old</span> must be a SOFT quantifier function 
+       (see `Classification' section in <span class="tt"><a href="SOFT____DEFSOFT.html">soft::defsoft</a></span>) 
+       that depends on one function variable (let it be <span class="v">?f</span>), 
+       that has no parameters, 
+       and whose body has the form</p>
+<pre class="code">(<a href="ACL2____FORALL.html">forall</a> (x1 ... xn) matrix&lt;(?f x1 ... xn)&gt;)</pre>
+<p>where <span class="v">x1</span>, ..., <span class="v">xn</span> are 0 or more variables 
+       and <span class="v">matrix&lt;(?f x1 ... xn)&gt;</span> is a term 
+       that contains a single call of <span class="v">?f</span> on <span class="v">x1</span>, ..., <span class="v">xn</span> 
+       (after translation and <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span> expansion).</p>
+<p>The transformation attempts to solve for <span class="v">?f</span>, 
+       i.e. to determine an <span class="v">n</span>-ary function 
+       that satisfies the constraints that <span class="v">old</span> puts on <span class="v">?f</span>.</p>
+<p>In the <span class="v">solve</span> <a href="res/kestrel-apt-design-notes/solve.pdf" target="_blank"><nobr>design notes<img src="../Icon_External_Link.png" title="External link to res/kestrel-apt-design-notes/solve.pdf"></nobr></a>, 
+       <span class="v">old</span> is denoted by S, 
+       <span class="v">?f</span> is denoted by f, 
+       <span class="v">x0</span>, ..., <span class="v">xn</span> are denoted by the single variable x 
+       (the generalization to multiple variables 
+       is straighforward in the design notes), and 
+       <span class="v">matrix&lt;(?f x1 ... xn)&gt;</span> is denoted by R(x,f(x)).</p>
+</blockquote><p><span class="v">:method</span>  no default</p><blockquote>
+<p>Specifies the solving method to use.</p>
+<p>It must be one of the following:</p>
+<ul>
+<li>
+<span class="v">:acl2-rewriter</span>, to use the ACL2 rewriter. 
+        This method is made available by including 
+        <span class="v">[books]/kestrel/apt/solve-method-acl2-rewriter.lisp</span>.</li>
+<li>
+<span class="v">:axe-rewriter</span>, to use the Axe rewriter. 
+        This method is available by including 
+        <span class="v">[books]/kestrel/apt/solve-method-axe-rewriter.lisp</span>.</li>
+<li>
+<span class="v">:manual</span>, to manually supply a solution.</li>
+</ul>
+<p>Support for more methods is planned.</p>
+</blockquote><p><span class="v">:method-rules</span>  <span class="v">nil</span></p><blockquote>
+<p>Specifies the ACL2 or Axe rewrite rules to use 
+       when <span class="v">:method</span> is <span class="v">:acl2-rewriter</span> or <span class="v">:axe-rewriter</span>.</p>
+<p>It must be a list of symbols that are 
+       names of ACL2 theorems usable as ACL2 or Axe rewrite rules.</p>
+<p>For the ACL2 rewriter, these rules are added to the current theory, 
+       and the rewriter operates in the so-augmented theory. 
+       For the Axe rewriter, these rules define the theory 
+       that the rewriter operates on.</p>
+<p>This input may be present only if 
+       <span class="v">:method</span> is <span class="v">:acl2-rewriter</span> or <span class="v">:axe-rewriter</span>.</p>
+</blockquote><p><span class="v">:solution-name</span>  default <span class="v">:auto</span></p><blockquote>
+<p>Determines the name of the solution function for <span class="v">?f</span>, 
+       and whether the function is generated or not.</p>
+<p>It must be one of the following:</p>
+<ul>
+<li>
+<span class="v">:auto</span>, which may only be used 
+        when the name of <span class="v">?f</span> starts with a <span class="v">?</span>. 
+        In this case, the function is generated, 
+        and its name is the symbol obtained 
+        by removing the initial <span class="v">?</span> from the name of <span class="v">?f</span>.</li>
+<li>A symbol that names an existing function. 
+        In this case, the function is not generated: 
+        the existing function is used instead. 
+        This is allowed only if <span class="v">:method</span> is <span class="v">:manual</span>.</li>
+<li>Any other symbol, to use as the name of the solution function, 
+        which is generated in this case.</li>
+</ul>
+<p>If this input is the name of an existing function, then the inputs 
+       <span class="v">:solution-enable</span>, 
+       <span class="v">:solution-guard</span>, 
+       <span class="v">:solution-guard-hints</span>, and 
+       <span class="v">:solution-body</span> 
+       must be all absent. 
+       If any of these inputs are present, 
+       then the <span class="v">:solution-name</span> input must not be 
+       the name of an existing function.</p>
+<p>If this input is the name of an existing function, 
+       it must be in logic mode and it must be <a href="ACL2____FUNCTION-DEFINEDNESS.html">defined</a>. Its arity must be the same as <span class="v">?f</span>. 
+       It must return a single result. 
+       If guards must be verified 
+       (as determined by the <span class="v">:verify-guards</span> input), 
+       then the function must be guard-verified.</p>
+<p>In the rest of the documentation page, 
+       let <span class="v">f</span> be the name of this function, 
+       whether it already exists or is generated.</p>
+</blockquote><p><span class="v">:solution-enable</span>  default <span class="v">nil</span></p><blockquote>
+<p>Determines whether <span class="v">f</span> is enabled, 
+       when this function is generated.</p>
+<p>It must be one of the following:</p>
+<ul>
+<li>
+<span class="v">t</span>, to enable it.</li>
+<li>
+<span class="v">nil</span>, to disable it.</li>
+</ul>
+<p>This input must be absent if <span class="v">f</span> already exists.</p>
+</blockquote><p><span class="v">:solution-guard</span>  default <span class="v">t</span></p><blockquote>
+<p>Determines the guard of <span class="v">f</span>, 
+       when this function is generated.</p>
+<p>It must be an untranslated term 
+       whose free variables are among <span class="v">x1</span>, ..., <span class="v">xn</span>. 
+       The term must return a single (i.e. non-<span class="tt"><a href="ACL2____MV.html">mv</a></span>) result.</p>
+<p>See Section `Solution Determination' below 
+       for a discussion about this input.</p>
+<p>This input must be absent if <span class="v">f</span> already exists.</p>
+</blockquote><p><span class="v">:solution-guard-hints</span>  default <span class="v">nil</span></p><blockquote>
+<p>Determines the hints to verify the guards of <span class="v">f</span>, 
+       when this function is generated.</p>
+<p>See Section `Solution Determination' below 
+       for a discussion about this input.</p>
+<p>This input may be present only if guards are to be verified, 
+       as determined by the <span class="v">:verify-guards</span> input.</p>
+<p>This input must be absent if <span class="v">f</span> already exists.</p>
+</blockquote><p><span class="v">:solution-body</span>  no default</p><blockquote>
+<p>Specifies the body of the solution function, 
+       when <span class="v">:method</span> is <span class="v">:manual</span> and <span class="v">f</span> is generated.</p>
+<p>It must be an untranslated term 
+       whose free variables are among <span class="v">x1</span>, ..., <span class="v">xn</span>. 
+       The term must return a single (i.e. non-<span class="tt"><a href="ACL2____MV.html">mv</a></span>) result.</p>
+<p>See Section `Solution Determination' below 
+       for a discussion about this input.</p>
+<p>This input must be present if 
+       <span class="v">:method</span> is <span class="v">:manual</span> and <span class="v">f</span> is generated; 
+       otherwise, this input must be absent.</p>
+</blockquote><p><span class="v">:solution-hints</span>  <span class="v">nil</span></p><blockquote>
+<p>Specifies the hints to prove the correctness of the solution, 
+       when <span class="v">:method</span> is <span class="v">:manual</span>.</p>
+<p>This input may be present only if <span class="v">:method</span> is <span class="v">:manual</span>.</p>
+</blockquote><p><span class="v">:new-name</span>  default <span class="v">:auto</span></p><blockquote>
+<p>Determines the name of the generated new function.</p>
+<p>It must be one of the following:</p>
+<ul>
+<li>
+<span class="v">:auto</span>, to generate the name automatically 
+       as described in <a href="APT____FUNCTION-NAME-GENERATION.html">function-name-generation</a>.</li>
+<li>Any other symbol, to use as the name of the function.</li>
+</ul>
+<p>In the rest of this documentation page, 
+      let <span class="v">new</span> be this function.</p>
+</blockquote><p><span class="v">:new-enable</span>  default <span class="v">:auto</span></p><blockquote>
+<p>Determines whether <span class="v">new</span> is enabled.</p>
+<p>It must be one of the following:</p>
+<ul>
+<li>
+<span class="v">t</span>, to enable it.</li>
+<li>
+<span class="v">nil</span>, to disable it.</li>
+<li>
+<span class="v">:auto</span>, to enable it iff <span class="v">old</span> is enabled.</li>
+</ul>
+</blockquote><p><span class="v">:old-if-new-name</span>  
+     default from <a href="APT____DEFAULTS-TABLE.html">table</a></p><blockquote>
+<p>Determines the name of the theorem asserting that 
+      the old function is implied by the old function.</p>
+<p>It must be one of the following:</p>
+<ul>
+<li>A keyword, to use as separator between 
+       the names of <span class="v">old</span> and <span class="v">new</span>. 
+       A keyword <span class="v">:kwd</span> specifies the theorem name <span class="v">oldkwdnew</span>, 
+       in the same package as <span class="v">new</span>.</li>
+<li>Any other symbol, to use as the name of the theorem.</li>
+<li>Absent, to use the value from the APT defaults table, 
+       which is set via <span class="tt"><a href="APT____SET-DEFAULT-INPUT-OLD-IF-NEW-NAME.html">set-default-input-old-if-new-name</a></span>.</li>
+</ul>
+<p>In the rest of this documentation page, 
+      let <span class="v">old-if-new</span> be the name of this theorem.</p>
+</blockquote><p><span class="v">:old-if-new-enable</span>  
+     default from <a href="APT____DEFAULTS-TABLE.html">table</a></p><blockquote>
+<p>Determines whether the <span class="v">old-if-new</span> theorem is enabled.</p>
+<p>It must be one of the following:</p>
+<ul>
+<li>
+<span class="v">t</span>, to enable the theorem.</li>
+<li>
+<span class="v">nil</span>, to disable the theorem.</li>
+<li>Absent, to use the value from the APT defaults table, 
+       which is set via <span class="tt"><a href="APT____SET-DEFAULT-INPUT-OLD-IF-NEW-ENABLE.html">set-default-input-old-if-new-enable</a></span>.</li>
+</ul>
+<p>If this input is <span class="v">t</span>, 
+      the <span class="v">:new-to-old-enable</span> input must be <span class="v">nil</span>. 
+      At most one of these two inputs may be <span class="v">t</span> at any time.</p>
+</blockquote><p><span class="v">:verify-guards</span>  default <span class="v">:auto</span></p><blockquote>
+<p>Determines whether the guards of the generated functions are verified or not.</p>
+<p>It must be one of the following:</p>
+<ul>
+<li>
+<span class="v">t</span>, to verify the guards.</li>
+<li>
+<span class="v">nil</span>, to not verify guards.</li>
+<li>
+<span class="v">:auto</span>, to verify the guards if and only if 
+       the guards of the target function <span class="v">old</span> are verified.</li>
+</ul>
+</blockquote><p><span class="v">:print</span>  default <span class="v">:result</span></p><blockquote>
+<p>Specifies what is printed on the screen 
+        (see <a href="ACL2____EVENT-MACRO-SCREEN-PRINTING.html">ACL2::event-macro-screen-printing</a>).</p>
+<p>It must be one of the following:</p>
+<ul>
+<li>
+<span class="v">nil</span>, to print nothing (not even error output).</li>
+<li>
+<span class="v">:error</span>, to print only error output (if any).</li>
+<li>
+<span class="v">:result</span>, to print, besides any error output, 
+         also the <a href="ACL2____EVENT-MACRO-RESULTS.html">results</a> of <span class="v">solve</span>. 
+         This is the default value of the <span class="v">:print</span> input.</li>
+<li>
+<span class="v">:info</span>, to print, 
+         besides any error output and the results, 
+         also some additional information about 
+         the internal operations of <span class="v">solve</span>.</li>
+<li>
+<span class="v">:all</span>, to print, 
+          besides any error output, 
+          the results, 
+          and the additional information, 
+          also ACL2's output in response to all the submitted events.</li>
+</ul>
+<p>If the call of <span class="v">solve</span> is redundant, 
+        an indication to that effect is printed on the screen, 
+        unless <span class="v">:print</span> is <span class="v">nil</span>.</p>
+</blockquote><p><span class="v">:show-only</span>  default <span class="v">nil</span></p><blockquote>
+<p>Determines whether the event expansion of <span class="v">solve</span> is submitted to ACL2 or just printed on the screen:</p>
+<ul>
+<li>
+<span class="v">nil</span>, to submit it.</li>
+<li>
+<span class="v">t</span>, to just print it. 
+            In this case: 
+            the event expansion is printed even if <span class="v">:print</span> is <span class="v">nil</span> 
+            (because the user has explicitly asked to show the event expansion); 
+            the resulting events are not re-printed separately 
+            (other than their appearance in the printed event expansion) 
+            even if <span class="v">:print</span> is <span class="v">:result</span> or <span class="v">:info</span> or <span class="v">:all</span>; 
+            no ACL2 output is printed for the event expansion 
+            even if <span class="v">:print</span> is <span class="v">:all</span> 
+            (because the event expansion is not submitted). 
+            If the call of <span class="v">solve</span> is redundant 
+            (as defined in the `Redundancy' section), the event expansion generated by the existing call 
+            is printed.</li>
+</ul>
+</blockquote><h3>Solution Determination</h3><p>The transformation attempts to find a solution for <span class="v">?f</span> 
+      according to the chosen method, as explained below. 
+      A solution may or may not be found. 
+      If no solution is found, the transformation fails 
+      with an informative error message.</p><h4>Rewriting</h4><p>When the <span class="v">:method</span> input is <span class="v">:acl2-rewriter</span> or <span class="v">:axe-rewriter</span>, 
+       the transformation calls the ACL2 or Axe rewriter 
+       on the term <span class="v">matrix&lt;(?f x1 ... xn)&gt;</span>, 
+       obtaining a rewritten term <span class="v">result</span>.</p><p>Consider the outer <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span> tree structure of <span class="v">result</span>, 
+      and collect all the leaves of such a tree:</p><ul>
+<li>If <span class="v">result</span> is not a call of <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span>, 
+        then <span class="v">result</span> is the only leaf.</li>
+<li>If <span class="v">result</span> has the form <span class="v">(<a href="COMMON-LISP____IF.html">if</a> a b c)</span>, 
+        recursively collect the leaves of <span class="v">b</span> of <span class="v">c</span>, 
+        and join them into a list.</li>
+</ul><p>For instance, if <span class="v">result</span> is <span class="v">(<a href="COMMON-LISP____IF.html">if</a> a (<a href="COMMON-LISP____IF.html">if</a> b c d) e)</span>, 
+       the collected leaves are <span class="v">c</span>, <span class="v">d</span>, and <span class="v">e</span>.</p><p>There are three cases to consider.</p><p>The first case is the one where all the collected leaves are <span class="v">t</span>. 
+       In this case, the transformation is successful, 
+       and the determined solution is</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> f (x1 ... xn)
+  nil)</pre><p>The fact that <span class="v">matrix&lt;(?f x1 ... xn)&gt;</span> rewrote to <span class="v">t</span> 
+       (under all the conditions in the <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span> tree) 
+       means that any <span class="v">?f</span> satisfies the constraints. 
+       So anything can be used as the solution <span class="v">f</span>. 
+       We use the function that always returns <span class="v">nil</span> for simplicity. 
+       While this may seem an unlikely case, 
+       it may arise under certain conditions, 
+       e.g. for some boundary cases.</p><p>The second case is the one where one collected leaf has the form</p><pre class="code">(<a href="COMMON-LISP____EQUAL.html">equal</a> (?f x1 ... xn) term&lt;x1,...,xn&gt;)</pre><p>where <span class="v">term&lt;x1,...,xn&gt;</span> is a term 
+       that may depend on <span class="v">x1</span>, ..., <span class="v">xn</span> 
+       and that does not contain <span class="v">?f</span>, 
+       and all the other collected leaves are <span class="v">t</span>. 
+       In this case, the transformation is successful, 
+       and the determined solution is</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> f (x1 ... xn)
+  term&lt;x1,...,xn&gt;)</pre><p>The conditions under which the rewritten term is <span class="v">t</span> 
+       put no constraints on the solution, 
+       which can be therefore entirely determined 
+       by the only equality leaf.</p><p>The third case is the one where the two cases above do not apply. 
+       In this case, the transformation fails. 
+       No solution has been determined.</p><p>Support for determining solutions in more cases 
+       may be added in the future.</p><p>Note that, in the second case above, 
+       there is no general guarantee that 
+       <span class="v">term&lt;x1,...,xn&gt;</span> can be guard-verified 
+       without assumptions on <span class="v">x1</span>, ..., <span class="v">xn</span>. 
+       The <span class="v">:solution-guard</span> input may be used to add such assumptions, 
+       and <span class="v">:solution-guard-hints</span> input may be used to verify guards, 
+       but there is no general guarantee that suitable inputs always exist: 
+       the ACL2 or Axe rewriter may produce a logically valid term 
+       that cannot be guard-verified under any hypotheses on its variables. 
+       Future extensions of this transformation may address this issue, 
+       e.g. by limiting rewriting so that 
+       only guard-verifiable terms are produced.</p><p>When the transformation is successful, 
+       the ACL2 or Axe rewriting provides 
+       an ACL2 or Axe proof of correctness of the solution. 
+       This should suffice to generate an ACL2 proof 
+       of the <span class="v">old-if-new</span> refinement theorem in principle, 
+       but in practice there may be technical difficulties in some cases. 
+       Difficulties seem less likely to happen when using the ACL2 rewriter, 
+       because the same rewrites should apply during the generated proof. 
+       Difficulties may be more likely when using the Axe rewriter, 
+       because its rewriting may not exactly correspond to ACL2's rewriting. 
+       Future extensions of this transformation may address this issue, 
+       e.g. by having the Axe rewriter produce an ACL2 proof 
+       that this transformation may use to prove the refinement theorem.</p><p>In any case, the transformation attempts to prove a theorem 
+       to confirm the correctness of ACL2's or Axe's rewriting in ACL2. 
+       If that theorem is successful, 
+       the transformation internally generates a theorem of the form</p><pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (?f x1 ... xn)
+                term&lt;x1,...,xn&gt;)
+         matrix&lt;(?f x1 ... xn)&gt;)</pre><p>which essentially says that the matrix of <span class="v">old</span> holds 
+       if we replace <span class="v">(?f x1 ... xn)</span> with <span class="v">term&lt;x1,...,xn&gt;</span>, 
+       i.e. that the inferred solution body satisfies the initial specification. 
+       It is the latter theorem that is used to prove <span class="v">old-if-new</span>. 
+       Its formulation is equivalent to <span class="v">matrix&lt;term&lt;x1,...,xn&gt;&gt;</span>, 
+       but the formulation used is more convenient 
+       for generating the proof of <span class="v">old-if-new</span>.</p><h4>Manual</h4><p>When the <span class="v">:method</span> input is <span class="v">:manual</span>, 
+       the transformation calls no inference tool. 
+       Instead, the generated or existing function <span class="v">f</span> 
+       is the (purported) solution.</p><p>If <span class="v">f</span> exists, it must have the same number of arguments as <span class="v">?f</span>. 
+       It must be the case that</p><pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (?f x1 ... xn)
+                (f x1 ... xn))
+         matrix&lt;(?f x1 ... xn)&gt;)</pre><p>This proof is attempted via the <span class="v">:solution-hints</span> input.</p><p>If <span class="v">f</span> is generated, it has the form</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> f (x1 ... xn)
+  term&lt;x1,...,xn&gt;)</pre><p>where <span class="v">term&lt;x1,...,xn&gt;</span> is the <span class="v">:solution-body</span> input; 
+       it is a term whose free variables are among <span class="v">x1</span>, ..., <span class="v">xn</span>.</p><p>It must be the case that</p><pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (?f x1 ... xn)
+                term&lt;x1,...,xn&gt;)
+         matrix&lt;(?f x1 ... xn)&gt;)</pre><p>This proof is attempted via the <span class="v">:solution-hints</span> input.</p><p>The guard of <span class="v">f</span> is determined by <span class="v">:solution-guard</span>. 
+       If guards are to be verified, 
+       the verification of the guards of <span class="v">f</span> 
+       is attempted using <span class="v">:solution-guard-hints</span>.</p><h3>Generated Events</h3><p><span class="v">f</span></p><blockquote>
+<p>The solution for <span class="v">?f</span>.</p>
+<pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> f (x1 ... xn)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard ...)) ; from :solution-guard input
+  ...) ; see section 'Solution Determination' above</pre>
+<p>This is not generated if <span class="v">:method</span> is <span class="v">:manual</span> 
+       and <span class="v">:solution-name</span> names an existing function.</p>
+<p>In the <span class="v">solve</span> <a href="res/kestrel-apt-design-notes/solve.pdf" target="_blank"><nobr>design notes<img src="../Icon_External_Link.png" title="External link to res/kestrel-apt-design-notes/solve.pdf"></nobr></a>, 
+       <span class="v">f</span> is denoted by f_0.</p>
+</blockquote><p><span class="v">new</span></p><blockquote>
+<p>Specification strengthened by choosing the solution, 
+       i.e. equality between <span class="v">?f</span> and <span class="v">f</span>:</p>
+<pre class="code">(<a href="SOFT____DEFUN-SK2.html">soft::defun-sk2</a> new ()
+  (<a href="ACL2____FORALL.html">forall</a> (x1 ... xn)
+          (<a href="COMMON-LISP____EQUAL.html">equal</a> (?f x1 ... xn)
+                 (f x1 ... xn))))</pre>
+<p>In the <span class="v">solve</span> <a href="res/kestrel-apt-design-notes/solve.pdf" target="_blank"><nobr>design notes<img src="../Icon_External_Link.png" title="External link to res/kestrel-apt-design-notes/solve.pdf"></nobr></a>, 
+       <span class="v">new</span> is denoted by S'.</p>
+</blockquote><p><span class="v">old-if-new</span></p><blockquote>
+<p>Theorem asserting that <span class="v">new</span> implies <span class="v">old</span> 
+       (i.e. a refinement relation):</p>
+<pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> old-if-new
+  (<a href="ACL2____IMPLIES.html">implies</a> (new)
+           (old))</pre>
+<p>In the <span class="v">solve</span> <a href="res/kestrel-apt-design-notes/solve.pdf" target="_blank"><nobr>design notes<img src="../Icon_External_Link.png" title="External link to res/kestrel-apt-design-notes/solve.pdf"></nobr></a>, 
+       <span class="v">old-if-new</span> is denoted by SS'.</p>
+</blockquote>
+</body>
+</html>

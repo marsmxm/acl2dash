@@ -1,0 +1,82 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Using-enabled-rules</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____USING-ENABLED-RULES">Click for Using-enabled-rules in the Full Manual</a></h3>
+
+<p>Avoiding <span class="v">:use</span> <a href="ACL2____HINTS.html">hints</a> for <a href="ACL2____ENABLE.html">enable</a>d <span class="v">:</span><span class="tt"><a href="ACL2____REWRITE.html">rewrite</a></span> rules</p><p>Consider the following (admittedly silly) example.</p> 
+ 
+ <pre class="code">(<a href="ACL2____THM.html">thm</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____APPEND.html">append</a> (<a href="COMMON-LISP____APPEND.html">append</a> x y) z) (<a href="COMMON-LISP____APPEND.html">append</a> x y z))
+     :hints (("Subgoal *1/1" :use cdr-cons)))</pre> 
+ 
+ <p>ACL2's output includes the following warning.</p> 
+ 
+ <pre class="code">ACL2 Warning [Use] in ( THM ...):  It is unusual to :USE the formula
+of an enabled :REWRITE or :DEFINITION rule, so you may want to consider
+disabling (:REWRITE CDR-CONS) in the hint provided for Subgoal *1/1.
+See :DOC using-enabled-rules.</pre> 
+ 
+ <p>The warning is saying that if you leave the rewrite rule enabled, ACL2 may 
+ simplify away the hypothesis added by the <span class="v">:use</span> hint.  We now explain this 
+ danger in more detail and show how disabling the rule can solve this 
+ problem.</p> 
+ 
+ <p>Recall (see <a href="ACL2____HINTS.html">hints</a>) how <span class="v">:use</span> <a href="ACL2____HINTS.html">hints</a> work.  Such a hint 
+ specifies a formula, <span class="v">F</span>, which is based on an existing lemma.  Then the 
+ indicated goal, <span class="v">G</span>, is replaced by the implication <span class="v">(<a href="ACL2____IMPLIES.html">implies</a> F G)</span>. 
+ The intention is that the truth of <span class="v">F</span> will help in the simplification of 
+ <span class="v">G</span> to <span class="v">T</span> (true).  The ``[Use]'' warning shown above is telling us of 
+ the danger that <span class="v">F</span> may be rewritten to <span class="v">T</span>, reducing the implication 
+ above to <span class="v">(<a href="ACL2____IMPLIES.html">implies</a> T G)</span>  thus, sadly, <span class="v">F</span> has disappeared and is 
+ not available to help with the simplification of <span class="v">G</span>.</p> 
+ 
+ <p>Consider the following tiny example.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> p (x) (<a href="COMMON-LISP____CONS.html">cons</a> x x))
+(<a href="ACL2____DEFTHM.html">defthm</a> car-p
+   (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____CAR.html">car</a> (p x)) x))
+(<a href="ACL2____IN-THEORY.html">in-theory</a> (<a href="ACL2____DISABLE.html">disable</a> p (:type-prescription p)))
+(<a href="ACL2____THM.html">thm</a> (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (p x1) (p x2))
+              (<a href="COMMON-LISP____EQUAL.html">equal</a> x1 x2))
+     :hints (("Goal"
+              :use ((:instance car-p (x x1))
+                    (:instance car-p (x x2))))))</pre> 
+ 
+ <p>The proof of the final <span class="tt"><a href="ACL2____THM.html">thm</a></span> form fails, because the new hypotheses 
+ are rewritten to <span class="v">t</span> using the <span class="v">:</span><span class="tt"><a href="ACL2____REWRITE.html">rewrite</a></span> rule <span class="v">CAR-P</span>, in 
+ the manner described above.  The following proof log shows the new hypotheses 
+ and their disappearance via rewriting.</p> 
+ 
+ <pre class="code">We augment the goal with the hypotheses provided by the :USE hint.
+These hypotheses can be derived from CAR-P via instantiation.  We are
+left with the following subgoal.
+
+Goal'
+(<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____AND.html">AND</a> (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (<a href="COMMON-LISP____CAR.html">CAR</a> (P X1)) X1)
+              (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (<a href="COMMON-LISP____CAR.html">CAR</a> (P X2)) X2))
+         (<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (P X1) (P X2))
+                  (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> X1 X2))).
+
+By the simple :rewrite rule CAR-P we reduce the conjecture to
+
+Goal''
+(<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (P X1) (P X2))
+         (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> X1 X2)).</pre> 
+ 
+ <p>When we disable the rule <span class="v">CAR-P</span> as follows, the proof succeeds.</p> 
+ 
+ <pre class="code">(<a href="ACL2____THM.html">thm</a> (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (p x1) (p x2))
+              (<a href="COMMON-LISP____EQUAL.html">equal</a> x1 x2))
+     :hints (("Goal"
+              :use ((:instance car-p (x x1))
+                    (:instance car-p (x x2)))
+              :in-theory (<a href="ACL2____DISABLE.html">disable</a> car-p))))</pre> 
+ 
+ <p>In general, then, a solution is to disable the rewrite rule that you are 
+ supplying in a <span class="v">:use</span> hint.</p>
+</body>
+</html>

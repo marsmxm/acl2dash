@@ -1,0 +1,148 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Invariant-risk-details</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____INVARIANT-RISK-DETAILS">Click for Invariant-risk-details in the Full Manual</a></h3>
+
+<p>More details about <a href="ACL2____INVARIANT-RISK.html">invariant-risk</a></p><p>This topic, which may be unnecessary for most ACL2 users, expands 
+ on the documentation for <a href="ACL2____INVARIANT-RISK.html">invariant-risk</a>.  See that topic and see <a href="ACL2____EVALUATION.html">evaluation</a> for relevant background.</p> 
+ 
+ <p>We refer below to the following example, which is slightly expanded from 
+ the one in the documentation for <a href="ACL2____INVARIANT-RISK.html">invariant-risk</a>.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFSTOBJ.html">defstobj</a> st (fld :type integer :initially 0))
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> f1 (n st)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs st :guard (<a href="COMMON-LISP____INTEGERP.html">integerp</a> n)))
+  (update-fld n st))
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> f2 (n st)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs st :guard (<a href="COMMON-LISP____INTEGERP.html">integerp</a> n)))
+  (f1 n st))
+
+; This :program-mode wrapper for f fails to require (<a href="COMMON-LISP____INTEGERP.html">integerp</a> n):
+(<a href="COMMON-LISP____DEFUN.html">defun</a> g (n st)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs st :mode :program))
+  (f2 n st))
+
+; Trace f1 and f2 and their *1* functions.  (This is optional.)
+(<a href="ACL2____TRACE_42.html">trace$</a> f1 f2 g)
+
+; Produces an invariant-risk warning; only *1* functions are called.
+(<a href="ACL2____G.html">g</a> 3 st)
+
+; Produces an invariant-risk warning and a guard violation:
+(<a href="ACL2____G.html">g</a> 'a st)
+
+; Defeat invariant-risk checking (risky; uses a trust tag):
+(<a href="ACL2____SET-CHECK-INVARIANT-RISK.html">set-check-invariant-risk</a> nil)
+
+; No warning because *1* functions are not called.
+(<a href="ACL2____G.html">g</a> 3 st)
+
+; No warning because *1* functions are not called.
+(<a href="ACL2____G.html">g</a> 'a st)
+
+; Non-integer field value!
+(<a href="ACL2____ASSERT-EVENT.html">assert-event</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (fld st) 'a))</pre> 
+ 
+ <p>To understand invariant-risk, consider the case that a <a href="ACL2____STOBJ.html">stobj</a> 
+ updater (such as <span class="v">update-fld</span> above) is called on ill-guarded arguments. 
+ In that case the resulting ACL2 <a href="ACL2____STATE.html">state</a> could be ill-formed, as in the 
+ example above: after turning off invariant-risk checking, the stobj <span class="v">st</span> is 
+ defined to have an integer field yet winds up with a symbol in that field. 
+ ACL2 arranges invariant-risk checking by installing special code in the 
+ executable-counterpart of a <span class="v">:</span><span class="tt"><a href="ACL2____PROGRAM.html">program</a></span>-mode function to prevent it 
+ from calling its corresponding submitted function.  It does this when the 
+ <span class="v">:program</span>-mode function has a non-nil <span class="v">'invariant-risk</span> property; in 
+ the example above, note:</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____GETPROPC.html">getpropc</a> 'g 'invariant-risk)
+UPDATE-FLD
+ACL2 !&gt;</pre> 
+ 
+ <p>When the function symbol <span class="v">g</span> was defined, it inherited this property 
+ from <span class="v">f2</span>, which in turn inherited it from <span class="v">f1</span>, which in turn inherited 
+ it from the stobj updater, <span class="v">update-fld</span>.  However, the aforementioned 
+ special code is only installed for <span class="v">:program</span> mode functions, hence not for 
+ <span class="v">f1</span> or <span class="v">f2</span>.  Consider for example the following trace, from the call 
+ of <span class="v">(<a href="ACL2____G.html">g</a> 3)</span> made above before turning off invariant-risk checking.</p> 
+ 
+ <pre class="code">1&gt; (ACL2_*1*_ACL2::G 3 |&lt;st&gt;|)
+
+ACL2 Warning [Invariant-risk] in G:  Invariant-risk has been detected
+for a call of function G (as possibly leading to an ill-guarded call
+of UPDATE-FLD); see :DOC invariant-risk.
+
+  2&gt; (ACL2_*1*_ACL2::F2 3 |&lt;st&gt;|)
+    3&gt; (F2 3 |&lt;st&gt;|)
+      4&gt; (F1 3 |&lt;st&gt;|)
+      &lt;4 (F1 |&lt;st&gt;|)
+    &lt;3 (F2 |&lt;st&gt;|)
+  &lt;2 (ACL2_*1*_ACL2::F2 |&lt;st&gt;|)
+&lt;1 (ACL2_*1*_ACL2::G |&lt;st&gt;|)
+&lt;st&gt;
+ACL2 !&gt;</pre> 
+ 
+ <p>This trace illustrates that even though <span class="v">f2</span> has the 
+ <span class="v">'invariant-risk</span> property, its executable-counterpart has permission to 
+ call its submitted function because <span class="v">f2</span> is a guard-verified 
+ <span class="v">:logic</span>-mode function.</p> 
+ 
+ <p>As an optimization, ACL2 avoids setting the <span class="v">'invariant-risk</span> property 
+ on <span class="v">:</span><span class="tt"><a href="ACL2____LOGIC.html">logic</a></span> mode functions whose <a href="ACL2____GUARD.html">guard</a> is <span class="v">t</span> or, more 
+ generally, a conjunction of <a href="ACL2____STOBJ.html">stobj</a> recognizer calls.  For example, the 
+ call of <span class="v">(bar 3 st)</span> below does not cause an invariant-risk warning.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____PROGN.html">progn</a> (<a href="ACL2____DEFSTOBJ.html">defstobj</a> st (reg :type (<a href="COMMON-LISP____ARRAY.html">array</a> (unsigned-byte 31) (8))
+                         :initially 0))
+       (<a href="COMMON-LISP____DEFUN.html">defun</a> foo (i st)
+         (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t :stobjs st))
+         (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQL.html">eql</a> i 0) (update-regi i 3 st) st))
+       (<a href="COMMON-LISP____DEFUN.html">defun</a> bar (i st)
+         (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs st :mode :program))
+         (foo i st)))
+(bar 3 st)</pre> 
+ 
+ <p>This optimization can hold even if the function is originally submitted 
+ without guard verification (typically, using <a href="ACL2____XARGS.html">xargs</a> declaration 
+ <span class="v">:verify-guards nil</span>), but only if its guards are verified before defining the 
+ <span class="v">:program</span>-mode wrapper (e.g., <span class="v">bar</span> above).  Thus we see an 
+ invariant-risk warning in the call of <span class="v">bar</span> below.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____PROGN.html">progn</a> (<a href="ACL2____DEFSTOBJ.html">defstobj</a> st (reg :type (<a href="COMMON-LISP____ARRAY.html">array</a> (unsigned-byte 31) (8))
+                         :initially 0))
+       (<a href="COMMON-LISP____DEFUN.html">defun</a> foo (i st)
+         (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t :stobjs st :VERIFY-GUARDS NIL))
+         (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQL.html">eql</a> i 0) (update-regi i 3 st) st))
+       (<a href="COMMON-LISP____DEFUN.html">defun</a> bar (i st)
+         (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs st :mode :program))
+         (foo i st))
+       (<a href="ACL2____VERIFY-GUARDS.html">verify-guards</a> foo) ; avoid invariant-risk by moving before bar
+       )
+(bar 3 st) ; invariant-risk</pre> 
+ 
+ <p>Here is code that will return a list of all <span class="v">:program</span>-mode functions 
+ subject to invariant-risk checking that are user-defined (not built into 
+ ACL2).</p> 
+ 
+ <pre class="code">:q ; go into raw Lisp
+(<a href="COMMON-LISP____LET.html">let</a> (ans (wrld (<a href="ACL2____W.html">w</a> *the-live-state*)))
+  (dolist (p (list-all-packages))
+    (do-symbols (sym p)
+      (when (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____GETPROPC.html">getpropc</a> sym 'invariant-risk)
+                 (<a href="ACL2____PROGRAMP.html">programp</a> sym wrld)
+                 (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____GETPROPC.html">getpropc</a> sym 'predefined)))
+        (push sym ans))))
+  ans)</pre> 
+ 
+ <p>To see exactly the executable-counterpart code generated for a 
+ <span class="v">:program</span>-mode function with invariant-risk, evaluate 
+ <span class="v">(<a href="ACL2____TRACE_12.html">trace!</a> (oneify-cltl-code :native t))</span> before submitting its 
+ definition.</p>
+</body>
+</html>

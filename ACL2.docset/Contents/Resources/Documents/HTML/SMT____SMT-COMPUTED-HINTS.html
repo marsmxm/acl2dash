@@ -1,0 +1,202 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Smt-computed-hints</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=SMT____SMT-COMPUTED-HINTS">Click for Smt-computed-hints in the Full Manual</a></h3>
+
+<p>This document discusses how computed-hints are used in the 
+  architecture of Smtlink.</p><p>Smtlink uses <span class="tt"><a href="ACL2____COMPUTED-HINTS.html">ACL2::computed-hints</a></span> and <span class="tt"><a href="ACL2____CLAUSE-PROCESSOR.html">ACL2::clause-processor</a></span> for controlling the several translation steps. To use 
+  Smtlink, the user first installs the computed hint, 
+  <span class="v">SMT::SMT-computed-hint</span>. When the user uses :smtlink in <span class="tt"><a href="ACL2____HINTS.html">ACL2::hints</a></span>, 
+  it macro-expands into a :clause-processor hint. This applies the first 
+  clause-processor for parsing <span class="tt"><a href="SMT____SMT-HINT.html">smt-hint</a></span>. This clause-processor 
+  also add <span class="v">(SMT::hint-please some-hint)</span> into the clause as the first in 
+  the disjunction. The SMT::SMT-computed-hint will recognize clauses that 
+  matches the form <span class="v">(('hint-please ) . term)</span>. It extracts the 
+  <span class="v">some-hint</span> from the clause, and install below 
+  <span class="v">:computed-hint-replacement</span>:</p> 
+ 
+<pre class="code">`(:computed-hint-replacement ((<a href="SMT____SMT-DELAYED-HINT.html">SMT-delayed-hint</a> clause ',some-hint))
+  :clause-processor (remove-hint-please clause))</pre> 
+ 
+<p>This <span class="v">:computed-hint-replacement</span> does two things: clearing up 
+the <span class="v">SMT::hint-please</span> disjunct from the clause with the hint 
+<span class="v">:clause-processor (remove-hint-please clause)</span>, and install another 
+computed-hint called <span class="v">SMT::SMT-delayed-hint</span> for actually applying 
+<span class="v">some-hint</span> to the cleaned-up new subgoal.</p> 
+ 
+<p>We started out using just one computed-hint that recognizes 
+<span class="v">SMT::hint-please</span> and applies the hint. This results in a rewrite-loop that 
+resembles the one described at <span class="tt"><a href="ACL2____USING-COMPUTED-HINTS-6.html">ACL2::using-computed-hints-6</a></span>. The 
+problem is that, when a user supplies a <span class="v">:use</span> hint, the computed-hint would 
+generate a new subgoal that still contains the <span class="v">SMT::hint-please</span>. The 
+<span class="v">SMT::hint-please</span> then triggers the computed-hint again, applying the 
+<span class="v">:use</span> hint, which generates a new subgoal that still contains the 
+<span class="v">SMT::hint-please</span>. This then triggers the computed-hint again ... you get 
+the idea. To solve this problem, we add this one additional step of 
+clause-processor to remove the <span class="v">SMT::hint-please</span> disjunct from the clause. 
+Then install another computed-hint called <span class="v">SMT::SMT-delayed-hint</span> for 
+running the real hints on the subgoal. Because this new subgoal doesn't contain 
+<span class="v">SMT::hint-please</span>, the <span class="v">SMT::SMT-computed-hint</span> won't get in the way. 
+It works fine even when the <span class="v">some-hint</span> is again a <span class="v">:smtlink</span> hint, 
+allowing the user to use Smtlink inside of a Smtlink proof.</p> 
+ 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>my-split-kwd-alist</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ my-split-kwd-alist (key kwd-alist)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> key)
+                             (<a href="ACL2____TRUE-LISTP.html">true-listp</a> kwd-alist))))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((acl2::__function__ 'my-split-kwd-alist))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> acl2::__function__))
+  (<a href="ACL2____B_A2.html">b*</a> ((kwd-alist (<a href="SMT____TRUE-LIST-FIX.html">true-list-fix</a> kwd-alist))
+       ((unless (<a href="COMMON-LISP____CONSP.html">consp</a> kwd-alist))
+        (<a href="ACL2____MV.html">mv</a> nil nil))
+       ((<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQ.html">eq</a> key (<a href="COMMON-LISP____CAR.html">car</a> kwd-alist)))
+        (<a href="ACL2____MV.html">mv</a> nil kwd-alist))
+       ((unless (<a href="COMMON-LISP____CONSP.html">consp</a> (<a href="COMMON-LISP____CDR.html">cdr</a> kwd-alist)))
+        (<a href="ACL2____PROG2_42.html">prog2$</a> (<a href="ACL2____ER.html">er</a> hard?
+                    'smt-computed-hints=&gt;my-split-kwd-alist
+                    "Something ~
+  is wrong with the kwd-alist: ~q0"
+                    kwd-alist)
+                (<a href="ACL2____MV.html">mv</a> nil nil)))
+       ((<a href="ACL2____MV.html">mv</a> pre post)
+        (my-split-kwd-alist key (<a href="COMMON-LISP____CDDR.html">cddr</a> kwd-alist))))
+      (<a href="ACL2____MV.html">mv</a> (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CAR.html">car</a> kwd-alist)
+                (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CADR.html">cadr</a> kwd-alist) pre))
+          post))))</pre> 
+<p><b>Theorem: </b>true-listp-of-my-split-kwd-alist.pre</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> true-listp-of-my-split-kwd-alist.pre
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?pre ?post)
+              (my-split-kwd-alist key kwd-alist)))
+            (<a href="ACL2____TRUE-LISTP.html">true-listp</a> pre))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>true-listp-of-my-split-kwd-alist.post</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> true-listp-of-my-split-kwd-alist.post
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?pre ?post)
+              (my-split-kwd-alist key kwd-alist)))
+            (<a href="ACL2____TRUE-LISTP.html">true-listp</a> post))
+        :rule-classes :rewrite)</pre> 
+<p><b>Function: </b>treat-in-theory-hint</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ treat-in-theory-hint (enabled kwd-alist)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____TRUE-LISTP.html">true-listp</a> enabled)
+                             (<a href="ACL2____TRUE-LISTP.html">true-listp</a> kwd-alist))))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((acl2::__function__ 'treat-in-theory-hint))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> acl2::__function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+   ((kwd-alist (<a href="SMT____TRUE-LIST-FIX.html">true-list-fix</a> kwd-alist))
+    ((<a href="ACL2____MV.html">mv</a> pre post)
+     (my-split-kwd-alist :in-theory kwd-alist)))
+   (<a href="COMMON-LISP____COND.html">cond</a>
+    ((<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____CONSP.html">consp</a> post)
+          (<a href="COMMON-LISP____CONSP.html">consp</a> (<a href="COMMON-LISP____CDR.html">cdr</a> post))
+          (<a href="COMMON-LISP____CONSP.html">consp</a> (<a href="COMMON-LISP____CADR.html">cadr</a> post))
+          (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____CAADR.html">caadr</a> post) 'enable))
+     (<a href="COMMON-LISP____APPEND.html">append</a> pre
+             (<a href="COMMON-LISP____CONS.html">cons</a> ':in-theory
+                   (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'enable
+                               (<a href="COMMON-LISP____APPEND.html">append</a> enabled (<a href="COMMON-LISP____CDADR.html">cdadr</a> post)))
+                         (<a href="COMMON-LISP____CDDR.html">cddr</a> post)))))
+    ((<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____CONSP.html">consp</a> post)
+          (<a href="COMMON-LISP____CONSP.html">consp</a> (<a href="COMMON-LISP____CDR.html">cdr</a> post))
+          (<a href="COMMON-LISP____CONSP.html">consp</a> (<a href="COMMON-LISP____CADR.html">cadr</a> post))
+          (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____CAADR.html">caadr</a> post) 'disable))
+     (<a href="COMMON-LISP____APPEND.html">append</a>
+          pre
+          (<a href="COMMON-LISP____CONS.html">cons</a> ':in-theory
+                (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'e/d
+                            (<a href="COMMON-LISP____CONS.html">cons</a> enabled (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CDADR.html">cdadr</a> post) 'nil)))
+                      (<a href="COMMON-LISP____CDDR.html">cddr</a> post)))))
+    ((<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____CONSP.html">consp</a> post)
+          (<a href="COMMON-LISP____CONSP.html">consp</a> (<a href="COMMON-LISP____CDR.html">cdr</a> post))
+          (<a href="COMMON-LISP____CONSP.html">consp</a> (<a href="COMMON-LISP____CADR.html">cadr</a> post))
+          (<a href="COMMON-LISP____CONSP.html">consp</a> (<a href="COMMON-LISP____CDADR.html">cdadr</a> post))
+          (<a href="COMMON-LISP____CONSP.html">consp</a> (<a href="COMMON-LISP____CDDADR.html">cddadr</a> post))
+          (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____CAADR.html">caadr</a> post) 'e/d))
+     (<a href="COMMON-LISP____APPEND.html">append</a>
+         pre
+         (<a href="COMMON-LISP____CONS.html">cons</a> ':in-theory
+               (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'e/d
+                           (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____APPEND.html">append</a> enabled (<a href="COMMON-LISP____CAR.html">car</a> (<a href="COMMON-LISP____CDADR.html">cdadr</a> post)))
+                                 (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CADR.html">cadr</a> (<a href="COMMON-LISP____CDADR.html">cdadr</a> post)) 'nil)))
+                     (<a href="COMMON-LISP____CDDR.html">cddr</a> post)))))
+    (t (<a href="COMMON-LISP____CONS.html">cons</a> ':in-theory
+             (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'enable enabled)
+                   kwd-alist)))))))</pre> 
+<p><b>Theorem: </b>true-listp-of-treat-in-theory-hint</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     true-listp-of-treat-in-theory-hint
+     (<a href="ACL2____B_A2.html">b*</a> ((new-kwd-alist (treat-in-theory-hint enabled kwd-alist)))
+         (<a href="ACL2____TRUE-LISTP.html">true-listp</a> new-kwd-alist))
+     :rule-classes :rewrite)</pre> 
+<p><b>Function: </b>treat-expand-hint</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ treat-expand-hint (expand-lst kwd-alist)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____TRUE-LISTP.html">true-listp</a> expand-lst)
+                             (<a href="ACL2____TRUE-LISTP.html">true-listp</a> kwd-alist))))
+ (<a href="COMMON-LISP____LET.html">let</a> ((acl2::__function__ 'treat-expand-hint))
+      (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> acl2::__function__))
+      (<a href="ACL2____B_A2.html">b*</a> ((kwd-alist (<a href="SMT____TRUE-LIST-FIX.html">true-list-fix</a> kwd-alist))
+           ((<a href="ACL2____MV.html">mv</a> pre post)
+            (my-split-kwd-alist :expand kwd-alist)))
+          (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____CONSP.html">consp</a> post) (<a href="COMMON-LISP____CONSP.html">consp</a> (<a href="COMMON-LISP____CDR.html">cdr</a> post)))
+                 (<a href="COMMON-LISP____APPEND.html">append</a> pre
+                         (<a href="COMMON-LISP____CONS.html">cons</a> ':expand
+                               (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____APPEND.html">append</a> expand-lst (<a href="COMMON-LISP____CADR.html">cadr</a> post))
+                                     post))))
+                (t (<a href="COMMON-LISP____CONS.html">cons</a> ':expand
+                         (<a href="COMMON-LISP____APPEND.html">append</a> expand-lst kwd-alist)))))))</pre> 
+<p><b>Theorem: </b>true-listp-of-treat-expand-hint</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     true-listp-of-treat-expand-hint
+     (<a href="ACL2____B_A2.html">b*</a> ((new-kwd-alist (treat-expand-hint expand-lst kwd-alist)))
+         (<a href="ACL2____TRUE-LISTP.html">true-listp</a> new-kwd-alist))
+     :rule-classes :rewrite)</pre> 
+<p><b>Function: </b>extract-hint-wrapper</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ extract-hint-wrapper (cl)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((acl2::__function__ 'extract-hint-wrapper))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> acl2::__function__))
+  (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____ENDP.html">endp</a> cl) (<a href="ACL2____MV.html">mv</a> nil nil))
+        (t (<a href="ACL2____B_A2.html">b*</a> ((lit cl))
+               (<a href="ACL2____CASE-MATCH.html">case-match</a> lit
+                           ((('hint-please ('quote kwd-alist))
+                             . term)
+                            (<a href="ACL2____MV.html">mv</a> term kwd-alist))
+                           (&amp; (extract-hint-wrapper (<a href="COMMON-LISP____CDR.html">cdr</a> cl)))))))))</pre> 
+<p><b>Function: </b>smt-computed-hint</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ smt-computed-hint (cl)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((acl2::__function__ 'smt-computed-hint))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> acl2::__function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+   (((<a href="ACL2____MV.html">mv</a> &amp; kwd-alist)
+     (extract-hint-wrapper cl)))
+   (<a href="COMMON-LISP____CONS.html">cons</a>
+    ':computed-hint-replacement
+    (<a href="COMMON-LISP____CONS.html">cons</a>
+         (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'smt-delayed-hint
+                     (<a href="COMMON-LISP____CONS.html">cons</a> 'clause
+                           (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'quote (<a href="COMMON-LISP____CONS.html">cons</a> kwd-alist 'nil))
+                                 'nil)))
+               'nil)
+         (<a href="COMMON-LISP____CONS.html">cons</a> ':clause-processor
+               (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'remove-hint-please
+                           (<a href="COMMON-LISP____CONS.html">cons</a> 'clause 'nil))
+                     'nil)))))))</pre> 
+<p><b>Function: </b>smt-delayed-hint</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> smt-delayed-hint (cl kwd-alist)
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORE.html">ignore</a> cl))
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t))
+       (<a href="COMMON-LISP____LET.html">let</a> ((acl2::__function__ 'smt-delayed-hint))
+            (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> acl2::__function__))
+            (<a href="COMMON-LISP____CONS.html">cons</a> ':computed-hint-replacement
+                  (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'smt-computed-hint
+                                    (<a href="COMMON-LISP____CONS.html">cons</a> 'clause 'nil))
+                              'nil)
+                        kwd-alist))))</pre> 
+
+</body>
+</html>

@@ -1,0 +1,228 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Atj-mark-term</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=JAVA____ATJ-MARK-TERM">Click for Atj-mark-term in the Full Manual</a></h3>
+
+<p>Mark the variables in a term as `new' or `old'.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(atj-mark-term term vars-in-scope vars-used-after vars-to-mark-new) 
+   
+(mv marked-term new-vars-in-scope)</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">term</span>  <font color="#606060">Guard <span class="v">(<a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a> term)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">vars-in-scope</span>  <font color="#606060">Guard <span class="v">(<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> vars-in-scope)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">vars-used-after</span>  <font color="#606060">Guard <span class="v">(<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> vars-used-after)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">vars-to-mark-new</span>  <font color="#606060">Guard <span class="v">(<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> vars-to-mark-new)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">marked-term</span>  <font color="#606060">Type <span class="v">(<a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a> marked-term)</span>.</font>
+</dd> 
+<dd>
+<span class="tt">new-vars-in-scope</span>  <font color="#606060">Type <span class="v">(<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> new-vars-in-scope)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>Marking a variable as `new' is always ``safe'', 
+     because it is always safe to introduce a new Java local variable. 
+     On the other hand, marking a variable as `old' requires care, 
+     to prevent a Java local variable to be erroneously reused. 
+     To understand this marking algorithm, 
+     one has to keep in mind how ACL2 terms are translated to Java: 
+     see <span class="tt"><a href="JAVA____ATJ-GEN-SHALLOW-TERM.html">atj-gen-shallow-term</a></span> and companions. 
+     This is a delicate algorithm: 
+     a proof of correctness would be very beneficial.</p><p>Two conditions are necessary for reusing a variable: 
+     (i) the variable must be in scope (i.e. exist and be accessible); and 
+     (ii) the previous value of the variable must not be used afterwards. 
+     The parameters <span class="v">vars-in-scope</span> and <span class="v">vars-used-after</span> 
+     support the checking of these conditions.</p><p>The parameter <span class="v">vars-in-scope</span> consists of the variables in scope 
+     at the point where the term under consideration occurs. 
+     At the top level (see <span class="tt"><a href="JAVA____ATJ-MARK-FORMALS_B2BODY.html">atj-mark-formals+body</a></span>), 
+     it is intialized with the (unmarked) formal parameters 
+     of the ACL2 function whose formal parameters and body are being marked: 
+     indeed, the formal parameters of a function are in scope for the body. 
+     As we descend into subterms, when we encounter a lambda expression, 
+     we extend <span class="v">vars-in-scope</span> with its (unmarked) formal parameters; 
+     only the ones that are marked as `new' actually extend the scope, 
+     while the ones marked as `old' were already in <span class="v">vars-in-scope</span>. 
+     The generated Java code evaluates functions' actual arguments 
+     left-to-right: 
+     thus, local variables introduced (for lambda expressions in) an argument 
+     are generally (see exception shortly) in scope for successive arguments. 
+     Therefore, <span class="v">vars-in-scope</span> is threaded through the marking functions 
+     (i.e. passed as argument and returned, possibly updated, as result). 
+     When processing a lambda expression applied to arguments, 
+     <span class="v">vars-in-scope</span> is threaded first through the arguments, 
+     and then through the body (which is evaluated after the arguments), 
+     after augmenting it with the formal parameters. 
+     The exception mentioned above is for <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span>, 
+     which is turned into a Java <span class="v">if</span> 
+     whose branches are Java blocks: 
+     Java variables declared inside these blocks 
+     have a more limited scope (namely, the respective block), 
+     and therefore should not be added to the <span class="v">vars-in-scope</span> 
+     that is passed to mark terms after the <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span>. 
+     The variables introduced in the test of the <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span> 
+     are declared outside the branches' blocks, 
+     and so they are threaded through. 
+     The <span class="v">vars-in-scope</span> resulting from marking the test of the <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span> 
+     is passed to mark both branches, 
+     but their returned <span class="v">vars-in-scope</span> is ignored. 
+     The code for <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span> is a bit more complicated 
+     because of the special treatment of <span class="v">(<a href="COMMON-LISP____IF.html">if</a> a a b)</span> terms, 
+     which are treated as <span class="v">(<a href="COMMON-LISP____OR.html">or</a> a b)</span>: 
+     the Java code generated for this case is a little different 
+     (see <span class="tt"><a href="JAVA____ATJ-GEN-SHALLOW-OR-CALL.html">atj-gen-shallow-or-call</a></span>), 
+     but the treatment of <span class="v">vars-in-scope</span> 
+     is essentially the same as just explained 
+     (there is no `then' branch to mark, because it is the same as the test, 
+     which has already been marked).</p><p>The parameter <span class="v">vars-used-after</span> consists of the variables 
+     whose current values are used ``after'' the term under consideration. 
+     At the top level (see <span class="tt"><a href="JAVA____ATJ-MARK-FORMALS_B2BODY.html">atj-mark-formals+body</a></span>), 
+     this is initialized with <span class="v">nil</span>, 
+     because no variables are used after evaluating the body of the function. 
+     As we descend into subterms, 
+     <span class="v">vars-used-after</span> is extended as needed, 
+     based on the ``neighboring'' subterms 
+     that will be evaluated (in the generated Java code) 
+     after the subterm under consideration. 
+     In particular, when marking an actual argument of a function call, 
+     <span class="v">vars-used-after</span> is extended with all the free variables 
+     of the actual arguments of the same function call 
+     that occur after the one being marked; 
+     recall that arguments are evaluated left-to-right 
+     in the generated Java code. 
+     The function <span class="v">atj-mark-terms</span>, 
+     which is used to mark the actual arguments of a function call, 
+     augments <span class="v">vars-used-after</span> with the free variables 
+     in the <span class="tt"><a href="COMMON-LISP____CDR.html">cdr</a></span> of the current list of arguments; 
+     this is somewhat inefficient, 
+     as the same free variables are collected repeatedly 
+     as the argument terms are processed, 
+     but terms are not expected to be too large in the near future; 
+     this may be eventually optimized when needed. 
+     Furthermore, as we traverse the arguments of a function call, 
+     we augment the used variables with the ones that will occur 
+     in the Java expressions generated for the preceding arguments; 
+     see <span class="tt"><a href="JAVA____ATJ-VARS-IN-JEXPR.html">atj-vars-in-jexpr</a></span>.</p><p>Calls of <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span> are treated a little differently, 
+     because the arguments are not evaluated left-to-right 
+     in the generated Java code: 
+     when marking the test, we augment <span class="v">vars-used-after</span> 
+     with all the free variables in the branches; 
+     when marking either branch, we use the same <span class="v">vars-used-after</span> 
+     that was passed for the <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span>, 
+     because the two branches are independent. 
+     The <span class="tt"><a href="COMMON-LISP____OR.html">or</a></span> form of <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span> is treated slightly differently as usual, 
+     but the essence is the same. 
+     Unlike <span class="v">vars-in-scope</span>, <span class="v">var-used-after</span> is not threaded through; 
+     it is simply passed down, and augmented as needed.</p><p>The body of a lambda expression is evaluated after its actual arguments: 
+     thus, when marking the actual arguments of a lambda expression 
+     we must augment <span class="v">vars-used-after</span> 
+     with the free variables of the lambda expression, 
+     i.e. the free variables in the body minus the formal parameters.</p><p>As we mark the formal parameters of a lambda expression, 
+     we need to mark in the same way 
+     all the references to these variables in the body of the lambda expression. 
+     For this purpose, we pass around a mapping, <span class="v">vars-to-mark-new</span>, 
+     from (unmarked) variables to markings: 
+     this could be an alist from symbols to booleans, 
+     but we isomorphically use lists (treated as sets) of symbols instead, 
+     which are the variable marked as `new', 
+     while the variables not in the list are marked as `old'. 
+     When the term to be marked is a variable, 
+     we look it up in this list, and mark it accordingly.</p><p>When the term to be marked is a quoted constant, 
+     it is obviously left unchanged.</p><p>When the term to be marked is a function call, 
+     we first treat the <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span> (and <span class="tt"><a href="COMMON-LISP____OR.html">or</a></span>) case separately. 
+     We mark the test, and after that the two branches. 
+     The handling of <span class="v">vars-in-scope</span> and <span class="v">vars-used-after</span> for this case 
+     has been explained above.</p><p>For all other function calls, which are strict, 
+     we first mark the actual arguments, 
+     treating <span class="v">vars-in-scope</span> and <span class="v">vars-used-after</span> 
+     as explained above. 
+     For calls of named functions, we are done at this point: 
+     we put the named function in front of the marked arguments and return. 
+     For calls of lambda expression, 
+     we use the auxiliary function <span class="v">atj-mark-lambda-formals</span> 
+     to decide which formal parameters should be marked as `new' or `old'. 
+     We mark the parameter as `old' (indicating that the variable can be reused) 
+     iff the following three conditions hold. 
+     The first condition is that the variable must be in scope; 
+     note that variables have already been annotated with types at this point, 
+     and so by testing variable names we also test their types, 
+     which is needed for Java 
+     (i.e. we could not reuse a Java variable of type <span class="v">Acl2Symbol</span> 
+     to store a value of type <span class="v">Acl2String</span>). 
+     The second condition is that the variable is not used 
+     after the lambda call term, i.e. it is not in <span class="v">vars-used-after</span>: 
+     otherwise, we would overwrite something that was supposed to be used later, 
+     with incorrect results in general. 
+     The third condition is that the variable is not free 
+     in any of the actual arguments that correspond to 
+     the formal parameters of the lambda expression 
+     that come just after the one being marked: 
+     this is because, in the generated Java code, 
+     the lambda variables are assigned one after the other, 
+     and therefore we should not overwrite a variable 
+     that may be needed afterwards. 
+     For instance, consider a swap <span class="v">(<a href="COMMON-LISP____LET.html">let</a> ((x y) (y x)) ...)</span>: 
+     <span class="v">x</span> cannot be reused 
+     (even if it is in scope and not used after the <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span>) 
+     because it must be assigned to <span class="v">y</span> after <span class="v">y</span> is assigned to <span class="v">x</span> 
+     (Java does not support parallel assignment); 
+     on the other hand, <span class="v">y</span> could be reused, 
+     if it is in scope and not used after the <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span>, 
+     because at the time of assigning to <span class="v">y</span> 
+     its (previous) value has already been assigned to <span class="v">x</span>.</p><p>When analyzing the arguments of a call of a lambda expression, 
+     we need to extend <span class="v">vars-used-after</span> with 
+     the free variables in the lambda expression 
+     (i.e. the free variables in the body minus the formal arguments). 
+     This is because the body of the lambda expression 
+     is evaluated after the arguments of the call. 
+     We store the extended list into <span class="v">vars-used-after-args</span>. 
+     But when we process the body of the lambda expression after that, 
+     we go back to using <span class="v">vars-used-after</span>, 
+     which excludes the variables used in the lambda expression, 
+     and only includes the variables used 
+     after the call of the lambda expression.</p> 
+ 
+ 
+ 
+<p><b>Theorem: </b>return-type-of-atj-mark-term.marked-term</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> return-type-of-atj-mark-term.marked-term
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?marked-term ?new-vars-in-scope)
+              (<a href="JAVA____ATJ-MARK-TERM.html">atj-mark-term</a> term vars-in-scope
+                             vars-used-after vars-to-mark-new)))
+            (<a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a> marked-term))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>return-type-of-atj-mark-term.new-vars-in-scope</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> return-type-of-atj-mark-term.new-vars-in-scope
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?marked-term ?new-vars-in-scope)
+              (<a href="JAVA____ATJ-MARK-TERM.html">atj-mark-term</a> term vars-in-scope
+                             vars-used-after vars-to-mark-new)))
+            (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> new-vars-in-scope))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>return-type-of-atj-mark-terms.marked-terms</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     return-type-of-atj-mark-terms.marked-terms
+     (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?marked-terms ?new-vars-in-scope)
+           (<a href="JAVA____ATJ-MARK-TERMS.html">atj-mark-terms</a> terms vars-in-scope vars-used-after
+                           vars-used-in-jexprs vars-to-mark-new)))
+         (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____PSEUDO-TERM-LISTP.html">pseudo-term-listp</a> marked-terms)
+              (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____LEN.html">len</a> marked-terms) (<a href="ACL2____LEN.html">len</a> terms))))
+     :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>return-type-of-atj-mark-terms.new-vars-in-scope</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     return-type-of-atj-mark-terms.new-vars-in-scope
+     (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?marked-terms ?new-vars-in-scope)
+           (<a href="JAVA____ATJ-MARK-TERMS.html">atj-mark-terms</a> terms vars-in-scope vars-used-after
+                           vars-used-in-jexprs vars-to-mark-new)))
+         (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> new-vars-in-scope))
+     :rule-classes :rewrite)</pre> 
+
+</body>
+</html>

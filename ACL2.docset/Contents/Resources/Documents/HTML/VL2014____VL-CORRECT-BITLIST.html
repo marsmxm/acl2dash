@@ -1,0 +1,153 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Vl-correct-bitlist</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL2014____VL-CORRECT-BITLIST">Click for Vl-correct-bitlist in the Full Manual</a></h3>
+
+<p>Extend (or truncate) a bit-list to match the size specifier for an 
+integer token.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(vl-correct-bitlist loc bits width etext warnings) 
+   
+(mv warnings new-bits)</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">loc</span>  Context for any new warnings.<br><font color="#606060">Guard <span class="v">(<a href="VL2014____VL-LOCATION-P.html">vl-location-p</a> loc)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">bits</span>  The actual bits for this number.  This list of bits may be shorter or 
+          longer than <span class="v">width</span>, which is the size specified for this integer 
+          or is <span class="v">nil</span> if no size was specified.<br><font color="#606060">Guard <span class="v">(<a href="VL2014____VL-BITLIST-P.html">vl-bitlist-p</a> bits)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">width</span>  The desired width specified for this number.  For instance, this 
+           would be <span class="v">3</span> for <span class="v">3'bx</span>.  Note that we emulate a 32-bit 
+           Verilog implementation and treat unsized numbers as having width 
+           32.<br><font color="#606060">Guard <span class="v">(<a href="ACL2____MAYBE-POSP.html">maybe-posp</a> width)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">etext</span>  Actual text for this number, for better warnings.<br><font color="#606060">Guard <span class="v">(<a href="VL2014____VL-ECHARLIST-P.html">vl-echarlist-p</a> etext)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">warnings</span>  An ordinary <a href="VL2014____WARNINGS.html">warnings</a> accumulator.<br><font color="#606060">Guard <span class="v">(<a href="VL2014____VL-WARNINGLIST-P.html">vl-warninglist-p</a> warnings)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">warnings</span>  <font color="#606060">Type <span class="v">(<a href="VL2014____VL-WARNINGLIST-P.html">vl-warninglist-p</a> warnings)</span>.</font>
+</dd> 
+<dd>
+<span class="tt">new-bits</span>  <font color="#606060">Type <span class="v">(<a href="VL2014____VL-BITLIST-P.html">vl-bitlist-p</a> new-bits)</span>, given <span class="v">(<a href="ACL2____FORCE.html">force</a> (<a href="VL2014____VL-BITLIST-P.html">vl-bitlist-p</a> bits))</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>Our goal is to produce a new list of bits that has exactly the 
+desired width, by truncating or extending <span class="v">bits</span> as necessary.</p> 
+ 
+<p>The rules for how to do this are given in Section 3.5.1 of the Verilog-2005 
+standard, or Section 5.7.1 of the SystemVerilog-2012 standard.  Both standards 
+agree about the details.  Essentially:</p> 
+ 
+<ul> 
+ 
+<li>If the actual list of bits is longer than width, we are to truncate it from 
+the left, keeping the least significant width-many bits.  We produce a 
+truncation warning in this case.</li> 
+ 
+<li>If the actual list of bits is shorter than width, we are usually supposed 
+to zero-extend it.  However, when the most significant bit is X or Z, we are 
+instead supposed to X-extend or Z-extend, respectively.</li> 
+ 
+</ul> 
+ 
+<p>The specification notes that in the 1995 Verilog standard, an unsized 
+constant whose leading bit is X or Z is only X/Z extended to 32 bits.  We 
+therefore detect and warn about this very unusual case.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>vl-correct-bitlist</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ vl-correct-bitlist
+ (loc bits width etext warnings)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="VL2014____VL-LOCATION-P.html">vl-location-p</a> loc)
+                             (<a href="VL2014____VL-BITLIST-P.html">vl-bitlist-p</a> bits)
+                             (<a href="ACL2____MAYBE-POSP.html">maybe-posp</a> width)
+                             (<a href="VL2014____VL-ECHARLIST-P.html">vl-echarlist-p</a> etext)
+                             (<a href="VL2014____VL-WARNINGLIST-P.html">vl-warninglist-p</a> warnings))))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'vl-correct-bitlist))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+   ((actual-len (<a href="ACL2____LEN.html">len</a> bits))
+    (desired-len (<a href="COMMON-LISP____IF.html">if</a> width (<a href="ACL2____LNFIX.html">lnfix</a> width) 32))
+    ((when (<a href="COMMON-LISP____EQL.html">eql</a> desired-len actual-len))
+     (<a href="ACL2____MV.html">mv</a> (<a href="VL2014____OK.html">ok</a>) bits))
+    ((when (<a href="COMMON-LISP____EQL.html">eql</a> actual-len 0))
+     (<a href="ACL2____RAISE.html">raise</a> "Programming error: expected at least one bit.")
+     (<a href="ACL2____MV.html">mv</a> (<a href="VL2014____OK.html">ok</a>)
+         (<a href="ACL2____REPLICATE.html">replicate</a> desired-len :vl-0val)))
+    ((when (<a href="COMMON-LISP_____C3.html">&lt;</a> actual-len desired-len))
+     (<a href="ACL2____B_A2.html">b*</a>
+      ((pad-bit (case (<a href="COMMON-LISP____CAR.html">car</a> bits)
+                      (:vl-zval :vl-zval)
+                      (:vl-xval :vl-xval)
+                      (otherwise :vl-0val)))
+       (<a href="VL2014____WARNINGS.html">warnings</a>
+        (<a href="COMMON-LISP____IF.html">if</a>
+         (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____NOT.html">not</a> width)
+              (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____EQ.html">eq</a> pad-bit :vl-xval)
+                  (<a href="COMMON-LISP____EQ.html">eq</a> pad-bit :vl-zval)))
+         (<a href="VL2014____WARN.html">warn</a>
+          :type :vl-warn-incompatible
+          :msg
+          "~l0: unsized numbers with leading X or Z bit ~
+                              have a different interpretation in Verilog-1995 ~
+                              than in Verilog-2001 and beyond.  You should ~
+                              put an explicit size on this number: ~s1."
+          :args (<a href="COMMON-LISP____LIST.html">list</a> loc (<a href="VL2014____VL-ECHARLIST-_E3STRING.html">vl-echarlist-&gt;string</a> etext)))
+         (<a href="VL2014____OK.html">ok</a>)))
+       (pad (<a href="ACL2____REPLICATE.html">replicate</a> (<a href="COMMON-LISP____-.html">-</a> desired-len actual-len)
+                       pad-bit))
+       (bits-prime (<a href="COMMON-LISP____APPEND.html">append</a> pad bits)))
+      (<a href="ACL2____MV.html">mv</a> (<a href="VL2014____OK.html">ok</a>) bits-prime)))
+    (bits-prime (<a href="ACL2____REST-N.html">rest-n</a> (<a href="COMMON-LISP____-.html">-</a> actual-len desired-len)
+                        bits))
+    (<a href="VL2014____WARNINGS.html">warnings</a>
+     (<a href="COMMON-LISP____IF.html">if</a>
+      (<a href="ACL2____ALL-EQUALP.html">all-equalp</a> :vl-xval bits)
+      (<a href="VL2014____OK.html">ok</a>)
+      (<a href="VL2014____WARN.html">warn</a>
+       :type :vl-warn-overflow
+       :msg
+       (<a href="STR____CAT.html">cat</a>
+        "~l0: implicitly truncating ~s1 from ~x2 to ~x3 bits."
+        (<a href="COMMON-LISP____IF.html">if</a>
+         (<a href="COMMON-LISP____NOT.html">not</a> width)
+         " Note that we are emulating a 32-bit Verilog ~
+                                implementation, but a 64-bit simulator would ~
+                                get a different value here.  You should add ~
+                                an explicit size specifier."
+         ""))
+       :args (<a href="COMMON-LISP____LIST.html">list</a> loc (<a href="VL2014____VL-ECHARLIST-_E3STRING.html">vl-echarlist-&gt;string</a> etext)
+                   actual-len desired-len)))))
+   (<a href="ACL2____MV.html">mv</a> (<a href="VL2014____OK.html">ok</a>) bits-prime))))</pre> 
+<p><b>Theorem: </b>vl-warninglist-p-of-vl-correct-bitlist.warnings</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-warninglist-p-of-vl-correct-bitlist.warnings
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?warnings ?new-bits)
+              (<a href="VL2014____VL-CORRECT-BITLIST.html">vl-correct-bitlist</a> loc bits width etext warnings)))
+            (<a href="VL2014____VL-WARNINGLIST-P.html">vl-warninglist-p</a> warnings))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>vl-bitlist-p-of-vl-correct-bitlist.new-bits</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-bitlist-p-of-vl-correct-bitlist.new-bits
+ (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____FORCE.html">force</a> (<a href="VL2014____VL-BITLIST-P.html">vl-bitlist-p</a> bits))
+          (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?warnings ?new-bits)
+                (<a href="VL2014____VL-CORRECT-BITLIST.html">vl-correct-bitlist</a> loc bits width etext warnings)))
+              (<a href="VL2014____VL-BITLIST-P.html">vl-bitlist-p</a> new-bits)))
+ :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>len-of-vl-correct-bitlist</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ len-of-vl-correct-bitlist
+ (<a href="COMMON-LISP____EQUAL.html">equal</a>
+   (<a href="ACL2____LEN.html">len</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 1
+                (<a href="VL2014____VL-CORRECT-BITLIST.html">vl-correct-bitlist</a> loc bits width etext warnings)))
+   (<a href="COMMON-LISP____IF.html">if</a> width (<a href="ACL2____NFIX.html">nfix</a> width) 32)))</pre> 
+
+</body>
+</html>

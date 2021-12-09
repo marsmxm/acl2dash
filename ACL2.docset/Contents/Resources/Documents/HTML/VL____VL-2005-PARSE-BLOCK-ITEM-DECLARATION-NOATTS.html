@@ -1,0 +1,149 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Vl-2005-parse-block-item-declaration-noatts</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL____VL-2005-PARSE-BLOCK-ITEM-DECLARATION-NOATTS">Click for Vl-2005-parse-block-item-declaration-noatts in the Full Manual</a></h3>
+
+<p>Match a whole <span class="v">block_item_declaration</span>, except for any attributes, for Verilog-2005.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(vl-2005-parse-block-item-declaration-noatts 
+     atts &amp;key (tokstream 'tokstream) 
+     (config 'config)) 
+ 
+   
+(mv errmsg? value new-tokstream)</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">config</span>  <font color="#606060">Guard <span class="v">(<a href="VL____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>Verilog-2005 Grammar:</p> 
+         <pre class="code">block_item_declaration ::=
+   {attribute_instance} 'reg' ['signed'] [range] list_of_block_variable_identifiers ';'
+ | {attribute_instance} 'integer' list_of_block_variable_identifiers ';'
+ | {attribute_instance} 'time' list_of_block_variable_identifiers ';'
+ | {attribute_instance} 'real' list_of_block_variable_identifiers ';'
+ | {attribute_instance} 'realtime' list_of_block_variable_identifiers ';'
+ | {attribute_instance} event_declaration
+ | {attribute_instance} local_parameter_declaration ';'
+ | {attribute_instance} parameter_declaration ';'
+
+list_of_block_variable_identifiers ::=
+   block_variable_type { ',' block_variable_type }
+
+block_variable_type ::= identifier { dimension }</pre> 
+ 
+         <p>Of particular note is that the rules for <span class="v">reg</span> through 
+         <span class="v">realtime</span> above differ from the module-level <span class="v">reg_declaration</span>, 
+         <span class="v">integer_declaration</span>, etc., in that they use 
+         <span class="v">list_of_block_variable_identifiers</span> instead of 
+         <span class="v">list_of_variable_identifiers</span>.  Comparing these, we see that the 
+         only difference is that block item declarations are not allowed to 
+         have initial values assigned to them.  That is, <span class="v">reg foo = 1</span> is 
+         okay as a module item, but not as a block item.</p> 
+ 
+         <p>With this in mind, our approach is to reuse our module-level 
+         parsers, but then walk through to ensure that none of the variables 
+         have been given initial values.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>vl-2005-parse-block-item-declaration-noatts-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ vl-2005-parse-block-item-declaration-noatts-fn
+ (atts tokstream config)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL____VL-ATTS-P.html">vl-atts-p</a> atts)))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'vl-2005-parse-block-item-declaration-noatts))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="VL____SEQ.html">seq</a>
+   tokstream
+   (<a href="COMMON-LISP____TYPE.html">type</a> := (<a href="ACL2____MV.html">mv</a> nil
+                (<a href="COMMON-LISP____LET.html">let</a> ((<a href="VL____TOKENS.html">tokens</a> (<a href="VL____VL-TOKSTREAM-_E3TOKENS.html">vl-tokstream-&gt;tokens</a>)))
+                     (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____CONSP.html">consp</a> tokens)
+                          (<a href="VL____VL-TOKEN-_E3TYPE.html">vl-token-&gt;type</a> (<a href="COMMON-LISP____CAR.html">car</a> tokens))))
+                tokstream))
+   (elements
+    :=
+    (case
+      type
+      (:vl-kwd-reg (<a href="VL____VL-PARSE-REG-DECLARATION.html">vl-parse-reg-declaration</a> atts))
+      (:vl-kwd-integer (<a href="VL____VL-PARSE-INTEGER-DECLARATION.html">vl-parse-integer-declaration</a> atts))
+      (:vl-kwd-time (<a href="VL____VL-PARSE-TIME-DECLARATION.html">vl-parse-time-declaration</a> atts))
+      (:vl-kwd-real (<a href="VL____VL-PARSE-REAL-DECLARATION.html">vl-parse-real-declaration</a> atts))
+      (:vl-kwd-realtime (<a href="VL____VL-PARSE-REALTIME-DECLARATION.html">vl-parse-realtime-declaration</a> atts))
+      (:vl-kwd-event (<a href="VL____VL-PARSE-EVENT-DECLARATION.html">vl-parse-event-declaration</a> atts))
+      ((:vl-kwd-localparam :vl-kwd-parameter)
+       (<a href="VL____SEQ.html">seq</a> tokstream
+            (elems := (<a href="VL____VL-PARSE-PARAM-OR-LOCALPARAM-DECLARATION.html">vl-parse-param-or-localparam-declaration</a>
+                           atts
+                           '(:vl-kwd-localparam :vl-kwd-parameter)))
+            (:= (<a href="VL____VL-MATCH-TOKEN.html">vl-match-token</a> :vl-semi))
+            (return elems)))
+      (t (<a href="VL____VL-PARSE-ERROR.html">vl-parse-error</a> "Invalid block item."))))
+   (return-raw
+    (<a href="COMMON-LISP____LET.html">let</a>
+     ((<a href="COMMON-LISP____SEARCH.html">search</a> (case type
+                    ((:vl-kwd-reg :vl-kwd-integer :vl-kwd-time
+                                  :vl-kwd-real :vl-kwd-realtime)
+                     (vl-find-vardecl-with-initval elements))
+                    (t nil))))
+     (<a href="COMMON-LISP____IF.html">if</a>
+      search
+      (<a href="VL____VL-PARSE-ERROR.html">vl-parse-error</a>
+       "Block item declarations are not allowed to have initial values.")
+      (<a href="ACL2____MV.html">mv</a> nil elements tokstream)))))))</pre> 
+<p><b>Theorem: </b>vl-2005-parse-block-item-declaration-noatts-fails-gracefully</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-2005-parse-block-item-declaration-noatts-fails-gracefully
+ (<a href="ACL2____IMPLIES.html">implies</a>
+  (<a href="ACL2____MV-NTH.html">mv-nth</a> 0
+          (<a href="VL____VL-2005-PARSE-BLOCK-ITEM-DECLARATION-NOATTS.html">vl-2005-parse-block-item-declaration-noatts</a> atts))
+  (<a href="COMMON-LISP____NOT.html">not</a>
+      (<a href="ACL2____MV-NTH.html">mv-nth</a> 1
+              (<a href="VL____VL-2005-PARSE-BLOCK-ITEM-DECLARATION-NOATTS.html">vl-2005-parse-block-item-declaration-noatts</a> atts)))))</pre> 
+<p><b>Theorem: </b>vl-warning-p-of-vl-2005-parse-block-item-declaration-noatts</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-warning-p-of-vl-2005-parse-block-item-declaration-noatts
+ (<a href="ACL2____IFF.html">iff</a>
+   (<a href="VL____VL-WARNING-P.html">vl-warning-p</a>
+        (<a href="ACL2____MV-NTH.html">mv-nth</a> 0
+                (<a href="VL____VL-2005-PARSE-BLOCK-ITEM-DECLARATION-NOATTS.html">vl-2005-parse-block-item-declaration-noatts</a> atts)))
+   (<a href="ACL2____MV-NTH.html">mv-nth</a> 0
+           (<a href="VL____VL-2005-PARSE-BLOCK-ITEM-DECLARATION-NOATTS.html">vl-2005-parse-block-item-declaration-noatts</a> atts))))</pre> 
+<p><b>Theorem: </b>vl-2005-parse-block-item-declaration-noatts-result</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-2005-parse-block-item-declaration-noatts-result
+ (<a href="ACL2____IMPLIES.html">implies</a>
+  (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____FORCE.html">force</a> (<a href="VL____VL-ATTS-P.html">vl-atts-p</a> atts)))
+  (<a href="VL____VL-BLOCKITEMLIST-P.html">vl-blockitemlist-p</a>
+      (<a href="ACL2____MV-NTH.html">mv-nth</a> 1
+              (<a href="VL____VL-2005-PARSE-BLOCK-ITEM-DECLARATION-NOATTS.html">vl-2005-parse-block-item-declaration-noatts</a> atts)))))</pre> 
+<p><b>Theorem: </b>vl-2005-parse-block-item-declaration-noatts-true-listp</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+   vl-2005-parse-block-item-declaration-noatts-true-listp
+   (<a href="ACL2____TRUE-LISTP.html">true-listp</a>
+        (<a href="ACL2____MV-NTH.html">mv-nth</a> 1
+                (<a href="VL____VL-2005-PARSE-BLOCK-ITEM-DECLARATION-NOATTS.html">vl-2005-parse-block-item-declaration-noatts</a> atts)))
+   :rule-classes :type-prescription)</pre> 
+<p><b>Theorem: </b>vl-2005-parse-block-item-declaration-noatts-count-strong</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-2005-parse-block-item-declaration-noatts-count-strong
+ (<a href="COMMON-LISP____AND.html">and</a>
+  (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a>
+   (vl-tokstream-measure
+        :tokstream
+        (<a href="ACL2____MV-NTH.html">mv-nth</a> 2
+                (<a href="VL____VL-2005-PARSE-BLOCK-ITEM-DECLARATION-NOATTS.html">vl-2005-parse-block-item-declaration-noatts</a> atts)))
+   (vl-tokstream-measure))
+  (<a href="ACL2____IMPLIES.html">implies</a>
+   (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 0
+                (<a href="VL____VL-2005-PARSE-BLOCK-ITEM-DECLARATION-NOATTS.html">vl-2005-parse-block-item-declaration-noatts</a> atts)))
+   (<a href="COMMON-LISP_____C3.html">&lt;</a>
+    (vl-tokstream-measure
+        :tokstream
+        (<a href="ACL2____MV-NTH.html">mv-nth</a> 2
+                (<a href="VL____VL-2005-PARSE-BLOCK-ITEM-DECLARATION-NOATTS.html">vl-2005-parse-block-item-declaration-noatts</a> atts)))
+    (vl-tokstream-measure))))
+ :rule-classes ((:rewrite) (:linear)))</pre> 
+
+</body>
+</html>

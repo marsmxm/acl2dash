@@ -1,0 +1,146 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Functional-instantiation-example</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____FUNCTIONAL-INSTANTIATION-EXAMPLE">Click for Functional-instantiation-example in the Full Manual</a></h3>
+
+<p>A small proof demonstrating functional instantiation</p><p>The example below demonstrates the use of functional instantiation, 
+ that is, the use of a generic result in proving a result about specific 
+ functions.  In this example we constrain a function to be associative and 
+ commutative, with an identity or ``root,'' on a given domain.  Next, we define 
+ a corresponding function that applies the constrained associative-commutative 
+ function to successive elements of a list.  We then prove that the latter 
+ function gives the same value when we first reverse the elements of the list. 
+ Finally, we use functional instantiation to derive the corresponding result 
+ for the function that multiplies successive elements of a list.</p> 
+ 
+ <p>The details of the proof (such as the <span class="tt"><a href="ACL2____IN-THEORY.html">in-theory</a></span> event and 
+ particulars of the lemmas) are not the point here.  Rather, the point is to 
+ demonstrate the interaction of <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span> <a href="ACL2____EVENTS.html">events</a> and 
+ <span class="v">:functional-instance</span> <a href="ACL2____LEMMA-INSTANCE.html">lemma-instance</a>s.  Of course, if you are 
+ interested in details then you may find it helpful to run these <a href="ACL2____EVENTS.html">events</a> 
+ through ACL2.</p> 
+ 
+ <p>Also see <a href="ACL2____CONSTRAINT.html">constraint</a> for more about <span class="v">:functional-instance</span> and see 
+ <a href="ACL2____LEMMA-INSTANCE.html">lemma-instance</a> for general information about the use of 
+ previously-proved lemmas.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____IN-PACKAGE.html">in-package</a> "ACL2")
+
+(<a href="ACL2____ENCAPSULATE.html">encapsulate</a>
+ (((ac-fn * *) =&gt; *)
+  ((ac-fn-domain *) =&gt; *)
+  ((ac-fn-root) =&gt; *))
+ (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> ac-fn (x y) (<a href="COMMON-LISP_____B2.html">+</a> x y)))
+ (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> ac-fn-root () 0))
+ (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> ac-fn-domain (x) (<a href="ACL2____ACL2-NUMBERP.html">acl2-numberp</a> x)))
+ (<a href="ACL2____DEFTHM.html">defthm</a> ac-fn-comm
+   (<a href="COMMON-LISP____EQUAL.html">equal</a> (ac-fn x y)
+          (ac-fn y x)))
+ (<a href="ACL2____DEFTHM.html">defthm</a> ac-fn-assoc
+   (<a href="COMMON-LISP____EQUAL.html">equal</a> (ac-fn (ac-fn x y) z)
+          (ac-fn x (ac-fn y z))))
+ (<a href="ACL2____DEFTHM.html">defthm</a> ac-fn-id
+   (<a href="ACL2____IMPLIES.html">implies</a> (ac-fn-domain x)
+            (<a href="COMMON-LISP____EQUAL.html">equal</a> (ac-fn (ac-fn-root) x)
+                   x)))
+ (<a href="ACL2____DEFTHM.html">defthm</a> ac-fn-closed
+   (<a href="COMMON-LISP____AND.html">and</a> (ac-fn-domain (ac-fn x y))
+        (ac-fn-domain (ac-fn-root)))))
+
+;;;;;;;;;;;;;;;;;;;;;;;
+; End of encapsulate. ;
+;;;;;;;;;;;;;;;;;;;;;;;
+
+; Define a ``fold'' function that iteratively applies ac-fn over a list.
+(<a href="COMMON-LISP____DEFUN.html">defun</a> ac-fn-list (x)
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ATOM.html">atom</a> x)
+      (ac-fn-root)
+    (ac-fn (<a href="COMMON-LISP____CAR.html">car</a> x)
+           (ac-fn-list (<a href="COMMON-LISP____CDR.html">cdr</a> x)))))
+
+; Recognize lists all of whose elements are in the intended domain.
+(<a href="COMMON-LISP____DEFUN.html">defun</a> ac-fn-domain-list (x)
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ATOM.html">atom</a> x)
+      t
+    (<a href="COMMON-LISP____AND.html">and</a> (ac-fn-domain (<a href="COMMON-LISP____CAR.html">car</a> x))
+         (ac-fn-domain-list (<a href="COMMON-LISP____CDR.html">cdr</a> x)))))
+
+; Define a list reverse function.
+(<a href="COMMON-LISP____DEFUN.html">defun</a> rev (x)
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ATOM.html">atom</a> x)
+      nil
+    (<a href="COMMON-LISP____APPEND.html">append</a> (<a href="ACL2____REV.html">rev</a> (<a href="COMMON-LISP____CDR.html">cdr</a> x))
+            (<a href="COMMON-LISP____LIST.html">list</a> (<a href="COMMON-LISP____CAR.html">car</a> x)))))
+
+; The following is needed for proving ac-fn-list-append, which is
+; needed for proving ac-fn-list-rev.
+(<a href="ACL2____DEFTHM.html">defthm</a> ac-fn-list-closed
+   (ac-fn-domain (ac-fn-list x)))
+
+; Needed for proving ac-fn-list-rev:
+(<a href="ACL2____DEFTHM.html">defthm</a> ac-fn-list-append
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (ac-fn-domain-list x)
+                (ac-fn-domain-list y))
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (ac-fn-list (<a href="COMMON-LISP____APPEND.html">append</a> x y))
+                  (ac-fn (ac-fn-list x)
+                         (ac-fn-list y)))))
+
+; Needed for proving ac-fn-list-rev:
+(<a href="ACL2____DEFTHM.html">defthm</a> ac-fn-domain-list-rev
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> (ac-fn-domain-list (<a href="ACL2____REV.html">rev</a> x))
+         (ac-fn-domain-list x)))
+
+; The following is a good idea because without it, the proof attempt
+; for ac-fn-list-rev (see just below) fails with the term (<a href="ACL2____HIDE.html">HIDE</a>
+; (AC-FN-LIST NIL)).  It is often a good idea to disable
+; executable-counterparts of functions that call constrained
+; functions.
+(<a href="ACL2____IN-THEORY.html">in-theory</a> (<a href="ACL2____DISABLE.html">disable</a> (:executable-counterpart ac-fn-list)))
+
+(<a href="ACL2____DEFTHM.html">defthm</a> ac-fn-list-rev
+  (<a href="ACL2____IMPLIES.html">implies</a> (ac-fn-domain-list x)
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (ac-fn-list (<a href="ACL2____REV.html">rev</a> x))
+                  (ac-fn-list x))))
+
+; Our goal now is to apply functional instantiation to ac-fn-list-rev
+; in order to prove the corresponding theorem, times-list-rev, based
+; on * instead of ac-fn.
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> times-list (x)
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ATOM.html">atom</a> x)
+      1
+    (<a href="COMMON-LISP_____A2.html">*</a> (<a href="COMMON-LISP____CAR.html">car</a> x)
+       (times-list (<a href="COMMON-LISP____CDR.html">cdr</a> x)))))
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> number-listp (x)
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ATOM.html">atom</a> x)
+      t
+    (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____ACL2-NUMBERP.html">acl2-numberp</a> (<a href="COMMON-LISP____CAR.html">car</a> x))
+         (number-listp (<a href="COMMON-LISP____CDR.html">cdr</a> x)))))
+
+; The following relies on the following built-in rules for * (whose
+; statements correspond directly to their names): commutativity-of-*,
+; associativity-of-*, and unicity-of-1.
+
+(<a href="ACL2____DEFTHM.html">defthm</a> times-list-rev
+  (<a href="ACL2____IMPLIES.html">implies</a> (number-listp x)
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (times-list (<a href="ACL2____REV.html">rev</a> x))
+                  (times-list x)))
+  :hints (("Goal"
+           :use
+           ((:functional-instance
+             ac-fn-list-rev
+             ;; Instantiate the generic functions:
+             (ac-fn *)
+             (ac-fn-root (<a href="COMMON-LISP____LAMBDA.html">lambda</a> () 1))
+             (ac-fn-domain acl2-numberp)
+             ;; Instantiate the other relevant functions:
+             (ac-fn-list times-list)
+             (ac-fn-domain-list number-listp))))))</pre>
+</body>
+</html>

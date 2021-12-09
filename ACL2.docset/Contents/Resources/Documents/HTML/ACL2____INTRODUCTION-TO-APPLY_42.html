@@ -1,0 +1,476 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Introduction-to-apply$</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____INTRODUCTION-TO-APPLY_42">Click for Introduction-to-apply$ in the Full Manual</a></h3>
+
+<p>Background knowledge on how to use <span class="tt"><a href="ACL2____APPLY_42.html">apply$</a></span>, <span class="tt"><a href="ACL2____DEFWARRANT.html">defwarrant</a></span>, etc.</p> 
+ 
+ <p>The paper <a href="http://www.cs.utexas.edu/users/kaufmann/papers/apply/index.html" target="_blank"><nobr>``Limited 
+ Second-Order Functionality in a First-Order Setting''<img src="../Icon_External_Link.png" title="External link to http://www.cs.utexas.edu/users/kaufmann/papers/apply/index.html"></nobr></a> by Matt Kaufmann and 
+ J Strother Moore best explains the basic logical and practical ideas behind 
+ <span class="v">apply$</span>.  We refer to the paper simply as ``the paper.''  Supplemental 
+ material on the logical foundations of <span class="v">apply$</span> can be found in the <a href="ACL2____COMMUNITY-BOOKS.html">community-books</a> directory <span class="v">books/projects/apply-model/</span>.  Also see <span class="tt"><a href="ACL2____APPLY_42.html">apply$</a></span> for detailed documentation on <span class="v">apply$</span> that complements the 
+ introduction below, to be read carefully when you're ready to use <span class="v">apply$</span> 
+ in your own projects.  We suggest that you not follow all the links in 
+ introductory discussion and instead read it linearly as you might a paper.</p> 
+ 
+ <p>The unreachable goal of this work is to allow the ACL2 user to pass 
+ `functions' as objects and to apply them.  That goal is unreachable because 
+ ACL2 remains a first order system.  However, we can identify a certain 
+ syntactic class of ordinary ACL2 objects, called the `<a href="ACL2____TAME.html">tame</a> 
+ functions' (which are in fact <i>not</i> functions but are merely symbols and 
+ list expressions) and we can allow names of functions with certain tameness 
+ properties to be passed around and used as functions.</p> 
+ 
+ <p>``Tameness'' imposes strict rules on how functional arguments are used. 
+ We'll discuss it further below but tame functions are recognized by the 
+ <span class="v">:logic</span> mode function <span class="v">tamep-functionp</span> and the paper gives explanatory 
+ details.</p> 
+ 
+ <p>The fundamental question raised by <span class="v">apply$</span> is ``How can <span class="v">apply$</span> 
+ know the correspondence between an ordinary ACL2 object, like a symbol or a 
+ list, and the ACL2 function the user means to apply?''  For example, if the 
+ user defines the function <span class="v">my-append</span>, how can <span class="v">apply$</span> know that 
+ <span class="v">(<a href="ACL2____APPLY_42.html">apply$</a> 'MY-APPEND (<a href="COMMON-LISP____LIST.html">list</a> a b))</span> should expand to <span class="v">(my-append a b)</span>?</p> 
+ 
+ <p>The ACL2 primitives can be built in.  The logical definition of <span class="v">apply$</span> 
+ includes a big case split that recognizes about 800 ACL2 primitives, so that 
+ for example:</p> 
+ 
+ <pre class="code">(<a href="ACL2____APPLY_42.html">apply$</a> 'car (<a href="COMMON-LISP____LIST.html">list</a> a)) = (<a href="COMMON-LISP____CAR.html">car</a> a)</pre> 
+ 
+ <p>and</p> 
+ 
+ <pre class="code">(<a href="ACL2____APPLY_42.html">apply$</a> 'assoc-equal (<a href="COMMON-LISP____LIST.html">list</a> a b)) = (<a href="ACL2____ASSOC-EQUAL.html">assoc-equal</a> a b).</pre> 
+ 
+ <p>But user-defined functions are problematic because once <span class="v">apply$</span> has been 
+ defined in the ACL2 sources it cannot be extended to handle new symbols.</p> 
+ 
+  <p>Intuitively, if you have defined the <span class="v">n</span>-ary function <span class="v">foo</span> then you 
+  would expect <span class="v">(<a href="ACL2____APPLY_42.html">apply$</a> 'foo (<a href="COMMON-LISP____LIST.html">list</a> a1...an))</span> to be <span class="v">(foo a1...an)</span>.  One 
+  way to arrange that might be to leave <span class="v">apply$</span> undefined on the symbol 
+  <span class="v">foo</span> but to assume, as by an axiom or hypothesis,</p> 
+ 
+  <pre class="code">forall a1...an : (<a href="ACL2____APPLY_42.html">apply$</a> 'foo (<a href="COMMON-LISP____LIST.html">list</a> a1...an)) = (foo a1...an).</pre> 
+ 
+  <p>It will turn out that using new axioms for this purpose is a bad idea. 
+  Hiding the link between <span class="v">apply$</span> and new symbols in axioms raises a 
+  problem with ACL2's notion of <span class="tt"><a href="ACL2____LOCAL.html">local</a></span>.  We illustrate this problem 
+  later in this doc topic.  But for that reason, the suppositions extending 
+  <span class="v">apply$</span> will take the form of hypotheses to be added to conjectures in 
+  which the behavior of <span class="v">apply$</span> on new symbols is important.  These 
+  hypotheses are called ``<span class="tt"><a href="ACL2____WARRANT.html">warrant</a></span>s.''</p> 
+ 
+  <p>Warrant (Merriam-Webster): (noun) a commission or document giving 
+  authority to do something....</p> 
+ 
+  <p>In our case, a warrant for <span class="v">fn</span> gives <span class="v">apply$</span> permission to apply 
+  <span class="v">fn</span> under some circumstances, by asserting a universally quantified 
+  conditional equality about <span class="v">apply$</span>'s behavior on <span class="v">'fn</span>. It also tells 
+  <span class="v">apply$</span> and the <a href="ACL2____TAME.html">tame</a>ness predicates things like how many arguments 
+  <span class="v">fn</span> takes and how it uses them by asserting the <span class="tt"><a href="ACL2____BADGE.html">badge</a></span> of 
+  <span class="v">'fn</span>.  The <span class="v">badge</span> of <span class="v">fn</span> is an ACL2 object that contains various 
+  tokens interpretable by <span class="v">apply$</span> and the tameness predicates.</p> 
+ 
+  <p>But there is a fundamental logical problem: it is not always possible to 
+  satisfy such suppositions. There may be no way that <span class="v">apply$</span> could handle 
+  <span class="v">fn</span>.  An example of a <span class="v">fn</span> for which that hypothesis is unsatisfiable 
+  is</p> 
+ 
+  <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> russell (x y) (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____APPLY_42.html">apply$</a> x (<a href="COMMON-LISP____LIST.html">list</a> y y)))).</pre> 
+ 
+  <p>This definition of <span class="v">russell</span> is not recursive: it does not call itself. 
+  So this definition is admissible.  But if we had a warrant for <span class="v">apply$</span> 
+  and that <span class="v">warrant</span> were as simple as</p> 
+ 
+  <pre class="code">forall x,y : (<a href="ACL2____APPLY_42.html">apply$</a> 'russell (<a href="COMMON-LISP____LIST.html">list</a> x y)) = (russell x y)</pre> 
+ 
+  <p>then we would have this classical problem with self-reference:</p> 
+  <pre class="code">(russell 'russell 'russell)
+=                                      {def russell}
+(<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____APPLY_42.html">apply$</a> 'russell (<a href="COMMON-LISP____LIST.html">list</a> 'russell 'russell)))
+=                                      {warrant russell}
+(<a href="COMMON-LISP____NOT.html">not</a> (russell 'russell 'russell))</pre> 
+ 
+  <p>which is contradictory.</p> 
+ 
+  <p>This problem is addressed by introducing the notion of ``tameness.'' 
+  Tameness is a syntactic property of terms and functions that implies that it 
+  is ok to ``extend'' <span class="v">apply$</span> to handle them.</p> 
+ 
+  <p>It should be pretty clear that if the user defines an ACL2 function that 
+  in no way depends on <span class="v">apply$</span>, e.g., a function like:</p> 
+ 
+  <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> sq (x) (<a href="COMMON-LISP_____A2.html">*</a> x x))</pre> 
+ 
+  <p>then the hypothesis</p> 
+ 
+  <pre class="code">forall x : (<a href="ACL2____APPLY_42.html">apply$</a> 'SQ (<a href="COMMON-LISP____LIST.html">list</a> x)) = (sq x)</pre> 
+ 
+  <p>is satisfiable: we could have introduced <span class="v">sq</span> before <span class="v">apply$</span> and 
+  then defined <span class="v">apply$</span> in the first place to handle that particular 
+  symbol.</p> 
+ 
+  <p><span class="v">Sq</span> is a particularly simple example of a tame function.  One 
+  challenge in this work has been to extend the notion of tameness so that it 
+  includes a lot of what a normal ACL2 programmer might want in <span class="v">apply$</span> 
+  while maintaining the soundness of the resulting theory.</p> 
+ 
+  <p>For example, consider the following function, which maps a given function 
+  over a list and collects the results.</p> 
+ 
+  <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> collect$ (fn lst)
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ENDP.html">endp</a> lst)
+      nil
+      (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="ACL2____APPLY_42.html">apply$</a> fn (<a href="COMMON-LISP____LIST.html">list</a> (<a href="COMMON-LISP____CAR.html">car</a> lst)))
+            (<a href="ACL2____COLLECT_42.html">collect$</a> fn (<a href="COMMON-LISP____CDR.html">cdr</a> lst)))))</pre> 
+ 
+  <p>Our definition of tameness considers <span class="tt">(collect$ 'SQ lst)</span> to be a 
+  tame expression, even though <span class="v">collect$</span> calls <span class="v">apply$</span>.  The reason we 
+  can allow this is that in this particular call of <span class="v">collect$</span> the function 
+  to be applied is itself tame.  But if <span class="tt">(collect$ 'SQ lst)</span> is a tame 
+  expression, then <span class="tt">'(LAMBDA (LST) (COLLECT$ 'SQ LST))</span> is a tame 
+  function and thus</p> 
+ 
+  <pre class="code">(<a href="ACL2____COLLECT_42.html">collect$</a> '(<a href="COMMON-LISP____LAMBDA.html">LAMBDA</a> (LST) (<a href="ACL2____COLLECT_42.html">COLLECT$</a> 'SQ LST)) z)</pre> 
+ 
+  <p>is a tame expression.  So, for example, at the top-level of ACL2 one 
+  can do this:</p> 
+ 
+  <pre class="code">ACL2 !&gt;(<a href="ACL2____COLLECT_42.html">collect$</a> '(<a href="COMMON-LISP____LAMBDA.html">LAMBDA</a> (LST) (<a href="ACL2____COLLECT_42.html">COLLECT$</a> 'SQ LST))
+                 '((1 2 3) (4 5 6) (7 8 9)))
+((1 4 9) (16 25 36) (49 64 81))</pre> 
+ 
+  <p>Of course, this presumes we have defined <span class="v">sq</span> and <span class="v">collect$</span> and have 
+  analyzed them to make sure they have the appropriate tameness properties. 
+  (Note that <span class="v">collect$</span> is not tame, but the way it uses its ``functional'' 
+  argument is crucial to the tameness of <span class="tt">(collect$ 'SQ lst)</span>.)  To use 
+  <span class="v">apply$</span> to full advantage we need to have analyzed every relevant 
+  function definition so we know which arguments are treated like functions and 
+  whether they are used in accordance with our restrictions.  So if you're 
+  defining a function you intend to <span class="v">apply$</span> it is convenient to define it 
+  with the new command <span class="tt"><a href="ACL2____DEFUN_42.html">defun$</a></span>, which is just an ordinary <span class="tt"><a href="COMMON-LISP____DEFUN.html">defun</a></span> 
+  followed by a <span class="tt"><a href="ACL2____DEFWARRANT.html">defwarrant</a></span> command.  If you've already defined the 
+  function and then realize you wish to <span class="v">apply$</span> it, you can call 
+  <span class="v">defwarrant</span> yourself.</p> 
+ 
+  <p><span class="v">Defwarrant</span> analyzes a <span class="v">:</span><span class="tt"><a href="ACL2____LOGIC.html">logic</a></span> mode definition and 
+  produces a badge and a warrant, if possible.  Also relevant is the <span class="tt"><a href="ACL2____DEFBADGE.html">defbadge</a></span> command which issues a badge for a function (if possible) but does 
+  not issue a warrant.  Its primary purpose is to allow <span class="v">:</span><span class="v">program</span> mode 
+  functions to analyzed and badged so they can be safely executed by 
+  <span class="v">apply$</span> at the top-level ACL2 loop.  But the present discussion focuses 
+  primarily on the logical machinery, which requires warrants.</p> 
+ 
+  <p>We explain further via an annotated example, starting from scratch but 
+  from the basic background just sketched.  For many additional examples, see 
+  <a href="ACL2____COMMUNITY-BOOKS.html">community-books</a> <span class="v">books/projects/apply/report.lisp</span> which is a 
+  certified book containing the examples in the paper.</p> 
+ 
+  <p><b>Note carefully:</b> the directory <span class="v">books/projects/apply-model/</span>, 
+  mentioned earlier in conjunction with the paper, is different from the 
+  directory <span class="v">books/projects/apply/</span> just mentioned!  The former directory 
+  concerns the logical foundations of <span class="v">apply$</span> as they stood when the paper 
+  was written.  The latter is more directly relevant to ACL2 users and provides 
+  useful lemmas about <span class="v">apply$</span> as it is axiomatized and implemented today. 
+  It also includes many example theorems.</p> 
+ 
+  <p>To get started, define two ordinary ACL2 functions, one that squares its 
+  argument and the other that reverses its argument.</p> 
+ 
+  <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> sq (x) (<a href="COMMON-LISP_____A2.html">*</a> x x))
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> rev (x)
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ENDP.html">endp</a> x)
+      nil
+      (<a href="COMMON-LISP____APPEND.html">append</a> (<a href="ACL2____REV.html">rev</a> (<a href="COMMON-LISP____CDR.html">cdr</a> x)) (<a href="COMMON-LISP____LIST.html">list</a> (<a href="COMMON-LISP____CAR.html">car</a> x)))))</pre> 
+ 
+  <p><b>Lesson 0:</b> Learn about <span class="v">apply$</span> by reading this tutorial 
+  introduction.  But this tutorial mentions many undefined concepts: tameness, 
+  warrants, badges, ilks.  These concepts are intertwined with <span class="v">apply$</span> and 
+  warrants through mutual recursion, constraints, rewrite rules, etc..  So we 
+  decided not to try to define them here as we go along, though the links 
+  provided do provide definitive descriptions.  So please tolerate the use of 
+  undefined words here  we'll try to give you a sense of what they 
+  mean.</p> 
+ 
+  <p><b>Lesson 1:</b> To use <span class="v">apply$</span>, be sure to include the following book 
+  of lemmas.  These lemmas are important not just to proving theorems about 
+  <span class="v">apply$</span> but to defining functions that use <span class="v">apply$</span>.</p> 
+ 
+  <pre class="code">(<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "projects/apply/top" :dir :system)</pre> 
+ 
+  <p><b>Lesson 2:</b> To allow <span class="v">apply$</span> to ``work'' on a function symbol the 
+  symbol must be ``warranted.''  Actually, of course, you can pass anything to 
+  <span class="v">apply$</span> and the axioms will reduce it to some value: ACL2 is untyped and 
+  all functions are total!  But <span class="v">apply$</span> won't work in the logic as you 
+  expect if the first argument to <span class="v">apply$</span> is not warranted!  (And 
+  <span class="v">apply$</span> won't work as you expect for top-level evaluation if its first 
+  argument is not at least badged.)  To issue warrants (and badges) for <span class="v">sq</span> 
+  and <span class="v">rev</span> do:</p> 
+ 
+  <pre class="code">(<a href="ACL2____DEFWARRANT.html">defwarrant</a> sq)
+
+(<a href="ACL2____DEFWARRANT.html">defwarrant</a> rev)</pre> 
+ 
+  <p><span class="tt"><a href="ACL2____DEFWARRANT.html">Defwarrant</a></span> checks that its argument, <i>fn</i>, is a defined 
+  function symbol that satisfies certain restrictions on how it uses its 
+  arguments, restrictions that enable us to define the tameness predicates and 
+  that allow <span class="v">apply$</span> to ``work'' without causing logical contradictions. 
+  <span class="v">Defwarrant</span> causes an error if <i>fn</i> does not obey our rules.  But if 
+  <span class="v">defwarrant</span> does not cause an error it produces a ``badge'' for <i>fn</i> 
+  that describes which formals are treated as ``functions.''  Henceforth, we'll 
+  say such formals have ``<a href="ACL2____ILK.html">ilk</a>'' <span class="v">:FN</span>.  In addition to computing a 
+  badge, non-erroneous calls of <span class="v">defwarrant</span> produce a <span class="tt"><a href="ACL2____WARRANT.html">warrant</a></span> for 
+  <i>fn</i> that specifies the <span class="tt"><a href="ACL2____BADGE.html">badge</a></span> and the conditions under which 
+  <span class="v">apply$</span> ``works'' on the function symbol <i>fn</i>.</p> 
+ 
+  <p><b>Lesson 3:</b> We'll say more about tameness, badges, and warrants 
+  later.  You already know that warrants can only be issued for <span class="v">:logic</span> 
+  mode functions because the function symbol is used as a function in the 
+  logical definition of the warrant.  But you might as well learn four major 
+  limitations of <span class="v">apply$</span>: 
+  (i) <span class="v">Apply$</span> does not take <span class="tt"><a href="ACL2____STATE.html">state</a></span> or <a href="ACL2____STOBJ.html">stobj</a> arguments and so 
+  cannot call any function that takes <span class="v">STATE</span> or <span class="v">stobj</span> arguments.  (ii) 
+  <span class="v">Apply$</span> cannot call a function whose measure, well-founded relation, or 
+  domain predicate depends on <span class="v">apply$</span>. (iii) <span class="v">Apply$</span> cannot call a 
+  function that itself uses <span class="v">apply$</span> unless that function's measure is a 
+  natural number or a lexicographic combination of naturals formed with 
+  <span class="v">llist</span> as defined in the Community Books at <span class="v">books/ordinals/</span>. (iv) 
+  <span class="v">Apply$</span> cannot call a function that itself uses <span class="v">apply$</span> if that 
+  function was defined mutually recursively.  Another way of saying all this is 
+  that <span class="v">defwarrant</span> will cause an error if you try to warrant a function 
+  violating (i), (ii), (iii) or (iv).</p> 
+ 
+  <p><b>Lesson 4:</b> If you want to define a function and immediately call 
+  <span class="v">defwarrant</span> on it you can use the handy macro <span class="v">defun$</span>.  We'll use 
+  <span class="v">defun$</span> freely below.</p> 
+ 
+  <p><b>Lesson 5:</b> You can define functions that take warranted 
+  ``functions'' as arguments and <span class="v">apply$</span> them.  Here is a function that 
+  applies its first argument to every element of its second argument and 
+  collects the results.  We sometimes call functions like <span class="v">collect$</span> 
+  ``mapping functions'' because they map another function over some range.  We 
+  would call them ``functionals'' except that suggests ACL2 is higher-order and 
+  it is not!  So we most often call them <a href="ACL2____SCION.html">scion</a>s of <span class="v">apply$</span>.  In 
+  ordinary English usage, a ``scion'' is a descendent of an important family or 
+  individual; our scions are ``descendents'' of <span class="v">apply$</span> and inherit its 
+  power and restrictions.</p> 
+ 
+  <pre class="code">(<a href="ACL2____DEFUN_42.html">defun$</a> collect$ (fn lst)
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ENDP.html">endp</a> lst)
+      nil
+      (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="ACL2____APPLY_42.html">apply$</a> fn (<a href="COMMON-LISP____LIST.html">list</a> (<a href="COMMON-LISP____CAR.html">car</a> lst)))
+            (<a href="ACL2____COLLECT_42.html">collect$</a> fn (<a href="COMMON-LISP____CDR.html">cdr</a> lst)))))</pre> 
+ 
+  <p>In this definition, the first argument has ilk <span class="v">:FN</span> because it is used 
+  exclusively as a ``function:'' it reaches the first argument of <span class="v">apply$</span> 
+  and is untouched otherwise.  The second argument has ilk <span class="v">NIL</span> and we say 
+  it's ``ordinary.''  It is <i>never</i> used as a function.</p> 
+ 
+  <p>Note: We define <span class="v">collect$</span> with <span class="v">defun$</span> simply to illustrate 
+  <span class="v">defun$</span>.  Unless we mean to pass <span class="v">collect$</span> to <span class="v">apply$</span> or to some 
+  scion in the future, there is no reason to have a warrant for <span class="v">collect$</span>. 
+  Had we defined <span class="v">collect$</span> with the ordinary <span class="v">defun</span> and realized later 
+  that we want to pass <span class="v">'COLLECT$</span> into a slot of ilk <span class="v">:FN</span>, we could get 
+  a warrant for <span class="v">collect$</span> by calling <span class="v">(<a href="ACL2____DEFWARRANT.html">defwarrant</a> collect$)</span>.</p> 
+ 
+  <p>Here's another useful scion:</p> 
+ 
+  <pre class="code">(<a href="ACL2____DEFUN_42.html">defun$</a> always$ (fn lst)
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ENDP.html">endp</a> lst)
+      t
+      (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____APPLY_42.html">apply$</a> fn (<a href="COMMON-LISP____LIST.html">list</a> (<a href="COMMON-LISP____CAR.html">car</a> lst)))
+           (<a href="ACL2____ALWAYS_42.html">always$</a> fn (<a href="COMMON-LISP____CDR.html">cdr</a> lst)))))</pre> 
+ 
+  <p>It checks that every element of <span class="v">lst</span> satisfies its <span class="v">:FN</span> argument 
+  <span class="v">fn</span>.</p> 
+ 
+  <p>By the way, both <span class="v">collect$</span> and <span class="v">always$</span> are pre-defined in 
+  ACL2 because they are part of the support for the <span class="tt"><a href="ACL2____LOOP_42.html">loop$</a></span> statment.</p> 
+ 
+  <p><b>Lesson 6:</b> You can run scions on warranted function symbols:</p> 
+ 
+  <pre class="code">ACL2 !&gt;(<a href="ACL2____COLLECT_42.html">collect$</a> 'SQ '(1 -2 3 -4))
+(1 4 9 16)
+
+ACL2 !&gt;(<a href="ACL2____COLLECT_42.html">collect$</a> 'rev '((1 2 3) (4 5 6) (7 8 9)))
+((3 2 1) (6 5 4) (9 8 7))</pre> 
+ 
+  <p><b>Lesson 7:</b> You can run scions on tame quoted <span class="v">LAMBDA</span> objects. 
+  These are just quoted list expressions that start with the symbol <span class="v">LAMBDA</span> 
+  and look like lambda-expressions.  But quoted <span class="v">LAMBDA</span> objects have to 
+  have fully translated bodies and meet other restrictions so <span class="v">apply$</span> can 
+  interpret them.  You cannot use macros like <span class="v">+</span> or <span class="v">cond</span> and must you 
+  quote all constants.  We urge you not to type quoted <span class="v">LAMBDA</span> objects by 
+  hand!  Instead, we provide a macro, <span class="tt"><a href="ACL2____LAMBDA_42.html">lambda$</a></span>, that allows you to write 
+  in untranslated form as you would a lambda expression in ACL2.</p> 
+ 
+  <p><b>Lesson 8:</b> There are three very similar looking but very different 
+  notions used in this documentation: lambda expressions, <span class="v">LAMBDA</span> objects, 
+  and <span class="v">lambda$</span> expressions.  Read carefully!  See <span class="tt"><a href="COMMON-LISP____LAMBDA.html">lambda</a></span> for some 
+  definitions and disambiguation help.</p> 
+ 
+  <pre class="code">; Don't type this:
+ACL2 !&gt;(<a href="ACL2____COLLECT_42.html">collect$</a> '(<a href="COMMON-LISP____LAMBDA.html">LAMBDA</a> (X)
+                          (<a href="COMMON-LISP____IF.html">IF</a> (<a href="COMMON-LISP_____C3.html">&lt;</a> X '0) (<a href="ACL2____BINARY-_A2.html">BINARY-*</a> '10 X) (SQ X)))
+                 '(1 -2 3 -4))
+(1 -20 9 -40)
+
+; Type this instead!
+ACL2 !&gt;(<a href="ACL2____COLLECT_42.html">collect$</a> (<a href="ACL2____LAMBDA_42.html">lambda$</a> (X)
+                          (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP_____C3.html">&lt;</a> x 0) (<a href="COMMON-LISP_____A2.html">*</a> 10 x) (sq x)))
+                 '(1 -2 3 -4))
+(1 -20 9 -40)</pre> 
+ 
+  <p><b>Lesson 9:</b> Almost all ACL2 primitives are known to <span class="v">apply$</span>.  For 
+  a complete list of the built-ins evaluate</p> 
+ 
+  <pre class="code">(<a href="COMMON-LISP____APPEND.html">append</a> '(<a href="ACL2____BADGE.html">BADGE</a> TAMEP TAMEP-FUNCTIONP SUITABLY-TAMEP-LISTP
+                APPLY$ EV$)
+        (<a href="ACL2____STRIP-CARS.html">strip-cars</a> *badge-prim-falist*))</pre> 
+ 
+  <p>You can freely use these ACL2 primitives with <span class="v">apply$</span> and in your 
+  <span class="v">lambda$</span> expressions, without warrants.</p> 
+ 
+  <p><b>Lesson 10:</b> You can prove and use theorems about scions.</p> 
+ 
+  <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> collect$-append
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____COLLECT_42.html">collect$</a> fn (<a href="COMMON-LISP____APPEND.html">append</a> a b))
+         (<a href="COMMON-LISP____APPEND.html">append</a> (<a href="ACL2____COLLECT_42.html">collect$</a> fn a)
+                 (<a href="ACL2____COLLECT_42.html">collect$</a> fn b))))
+
+(<a href="ACL2____THM.html">thm</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____COLLECT_42.html">collect$</a> (<a href="ACL2____LAMBDA_42.html">lambda$</a> (x) (sq (sq x)))
+                      (<a href="COMMON-LISP____APPEND.html">append</a> c d))
+            (<a href="COMMON-LISP____APPEND.html">append</a> (<a href="ACL2____COLLECT_42.html">collect$</a> (<a href="ACL2____LAMBDA_42.html">lambda$</a> (x) (sq (sq x))) c)
+                    (<a href="ACL2____COLLECT_42.html">collect$</a> (<a href="ACL2____LAMBDA_42.html">lambda$</a> (x) (sq (sq x))) d))))</pre> 
+ 
+  <p>Notice that the lemma <span class="v">collect$-append</span> talks about an arbitrary 
+  <span class="v">fn</span>.  The definition of <span class="v">apply$</span> is completely irrelevant to this 
+  theorem!  Once <span class="v">collect$-append</span> has been proved can be instantiated with 
+  anything for <span class="v">fn</span>.  This is demonstrated when the <span class="v">thm</span> above is 
+  proved: the proof is just to rewrite with <span class="v">collect$-append</span>.</p> 
+ 
+  <p><b>Lesson 11:</b> But when your theorems depend on the behavior of 
+  <span class="v">apply$</span> on particular user-defined functions, you will need to provide 
+  hypotheses stipulating the behavior of <span class="v">apply$</span> on those values.  Those 
+  hypotheses are the warrants for the (non-primitive) function symbols 
+  involved.  Here is an example: If <span class="v">lst</span> is a list of integers and we 
+  square every element by mapping over it with <span class="v">sq</span> then the result is a 
+  list of naturals  but this theorem depends on the fact that <span class="v">(<a href="ACL2____APPLY_42.html">apply$</a>
+  'SQ (<a href="COMMON-LISP____LIST.html">list</a> x))</span> is <span class="v">(sq x)</span>, which is what the warrant for <span class="v">sq</span> tells 
+  us.  Thus, the warrant for <span class="v">sq</span> is required as a hypothesis!</p> 
+ 
+  <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> all-natp-collect$-sq
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____WARRANT.html">warrant</a> sq)
+                (<a href="ACL2____ALWAYS_42.html">always$</a> 'INTEGERP lst))
+           (<a href="ACL2____ALWAYS_42.html">always$</a> 'NATP (<a href="ACL2____COLLECT_42.html">collect$</a> 'SQ lst))))</pre> 
+ 
+  <p>Note that this theorem uses the scion <span class="v">always$</span> to express the ideas of 
+  ``list of integers'' and ``list of naturals.''  Note also that we don't need 
+  to provide warrants for <span class="v">integerp</span> or <span class="v">natp</span> because they are ACL2 
+  primitives and thus built into the behavior of <span class="v">apply$</span>.</p> 
+ 
+  <p><b>Lesson 12:</b> Warrants solve the ``<span class="v">LOCAL</span> problem.''  Imagine the 
+  trouble we'd be in if the theorem above did not require a warrant on <span class="v">sq</span>. 
+  We could get away with this:</p> 
+ 
+  <pre class="code">(<a href="ACL2____ENCAPSULATE.html">encapsulate</a> nil
+  (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> sq (x) (<a href="COMMON-LISP_____A2.html">*</a> x x)))
+  (<a href="ACL2____DEFTHM.html">defthm</a> unwarranted-all-natp-collect$-sq
+    (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____ALWAYS_42.html">always$</a> 'INTEGERP lst)
+             (<a href="ACL2____ALWAYS_42.html">always$</a> 'NATP (<a href="ACL2____COLLECT_42.html">collect$</a> 'SQ lst)))))
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> sq (x) (<a href="COMMON-LISP_____A2.html">*</a> x x x))
+
+(<a href="ACL2____THM.html">thm</a> (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____ALWAYS_42.html">always$</a> 'INTEGERP lst)
+              (<a href="ACL2____ALWAYS_42.html">always$</a> 'NATP (<a href="ACL2____COLLECT_42.html">collect$</a> 'SQ lst))))</pre> 
+ 
+  <p>This would be a disaster because the final <span class="v">thm</span> is invalid since 
+  <span class="v">(sq -2)</span> here is <span class="v">-8</span> and yet the <span class="v">thm</span> is trivially proved by 
+  appealing to the unwarranted theorem exported from the encapsulate.</p> 
+ 
+  <p>If we could prove the unwarranted theorem we could export it because it 
+  does not mention or depend on the function <span class="v">sq</span>, it just mentions the 
+  constant <span class="tt">'SQ</span>.  Fortunately, we cannot actually prove the unwarranted 
+  version of the theorem because there is no <i>a priori</i> connection between 
+  <span class="v">(<a href="ACL2____APPLY_42.html">apply$</a> 'SQ (<a href="COMMON-LISP____LIST.html">list</a> x))</span> and <span class="v">(sq x)</span>.  And if we add the warrant for 
+  <span class="v">sq</span> to the <span class="v">defthm</span> in the encapsulate we can prove the theorem but we 
+  cannot export it because the warrant ancestrally depends on locally defined 
+  function <span class="v">sq</span>.</p> 
+ 
+  <p><b>Lesson 13:</b> While we may have given the impression that we've 
+  provided a convenient fragment of second-order functionality in ACL2 its 
+  limitations will annoy you!  For example, when ACL2 tries to use the 
+  lemma</p> 
+ 
+  <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> all-natp-collect$-sq
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____WARRANT.html">warrant</a> sq)
+                (<a href="ACL2____ALWAYS_42.html">always$</a> 'INTEGERP lst))
+           (<a href="ACL2____ALWAYS_42.html">always$</a> 'NATP (<a href="ACL2____COLLECT_42.html">collect$</a> 'SQ lst))))</pre> 
+ 
+  <p>it just employs its usual first-order matching algorithm.  Thus, the lemma 
+  won't apply to</p> 
+ 
+  <pre class="code">(<a href="ACL2____ALWAYS_42.html">always$</a> 'NATP (<a href="ACL2____COLLECT_42.html">collect$</a> (<a href="ACL2____LAMBDA_42.html">lambda$</a> (x) (<a href="COMMON-LISP_____A2.html">*</a> x x)) lst))</pre> 
+ 
+  <p>because the constant symbol <span class="tt">'SQ</span> is not the same as the constant 
+  list generated by translating <span class="v">lambda$</span> expression, 
+  <span class="tt"><span class="v">'(<a href="COMMON-LISP____LAMBDA.html">LAMBDA</a> (X) (<a href="ACL2____BINARY-_A2.html">BINARY-*</a> X X))</span></span>, even though they are equivalent 
+  if understood as functions.  See the discussion at <span class="tt"><a href="ACL2____FN-EQUAL.html">fn-equal</a></span>.</p> 
+ 
+  <p><b>Lesson 14:</b> Recall Lesson 0!  Before you start to use <span class="v">apply$</span> 
+  outside of this simple demo script, we advise you to read the documentation 
+  for <span class="v">apply$</span>.</p> 
+ 
+  <p><b>An Advanced Lesson:</b> We conclude this tutorial by defining one of 
+  the most useful scions and proving a couple of theorems illustrating its 
+  flexibility: <span class="v">foldr</span>.</p> 
+ 
+  <pre class="code">(<a href="ACL2____DEFUN_42.html">defun$</a> foldr (lst fn init)
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ENDP.html">endp</a> lst)
+      init
+      (<a href="ACL2____APPLY_42.html">apply$</a> fn
+              (<a href="COMMON-LISP____LIST.html">list</a> (<a href="COMMON-LISP____CAR.html">car</a> lst)
+                    (foldr (<a href="COMMON-LISP____CDR.html">cdr</a> lst) fn init)))))</pre> 
+ 
+  <p>Note that <span class="v">foldr</span> maps over the list in its first argument, applying 
+  its second argument to two things: successive elements of the list and the 
+  result of recursively calling itself on the rest of the list.  It returns its 
+  third argument when the list is empty.</p> 
+ 
+  <p>When its functional argument is <span class="v">cons</span> <span class="v">foldr</span> is just the 
+  concatenation of its other two arguments:</p> 
+ 
+  <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> foldr-cons
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> (foldr x 'cons y)
+         (<a href="COMMON-LISP____APPEND.html">append</a> x y)))</pre> 
+ 
+  <p>We do not need a warrant for <span class="v">cons</span> because it is built into 
+  <span class="v">apply$</span>.  In fact, the built-ins don't have warrants but if you 
+  unnecessarily list a primitive in a <span class="v">warrant</span> expression, like <span class="v">(<a href="ACL2____WARRANT.html">warrant</a>
+  foldr cons)</span>, it just ignores the primitives that are built into 
+  <span class="v">apply$</span>.</p> 
+ 
+  <p>By supplying a certain <span class="v">lambda</span> expression we can use <span class="v">foldr</span> to 
+  reverse its first argument:</p> 
+ 
+  <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> foldr-can-be-rev
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____WARRANT.html">warrant</a> foldr)
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (foldr x
+                         (<a href="ACL2____LAMBDA_42.html">lambda$</a> (x y)
+                            (foldr y 'cons (<a href="COMMON-LISP____CONS.html">cons</a> x nil)))
+                         nil)
+                  (<a href="ACL2____REV.html">rev</a> x))))</pre> 
+ 
+  <p>Note that the <span class="v">lambda$</span> expression calls <span class="v">foldr</span>.  Because of this, 
+  we must provide the warrant for <span class="v">foldr</span> since that inner <span class="v">foldr</span> will 
+  be applied by the outer <span class="v">foldr</span>.  This illustrates an important point: 
+  scions can apply other scions, including themselves, as long as the 
+  applications are tame.</p>
+</body>
+</html>

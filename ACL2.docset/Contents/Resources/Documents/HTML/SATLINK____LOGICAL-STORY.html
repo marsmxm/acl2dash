@@ -1,0 +1,123 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Logical-story</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=SATLINK____LOGICAL-STORY">Click for Logical-story in the Full Manual</a></h3>
+
+<p>How we logically assume that the SAT solver's claims of unsat are 
+correct.</p><p>The whole point of Satlink is to be able to call an external SAT 
+solver, written in C or C++, and trust its results.  Here, we explain exactly 
+how we do that.</p> 
+ 
+<p>Our assumptions about the SAT solver will be expressed as constraints about 
+a new function, <span class="v">satlink-run-fn</span>.  Informally, the idea behind this function 
+is that it will have the following signature:</p> 
+ 
+<pre class="code">(satlink-run-fn config formula env$)  (status env$) 
+</pre> 
+ 
+<dl> 
+ 
+<dt>Inputs</dt> 
+ 
+<dd>
+<span class="v">config</span> is a <a href="SATLINK____CONFIG-P.html">config-p</a> that says which SAT solver to run and how 
+to run it.</dd> 
+ 
+<dd>
+<span class="v">formula</span> is the <a href="SATLINK____CNF.html">cnf</a> formula to solve.</dd> 
+ 
+<dd>
+<span class="v">env$</span> is <a href="SATLINK____ENV_42.html">env$</a>, a bit array that will be used to store the 
+satisfying assignment from the SAT solver, in the SAT case.</dd> 
+ 
+<dt>Outputs</dt> 
+ 
+<dd>
+<span class="v">status</span> is the answer we get back from the SAT solver; in practice it 
+will either be <span class="v">:sat</span> or <span class="v">:unsat</span>, or perhaps <span class="v">:failed</span> if we run into 
+some kind of gross errorfor instance, perhaps the SAT solver produces 
+output that we weren't expecting, like "Segmentation fault" or 
+"Killed".</dd> 
+ 
+<dd>
+<span class="v">env$</span> is the updated <a href="SATLINK____ENV_42.html">env$</a> bit array; in the <span class="v">:sat</span> case it 
+should contain the satisfying assignment.</dd> 
+ 
+<dd>
+<span class="v">lrat-proof</span> will be NIL unless <span class="v">config.lrat-check</span> is true.  In that 
+case, it is expected that the solver will write a file 
+"[input-filename].lrat" containing an LRAT proof; see 
+"projects/sat/lrat/README".</dd> 
+ 
+</dl> 
+ 
+<h3>Axiomatization</h3> 
+ 
+<p>We use ACL2's <a href="ACL2____PARTIAL-ENCAPSULATE.html">partial-encapsulate</a> feature to assume that the function 
+satisfies certain constraints.</p> 
+ 
+<p>To make our story as tight as possible, we would like to assume very little 
+about <span class="v">satlink-run-fn</span>.  It turns out we only need three constraints, with 
+the first two constraints just saying that the function returns three values:</p> 
+ 
+<p><b>Theorem: </b>true-listp-of-satlink-run-fn</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> true-listp-of-satlink-run-fn
+        (<a href="ACL2____TRUE-LISTP.html">true-listp</a> (satlink-run-fn config formula env$))
+        :rule-classes :type-prescription)</pre> 
+<p><b>Theorem: </b>len-of-satlink-run-fn</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> len-of-satlink-run-fn
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____LEN.html">len</a> (satlink-run-fn config formula env$))
+               3))</pre> 
+ 
+<p>The final constraint is the real one.  The idea here is to express:</p> 
+ 
+<div class="box"><p> 
+   if <span class="v">satlink-run-fn</span> returns <span class="v">:unsat</span>,<br> 
+   then the formula evaluates to false under every environment. 
+</p></div> 
+ 
+<p>However, we don't even need to assume that if our solver outputs an LRAT 
+proof that can be checked by the LRAT checker in "projects/sat/lrat".  So if 
+the configuration option <span class="v">lrat-check</span> is set to true, then we don't assume 
+this.  If <span class="v">lrat-check</span> is <span class="v">NIL</span>, then we'll just assume the solver is 
+correct.</p> 
+ 
+<p>But the quantification here isn't quite right for a rewrite rule, so 
+instead we assume the contrapositive:</p> 
+ 
+<div class="box"><p> 
+   if NOT(the formula evaluates to false under every environment),<br> 
+   and we are not checking an LRAT proof,<br> 
+   then NOT( <span class="v">satlink-run-fn</span> returns <span class="v">:unsat</span> ) 
+</p></div> 
+ 
+<p>Which simplifies down to:</p> 
+ 
+<div class="box"><p> 
+   if the formula evaluates to true under any environment,<br> 
+   and we are not checking an LRAT proof,<br> 
+   then <span class="v">satlink-run-fn</span> does not return <span class="v">:unsat</span> 
+</p></div> 
+ 
+<p>So the real constraint looks like this:</p> 
+ 
+<p><b>Theorem: </b>satlink-run-fn-unsat-claim</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+    satlink-run-fn-unsat-claim
+    (<a href="ACL2____IMPLIES.html">implies</a>
+         (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SATLINK____EVAL-FORMULA.html">eval-formula</a> formula arbitrary-env)
+                     1)
+              (<a href="COMMON-LISP____NOT.html">not</a> (<a href="SATLINK____CONFIG-_E3LRAT-CHECK.html">config-&gt;lrat-check</a> config)))
+         (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 0 (satlink-run-fn config formula env$))
+                     :unsat))))</pre> 
+ 
+ 
+<p>And that's it.  We don't need to assume anything about what happens in the 
+<span class="v">:sat</span> case or the case where we're checking LRAT proofs, because our 
+top-level <a href="SATLINK____SAT.html">sat</a> wrapper will verify those answers.</p> 
+ 
+
+</body>
+</html>

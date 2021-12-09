@@ -1,0 +1,96 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Bigmem-concrete-stobj</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=BIGMEM____BIGMEM-CONCRETE-STOBJ">Click for Bigmem-concrete-stobj in the Full Manual</a></h3>
+
+<p>Concrete stobj set-up corresponding to <span class="v">bigmem</span>'s <span class="v">mem</span> stobj</p><p>The <span class="v">mem$c</span> stobj provides a fast, array-like, 
+  allocate-on-demand implementation of a <span class="v">2^64</span> byte 
+  array.</p> 
+ 
+  <p> Here are the definitions of the stobjs involved: </p> 
+ 
+  <p><b>Definition: </b>mem$c</p><pre class="code">(<a href="ACL2____DEFSTOBJ.html">defstobj</a> mem$c
+          (level1 :type (<a href="COMMON-LISP____ARRAY.html">array</a> l1 (4194304))
+                  :resizable nil)
+          :inline t
+          :non-memoizable t)</pre> 
+  <p><b>Definition: </b>l1</p><pre class="code">(<a href="ACL2____DEFSTOBJ.html">defstobj</a> l1
+          (pages :type (<a href="COMMON-LISP____ARRAY.html">array</a> page (0))
+                 :resizable t)
+          (pages_vld :type bit :initially 0)
+          :inline t
+          :non-executable t
+          :non-memoizable t)</pre> 
+  <p><b>Definition: </b>page</p><pre class="code">(<a href="ACL2____DEFSTOBJ.html">defstobj</a> page
+          (pg :type (<a href="COMMON-LISP____ARRAY.html">array</a> (unsigned-byte 8) (0))
+              :initially 0
+              :resizable t)
+          (pg_vld :type bit :initially 0)
+          :inline t
+          :non-executable t
+          :non-memoizable t)</pre> 
+ 
+  <p>Here's how a memory access works. A 64-bit address is split into 
+  three parts: MSB <span class="v">22</span> bits called <span class="v">i1</span>, then <span class="v">22</span> bits 
+  called <span class="v">i2</span>, and finally, LSB <span class="v">20</span> bits called 
+  <span class="v">offset</span>.</p> 
+ 
+  <ul> 
+ 
+   <li><p><span class="v">i1</span> is used to index into <span class="v">level1</span>; i.e., it gets the 
+   <span class="v">i1</span>-th <span class="v">l1</span> in <span class="v">level1</span>.</p></li> 
+ 
+   <li>
+<p><span class="v">i2</span> is used to index into the <span class="v">pages</span> field of 
+   <span class="v">l1</span> obtained above; i.e., it gets the <span class="v">i2</span>-th <span class="v">page</span> from 
+   <span class="v">pages</span>.</p> 
+ 
+  <p>Note that <span class="v">pages</span> is a resizable array; if <span class="v">i2</span> is not less 
+   than the length of <span class="v">pages</span>, we first resize <span class="v">pages</span> to 
+   <span class="v">2^22</span> (<span class="v">i2</span> is <span class="v">22</span> bits wide) and then get the newly 
+   created <span class="v">i2</span>-th <span class="v">page</span>.</p> 
+ 
+   <p>The check <span class="v"> (<a href="COMMON-LISP_____C3.html">&lt;</a> i2 (pages-length l1)) </span> has pretty bad 
+   execution performance, so we optimize this by checking the value of 
+   <span class="v">pages_vld</span> (a simple scalar field of type <span class="v">bit</span>) instead. 
+   The default value of <span class="v">pages_vld</span> is <span class="v">0</span>, which corresponds to 
+   <span class="v"> (pages-length l1) == 0 </span>. Whenever we resize <span class="v">pages</span>, we 
+   always resize it to <span class="v">2^22</span> elements and then set <span class="v">pages_vld</span> 
+   to <span class="v">1</span>. In other words, we maintain the invariant that if 
+   <span class="v">pages_vld</span> is <span class="v">0</span>, then <span class="v"> (pages-length l1) </span> is <span class="v">0</span>, 
+   and otherwise it is <span class="v">2^22</span>.  Since <span class="v">i2</span> is <span class="v">22</span> bits wide, 
+   we know that if <span class="v">pages_vld</span> is <span class="v">1</span>, we don't have to resize 
+   <span class="v">pages</span>.</p> 
+ 
+   </li> 
+ 
+   <li><p><span class="v">offset</span> is used to index into the <span class="v">pg</span> field of 
+  <span class="v">page</span> obtained above; i.e., it accesses the <span class="v">offset</span>-th byte 
+  in <span class="v">pg</span>.  Note that like <span class="v">pages</span> above, <span class="v">pg</span> is also a 
+  resizable array and we do the same kind of resizing here that we do 
+  for <span class="v">pages</span>.</p></li> 
+ 
+  </ul> 
+ 
+  <p>A benefit of this set-up is that it does not occupy too much 
+  memory. At the very beginning, when no memory accesses have 
+  occurred, <span class="v">level1</span> of <span class="v">mem$c</span> may have <span class="v">2^22</span> elements of 
+  type <span class="v">l1</span>, but each of those <span class="v">l1</span>s has an array field 
+  <span class="v">pages</span> of length zero and one scalar bit field. When a memory 
+  access does happen, we resize <span class="v">pages</span> to <span class="v">2^22</span> <span class="v">page</span> 
+  elements, each of which has an array field <span class="v">pg</span> of length zero 
+  and one scalar bit field.  We only allocate <span class="v">2^20</span> bytes for the 
+  <span class="v">pg</span> in the <span class="v">page</span> selected by <span class="v">i2</span>. Of course, if we read 
+  from a memory location for which <span class="v">pages_vld</span> or <span class="v">pg_vld</span> is 
+  <span class="v">0</span>, then we simply return the default value, <span class="v">0</span>, without 
+  resizing any array fields. Also, if there's spatial locality (i.e., 
+  if the memory accesses pertain to addresses which share <span class="v">i1</span> 
+  and/or <span class="v">i2</span> --- a common enough scenario), this set-up is pretty 
+  fast because we don't have to resize arrays as often.</p>
+</body>
+</html>

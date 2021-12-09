@@ -1,0 +1,818 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Nested-stobjs</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____NESTED-STOBJS">Click for Nested-stobjs in the Full Manual</a></h3>
+
+<p>Using <a href="ACL2____STOBJ.html">stobj</a>s that contain stobjs</p><p>For this topic we assume that you already understand the basics of 
+ single-threaded objects in ACL2.  See <a href="ACL2____STOBJ.html">stobj</a>, and in particular, see 
+ <a href="ACL2____DEFSTOBJ.html">defstobj</a>, which notes that a stobj field can itself be a stobj, an 
+ array of stobjs, or a <a href="ACL2____STOBJ-TABLE.html">stobj-table</a>.  The present <a href="COMMON-LISP____DOCUMENTATION.html">documentation</a> 
+ topic expands on that point.  However, we ignore stobj-table fields here; see 
+ <a href="ACL2____STOBJ-TABLE.html">stobj-table</a> for such documentation.</p> 
+ 
+ <p>Our presentation is in five sections.  First we augment the documentation 
+ for <span class="tt"><a href="ACL2____DEFSTOBJ.html">defstobj</a></span> by explaining how stobjs may be specified for fields in a 
+ new stobj definition.  Then we explain an aliasing problem, which accounts for 
+ a prohibition against making direct calls to accessors and updaters involving 
+ stobj fields of stobjs.  Next, we introduce an ACL2 primitive, <span class="v">stobj-let</span>, 
+ which provides the only way to read and write stobj components of stobjs.  The 
+ fourth section provides precise documentation for <span class="v">stobj-let</span>.  We conclude 
+ by discussing the use of <span class="v">stobj-let</span> with abstract stobjs (see <a href="ACL2____DEFABSSTOBJ.html">defabsstobj</a>); the discussion below ignores abstract stobjs until reaching 
+ that section.</p> 
+ 
+ <p>See also ACL2 community book <span class="v">demos/modeling/nested-stobj-toy-isa.lisp</span> 
+ for a worked example, which applies nested stobj structures to the problem of 
+ defining interpreters.  A variety of small additional examples may be found in 
+ ACL2 community book <span class="v">books/system/tests/nested-stobj-tests.lisp</span>.  For 
+ further discussion, you are welcome to read the ``Essay on Nested Stobjs'', a 
+ long comment in ACL2 source file <span class="v">other-events.lisp</span>.  However, this 
+ documentation topic is intended to be self-contained for those familiar with 
+ <a href="ACL2____STOBJ.html">stobj</a>s.</p> 
+ 
+ <h3>SECTION: Extension of <span class="tt"><a href="ACL2____DEFSTOBJ.html">defstobj</a></span> to permit <a href="ACL2____STOBJ.html">stobj</a>s within 
+ stobjs</h3> 
+ 
+ <p>Recall that the <span class="v">:type</span> keyword of a <span class="tt"><a href="ACL2____DEFSTOBJ.html">defstobj</a></span> field descriptor 
+ can be a ``type-indicator'' that specifies the type of the field as a 
+ type-spec (see <a href="ACL2____TYPE-SPEC.html">type-spec</a>).  For example, the following specifies an 
+ integer field and a field that is an array of bytes.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFSTOBJ.html">defstobj</a> st
+  (int-field :type integer :initially 0)
+  (ar-field :type (<a href="COMMON-LISP____ARRAY.html">array</a> unsigned-byte (10)) :initially 0))</pre> 
+ 
+ <p>But the <span class="v">:type</span> of a stobj field descriptor may instead be based on a 
+ stobj.  For example, the following sequence of three <a href="ACL2____EVENTS.html">events</a> is legal. 
+ The first field descriptor of <span class="v">top</span>, named <span class="v">sub1-field</span>, illustrates one 
+ new kind of value for <span class="v">:type</span>: the name of a previously-introduced stobj, 
+ which here is <span class="v">sub1</span>. The second field descriptor of <span class="v">top</span>, named 
+ <span class="v">sub2-ar-field</span>, illustrates a second new kind of value for <span class="v">:type</span>: an 
+ array whose elements are specified by the name of a previously-introduced 
+ stobj, in this case, the stobj <span class="v">sub2</span>.  (See <a href="ACL2____STOBJ-TABLE.html">stobj-table</a> for the 
+ third new kind of value for <span class="v">:type</span>.)</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFSTOBJ.html">defstobj</a> sub1 fld1)
+(<a href="ACL2____DEFSTOBJ.html">defstobj</a> sub2 fld2)
+(<a href="ACL2____DEFSTOBJ.html">defstobj</a> top
+  (sub1-field :type sub1)
+  (sub2-ar-field :type (<a href="COMMON-LISP____ARRAY.html">array</a> sub2 (10))))</pre> 
+ 
+ <p>The <span class="v">:initially</span> keyword is illegal for fields whose <span class="v">:type</span> is a 
+ stobj or an array of stobjs (or, not further discussed here, a <a href="ACL2____STOBJ-TABLE.html">stobj-table</a>.  Each such initial value is provided by a corresponding call of 
+ the stobj creator for that stobj.  In particular, in the case of an array of 
+ stobjs, the stobj creator is called once for each element of the array, so 
+ that the array elements are distinct.  For example, each element of 
+ <span class="v">sub2-ar-field</span> in the example above is initially provided by a separate 
+ call of <span class="v">create-sub2</span>.  Each initial element is thus unique, and in 
+ particular is distinct from the initial global value of the stobj.  Similarly, 
+ the initial global stobj for <span class="v">sub1</span> is distinct from the initial 
+ <span class="v">sub1-field</span> field of the global stobj for <span class="v">top</span>, as these result from 
+ separate calls of <span class="v">create-sub1</span>.</p> 
+ 
+ <p>When a stobj is used in a field of another stobj, we may refer to the 
+ former field as a ``child stobj'' and the latter stobj as a ``parent stobj''. 
+ So in the example above, <span class="v">sub1-field</span> is a child stobj of type <span class="v">sub1</span> 
+ for parent stobj <span class="v">top</span>, and <span class="v">sub2-ar-field</span> is an array of child stobjs 
+ of type <span class="v">sub2</span> for parent stobj <span class="v">top</span>.  A child stobj has the same 
+ structural shape as the global stobj of its type, but as explained above, 
+ these are distinct structures.  We follow standard terminology by saying 
+ ``isomorphic'' to indicate the same structural shape.  So for example, (the 
+ value of) <span class="v">sub1-field</span> is isomorphic to <span class="v">sub1</span>, though these are 
+ distinct structures.</p> 
+ 
+ <p>ACL2 enforces the following restriction, which can allow for greater 
+ efficiency in the raw Lisp code generated for <span class="v">stobj-let</span> forms, as per the 
+ discussion below about clearing memoization tables.  If the parent stobj is 
+ introduced by <span class="tt"><a href="ACL2____DEFSTOBJ.html">defstobj</a></span> using keyword argument <span class="v">:non-memoizable t</span>, 
+ then this is required to have been the case for every child stobj as well.</p> 
+ 
+ <h3>SECTION: An aliasing problem</h3> 
+ 
+ <p>Before introducing <span class="v">stobj-let</span> below, we provide motivation for this 
+ ACL2 primitive.</p> 
+ 
+ <p>Consider the following <a href="ACL2____EVENTS.html">events</a>.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFSTOBJ.html">defstobj</a> child fld)
+(<a href="ACL2____DEFSTOBJ.html">defstobj</a> parent
+  (fld2 :type child))</pre> 
+ 
+ <p>Now suppose we could evaluate the following code, to be run immediately 
+ after admitting the two <span class="tt"><a href="ACL2____DEFSTOBJ.html">defstobj</a></span> events above.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____LET_A2.html">let*</a> ((child (fld2 parent))
+       (child (update-fld 3 child)))
+  (<a href="ACL2____MV.html">mv</a> child parent))</pre> 
+ 
+ <p>Now logically there is no change to <span class="v">parent</span>: <span class="v">parent</span> is passed 
+ through unchanged.  We can indeed prove that fact!</p> 
+ 
+ <pre class="code">(<a href="ACL2____THM.html">thm</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 1
+                    (<a href="COMMON-LISP____LET_A2.html">let*</a> ((child (fld2 parent))
+                           (child (update-fld 3 child)))
+                      (<a href="ACL2____MV.html">mv</a> child parent)))
+            parent))</pre> 
+ 
+ <p>But recall that stobjs are updated with destructive assignments.  That is, 
+ we really are updating <span class="v">(fld2 parent)</span> to be the new value of <span class="v">child</span>, 
+ whether this is explained logically or not.  Thus, evaluation of the above 
+ <span class="tt"><a href="COMMON-LISP____LET_A2.html">let*</a></span> form does in fact change the actual global stobj, 
+ <span class="v">parent</span>.</p> 
+ 
+ <p>(Aside: Here is an explanation involving raw Lisp, for those who might find 
+ this useful.  We escape to raw Lisp and execute the following.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____LET.html">let</a> ((parent (<a href="COMMON-LISP____CDR.html">cdr</a> (<a href="ACL2____ASSOC-EQ.html">assoc-eq</a> 'parent *user-stobj-alist*))))
+  (<a href="COMMON-LISP____LET_A2.html">let*</a> ((child (fld2 parent))
+         (child (update-fld 4 child)))
+    (<a href="ACL2____MV.html">mv</a> child parent)))</pre> 
+ 
+ <p>Then, in raw Lisp, <span class="v">(fld (fld2 (<a href="COMMON-LISP____CDR.html">cdr</a> (<a href="ACL2____ASSOC-EQ.html">assoc-eq</a> 'parent
+ *user-stobj-alist*))))</span> evaluates to <span class="v">4</span>, illustrating the destructive 
+ update.  End of Aside.)</p> 
+ 
+ <p>Such aliasing can permit a change to a child stobj to cause a 
+ logically-inexplicable change to the parent stobj.  Similarly, unfettered 
+ accessing of stobj fields can result in logically inexplicable changes to the 
+ child stobj when the parent stobj is changed.  Thus, ACL2 disallows direct 
+ calls of stobj accessors and updaters for fields whose <span class="v">:type</span> is a stobj 
+ or an array of stobjs (or a <a href="ACL2____STOBJ-TABLE.html">stobj-table</a>).  Instead, ACL2 provides 
+ <span class="v">stobj-let</span> for reading and writing such fields in a sound manner.</p> 
+ 
+ <h3>SECTION: Accessing and updating stobj fields of stobjs using 
+ <span class="v">stobj-let</span>
+</h3> 
+ 
+ <p>ACL2 provides a primitive, <span class="v">stobj-let</span>, to access and update stobj 
+ fields of stobjs, in a manner that avoids the aliasing problem discussed 
+ above.  In this section we provide an informal introduction to <span class="v">stobj-let</span>, 
+ using examples, to be followed in the next section by precise 
+ documentation.</p> 
+ 
+ <p>We begin by returning to a slight variant of the example above.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFSTOBJ.html">defstobj</a> child fld)
+(<a href="ACL2____DEFSTOBJ.html">defstobj</a> parent
+  (fld2 :type child)
+  fld3)</pre> 
+ 
+ <p>The following form returns the result of updating the <span class="v">fld2</span> field of 
+ <span class="v">parent</span>, which is a stobj isomorphic to <span class="v">child</span>, to have a value of 3. 
+ Below we explain the terms ``bindings'', ``producer variables'', ``producer'', 
+ and ``consumer'', as well as how to understand this form.</p> 
+ 
+ <pre class="code">(<a href="ACL2____STOBJ-LET.html">stobj-let</a>
+ ((child (fld2 parent)))  ; bindings
+ (child)                  ; producer variable(<a href="ACL2____S.html">s</a>)
+ (update-fld 3 child)     ; producer
+ (update-fld3 'a parent)) ; consumer</pre> 
+ 
+ <p>The four lines under ``<span class="v">stobj-let</span>'' just above can be understood as 
+ follows.</p> 
+ 
+ <ul> 
+ <li>Bindings:<br> 
+     <blockquote>Bind <span class="v">child</span> to <span class="v">(fld2 parent)</span>.</blockquote>
+</li> 
+ <li>Producer variable(s) and producer:<br> 
+     <blockquote>Then bind the variable, <span class="v">child</span>, to the value of 
+     the producer, <span class="v">(update-fld 3 child)</span>.</blockquote>
+</li> 
+ <li>Implicit update of parent:<br> 
+     <blockquote>Update <span class="v">fld2</span> of <span class="v">parent</span> with the producer variable, 
+     <span class="v">child</span>.</blockquote>
+</li> 
+ <li>Consumer:<br> 
+     <blockquote>Finally, return <span class="v">(update-fld3 'a
+     parent)</span>.</blockquote>
+</li> 
+ </ul> 
+ 
+ <p>Thus, the logical expansion of the <span class="v">stobj-let</span> form above is the 
+ following expression, though this is approximate (see below).</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____LET.html">let</a> ((child (fld2 parent))) ; bindings
+  (<a href="COMMON-LISP____LET.html">let</a> ((child (update-fld 3 child))) ; bind producer vars to producer
+    (<a href="COMMON-LISP____LET.html">let</a> ((parent (update-fld2 child parent))) ; implicit update of parent
+      (update-fld3 'a parent))))</pre> 
+ 
+ <p>The bindings always bind distinct names to child stobjs of a unique parent 
+ stobj, where the child stobj corresponds to the <span class="v">:type</span> associated with the 
+ indicated accessor in the <span class="tt"><a href="ACL2____DEFSTOBJ.html">defstobj</a></span> form for the parent stobj.  Thus in 
+ this case, for the unique binding, variable <span class="v">child</span> is bound to the stobj 
+ of `type' <span class="v">child</span> for accessor <span class="v">fld2</span> of the parent stobj, <span class="v">parent</span>. 
+ We refer to <span class="v">child</span> from the bindings as a ``stobj-let-bound variable''. 
+ Note also that the ``implicit extra step'' mentioned above is generated by 
+ macroexpansion of <span class="v">stobj-let</span>; it logically updates the parent with new 
+ child values, just before calling the consumer.  Implementation note for those 
+ using <a href="ACL2____MEMOIZATION.html">memoization</a>: destructive updating in raw Lisp lets us omit this 
+ implicit extra step, though the raw Lisp code generated for <span class="v">stobj-let</span> 
+ will clear the memoization table for every function taking the parent stobj as 
+ an input, if any child stobj bound in the bindings is among the producer 
+ variables  unless the parent stobj was introduced by <span class="tt"><a href="ACL2____DEFSTOBJ.html">defstobj</a></span> 
+ using keyword argument <span class="v">:non-memoizable t</span>.</p> 
+ 
+ <p>The form above is equivalent to the form displayed just below, which 
+ differs only in specifying an explicit stobj updater corresponding to the 
+ stobj accessor, <span class="v">fld2</span>.  Here we show the default updater name, whose name 
+ has <span class="v">"UPDATE-"</span> prepended to the name of the accessor.  But if the 
+ <span class="v">:RENAMING</span> field of the <span class="v">defstobj</span> event specified a different updater 
+ name corresponding to <span class="v">fld2</span>, then that would need to be included where we 
+ have added <span class="v">update-fld2</span> below.</p> 
+ 
+ <pre class="code">(<a href="ACL2____STOBJ-LET.html">stobj-let</a>
+ ((child (fld2 parent) update-fld2)) ; bindings, including updater(<a href="ACL2____S.html">s</a>)
+ (child)                  ; producer variables
+ (update-fld 3 child)     ; producer
+ (update-fld3 'a parent)) ; consumer</pre> 
+ 
+ <p>You can experiment using <span class="v">:</span><span class="tt"><a href="ACL2____TRANS1.html">trans1</a></span> to see the single-step 
+ macroexpansion of a <span class="v">stobj-let</span> form in the logic.  For example, here is 
+ how that works for a <span class="v">stobj-let</span> form that binds three fields and updates 
+ two of them.  Notice that because more than one field is updated, an <span class="tt"><a href="ACL2____MV-LET.html">mv-let</a></span> form is generated to bind the two fields to their values returned by 
+ the producer, rather than a <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span> form as previously generated.  First, 
+ let's introduce some events.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFSTOBJ.html">defstobj</a> child1 child1-fld)
+(<a href="ACL2____DEFSTOBJ.html">defstobj</a> child2 child2-fld)
+(<a href="ACL2____DEFSTOBJ.html">defstobj</a> child3 child3-fld)
+(<a href="ACL2____DEFSTOBJ.html">defstobj</a> mom
+  (fld1 :type child1)
+  (fld2 :type child2)
+  (fld3 :type child3))
+; Silly stub:
+(<a href="COMMON-LISP____DEFUN.html">defun</a> update-last-op (op mom)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs mom))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORE.html">ignore</a> op))
+  mom)
+(<a href="COMMON-LISP____DEFUN.html">defun</a> new-mom (mom)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs mom))
+  (<a href="ACL2____STOBJ-LET.html">stobj-let</a>
+   ((child1 (fld1 mom))
+    (child2 (fld2 mom))
+    (child3 (fld3 mom)))
+   (child1 child3)
+   (<a href="COMMON-LISP____LET_A2.html">let*</a> ((child1 (update-child1-fld 'one child1))
+          (child3 (update-child3-fld 'three child3)))
+     (<a href="ACL2____MV.html">mv</a> child1 child3))
+   (update-last-op 'my-compute mom)))</pre> 
+ 
+ <p>Now let's look at the single-step macroexpansion of the above 
+ <span class="v">stobj-let</span> form.</p> 
+ 
+ <pre class="code">ACL2 !&gt;:trans1 (<a href="ACL2____STOBJ-LET.html">stobj-let</a>
+                ((child1 (fld1 mom))
+                 (child2 (fld2 mom))
+                 (child3 (fld3 mom)))
+                (child1 child3)
+                (<a href="COMMON-LISP____LET_A2.html">let*</a> ((child1 (update-child1-fld 'one child1))
+                       (child3 (update-child3-fld 'three child3)))
+                  (<a href="ACL2____MV.html">mv</a> child1 child3))
+                (update-last-op 'my-compute mom))
+ (<a href="ACL2____PROGN_42.html">PROGN$</a>
+  (<a href="COMMON-LISP____LET.html">LET</a>
+   ((CHILD1 (FLD1 MOM))
+    (CHILD2 (FLD2 MOM))
+    (CHILD3 (FLD3 MOM)))
+   (<a href="COMMON-LISP____DECLARE.html">DECLARE</a> (<a href="COMMON-LISP____IGNORABLE.html">IGNORABLE</a> CHILD1 CHILD2 CHILD3))
+   (<a href="ACL2____MV-LET.html">MV-LET</a>
+      (CHILD1 CHILD3)
+      (<a href="ACL2____CHECK-VARS-NOT-FREE.html">CHECK-VARS-NOT-FREE</a> (MOM)
+                           (<a href="COMMON-LISP____LET_A2.html">LET*</a> ((CHILD1 (UPDATE-CHILD1-FLD 'ONE CHILD1))
+                                  (CHILD3 (UPDATE-CHILD3-FLD 'THREE CHILD3)))
+                                 (<a href="ACL2____MV.html">MV</a> CHILD1 CHILD3)))
+      (<a href="COMMON-LISP____LET_A2.html">LET*</a> ((MOM (UPDATE-FLD1 CHILD1 MOM))
+             (MOM (UPDATE-FLD3 CHILD3 MOM)))
+            (<a href="ACL2____CHECK-VARS-NOT-FREE.html">CHECK-VARS-NOT-FREE</a> (CHILD1 CHILD2 CHILD3)
+                                 (UPDATE-LAST-OP 'MY-COMPUTE MOM))))))
+ACL2 !&gt;</pre> 
+ 
+ <p>If you try to evaluate a <span class="v">stobj-let</span> form directly in the top-level 
+ loop, rather than from within a function body, you will get an error.  The 
+ example above illustrates how <span class="v">stobj-let</span> may be used in function bodies; 
+ here is another example, presented using an edited log.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____DEFSTOBJ.html">defstobj</a> child fld)
+
+Summary
+Form:  ( DEFSTOBJ CHILD ...)
+Rules: NIL
+Time:  0.02 seconds (prove: 0.00, print: 0.00, other: 0.02)
+ CHILD
+ACL2 !&gt;(<a href="ACL2____DEFSTOBJ.html">defstobj</a> parent
+         (fld2 :type child)
+         fld3)
+
+Summary
+Form:  ( DEFSTOBJ PARENT ...)
+Rules: NIL
+Time:  0.02 seconds (prove: 0.00, print: 0.00, other: 0.02)
+ PARENT
+ACL2 !&gt;(<a href="COMMON-LISP____DEFUN.html">defun</a> f (parent)
+         (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs parent))
+         (<a href="ACL2____STOBJ-LET.html">stobj-let</a>
+          ((child (fld2 parent)))   ; bindings
+          (child)                   ; producer variables
+          (update-fld 3 child)      ; producer
+          (update-fld3 'a parent))) ; consumer
+[[output omitted]]
+ F
+ACL2 !&gt;(f parent)
+&lt;parent&gt;
+ACL2 !&gt;(<a href="COMMON-LISP____DEFUN.html">defun</a> check-f (parent)
+         ; returns the value of the field of the child stobj
+         (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs parent))
+         (<a href="ACL2____STOBJ-LET.html">stobj-let</a>
+          ((child (fld2 parent))) ; bindings
+          (val)                   ; producer variables
+          (fld child)             ; producer
+          val))                   ; consumer
+[[output omitted]]
+ CHECK-F
+ACL2 !&gt;(check-f parent)
+3
+ACL2 !&gt;</pre> 
+ 
+ <p>Notice that the second function defined above, <span class="v">check-f</span>, uses a 
+ <span class="v">stobj-let</span> form that returns an ordinary value: it reads a value from a 
+ child stobj, but does not write to the child stobj, as indicated by the lack 
+ of a child stobj among the producer variables.  So for that <span class="v">stobj-let</span> 
+ form, there is no implicit extra step.</p> 
+ 
+ <p>We labeled a <span class="v">stobj-let</span> expansion above as ``approximate'' for two 
+ reasons, which we give here informally.  (Now you know how to apply 
+ <span class="v">:</span><span class="tt"><a href="ACL2____TRANS1.html">trans1</a></span> to that <span class="v">stobj-let</span> call to see the precise 
+ expansion.)  First, <span class="v">stobj-let</span> declares the stobj-let-bound variables to 
+ be <span class="v">ignorable</span> for the top <span class="v">let</span> bindings.  Second, and more 
+ importantly, <span class="v">stobj-let</span> imposes the following restrictions on the producer 
+ and consumer, to avoid the aliasing problem: it disallows references to the 
+ parent stobj in the producer and it also disallows references to any bound 
+ stobj (i.e., bound in the bindings) in the consumer.</p> 
+ 
+ <p>We conclude this section with examples based on a slight variation of the 
+ nested stobj example from the first section above.  These events can also be 
+ found in ACL2 community book <span class="v">books/system/tests/nested-stobj-tests.lisp</span>, 
+ immediately under the following comment:</p> 
+ 
+ <pre class="code">; As promised in :doc stobj-let, we begin with an example from that :doc.</pre> 
+ 
+ <p>Note that some lemmas were needed in order to complete the <a href="ACL2____GUARD.html">guard</a> 
+ proof for the function <span class="v">update-top</span>, which may be found in the above file; 
+ they are omitted below.</p> 
+ 
+ <p>First we introduce three stobjs.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFSTOBJ.html">defstobj</a> kid1 fld1)
+(<a href="ACL2____DEFSTOBJ.html">defstobj</a> kid2 fld2)
+(<a href="ACL2____DEFSTOBJ.html">defstobj</a> mom
+  (kid1-field :type kid1)
+  (kid2-ar-field :type (<a href="COMMON-LISP____ARRAY.html">array</a> kid2 (5)))
+  last-op)</pre> 
+ 
+ <p>The next function takes a given index and a <span class="v">mom</span> stobj, and swaps the 
+ value stored in the stobj in <span class="v">mom</span>'s <span class="v">kid2-ar-field</span> array at that index 
+ with the value stored in the stobj in <span class="v">mom</span>'s <span class="v">kid1-field</span> field.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> mom-swap-fields (index mom)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs mom
+                  :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____NATP.html">natp</a> index)
+                              (<a href="COMMON-LISP_____C3.html">&lt;</a> index (kid2-ar-field-length mom)))))
+  (<a href="ACL2____STOBJ-LET.html">stobj-let</a>
+   ((kid1 (kid1-field mom))
+    (kid2 (kid2-ar-fieldi index mom)))
+   (kid1 kid2)
+   (<a href="COMMON-LISP____LET_A2.html">let*</a> ((val1 (fld1 kid1))
+          (val2 (fld2 kid2))
+          (kid1 (update-fld1 val2 kid1))
+          (kid2 (update-fld2 val1 kid2)))
+     (<a href="ACL2____MV.html">mv</a> kid1 kid2))
+   (update-last-op 'swap mom)))</pre> 
+ 
+ <p>Function <span class="v">mom.kid1-fld1</span> stores a given value in the given <span class="v">mom</span>'s 
+ <span class="v">kid1-fld1</span> field.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> mom.kid1-fld1 (val mom)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs mom))
+  (<a href="ACL2____STOBJ-LET.html">stobj-let</a>
+   ((kid1 (kid1-field mom)))
+   (kid1)
+   (update-fld1 val kid1)
+   (update-last-op val mom)))</pre> 
+ 
+ <p>We next combine the two functions above, according to an <span class="v">op</span> argument, 
+ as indicated by the following definition.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> update-mom (op mom)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs mom))
+  (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____CONSP.html">consp</a> op)
+              (<a href="COMMON-LISP____EQ.html">eq</a> (<a href="COMMON-LISP____CAR.html">car</a> op) 'swap)
+              (<a href="ACL2____NATP.html">natp</a> (<a href="COMMON-LISP____CDR.html">cdr</a> op))
+              (<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="COMMON-LISP____CDR.html">cdr</a> op) (kid2-ar-field-length mom)))
+         (mom-swap-fields (<a href="COMMON-LISP____CDR.html">cdr</a> op) mom))
+        (t (mom.kid1-fld1 op mom))))</pre> 
+ 
+ <p>The following checker function uses a <span class="v">stobj-let</span> form like the ones 
+ above, a major difference being that the producer variable is not a stobj, 
+ since the producer does not modify any stobjs.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> check-update-mom (index val1 val2 last-op mom)
+    (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs mom
+                    :mode :program
+                    :guard
+                    (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____NULL.html">null</a> index)
+                        (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____NATP.html">natp</a> index)
+                             (<a href="COMMON-LISP_____C3.html">&lt;</a> index (kid2-ar-field-length mom))))))
+    (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (last-op mom) last-op)
+         (<a href="ACL2____STOBJ-LET.html">stobj-let</a>
+          ((kid1 (kid1-field mom))
+           (kid2 (kid2-ar-fieldi index mom)))
+          (val) ; producer variables
+          (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> val1 (fld1 kid1))
+               (<a href="COMMON-LISP____EQUAL.html">equal</a> val2 (fld2 kid2)))
+          val)))</pre> 
+ 
+ <p>Now let us run our update function to populate some fields within the 
+ <span class="v">mom</span> stobj.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____LET_A2.html">let*</a> ((mom ; set mom to (3 (x0 x1 x2 x3 x4))
+         (update-mom 3 mom))
+        (mom ; set mom to (x1 (x0 3 x2 x3 x4))
+         (update-mom '(swap . 1) mom))
+        (mom ; set mom to (7 (x0 3 x2 x3 x4))
+         (update-mom 7 mom))
+        (mom ; set mom to (x0 (7 3 x2 x3 x4))
+         (update-mom '(swap . 0) mom))
+        (mom ; set mom to (5 (7 3 x2 x3 x4))
+         (update-mom 5 mom))
+        (mom ; set mom to (7 (5 3 x2 x3 x4))
+         (update-mom '(swap . 0) mom)))
+   mom)</pre> 
+ 
+ <p>Are the above values of 7, 5, and 3 as expected, with a last operation 
+ being a swap?  Yes!</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="COMMON-LISP____AND.html">and</a> (check-update-mom 0 7 5 'swap mom)
+            (check-update-mom 1 7 3 'swap mom))
+T
+ACL2 !&gt;</pre> 
+ 
+ <p>Notice that above, we never tried to access two different entries of the 
+ array.  This can be done, but we need to bind two different stobjs to those 
+ fields.  Fortunately, congruent stobjs make this possible; see <a href="ACL2____DEFSTOBJ.html">defstobj</a>, in particular the discussion of congruent stobjs.  Since we want to 
+ bind two stobjs to values in the array that are isomorphic to the stobj 
+ <span class="v">kid2</span>, we introduce a stobj congruent to <span class="v">kid2</span>.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFSTOBJ.html">defstobj</a> kid2a fld2a :congruent-to kid2)</pre> 
+ 
+ <p>Then we can define our swapping function as follows.  The <a href="ACL2____GUARD.html">guard</a> 
+ proof obligation includes the requirement that the two indices be distinct, 
+ again to avoid an aliasing problem.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> mom-swap-indices (i1 i2 mom)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs mom
+                  :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____NATP.html">natp</a> i1)
+                              (<a href="COMMON-LISP_____C3.html">&lt;</a> i1 (kid2-ar-field-length mom))
+                              (<a href="ACL2____NATP.html">natp</a> i2)
+                              (<a href="COMMON-LISP_____C3.html">&lt;</a> i2 (kid2-ar-field-length mom))
+                              (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> i1 i2)))))
+  (<a href="ACL2____STOBJ-LET.html">stobj-let</a>
+   ((kid2 (kid2-ar-fieldi i1 mom))
+    (kid2a (kid2-ar-fieldi i2 mom)))
+   (kid2 kid2a)
+   (<a href="COMMON-LISP____LET_A2.html">let*</a> ((val2 (fld2 kid2))
+          (val2a (fld2 kid2a))
+          (kid2 (update-fld2 val2a kid2))
+          (kid2a (update-fld2 val2 kid2a)))
+     (<a href="ACL2____MV.html">mv</a> kid2 kid2a))
+   mom))</pre> 
+ 
+ <p>The aforementioned community book, 
+ <span class="v">books/system/tests/nested-stobj-tests.lisp</span>, contains a corresponding 
+ checker immediately following this definition.</p> 
+ 
+ <h3>SECTION: Precise documentation for <span class="v">stobj-let</span>
+</h3> 
+ 
+ <pre class="code">General Form:
+(<a href="ACL2____STOBJ-LET.html">stobj-let</a>
+ BINDINGS
+ PRODUCER-VARIABLES
+ PRODUCER
+ CONSUMER)</pre> 
+ 
+ <p>where <span class="v">PRODUCER-VARIABLES</span> is a non-empty true list of legal variable 
+ names without duplicates, <span class="v">PRODUCER</span> and <span class="v">CONSUMER</span> are expressions, and 
+ <span class="v">BINDINGS</span> is a list subject to the following requirements.</p> 
+ 
+ <p><span class="v">BINDINGS</span> is a non-empty true list of tuples, each of which has the 
+ form <span class="v">(VAR ACCESSOR)</span> or <span class="v">(VAR ACCESSOR UPDATER)</span>.  Each <span class="v">VAR</span> may 
+ occur only once, and to avoid aliasing, the same <span class="v">ACCESSOR</span> may not be 
+ bound more than once if at least one of the variables to which it's bound is 
+ among the <span class="v">PRODUCER-VARIABLES</span>.  There is a stobj name, <span class="v">ST</span>, previously 
+ introduced by <span class="tt"><a href="ACL2____DEFSTOBJ.html">defstobj</a></span> (not <span class="tt"><a href="ACL2____DEFABSSTOBJ.html">defabsstobj</a></span>), such that each 
+ <span class="v">accessor</span> is of the form <span class="v">(ACC ST)</span> or <span class="v">(ACCi I ST)</span>, with the same 
+ stobj name (<span class="v">ST</span>) for each binding.  Each of these accessors and (if 
+ supplied) updaters is a stobj accessor for the same stobj, which is typically 
+ <span class="v">ST</span> but may be a stobj congruent to <span class="v">ST</span>.  In the case <span class="v">(ACC ST)</span>, 
+ <span class="v">ACC</span> is the accessor for a scalar (hence not array) field.  In the case 
+ <span class="v">(ACCi I ST)</span>, <span class="v">ACCi</span> is the accessor for an array field and <span class="v">I</span> is 
+ either a variable, a natural number, a list <span class="v">(<a href="COMMON-LISP____QUOTE.html">quote</a> N)</span> where <span class="v">N</span> is a 
+ natural number, or a symbol introduced by <span class="tt"><a href="ACL2____DEFCONST.html">defconst</a></span>.  If <span class="v">UPDATER</span> 
+ is supplied, then it is a symbol that is the name of the stobj updater for the 
+ field of <span class="v">ST</span> accessed by <span class="v">ACCESSOR</span>.  If <span class="v">UPDATER</span> is not supplied, 
+ then for the discussion below we consider it to be, implicitly, the symbol in 
+ the same package as the function symbol of <span class="v">ACCESSOR</span> (i.e., <span class="v">ACC</span> or 
+ <span class="v">ACCi</span>), obtained by prepending the string <span class="v">"UPDATE-"</span> to the <span class="tt"><a href="COMMON-LISP____SYMBOL-NAME.html">symbol-name</a></span> of that function symbol.  Finally, <span class="v">ACCESSOR</span> has a <a href="ACL2____SIGNATURE.html">signature</a> specifying a return value that is either <span class="v">VAL</span> or is a stobj 
+ that is congruent to <span class="v">VAL</span>. (This means that only stobjs may be bound in 
+ these bindings.)</p> 
+ 
+ <p>If the conditions above are met, then the General Form expands to one of 
+ the expressions below, depending on whether the list 
+ <span class="v">PRODUCER-VARIABLES</span> has one member or more than one member, respectively. 
+ (But see below for extra code that may be inserted if there are stobj array 
+ accesses in <span class="v">BINDINGS</span>.)  We observe the following conventions.</p> 
+ 
+ <ul> 
+ 
+ <li>Let <span class="v">BINDINGS'</span> be the result of dropping each updater (if any) from 
+ <span class="v">BINDINGS</span>, that is, replacing each tuple <span class="v">(VAR ACCESSOR UPDATER)</span> in 
+ <span class="v">BINDINGS</span> by <span class="v">(VAR ACCESSOR)</span>.</li> 
+ 
+ <li>Let <span class="v">STOBJ-LET-BOUND-VARIABLES</span> be 
+ the list of variables <span class="v">VAR</span> discussed above, that is, <span class="v">(<a href="ACL2____STRIP-CARS.html">strip-cars</a>
+ BINDINGS)</span>.</li> 
+ 
+ <li>Let <span class="v">UPDATES</span> be the result of mapping through 
+ <span class="v">PRODUCER-VARIABLES</span> and, for each variable <span class="v">VAR</span> that has a binding 
+ <span class="v">(VAR ACCESSOR UPDATER)</span> in <span class="v">BINDINGS</span> (where <span class="v">UPDATER</span> may be 
+ implicit, as discussed above), collect into <span class="v">UPDATES</span> the tuple <span class="v">(ST
+ (UPDATER VAR ST))</span>.</li> 
+ 
+ </ul> 
+ 
+ <p>For <span class="v">PRODUCER-VARIABLES</span> = <span class="v">(PRODUCER-VAR)</span>:</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____LET.html">let</a> BINDINGS'
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> . STOBJ-LET-BOUND-VARIABLES))
+  (<a href="COMMON-LISP____LET.html">let</a> ((PRODUCER-VAR PRODUCER))
+    (<a href="COMMON-LISP____LET_A2.html">let*</a> UPDATES
+      CONSUMER)))</pre> 
+ 
+ <p>Otherwise:</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____LET.html">let</a> BINDINGS'
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> . STOBJ-LET-BOUND-VARIABLES))
+  (<a href="ACL2____MV-LET.html">mv-let</a> PRODUCER-VARS
+          PRODUCER
+          (<a href="COMMON-LISP____LET_A2.html">let*</a> UPDATES
+            CONSUMER)))</pre> 
+ 
+ <p>Moreover, ACL2 places restrictions on the resulting expression: <span class="v">ST</span> 
+ must not occur free in <span class="v">PRODUCER</span>, and every variable in 
+ <span class="v">STOBJ-LET-BOUND-VARIABLES</span> must not occur free in <span class="v">CONSUMER</span>.</p> 
+ 
+ <p><span class="v">Stobj-let</span> forms can be evaluated using ordinary objects in theorem 
+ contexts, much as any form.  They can also, of course, appear in function 
+ bodies.  However, a <span class="v">stobj-let</span> form cannot be evaluated directly in the 
+ top-level loop or other top-level contexts for execution (such as during 
+ <span class="tt"><a href="ACL2____MAKE-EVENT.html">make-event</a></span> expansion).</p> 
+ 
+ <p>Finally, let <span class="v">FORM</span> denote the form displayed above (either case).  When 
+ <span class="v">FORM</span> appears in the body of a definition then in some cases, its 
+ translation into logic is an expression of the form <span class="v">(<a href="ACL2____PROG2_42.html">PROG2$</a> &lt;check&gt;
+ FORM</span>'), where <span class="v">FORM'</span> is the translation of <span class="v">FORM</span>.  (See <a href="ACL2____TERM.html">term</a> 
+ for a discussion of translation.)  The <span class="v">&lt;check&gt;</span> expression generates an 
+ extra <a href="ACL2____GUARD.html">guard</a> proof obligation, which guarantees that no aliasing occurs 
+ in <span class="v">BINDINGS</span> for two variables bound to accesses of the same stobj array, 
+ when at least one of the two variables is a producer variable.  When ACL2 
+ determines that no such aliasing is possible, for example because all the 
+ array accesses use distinct numeric indices or because there are no producer 
+ variables, then <span class="v">FORM</span> does not undergo such replacement.  Warning: The use 
+ of <span class="v">:</span><span class="tt"><a href="ACL2____TRANS1.html">trans1</a></span> will not show this addition of a check.  But you can 
+ see it after admitting the definition of <span class="v">FN</span> (perhaps using <span class="tt"><a href="ACL2____SKIP-PROOFS.html">skip-proofs</a></span> if you are having difficult admitting the definition) as 
+ follows.</p> 
+ 
+ <pre class="code">(<a href="ACL2____UNTRANSLATE.html">untranslate</a> (<a href="ACL2____BODY.html">body</a> 'FN nil (<a href="ACL2____W.html">w</a> state)) nil (<a href="ACL2____W.html">w</a> state))</pre> 
+ 
+ <h3>SECTION: Using <span class="v">stobj-let</span> with abstract stobjs</h3> 
+ 
+ <p>This section shows how an abstract stobj may be considered to have child 
+ stobj accessors and updaters that may be used with <span class="v">stobj-let</span>, in 
+ essentially in the same way that a child stobj of a concrete stobj may be 
+ accessed and updated with <span class="v">stobj-let</span>.</p> 
+ 
+ <p>Below we assume familiarity with abstract stobjs; see <a href="ACL2____DEFABSSTOBJ.html">defabsstobj</a>. 
+ We begin with a specification of child stobj accessor/updater pairs for 
+ abstract stobjs.  We then present an example.  Finally we conclude by 
+ discussing aspects of <span class="v">stobj-let</span> specific to abstract stobjs.</p> 
+ 
+ <h4>Child stobj accessors and updaters for abstract stobjs</h4> 
+ 
+ <p>The documentation for <span class="tt"><a href="ACL2____DEFABSSTOBJ.html">defabsstobj</a></span> notes a function spec in the 
+ <span class="v">:EXPORTS</span> may introduce a child stobj accessor by including the keyword, 
+ <span class="v">:UPDATER</span>, whose value is the corresponding child stobj updater.  Here we 
+ flesh out that brief summary.</p> 
+ 
+ <p>An abstract stobj <span class="v">st</span> is considered to have a child stobj with accessor 
+ <span class="v">acc</span> and updater <span class="v">upd</span> if the <span class="v">defabsstobj</span> event introducing 
+ <span class="v">st</span> has a pair of function specs of the following form.</p> 
+ 
+ <pre class="code">(acc :logic acc$a :exec acc$c :updater upd) ; and optionally, other keywords
+(upd :logic upd$a :exec upd$c)              ; and optionally, other keywords</pre> 
+ 
+ <p>It is required that <span class="v">acc$c</span> is a child stobj accessor for the 
+ foundational stobj, <span class="v">st$c</span>, of <span class="v">st</span>.  It is also required that 
+ <span class="v">upd$c</span> is the child stobj updater of <span class="v">st$c</span> that corresponds to 
+ <span class="v">acc$c</span>.  We may call <span class="v">acc</span> and <span class="v">upd</span> a child stobj accessor/updater 
+ pair for <span class="v">st</span>.  Note that <span class="v">st$c</span> may itself be an abstract stobj, in 
+ which case its exports <span class="v">acc$c</span> and <span class="v">upd$c</span> must be a child stobj 
+ accessor/updater pair for <span class="v">st$c</span>.</p> 
+ 
+ <p>For <span class="v">acc</span> and <span class="v">acc$c</span> as above, <span class="v">acc</span> is considered to be a scalar 
+ accessor if <span class="v">acc$c</span> is a scalar accessor, and otherwise <span class="v">acc</span> is an 
+ array accessor (unless it is a stobj-table accessor, discussed elsewhere; see 
+ <a href="ACL2____STOBJ-TABLE.html">stobj-table</a>); similarly for <span class="v">upd</span>, which therefore is a scalar 
+ accessor if and only if <span class="v">acc</span> is a scalar accessor.</p> 
+ 
+ <p>A child stobj accessor/updater pair may be used in <span class="v">stobj-let</span> in the 
+ same way when the parent is an abstract stobj as when the parent is a concrete 
+ stobj.</p> 
+ 
+ <h4>Example uses of <span class="v">stobj-let</span> for an abstract stobj</h4> 
+ 
+ <p>The following basic example comes from the <a href="ACL2____COMMUNITY-BOOK.html">community-book</a>, 
+ <span class="v">books/system/tests/abstract-stobj-nesting/two-usuallyequal-nums-stobj-simpler.lisp</span>, 
+ which is based on a book contributed by Sol Swords.  This example introduces 
+ an abstract stobj with child stobj fields, and uses <span class="v">stobj-let</span> to read and 
+ write those fields.</p> 
+ 
+ <p>We start by introducing a concrete stobj with two child stobj fields, each 
+ of which represents a natural number, together with a ``valid bit'' that, when 
+ true, asserts the equality of those two numbers.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFSTOBJ.html">defstobj</a> n$ (n$val :type (integer 0 *) :initially 0))
+(<a href="ACL2____DEFSTOBJ.html">defstobj</a> n$2 (n$val$c :type (integer 0 *) :initially 0)
+  :congruent-to n$)
+(<a href="ACL2____DEFSTOBJ.html">defstobj</a> two-usuallyequal-nums$c
+  (uenslot1$c :type n$) ; stobj slot ;
+  (uenslot2$c :type n$2) ; stobj slot ;
+  (uenvalid$c :type (<a href="COMMON-LISP____MEMBER.html">member</a> t nil) :initially nil))</pre> 
+ 
+ <p>We represent this concrete stobj abstractly using a cons structure of the 
+ form <span class="v">(valid slot1 . slot2)</span> for the valid bit and the two numbers.  Here 
+ is the recognizer for that abstract stobj.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFUN-NX.html">defun-nx</a> two-usuallyequal-nums$ap (x)
+
+; A two-usuallyequal-nums contains three fields (valid slot1 . slot2).  Valid
+; is Boolean, and slot1 and slot2 are n$ stobjs that must be equal if valid is
+; T.
+
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t))
+  (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x)
+       (<a href="COMMON-LISP____CONSP.html">consp</a> (<a href="COMMON-LISP____CDR.html">cdr</a> x))
+       (<a href="COMMON-LISP____LET_A2.html">let*</a> ((valid (<a href="COMMON-LISP____CAR.html">car</a> x))
+              (slot1 (<a href="COMMON-LISP____CADR.html">cadr</a> x))
+              (slot2 (<a href="COMMON-LISP____CDDR.html">cddr</a> x)))
+         (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____BOOLEANP.html">booleanp</a> valid)
+              (n$p slot1)
+              (n$p slot2)
+              (<a href="ACL2____IMPLIES.html">implies</a> valid
+                       (<a href="COMMON-LISP____EQUAL.html">equal</a> slot1 slot2))))))</pre> 
+ 
+ <p>The next step is to define functions in support of the abstract stobj that 
+ we intend to introduce.  Here is one such definition.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFUN-NX.html">defun-nx</a> update-uenslot1$a (n$ x)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (two-usuallyequal-nums$ap x)
+                              (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____NOT.html">not</a> (uenvalid$a x))
+                                  (<a href="ACL2____NON-EXEC.html">non-exec</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (n$val n$)
+                                                   (n$val (uenslot2$a x))))))
+                  :stobjs n$))
+  (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CAR.html">car</a> x) (<a href="COMMON-LISP____CONS.html">cons</a> n$ (<a href="COMMON-LISP____CDDR.html">cddr</a> x))))</pre> 
+ 
+ <p>After introducing such functions we introduce our abstract stobj as 
+ follows (see the aforementioned book if you want details).  Notice the use of 
+ the <span class="v">:updater</span> keyword, which identifies child stobj fields of the new 
+ abstract stobj.  Thus, <span class="v">uenslot1</span> accesses a child stobj field of the 
+ <span class="v">two-usuallyequal-nums</span> stobj, and that field is updated by the specified 
+ <span class="v">:updater</span>, <span class="v">update-uenslot1</span>; similarly for <span class="v">uenslot2</span> and its 
+ corresponding updater, <span class="v">update-uenslot2</span>.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFABSSTOBJ.html">defabsstobj</a> two-usuallyequal-nums
+  :exports
+  ((uenslot1 :logic uenslot1$a :exec uenslot1$c :updater update-uenslot1)
+   (uenslot2 :logic uenslot2$a :exec uenslot2$c :updater update-uenslot2)
+   (uenvalid :logic uenvalid$a :exec uenvalid$c)
+   (update-uenslot1 :logic update-uenslot1$a :exec update-uenslot1$c)
+   (update-uenslot2 :logic update-uenslot2$a :exec update-uenslot2$c)
+   (update-uenvalid :logic update-uenvalid$a :exec update-uenvalid$c)))</pre> 
+ 
+ <p>We may now use <span class="v">stobj-let</span> in the same way that we use it for concrete 
+ stobjs with child stobj fields.  That point is illustrated by the following 
+ definition, which accesses the numbers in the two child stobj fields.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> fields-of-two-usuallyequal-nums (two-usuallyequal-nums)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs two-usuallyequal-nums))
+  (<a href="ACL2____STOBJ-LET.html">stobj-let</a>
+; bindings:
+   ((n$  (uenslot1 two-usuallyequal-nums))
+    (n$2 (uenslot2 two-usuallyequal-nums)))
+; producer variable:
+   (n1 n2)
+; producer:
+   (<a href="ACL2____MV.html">mv</a> (n$val n$) (n$val n$2))
+; consumer:
+   (<a href="COMMON-LISP____LIST.html">list</a> :n n1 :n2 n2 :valid (uenvalid two-usuallyequal-nums))))</pre> 
+ 
+ <p>Here is what we get when we we this function before updating the abstract 
+ stobj.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(fields-of-two-usuallyequal-nums two-usuallyequal-nums)
+(:N 0 :N2 0 :VALID NIL)
+ACL2 !&gt;</pre> 
+ 
+ <p>We can update the abstract stobj by first setting the valid bit to nil, so 
+ that we can sequentially update the two child stobjs.  We say more about that 
+ point below.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> update-two-usuallyequal-nums (n two-usuallyequal-nums)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____NATP.html">natp</a> n)
+                  :stobjs two-usuallyequal-nums))
+  (<a href="COMMON-LISP____LET_A2.html">let*</a> ((two-usuallyequal-nums (update-uenvalid nil two-usuallyequal-nums)))
+    (<a href="ACL2____STOBJ-LET.html">stobj-let</a> ((n$ (uenslot1 two-usuallyequal-nums))
+                (n$2 (uenslot2 two-usuallyequal-nums)))
+               (n$ n$2)
+               (<a href="COMMON-LISP____LET_A2.html">let*</a> ((n$ (update-n$val n n$))
+                      (n$2 (update-n$val n n$2)))
+                 (<a href="ACL2____MV.html">mv</a> n$ n$2))
+               (update-uenvalid t two-usuallyequal-nums))))</pre> 
+ 
+ <p>To see why we first update the valid bit to <span class="v">nil</span>, consider the logical 
+ translation of the <span class="v">stobj-let</span> form above.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____UNTRANSLATE.html">untranslate</a> (<a href="ACL2____BODY.html">body</a> 'update-two-usuallyequal-nums nil (<a href="ACL2____W.html">w</a> state))
+                    nil
+                    (<a href="ACL2____W.html">w</a> state))
+(<a href="COMMON-LISP____LET.html">LET</a>
+ ((TWO-USUALLYEQUAL-NUMS (UPDATE-UENVALID NIL TWO-USUALLYEQUAL-NUMS)))
+ (<a href="COMMON-LISP____LET.html">LET</a>
+  ((N$ (UENSLOT1 TWO-USUALLYEQUAL-NUMS))
+   (N$2 (UENSLOT2 TWO-USUALLYEQUAL-NUMS)))
+  (<a href="ACL2____MV-LET.html">MV-LET</a>
+   (N$ N$2)
+   (<a href="COMMON-LISP____LET_A2.html">LET*</a> ((N$ (UPDATE-N$VAL N N$))
+          (N$2 (UPDATE-N$VAL N N$2)))
+         (<a href="COMMON-LISP____LIST.html">LIST</a> N$ N$2))
+   (<a href="COMMON-LISP____LET_A2.html">LET*</a>
+        ((TWO-USUALLYEQUAL-NUMS (UPDATE-UENSLOT1 N$ TWO-USUALLYEQUAL-NUMS))
+         (TWO-USUALLYEQUAL-NUMS (UPDATE-UENSLOT2 N$2 TWO-USUALLYEQUAL-NUMS)))
+        (UPDATE-UENVALID T TWO-USUALLYEQUAL-NUMS)))))
+ACL2 !&gt;</pre> 
+ 
+ <p>We can see that if the valid bit were <span class="v">t</span> before doing any updates, then 
+ the guard proof obligation would fail for the first child stobj update, made 
+ with <span class="v">update-uenslot1</span> (as defined above; see its guard).</p> 
+ 
+ <p>The update works, as shown in the log below.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(update-two-usuallyequal-nums 17 two-usuallyequal-nums)
+&lt;two-usuallyequal-nums&gt;
+ACL2 !&gt;(fields-of-two-usuallyequal-nums two-usuallyequal-nums)
+(:N 17 :N2 17 :VALID T)
+ACL2 !&gt;</pre> 
+ 
+ <h4>Aspects of <span class="v">stobj-let</span> specific to abstract stobjs</h4> 
+ 
+ <p>As suggested by the example above, <span class="v">stobj-let</span> operates about the same 
+ whether the parent stobj is a concrete stobj or an abstract stobj.  In this 
+ section we discuss some differences.</p> 
+ 
+ <p>One difference is that the only field accessors in the <span class="v">BINDINGS</span> are 
+ child stobj field accessors.  After all those are the only exported functions 
+ for an abstract stobj that may be considered to correspond to fields..</p> 
+ 
+ <p>Another difference is in the aliasing checks.  Recall that for an abstract 
+ stobj <span class="v">st</span>, each child stobj accessor has an <span class="v">:EXEC</span> function that is a 
+ child stobj accessor of the foundational stobj, <span class="v">st$c</span>, for <span class="v">st</span>.  If 
+ <span class="v">st$c</span> is itself an abstract stobj then the <span class="v">:EXEC</span> function for 
+ <span class="v">st$c</span> is a child stobj accessor for the foundation of <span class="v">st$c</span>; and so 
+ on.  At the end of this chain we have a child stobj accessor for a concrete 
+ stobj, which we may call the underlying concrete child stobj accessor.  The 
+ aliasing checks are actually done with respect to the underlying concrete 
+ child stobj accessors that correspond to the accessors in the <span class="v">BINDINGS</span>. 
+ After all, under the hood those concrete stobj functions are the ones that are 
+ actually executed on the ``live'' stobj.</p> 
+ 
+ <p>Another aspect of <span class="v">stobj-let</span> specific to abstract stobjs is how aborts 
+ are handled.  If an abort occurs in the middle of a <span class="v">stobj-let</span> that 
+ updates child stobjs, when the parent stobj is an abstract stobj, you may be 
+ put into an illegal state, with instructions for how to continue at your own 
+ risk.  See <a href="ACL2____ILLEGAL-STATE.html">illegal-state</a>.</p>
+</body>
+</html>

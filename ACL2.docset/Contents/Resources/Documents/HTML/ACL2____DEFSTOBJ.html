@@ -1,0 +1,583 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Defstobj</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____DEFSTOBJ">Click for Defstobj in the Full Manual</a></h3>
+
+<p>Define a new single-threaded object</p><p>Note: Novices are advised to avoid <span class="v">defstobj</span>, perhaps instead 
+ using community books <a href="STD____DEFAGGREGATE.html">std::defaggregate</a> or 
+ <span class="v">books/data-structures/structures.lisp</span>.  At the least, consider using 
+ <span class="v">(</span><span class="tt"><a href="ACL2____SET-VERIFY-GUARDS-EAGERNESS.html">set-verify-guards-eagerness</a></span><span class="v"> 0)</span> to avoid <a href="ACL2____GUARD.html">guard</a> 
+ verification.  On the other hand, after you learn to use <span class="v">defstobj</span>, see 
+ <a href="ACL2____DEFABSSTOBJ.html">defabsstobj</a> for another way to introduce single-threaded objects.</p> 
+ 
+ <pre class="code">Example:
+(<a href="ACL2____DEFCONST.html">defconst</a> *mem-size* 10) ; for use of *mem-size* just below
+(<a href="ACL2____DEFSTOBJ.html">defstobj</a> st
+          (reg :type (<a href="COMMON-LISP____ARRAY.html">array</a> (unsigned-byte 31) (8))
+               :initially 0)
+          (p-c :type (unsigned-byte 31)
+               :initially 555)
+          halt   ; = (halt :type t :initially nil)
+          (mem :type (<a href="COMMON-LISP____ARRAY.html">array</a> (unsigned-byte 31) (*mem-size*))
+               :initially 0 :resizable t)
+          (ht  :type (hash-table eq 70)))
+
+General Form:
+(<a href="ACL2____DEFSTOBJ.html">defstobj</a> name
+          (field1 :type type1 :initially val1 :resizable b1)
+          ...
+          (fieldk :type typek :initially valk :resizable bk)
+          :renaming alist
+          :inline flg
+          :congruent-to old-stobj-name
+          :non-memoizable nm-flg
+          :non-executable ne-flg)</pre> 
+ 
+ <p>where <span class="v">name</span> is a new symbol; each <span class="v">fieldi</span> is a symbol; each 
+ <span class="v">typei</span> is either a type-indicator (a <span class="tt"><a href="ACL2____TYPE-SPEC.html">type-spec</a></span> or <a href="ACL2____STOBJ.html">stobj</a> 
+ name), of the form <span class="v">(<a href="COMMON-LISP____ARRAY.html">ARRAY</a> type-indicator (<a href="COMMON-LISP____MAX.html">max</a>))</span>, or of one of the forms 
+ <span class="v">(HASH-TABLE test)</span>, <span class="v">(HASH-TABLE test size)</span>, <span class="v">(<a href="ACL2____STOBJ-TABLE.html">STOBJ-TABLE</a>)</span>, or 
+ <span class="v">(<a href="ACL2____STOBJ-TABLE.html">STOBJ-TABLE</a> size)</span>; each <span class="v">vali</span> is an object satisfying <span class="v">typei</span>; 
+ and each <span class="v">bi</span> is <span class="v">t</span> or <span class="v">nil</span>.  Each pair <span class="v">:initially vali</span> and 
+ <span class="v">:resizable bi</span> may be omitted; more on this below.  The <span class="v">:renaming
+ alist</span> argument is optional and allows the user to override the default 
+ function names introduced by this event.  The <span class="v">:inline flg</span> Boolean 
+ argument is also optional and declares to ACL2 that the generated access and 
+ update functions for the stobj should be implemented as macros under the 
+ hood (which has the effect of inlining the function calls).  The optional 
+ <span class="v">:congruent-to old-stobj-name</span> argument specifies an existing stobj with 
+ exactly the same structure, and is discussed below.  The optional 
+ <span class="v">:non-memoizable nm-flg</span> and <span class="v">:non-executable ne-flg</span> Boolean arguments 
+ are ignored when <span class="v">nm-flg</span> and <span class="v">ne-flg</span> are <span class="v">nil</span>, but otherwise: the 
+ former instructs ACL2 to lay down faster code for functions that return the 
+ new stobj but disallows <a href="ACL2____MEMOIZATION.html">memoization</a> of any function that takes the new 
+ stobj as an argument; and the latter avoids actually creating the 
+ stobj (details follow later below).  We describe further restrictions on the 
+ <span class="v">fieldi</span>, <span class="v">typei</span>, <span class="v">vali</span>, and on <span class="v">alist</span> below.  We recommend 
+ that you read about single-threaded objects (stobjs) in ACL2 before 
+ proceeding; see <a href="ACL2____STOBJ.html">stobj</a>.</p> 
+ 
+ <p>The effect of this event is to introduce a new single-threaded object 
+ (i.e., a ``<a href="ACL2____STOBJ.html">stobj</a>''), named <span class="v">name</span>, and the associated recognizers, 
+ creator, accessors, updaters, constants.  For fields of <span class="v">ARRAY</span> type, this 
+ event also introduces length and resize functions.  For fields of 
+ <span class="v">HASH-TABLE</span> type, this event also introduces boundp, get?, remove, count, 
+ clear, and initialization functions; similarly for <span class="v">STOBJ-TABLE</span> type, 
+ except for the get? function, which is only for the <span class="v">HASH-TABLE</span> type.</p> 
+ 
+ <h3>The Single-Threaded Object Introduced</h3> 
+ 
+ <p>The <span class="v">defstobj</span> event effectively introduces a new ``live stobj'' object, 
+ named <span class="v">name</span>, which has as its initial logical value a list of <span class="v">k</span> 
+ elements, where <span class="v">k</span> is the number of ``field descriptors'' provided.  This 
+ object has mutable updates: that is, the object is actually modified in place, 
+ rather than copied.  This is only possible because of syntactic restrictions 
+ enforced by ACL2 when programming with stobjs, so that after modifying a 
+ stobj, its old versions are no longer accessible.</p> 
+ 
+ <p>The elements are listed in the same order in which the field descriptors 
+ appear.  If the <span class="v">:type</span> of a field is <span class="v">(<a href="COMMON-LISP____ARRAY.html">ARRAY</a> type-indicator (<a href="COMMON-LISP____MAX.html">max</a>))</span> 
+ then <span class="v">max</span> is a non-negative integer or a symbol introduced by <span class="tt"><a href="ACL2____DEFCONST.html">defconst</a></span>) whose value is a non-negative integer, and the corresponding 
+ element of the stobj is initially of length specified by <span class="v">max</span>.  If the 
+ <span class="v">:type</span> of a field is <span class="v">(HASH-TABLE test)</span> or <span class="v">(HASH-TABLE test
+ size)</span>, then <span class="v">test</span> is one of the symbols <span class="v">EQ</span>, <span class="v">EQL</span>, 
+ <span class="v">HONS-EQUAL</span>, or <span class="v">EQUAL</span>, while <span class="v">size</span>, if supplied as above or in 
+ <span class="v">(<a href="ACL2____STOBJ-TABLE.html">STOBJ-TABLE</a> size)</span>, is a natural number.  In that case the test is 
+ applied when looking up keys, where <span class="tt"><a href="ACL2____HONS-COPY.html">hons-copy</a></span> is first applied to the 
+ key in the <span class="v">HONS-EQUAL</span> case; and the size is a hint to the host Lisp for 
+ the initial size of the associated hash table in raw Lisp.  (The size really 
+ is used only as a hint.  Indeed, at least one host Lisp does not support size 
+ 0, so ACL2 simply treats size 0 as size 1; and even size 1 may result in a 
+ hash-table of considerably larger size.)</p> 
+ 
+ <p>If the value of <span class="v">:type</span> is of the form <span class="v">(<a href="COMMON-LISP____ARRAY.html">ARRAY</a> type-indicator
+ (<a href="COMMON-LISP____MAX.html">max</a>))</span> or just <span class="v">type-indicator</span>, then <span class="v">type-indicator</span> is typically a 
+ type-spec; see <a href="ACL2____TYPE-SPEC.html">type-spec</a>.  However, <span class="v">type-indicator</span> can also be the 
+ name of a stobj that was previously introduced (by <span class="v">defstobj</span> or <span class="tt"><a href="ACL2____DEFABSSTOBJ.html">defabsstobj</a></span>).  We ignore this ``nested stobj'' case below; see <a href="ACL2____NESTED-STOBJS.html">nested-stobjs</a> for a discussion of stobjs within stobjs.  Note that 
+ <span class="v">HASH-TABLE</span> types do not specify a type indicator; thus, a hash-table 
+ field cannot contain stobjs as values.</p> 
+ 
+ <p>A field with a <span class="v">STOBJ-TABLE</span> type is logically an association list whose 
+ keys are <a href="ACL2____STOBJ.html">stobj</a> names.  ACL2 maintains the execution invariant that each 
+ key is mapped to a stobj satisfying that key's recognizer.  We say little more 
+ here about stobj-tables; see <a href="ACL2____STOBJ-TABLE.html">stobj-table</a> for relevant discussion.</p> 
+ 
+ <p>The keyword value <span class="v">:initially val</span> specifies the initial value of a 
+ field, except for the case of a <span class="v">:type</span> <span class="v">(<a href="COMMON-LISP____ARRAY.html">ARRAY</a> type-indicator (<a href="COMMON-LISP____MAX.html">max</a>))</span>, 
+ in which case <span class="v">val</span> is the initial value of the corresponding array.  Note 
+ that the <span class="v">:initially</span> field is ignored for <span class="v">HASH-TABLE</span> and 
+ <span class="v">STOBJ-TABLE</span> types; such tables are initially empty anyhow.</p> 
+ 
+ <p>Note that the actual representation of the stobj in the underlying Lisp may 
+ be quite different; see <a href="ACL2____STOBJ-EXAMPLE-2.html">stobj-example-2</a>.  For the moment we focus 
+ primarily on the logical aspects of the object.</p> 
+ 
+ <p>In addition, the <span class="v">defstobj</span> event introduces functions for recognizing 
+ and creating the stobj and for recognizing, accessing, and updating its 
+ fields.  For fields of <span class="v">ARRAY</span> type, length and resize functions are also 
+ introduced.  For fields of <span class="v">HASH-TABLE</span> or <span class="v">STOBJ-TABLE</span> type, this 
+ event also introduces boundp, get? (<span class="v">HASH-TABLE</span> types only), remove, 
+ count, clear, and initialization functions, as discussed below.  Constants are 
+ introduced that correspond to the accessor functions.</p> 
+ 
+ <h3>Restrictions on the Field Descriptions in Defstobj</h3> 
+ 
+ <p>Each field descriptor is of the form:</p> 
+ 
+ <pre class="code">(fieldi :TYPE typei :INITIALLY vali)</pre> 
+ 
+ <p>Note that the type and initial value are given in ``keyword argument'' 
+ format and may be given in either order.  The <span class="v">typei</span> and <span class="v">vali</span> 
+ ``arguments'' are not evaluated.  If omitted, the type defaults to <span class="v">t</span> 
+ (unrestricted) and the initial value defaults to <span class="v">nil</span>.</p> 
+ 
+ <p>Each <span class="v">typei</span> must be either a <span class="tt"><a href="ACL2____TYPE-SPEC.html">type-spec</a></span> or else a list of the 
+ form <span class="v">(<a href="COMMON-LISP____ARRAY.html">ARRAY</a> type-spec (<a href="COMMON-LISP____MAX.html">max</a>))</span>, <span class="v">(HASH-TABLE test)</span>, <span class="v">(HASH-TABLE test
+ size)</span>, <span class="v">(<a href="ACL2____STOBJ-TABLE.html">STOBJ-TABLE</a>)</span>, or <span class="v">(<a href="ACL2____STOBJ-TABLE.html">STOBJ-TABLE</a> size)</span>.  (Again, we are 
+ ignoring the case of nested stobjs, discussed elsewhere; see <a href="ACL2____NESTED-STOBJS.html">nested-stobjs</a>.)  The latter forms are said to be ``array types'', 
+ ``hash-table types'', and stobj-table types (again, not discussed much here; 
+ see <a href="ACL2____STOBJ-TABLE.html">stobj-table</a>).  Examples of legal <span class="v">typei</span> are:</p> 
+ 
+ <pre class="code">(INTEGER 0 31)
+(SIGNED-BYTE 31)
+(<a href="COMMON-LISP____ARRAY.html">ARRAY</a> (SIGNED-BYTE 31) (16))
+(<a href="COMMON-LISP____ARRAY.html">ARRAY</a> (SIGNED-BYTE 31) (*c*)) ; where *c* has a non-negative integer value
+(HASH-TABLE HONS-EQUAL 70)
+(<a href="ACL2____STOBJ-TABLE.html">STOBJ-TABLE</a> 70)</pre> 
+ 
+ <p>The <span class="v">typei</span> describes the objects which are expected to occupy the given 
+ field.  Those objects in <span class="v">fieldi</span> should satisfy <span class="v">typei</span>.  We are more 
+ precise below about what we mean by ``expected.''  We first present the 
+ restrictions on <span class="v">typei</span> and <span class="v">vali</span>.</p> 
+ 
+ <h3>Scalar Types</h3> 
+ 
+ <p>We first discuss types that are neither array types, hash-table types, nor 
+ stobj-table types.  We call these ``scalar types.''</p> 
+ 
+ <p>When <span class="v">typei</span> is a <span class="tt"><a href="ACL2____TYPE-SPEC.html">type-spec</a></span> it restricts the contents, <span class="v">x</span>, 
+ of <span class="v">fieldi</span> according to the ``meaning'' formula given in the table for 
+ <span class="tt"><a href="ACL2____TYPE-SPEC.html">type-spec</a></span>.  For example, the first <span class="v">typei</span> above restricts the 
+ field to be an integer between 0 and 31, inclusive.  The second restricts the 
+ field to be an integer between -2^30 and (2^30)-1, inclusive.</p> 
+ 
+ <p>The initial value, <span class="v">vali</span>, of a field description may be any ACL2 object 
+ but must satisfy <span class="v">typei</span>.  Note that <span class="v">vali</span> is not a form to be 
+ evaluated but an object.  A form that evaluates to <span class="v">vali</span> could be written 
+ <span class="v">'vali</span>, but <span class="v">defstobj</span> does not expect you to write the quote mark. 
+ For example, the field description</p> 
+ 
+ <pre class="code">(days-off :initially (saturday sunday))</pre> 
+ 
+ <p>describes a field named <span class="v">days-off</span> whose initial value is the list 
+ consisting of the two symbols <span class="v">SATURDAY</span> and <span class="v">SUNDAY</span>.  In particular, 
+ the initial value is NOT obtained by applying the function <span class="v">saturday</span> to 
+ the variable <span class="v">sunday</span>!  Had we written</p> 
+ 
+ <pre class="code">(days-off :initially '(saturday sunday))</pre> 
+ 
+ <p>it would be equivalent to writing</p> 
+ 
+ <pre class="code">(days-off :initially (<a href="COMMON-LISP____QUOTE.html">quote</a> (saturday sunday)))</pre> 
+ 
+ <p>which would initialize the field to a list of length two, whose first 
+ element is the symbol <span class="v">quote</span> and whose second element is a list containing 
+ the symbols <span class="v">saturday</span> and <span class="v">sunday</span>.</p> 
+ 
+ <h3>Array Types</h3> 
+ 
+ <p>When <span class="v">typei</span> is of the form <span class="v">(<a href="COMMON-LISP____ARRAY.html">ARRAY</a> type-spec (<a href="COMMON-LISP____MAX.html">max</a>))</span>, the field is 
+ supposed to be a list of items, initially of length specified by <span class="v">max</span>, 
+ each of which satisfies the indicated <span class="v">type-spec</span>.  <span class="v">Max</span> must be a 
+ non-negative integer or a defined constant evaluating to a non-negative 
+ integer.  Thus, each of</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____ARRAY.html">ARRAY</a> (SIGNED-BYTE 31) (16))
+(<a href="COMMON-LISP____ARRAY.html">ARRAY</a> (SIGNED-BYTE 31) (*c*)) ; given previous event (<a href="ACL2____DEFCONST.html">defconst</a> *c* 16)</pre> 
+ 
+ <p>restricts the field to be a list of integers, initially of length 16, where 
+ each integer in the list is a <span class="v">(SIGNED-BYTE 31)</span>.  We sometimes call such a 
+ list an ``array'' (because it is represented as an array in the underlying 
+ Common Lisp).  The elements of an array field are indexed by position, 
+ starting at 0.  Thus, the maximum legal index of an array field one less than 
+ is specified by <span class="v">max</span>.  Note that the value of <span class="v">max</span> must be less than 
+ the Common Lisp constant <span class="v">array-dimension-limit</span>, and also (though this 
+ presumably follows) less than the Common Lisp constant 
+ <span class="v">array-total-size-limit</span>.</p> 
+ 
+ <p>Note also that the <span class="v">ARRAY</span> type requires that the <span class="v">max</span> be enclosed 
+ in parentheses.  This makes ACL2's notation consistent with the Common Lisp 
+ convention of describing the (multi-)dimensionality of arrays.  But ACL2 
+ currently supports only single dimensional arrays in stobjs.</p> 
+ 
+ <p>For array fields, the initial value <span class="v">vali</span> must be an object satisfying 
+ the <span class="tt"><a href="ACL2____TYPE-SPEC.html">type-spec</a></span> of the <span class="v">ARRAY</span> description.  The initial value of the 
+ field is a list of <span class="v">max</span> repetitions of <span class="v">vali</span>.</p> 
+ 
+ <p>Array fields can be ``resized,'' that is, their lengths can be changed, if 
+ <span class="v">:resizable t</span> is supplied as shown in the example and General Form above. 
+ The new length must satisfy the same restriction as does <span class="v">max</span>, as 
+ described above.  Each array field in a <span class="v">defstobj</span> event gives rise to a 
+ length function, which gives the length of the field, and a resize function, 
+ which modifies the length of the field if <span class="v">:resizable t</span> was supplied with 
+ the field when the <span class="v">defstobj</span> was introduced and otherwise causes an error. 
+ If <span class="v">:resizable t</span> was supplied and the resize function specifies a new 
+ length <span class="v">k</span>, then: if <span class="v">k</span> is less than the existing array length, the 
+ array is shortened simply by dropping elements with index at least <span class="v">k</span>; 
+ otherwise, the array is extended to length <span class="v">k</span> by mapping the new indices 
+ to the initial value (supplied by <span class="v">:initially</span>, else default <span class="v">nil</span>).</p> 
+ 
+ <p>Array resizing is relatively slow, so we recommend using it somewhat 
+ sparingly.</p> 
+ 
+ <h3>Hash-table Types</h3> 
+ 
+ <p>When <span class="v">typei</span> is of the form <span class="v">(HASH-TABLE test size)</span>, where <span class="v">size</span> 
+ is optional, the field is logically an association list, initially empty. 
+ Under the hood in raw Lisp, however, there is a corresponding hash table that 
+ represents the same association of keys with values as does the association 
+ list.  Each key should be comparable with arbitrary objects using the 
+ specified <span class="v">test</span>: thus if <span class="v">test</span> is <span class="tt"><a href="COMMON-LISP____EQUAL.html">equal</a></span> then there is no 
+ restriction on keys; if <span class="v">test</span> is <span class="tt"><a href="COMMON-LISP____EQ.html">eq</a></span> or <span class="tt"><a href="COMMON-LISP____EQL.html">eql</a></span> then the keys 
+ must be symbols or satisfy <span class="tt"><a href="ACL2____EQLABLEP.html">eqlablep</a></span>, respectively; and if <span class="v">test</span> is 
+ <span class="tt"><a href="ACL2____HONS-EQUAL.html">hons-equal</a></span> then there is no restriction on keys, but each proposed key 
+ is <span class="tt"><a href="ACL2____HONS.html">hons</a></span>ed in raw Lisp before it is used (whether for access or update) 
+ and before it is put into the underlying hash table.  The <span class="v">size</span>, if 
+ supplied, is a positive integer that may be used by the host Lisp as a hint 
+ for how to size the associated hash table in raw Lisp.</p> 
+ 
+ <p>A hash-table field is associated not only with a recognizer, an accesor, 
+ and an updater, but also with the following functions, whose final argument is 
+ the stobj name but that may also take a key or, in the case of the ``init'' 
+ function, three other arguments, as follows:</p> 
+ 
+ <ul> 
+ 
+ <li>a ``boundp'' function to check whether a given key is bound;</li> 
+ 
+ <li>a ``get?'' function that, for a given key, returns two values <span class="v">(<a href="ACL2____MV.html">mv</a> val
+ boundp)</span>, where: if the given key is bound then <span class="v">val</span> is its value and 
+ <span class="v">boundp</span> is <span class="v">t</span>, else <span class="v">val</span> and <span class="v">boundp</span> are both <span class="v">nil</span>;</li> 
+ 
+ <li>a ``remove'' function for removing a given key;</li> 
+ 
+ <li>a ``count'' function that returns the number of (distinct) keys;</li> 
+ 
+ <li>a ``clear'' function that creates a new empty hash table (and logically, 
+ the empty alist);</li> 
+ 
+ <li>an ``init'' function that takes a given size, rehash-size, and 
+ rehash-threshold (and the stobj name) and creates a new empty hash table (and 
+ logically, the empty alist) by passing these parameters to the raw Lisp 
+ function, <span class="v">(make-hash-table)</span>, that creates a hash table.</li> 
+ 
+ </ul> 
+ 
+ <p>The clear and init functions both use the <span class="v">size</span> argument, if supplied, 
+ of the type of the field supplied in the <span class="v">defstobj</span> event.  If no <span class="v">size</span> 
+ argument was supplied in that type, then the size of the hash table depends on 
+ the host Lisp.</p> 
+ 
+ <h3>Stobj-table Types</h3> 
+ 
+ <p>As noted above, these are not discussed much here; see <a href="ACL2____STOBJ-TABLE.html">stobj-table</a>.</p> 
+ 
+ <h3>The Default Function Names</h3> 
+ 
+ <p>To recap, in</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFSTOBJ.html">defstobj</a> name
+          (field1 :type type1 :initially val1)
+          ...
+          (fieldk :type typek :initially valk)
+          :renaming alist
+          :doc doc-string
+          :inline inline-flag)</pre> 
+ 
+ <p><span class="v">name</span> must be a new symbol, each <span class="v">fieldi</span> must be a symbol, each 
+ <span class="v">typei</span> must be a <span class="tt"><a href="ACL2____TYPE-SPEC.html">type-spec</a></span> or <span class="v">(<a href="COMMON-LISP____ARRAY.html">ARRAY</a> type-spec (<a href="COMMON-LISP____MAX.html">max</a>))</span>, and 
+ each <span class="v">vali</span> must be an object satisfying <span class="v">typei</span>.</p> 
+ 
+ <p>Roughly speaking, for each <span class="v">fieldi</span>, a <span class="v">defstobj</span> introduces a 
+ recognizer function, an accessor function, and an updater function.  The 
+ accessor function, for example, takes the stobj and returns the indicated 
+ component; the updater takes a new component value and the stobj and return a 
+ new stobj with the component replaced by the new value.  But that summary is 
+ inaccurate for array, hash-table, and stobj-table fields.</p> 
+ 
+ <p>The accessor function for an array field does not take the stobj and return 
+ the indicated component array, which is a list of length specified by 
+ <span class="v">max</span>.  Instead, it takes an additional index argument and returns the 
+ indicated element of the array component.  Similarly, the updater function for 
+ an array field takes an index, a new value, and the stobj, and returns a new 
+ stobj with the indicated element replaced by the new value.</p> 
+ 
+ <p>The accessor and updater functions for a hash-table field are analogous to 
+ those for array fields.  Thus, the accessor takes an additional key argument 
+ and returns the associated value, or nil if the key is not bound.  The updater 
+ function takes a key, a new value, and the stobj, and returns a new stobj with 
+ the indicated element replaced by the new value.  See <a href="ACL2____STOBJ-TABLE.html">stobj-table</a> for a 
+ discussion of stobj-table types, which are largely ignored below.</p> 
+ 
+ <p>These functions  the recognizer, accessor, and updater, and also 
+ length and resize functions in the case of array fields, and boundp, get?, 
+ remove, count, clear, and init functions in the case of hash-table fields 
+  have ``default names.''  The default names depend on the field name, 
+ <span class="v">fieldi</span>, and on whether the field is an array field, a hash-table field, 
+ or neither (i.e., a scalar field).  For clarity, suppose <span class="v">fieldi</span> is named 
+ <span class="v">c</span>. The default names are shown below in calls, which also indicate the 
+ arities of the functions.  In the expressions, we use <span class="v">x</span> as the object to 
+ be recognized by field recognizers, <span class="v">i</span> as an array index or the size of a 
+ resized array, <span class="v">k</span> as a key (for the logical association list or raw-Lisp 
+ hash table associated with the field), <span class="v">v</span> as the ``new value'' to be 
+ installed by an updater, and <span class="v">name</span> as the single-threaded object.</p> 
+ 
+ <pre class="code">            scalar field        array field          hash-table field
+                                                     and stobj-table field
+recognizer  (cP x)              (cP x)               (cP x)
+accessor    (c name)            (cI i name)
+                                    hash-table access: (c-get k name)
+                                   stobj-table access: (c-get k name default)
+updater     (UPDATE-c v name)   (UPDATE-cI i v name) (c-put k v name)
+length                          (c-LENGTH name)
+resize                          (RESIZE-c i name)
+boundp                                               (c-boundp k name)
+get? [For hash-tables only, not stobj-tables]        (c-get? k name)
+remove                                               (c-rem k name)
+count                                                (c-count name)
+clear                                                (c-clear name)
+init                                                 (c-init ht-size
+                                                             rehash-size
+                                                             rehash-threshold
+                                                             name)</pre> 
+ 
+ <p>Finally, a recognizer and a creator for the entire single-threaded object 
+ are introduced.  The creator returns the initial stobj, but may only be used 
+ in limited contexts; see <a href="ACL2____WITH-LOCAL-STOBJ.html">with-local-stobj</a>.  If the single-threaded 
+ object is named <span class="v">name</span>, then the default names and arities are as shown 
+ below.</p> 
+ 
+ <pre class="code">top recognizer     (nameP x)
+creator            (CREATE-name)</pre> 
+ 
+ <p>For example, the event</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFSTOBJ.html">DEFSTOBJ</a> $S
+  (X :TYPE INTEGER :INITIALLY 0)
+  (A :TYPE (<a href="COMMON-LISP____ARRAY.html">ARRAY</a> (INTEGER 0 9) (3)) :INITIALLY 9)
+  (H :TYPE (HASH-TABLE EQ)))</pre> 
+ 
+ <p>introduces a stobj named <span class="v">$S</span>.  The stobj has three fields: <span class="v">X</span>, 
+ <span class="v">A</span>, and <span class="v">H</span>.  The <span class="v">A</span> field is an array and the the <span class="v">A</span> field is 
+ a hash table.  The <span class="v">X</span> field contains an integer and is initially 0.  The 
+ <span class="v">A</span> field contains a list of integers, each between 0 and 9, inclusive. 
+ Initially, each of the three elements of the <span class="v">A</span> field is 9.</p> 
+ 
+ <p>This event introduces the following sequence of definitions:</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">DEFUN</a> XP (X) ...)               ; recognizer for X field
+(<a href="COMMON-LISP____DEFUN.html">DEFUN</a> AP (X) ...)               ; recognizer of A field
+(<a href="COMMON-LISP____DEFUN.html">DEFUN</a> HP (X) ...)               ; recognizer of H field
+(<a href="COMMON-LISP____DEFUN.html">DEFUN</a> $SP ($S) ...)             ; top-level recognizer for stobj $S
+(<a href="COMMON-LISP____DEFUN.html">DEFUN</a> CREATE-$S () ...)         ; creator for stobj $S
+(<a href="COMMON-LISP____DEFUN.html">DEFUN</a> X ($S) ...)               ; accessor for X field
+(<a href="COMMON-LISP____DEFUN.html">DEFUN</a> UPDATE-X (V $S) ...)      ; updater for X field
+(<a href="COMMON-LISP____DEFUN.html">DEFUN</a> A-LENGTH ($S) ...)        ; length of A field
+(<a href="COMMON-LISP____DEFUN.html">DEFUN</a> RESIZE-A (I $S) ...)      ; resizer for A field
+(<a href="COMMON-LISP____DEFUN.html">DEFUN</a> AI (I $S) ...)            ; accessor for A field at index I
+(<a href="COMMON-LISP____DEFUN.html">DEFUN</a> UPDATE-AI (I V $S) ...)   ; updater for A field at index I
+(<a href="COMMON-LISP____DEFUN.html">DEFUN</a> H-GET (K $S) ...)         ; accessor for H field at key K
+(<a href="COMMON-LISP____DEFUN.html">DEFUN</a> H-PUT (K V $S) ...)       ; updater for H field at key K
+(<a href="COMMON-LISP____DEFUN.html">DEFUN</a> H-BOUNDP (K $S) ...)      ; t if key k is bound in H, else nil
+(<a href="COMMON-LISP____DEFUN.html">DEFUN</a> H-GET? (K $S) ...)        ; (<a href="ACL2____MV.html">mv</a> val t) if key is bound in H to val;
+                                 ;   (<a href="ACL2____MV.html">mv</a> nil nil) if key is not bound in H
+(<a href="COMMON-LISP____DEFUN.html">DEFUN</a> H-REM (K $S) ...)         ; remove key K from field H
+(<a href="COMMON-LISP____DEFUN.html">DEFUN</a> H-COUNT ($S) ...)         ; the number of (distinct) keys in field H
+(<a href="COMMON-LISP____DEFUN.html">DEFUN</a> H-CLEAR ($S) ...)         ; empty the hash table for field H
+(<a href="COMMON-LISP____DEFUN.html">DEFUN</a> H-INIT (HT-SIZE REHASH-SIZE REHASH-THRESHOLD $S) ...)
+                                 ; replace the hash table for field H with
+                                 ;   with a new, empty hash table with the
+                                 ;   given hints as described below</pre> 
+ 
+ <p>For the last of these, the values of <span class="v">HT-SIZE</span>, <span class="v">REHASH-SIZE</span>, and 
+ <span class="v">REHASH-THRESHOLD</span> are passed to the <span class="v">:size</span>, <span class="v">:rehash-size</span>, and 
+ <span class="v">:reash-threshold</span> arguments (respectively) of a call of 
+ <span class="v">make-hash-table</span> in raw Lisp.  The <span class="v">:test</span> argument of this function is 
+ the one specified in the <span class="v">:type</span> specified in the <span class="v">defstobj</span> event for 
+ the field, in this case <span class="v">EQ</span> from the type <span class="v">(HASH-TABLE EQ)</span>; note 
+ however that if the <span class="v">:type</span> specifies the test <span class="v">(HASH-TABLE
+ HONS-EQUAL)</span>, then the <span class="v">:test</span> is <span class="v">EQL</span>.</p> 
+ 
+ <h3>Avoiding the Default Function Names</h3> 
+ 
+ <p>If you do not like the default names listed above you may use the optional 
+ <span class="v">:renaming</span> alist to substitute names of your own choosing.  Each element 
+ of <span class="v">alist</span> should be of the form <span class="v">(fn1 fn2)</span>, where <span class="v">fn1</span> is a 
+ default name and <span class="v">fn2</span> is your choice for that name.</p> 
+ 
+ <p>For example</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFSTOBJ.html">DEFSTOBJ</a> $S
+  (X :TYPE INTEGER :INITIALLY 0)
+  (A :TYPE (<a href="COMMON-LISP____ARRAY.html">ARRAY</a> (INTEGER 0 9) (3)) :INITIALLY 9)
+  :renaming ((X XACCESSOR) (CREATE-$S MAKE$S)))</pre> 
+ 
+ <p>introduces the following definitions</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">DEFUN</a> XP (X) ...)               ; recognizer for X field
+(<a href="COMMON-LISP____DEFUN.html">DEFUN</a> AP (X) ...)               ; recognizer of A field
+(<a href="COMMON-LISP____DEFUN.html">DEFUN</a> $SP ($S) ...)             ; top-level recognizer for stobj $S
+(<a href="COMMON-LISP____DEFUN.html">DEFUN</a> MAKE$S () ...)            ; creator for stobj $S
+(<a href="COMMON-LISP____DEFUN.html">DEFUN</a> XACCESSOR ($S) ...)       ; accessor for X field
+(<a href="COMMON-LISP____DEFUN.html">DEFUN</a> UPDATE-X (V $S) ...)      ; updater for X field
+(<a href="COMMON-LISP____DEFUN.html">DEFUN</a> A-LENGTH ($S) ...)        ; length of A field
+(<a href="COMMON-LISP____DEFUN.html">DEFUN</a> RESIZE-A (K $S) ...)      ; resizer for A field
+(<a href="COMMON-LISP____DEFUN.html">DEFUN</a> AI (I $S) ...)            ; accessor for A field at index I
+(<a href="COMMON-LISP____DEFUN.html">DEFUN</a> UPDATE-AI (I V $S) ...)   ; updater for A field at index I</pre> 
+ 
+ <p>Note that even though the renaming alist substitutes ``<span class="v">XACCESSOR</span>'' for 
+ ``<span class="v">X</span>'' the updater for the <span class="v">X</span> field is still called ``<span class="v">UPDATE-X</span>.'' 
+ That is because the renaming is applied to the default function names, not to 
+ the field descriptors in the event.</p> 
+ 
+ <p>Use of the <span class="v">:renaming</span> alist may be necessary to avoid name clashes 
+ between the default names and and pre-existing function symbols.</p> 
+ 
+ <h3>Constants</h3> 
+ 
+ <p><span class="v">Defstobj</span> events also introduce constant definitions (see <a href="ACL2____DEFCONST.html">defconst</a>).  One constant is introduced for each accessor function by 
+ prefixing and suffixing a `<span class="v">*</span>' character on the function name.  The value 
+ of that constant is the position of the field being accessed.  For example, if 
+ the accessor functions are <span class="v">a</span>, <span class="v">b</span>, and <span class="v">c</span>, in that order, then the 
+ following constant definitions are introduced.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFCONST.html">defconst</a> *a* 0)
+(<a href="ACL2____DEFCONST.html">defconst</a> *b* 1)
+(<a href="ACL2____DEFCONST.html">defconst</a> *c* 2)</pre> 
+ 
+ <p>These constants are used for certain calls of <span class="tt"><a href="COMMON-LISP____NTH.html">nth</a></span> and <span class="tt"><a href="ACL2____UPDATE-NTH.html">update-nth</a></span> that are displayed to the user in proof output.  For example, for 
+ stobj <span class="v">st</span> with accessor functions <span class="v">a</span>, <span class="v">b</span>, and <span class="v">c</span>, in that 
+ order, the term <span class="v">(<a href="COMMON-LISP____NTH.html">nth</a> '2 st)</span> would be printed during a proof as <span class="v">(<a href="COMMON-LISP____NTH.html">nth</a>
+ *c* st)</span>.  Also see <a href="ACL2____TERM.html">term</a>, in particular the discussion there of 
+ untranslated terms, and see <a href="ACL2____NTH-ALIASES-TABLE.html">nth-aliases-table</a>.</p> 
+ 
+ <h3>Inspecting the Effects of a Defstobj</h3> 
+ 
+ <p>Because the stobj functions are introduced as ``sub-events'' of the 
+ <span class="v">defstobj</span> the history commands <span class="v">:</span><span class="tt"><a href="ACL2____PE.html">pe</a></span> and <span class="v">:</span><span class="tt"><a href="ACL2____PC.html">pc</a></span> will 
+ not print the definitions of these functions but will print the superior 
+ <span class="v">defstobj</span> event.  To see the definitions of these functions use the 
+ history command <span class="v">:</span><span class="tt"><a href="ACL2____PCB_12.html">pcb!</a></span>.</p> 
+ 
+ <p>To see an s-expression containing the definitions that constitute the raw 
+ Lisp implementation of the event, evaluate the form</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____NTH.html">nth</a> 4 (global-val 'cltl-command (<a href="ACL2____W.html">w</a> state)))</pre> 
+ 
+ <p><i>immediately after</i> the <span class="v">defstobj</span> event has been processed.  Those 
+ functions that contain <span class="v">(<a href="COMMON-LISP____DECLARE.html">DECLARE</a> (STOBJ-INLINE-FN T))</span> will generate <span class="tt"><a href="ACL2____DEFABBREV.html">defabbrev</a></span> forms because the <span class="v">:inline</span> keyword of <span class="v">defstobj</span> was 
+ supplied the value <span class="v">t</span>.  The rest will generate <span class="tt"><a href="COMMON-LISP____DEFUN.html">defun</a></span> forms.</p> 
+ 
+ <p>A <span class="v">defstobj</span> is considered redundant only if it is syntactically 
+ identical to a previously executed <span class="v">defstobj</span>.  Note that a redundant 
+ <span class="v">defstobj</span> does not reset the <a href="ACL2____STOBJ.html">stobj</a> fields to their initial 
+ values.</p> 
+ 
+ <h3>Performance</h3> 
+ 
+ <p>The <span class="v">:inline</span> keyword argument controls whether or not the functions 
+ introduced are inlined (as macros under the hood, in raw Lisp), with the 
+ exception of the resize function.  If <span class="v">:inline t</span> is provided then these 
+ are inlined; otherwise they are not.  The advantage of inlining is potentially 
+ better performance; there have been contrived examples, doing essentially 
+ nothing except accessing and updating array fields, where inlining reduced the 
+ time by a factor of 10 or more; and inlining has sped up realistic examples by 
+ a factor of at least 2.  Inlining may get within a factor of 2 of C execution 
+ times for such contrived examples, and perhaps within a few percent of C 
+ execution times on realistic examples.</p> 
+ 
+ <p>A drawback to inlining is that redefinition may not work as expected, much 
+ as redefinition may not work as expected for macros: defined functions that 
+ call a macro, or an inlined stobj function, will not see a subsequent 
+ redefinition of the macro or inlined function.  Another drawback to inlining 
+ is that because inlined functions are implemented as macros in raw Lisp, 
+ tracing (see <a href="ACL2____TRACE_42.html">trace$</a>) will not show their calls.  These drawbacks are 
+ avoided by default, but the user who is not concerned about them is advised to 
+ specify <span class="v">:inline t</span>.</p> 
+ 
+ <p>It can also improve performance to specify <span class="v">:non-memoizable t</span>, which 
+ disallows memoization but therefore avoids the cost of certain ``flushing'' 
+ operations.</p> 
+ 
+ <h3>Specifying Congruent Stobjs</h3> 
+ 
+ <p>Two stobjs are may be considered to be ``congruent'' if they have the same 
+ structure, that is, their <span class="v">defstobj</span> events are identical when ignoring 
+ field names.  In particular, every stobj is congruent to itself.  In order to 
+ tell ACL2 that a new stobj <span class="v">st2</span> is indeed to be considered as congruent to 
+ an existing stobj <span class="v">st1</span>, the <span class="v">defstobj</span> event introducing <span class="v">st2</span> is 
+ given the keyword argument <span class="v">:congruent-to st1</span>.  Congruence is an 
+ equivalence relation: when you specify a new stobj to be congruent to an old 
+ one, you are also specifying that the new stobj is congruent to all other 
+ stobjs that are congruent to the old one.  Thus, continuing the example above, 
+ if you specify that <span class="v">st3</span> is <span class="v">:congruent-to st2</span>, then <span class="v">st1</span>, 
+ <span class="v">st2</span>, and <span class="v">st3</span> will all be congruent to each other.</p> 
+ 
+ <p>When two stobjs are congruent, ACL2 allows you to substitute one for 
+ another in a function call.  Any number of stobjs may be replaced with 
+ congruent stobjs in the call, provided no two get replaced with the same 
+ stobj.  The return values are correspondingly modified: if stobj <span class="v">st1</span> is 
+ replaced by <span class="v">st2</span> at an argument position, and if <span class="v">st1</span> is returned in 
+ the output <a href="ACL2____SIGNATURE.html">signature</a> of the function, then <span class="v">st2</span> is returned in 
+ place of <span class="v">st1</span>.</p> 
+ 
+ <p>The following example illustrates congruent stobjs.  For more examples of 
+ how to take advantage of congruent stobjs, and also of how to misuse them, see 
+ community book <span class="v">books/misc/congruent-stobjs-test.lisp</span>.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFSTOBJ.html">defstobj</a> st1 fld1)
+(<a href="ACL2____DEFSTOBJ.html">defstobj</a> st2 fld2 :congruent-to st1)
+(<a href="ACL2____DEFSTOBJ.html">defstobj</a> st3 fld3 :congruent-to st2) ; equivalently, :congruent-to st1
+(<a href="COMMON-LISP____DEFUN.html">defun</a> f (st1 st2 st3)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (st1 st2 st3)))
+  (<a href="COMMON-LISP____LIST.html">list</a> (fld2 st1) (fld3 st2) (fld1 st3)))
+(update-fld1 1 st1)
+(update-fld1 2 st2) ; notice use of update-fld1 on st2
+(update-fld1 3 st3) ; notice use of update-fld1 on st3
+(<a href="ACL2____ASSERT-EVENT.html">assert-event</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (f st3 st2 st1) '(3 2 1)))</pre> 
+ 
+ <p>The following example shows an error that occurs when stobj arguments are 
+ repeated, i.e., at least two stobj arguments (in this case, three) get 
+ replaced by the same stobj.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(f st1 st1 st1)
+
+ACL2 Error in TOP-LEVEL:  The form ST1 is being used, as an argument
+to a call of F, where the single-threaded object ST2 was expected,
+even though these are congruent stobjs.  See :DOC defstobj, in particular
+the discussion of congruent stobjs.  Note:  this error occurred in
+the context (F ST1 ST1 ST1).
+
+ACL2 !&gt;</pre> 
+ 
+ <h3>Specifying Non-executable Stobjs</h3> 
+ 
+ <p>As noted above, if keyword argument <span class="v">:non-executable t</span> is specified 
+ then the stobj is not created.  More precisely, the ``live'', mutable stobj is 
+ not created.  So why use this keyword argument?  Perhaps you would like to do 
+ your computation on several stobjs that are all congruent to a given stobj, 
+ <span class="v">st</span>.  Then by using <span class="v">:non-executable t</span> to introduce <span class="v">st</span>, you avoid 
+ allocating memory for <span class="v">st</span> that you never intend to use.  Similarly, you 
+ can avoid allocating such memory when your intended use of <span class="v">st</span> is only as 
+ a local stobj (see <a href="ACL2____WITH-LOCAL-STOBJ.html">with-local-stobj</a>) or as the type of a stobj field of 
+ another stobj.</p> 
+ 
+ <p>When <span class="v">:non-executable t</span> is specified, it is illegal to supply a 
+ <span class="v">:congruent-to</span> argument.</p>
+</body>
+</html>

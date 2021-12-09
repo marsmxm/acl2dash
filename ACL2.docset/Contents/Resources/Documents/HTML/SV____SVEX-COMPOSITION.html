@@ -1,0 +1,66 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Svex-composition</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=SV____SVEX-COMPOSITION">Click for Svex-composition in the Full Manual</a></h3>
+
+<p>The process of composing together a netlist of svex assignments into 
+full update functions.</p> 
+<p>Suppose we have a module with a lot of assignment statements. We want to 
+compose together the RHS expressions in order to get the update formula for 
+each wire, in terms of the PIs and registers.</p> 
+ 
+<p>One basic thing to do is DFS through each of the expressions, building full 
+update formulas.  Every time we get to a wire, either it is a PI/register or 
+another internal wire.  If it is a PI/register, we leave it; if it's an 
+internal wire, either we've seen it before and computed some formula for it, 
+or we descend into its update formula and compute that first.</p> 
+ 
+<p>Two kinds of problems arise when using this strategy. First, there might be 
+variable-level self-loops, e.g.:</p> 
+<pre class="code">wire [5:0] a = b | (a[4:0] &lt;&lt; 1);</pre> 
+ 
+<p>Here, <span class="v">a</span> looks like a has a self-loop, but in fact each bit only 
+depends on previous bits, so the loop can be unrolled into a combinational 
+formula.  This represents a third possibility for when we encounter an 
+internal wire: we've encountered it before, but haven't finished computing a 
+formula for it.</p> 
+ 
+<p>Second, there might be bit-level self-loops. These are bad news but they 
+do sometimes come up, e.g. in latch-based (as opposed to flipflop-based) logic 
+as well as with clock gating where the clock gate signal depends on the output 
+of a register that it gates (depending on how the clock gate is represented in 
+the logic).</p> 
+ 
+<p>To deal with these two problems, we do two further steps after the initial 
+simple DFS composition step; step 2 effectively deals with variable-level 
+self-loops and step 3 deals with bit-level self-loops.  The full sequence of 
+steps:</p> 
+ 
+<ul> 
+ 
+<li>1. Simple depth-first search composition, stopping whenever we reach a 
+variable that is still in the stack.</li> 
+ 
+<li>2. Iterative self-composition of the remaining signals, using caremasks to 
+determine when a variable needs to be composed in.  This is implemented in as 
+<span class="v">svex-alist-maskcompose-iter</span> in "mask-compose.lisp".</li> 
+ 
+<li>3. Break up into bits any remaining internal signals that other signals 
+still depend on, then find strongly-connected components of the bit-level 
+dependency graph and try to self-compose those components enough times to 
+resolve further dependencies.  Then translate the decomposed signals back into 
+the original namespace.</li> 
+ 
+<li>4. Finally, replace any remaining internal signal dependencies with Xes.</li> 
+</ul> 
+ 
+<p>This is implemented <span class="v">svex-assigns-compose</span>.</p> 
+ 
+
+</body>
+</html>

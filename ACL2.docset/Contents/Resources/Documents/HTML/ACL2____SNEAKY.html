@@ -1,0 +1,100 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Sneaky</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____SNEAKY">Click for Sneaky in the Full Manual</a></h3>
+
+<p>A debugging tool for ACL2 programs.  The sneaky functions allow you 
+to save and mutate global variables, even without access to <a href="ACL2____STATE.html">state</a>.</p><h3>Introductory example</h3> 
+ 
+<pre class="code">ACL2 !&gt; (<a href="COMMON-LISP____DEFUN.html">defun</a> my-function (x y)           ;; note: no state
+          (<a href="ACL2____B_A2.html">b*</a> ((sum     (<a href="COMMON-LISP_____B2.html">+</a> x y))
+               (product (<a href="COMMON-LISP_____A2.html">*</a> x y)))
+            (<a href="ACL2____SNEAKY-SAVE.html">sneaky-save</a> :sum sum)         ; save the latest sum
+            (<a href="ACL2____SNEAKY-SAVE.html">sneaky-save</a> :product product) ; save the latest product
+            (<a href="ACL2____SNEAKY-INCF.html">sneaky-incf</a> :calls 1)         ; count how many calls there were
+            (<a href="COMMON-LISP____LIST.html">list</a> sum product)))
+
+ACL2 !&gt; (my-function 1 2)
+(3 2)
+
+ACL2 !&gt; (my-function 3 4)
+(7 12)
+
+ACL2 !&gt; (<a href="ACL2____DEFCONSTS.html">defconsts</a> (*sum* state)           ;; *sum* is 7
+          (<a href="ACL2____SNEAKY-LOAD.html">sneaky-load</a> :sum state))        ;; (its most recent value)
+
+ACL2 !&gt; (<a href="ACL2____DEFCONSTS.html">defconsts</a> (*product* state)       ;; *product* is 7
+          (<a href="ACL2____SNEAKY-LOAD.html">sneaky-load</a> :product state))    ;; (its most recent value)
+
+ACL2 !&gt; (<a href="ACL2____DEFCONSTS.html">defconsts</a> (*calls* state)         ;; *calls* is 2
+          (<a href="ACL2____SNEAKY-LOAD.html">sneaky-load</a> :product state))    ;; (we called my-function twice)</pre> 
+ 
+<h3>Motivation</h3> 
+ 
+<p>When you are debugging a large program, you may want to get a hold of 
+internal values from some function that is somehow "deep" inside your 
+computation.  Here are some ways you might do this:</p> 
+ 
+<ul> 
+ 
+<li>Printing.  You could, perhaps via <a href="ACL2____REDEF.html">redef</a>, add <a href="ACL2____CW.html">cw</a> statements to 
+print out the desired values. This is easy and works well when your values are 
+small enough to print, and your function is called infrequently enough that the 
+printing is not unmanageable.</li> 
+ 
+<li>Tracing.  If the values you want to see are inputs or outputs of a 
+function, you could perhaps use <a href="ACL2____TRACE_42.html">trace$</a>.  This may avoid needing to 
+rebuild or use <a href="ACL2____REDEF.html">redef</a>.  Like printing, this is likely to work well for 
+inspecting small values and infrequently called functions.</li> 
+ 
+<li>Globals.  If your functions involves <a href="ACL2____STATE.html">state</a>, you might be able to 
+just <a href="ACL2____ASSIGN.html">assign</a> the values of interest to some new state globals.  You could 
+then extract and inspect them using <a href="ACL2_____04.html">@</a>.  This approach may work well even 
+for large values or frequently called functions, but requires access to 
+state.</li> 
+ 
+</ul> 
+ 
+<p>Unfortunately, if your program is made up of ordinary, pure ACL2 functions 
+that do not involve <a href="ACL2____STATE.html">state</a>, then using globals might require adding state 
+all throughout the call tree.  This could be really difficult, especially for a 
+one-off investigation.</p> 
+ 
+<p>The <b>sneaky</b> mechanism allows you to work around this limitation: it is 
+very similar to using globals, but allows you to avoid state.</p> 
+ 
+<h3>Implementation</h3> 
+ 
+<p>The sneaky book requires a trust tag.  In raw Lisp, we add a Common Lisp 
+variable, the <span class="v">*sneaky-state*</span>, which is a hash table associating names with 
+values.</p> 
+ 
+<p>The main sneaky operations, like <a href="ACL2____SNEAKY-SAVE.html">sneaky-save</a>, <a href="ACL2____SNEAKY-PUSH.html">sneaky-push</a>, and 
+<a href="ACL2____SNEAKY-INCF.html">sneaky-incf</a>, allow you to manipulate the values in this hash table, but 
+only indirectly.  This keeps the <span class="v">*sneaky-state*</span> as a purely Common Lisp 
+variable that exists outside of ACL2, so the effects of manipulating this state 
+is logically invisible.  That is, in the logic, all of these functions just 
+return <span class="v">nil</span>.</p> 
+ 
+<p>Meanwhile, to be able to retrieve values, the special operations <a href="ACL2____SNEAKY-LOAD.html">sneaky-load</a> and <a href="ACL2____SNEAKY-ALIST.html">sneaky-alist</a> allow you to access the 
+<span class="v">*sneaky-state*</span>.  However, in the logic these functions just read from the 
+ACL2 oracle.  So, even though a sequence like:</p> 
+ 
+<pre class="code">(<a href="ACL2____SNEAKY-SAVE.html">sneaky-save</a> :foo 5)
+(<a href="ACL2____SNEAKY-LOAD.html">sneaky-load</a> :foo state)   ;; should always return (<a href="ACL2____MV.html">mv</a> '5 state)</pre> 
+ 
+<p>There is no logical connection between the sneaky save/load, so you should 
+never be able to prove theorems such as</p> 
+ 
+<pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> unprovable
+  (<a href="ACL2____PROGN_42.html">progn$</a> (<a href="ACL2____SNEAKY-SAVE.html">sneaky-save</a> :foo 5)
+          (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 0 (<a href="ACL2____SNEAKY-LOAD.html">sneaky-load</a> :foo state)) 5)))</pre> 
+ 
+
+</body>
+</html>

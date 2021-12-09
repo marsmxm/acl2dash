@@ -1,0 +1,370 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>X86-operand-from-modr/m-and-sib-bytes</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=X86ISA____X86-OPERAND-FROM-MODR_F2M-AND-SIB-BYTES">Click for X86-operand-from-modr/m-and-sib-bytes in the Full Manual</a></h3>
+
+<p>Read an operand from memory or a register.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(x86-operand-from-modr/m-and-sib-bytes 
+     proc-mode reg-type operand-size inst-ac? 
+     memory-ptr? seg-reg p4? temp-rip 
+     rex-byte r/m mod sib num-imm-bytes x86) 
+ 
+   
+(mv flg operand increment-rip-by addr x86)</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">reg-type</span>  <span class="v">reg-type</span> is <span class="v">*gpr-access*</span> for GPRs, and 
+                   <span class="v">*xmm-access*</span> for XMMs.</dd> 
+  <dd>
+<span class="tt">inst-ac?</span>  <span class="v">t</span> if instruction does alignment checking, 
+                   <span class="v">nil</span> otherwise.<br><font color="#606060">Guard <span class="v">(<a href="ACL2____BOOLEANP.html">booleanp</a> inst-ac?)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">memory-ptr?</span>  <span class="v">t</span> if the operand is a memory operand of the 
+                   form m16:16, m16:32, or m16:64.<br><font color="#606060">Guard <span class="v">(<a href="ACL2____BOOLEANP.html">booleanp</a> memory-ptr?)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">seg-reg</span>  Register of the segment to read the operand from 
+                   (when reading the operand from memory).<br><font color="#606060">Guard <span class="v">(<a href="ACL2____INTEGER-RANGE-P.html">integer-range-p</a> 0 *segment-register-names-len* seg-reg)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">p4?</span>  Address-Size Override Prefix Present?.</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">operand</span>  <font color="#606060">Type <span class="v">(<a href="ACL2____NATP.html">natp</a> operand)</span>.</font>
+</dd> 
+<dd>
+<span class="tt">x86</span>  <font color="#606060">Type <span class="v">(x86p x86)</span>, given <span class="v">(<a href="ACL2____FORCE.html">force</a> (x86p x86))</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p> 
+   Based on the ModR/M byte, 
+   the operand is read from either a register or memory. 
+   In the latter case, we calculate the effective address 
+   and the we read the operand from it. 
+   Besides returning the operand, 
+   we also return the calculated effective address. 
+   This is useful for instructions that modify the operand after reading it 
+   (e.g. the source/destination operand of ADD), 
+   which pass the effective address calculated by this function 
+   to <span class="tt"><a href="X86ISA____X86-OPERAND-TO-REG_F2MEM.html">x86-operand-to-reg/mem</a></span> (which writes the result to memory). 
+   </p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>x86-operand-from-modr/m-and-sib-bytes</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ x86-operand-from-modr/m-and-sib-bytes
+ (proc-mode reg-type operand-size inst-ac?
+            memory-ptr? seg-reg p4? temp-rip
+            rex-byte r/m mod sib num-imm-bytes x86)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (x86)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____TYPE.html">type</a> (integer 0 4) proc-mode)
+          (<a href="COMMON-LISP____TYPE.html">type</a> (unsigned-byte 1) reg-type)
+          (<a href="COMMON-LISP____TYPE.html">type</a> (<a href="COMMON-LISP____MEMBER.html">member</a> 1 2 4 6 8 10 16)
+                operand-size)
+          (<a href="COMMON-LISP____TYPE.html">type</a> (<a href="COMMON-LISP____OR.html">or</a> t nil) p4?)
+          (<a href="COMMON-LISP____TYPE.html">type</a> (signed-byte 48) temp-rip)
+          (<a href="COMMON-LISP____TYPE.html">type</a> (unsigned-byte 8) rex-byte)
+          (<a href="COMMON-LISP____TYPE.html">type</a> (unsigned-byte 3) r/m)
+          (<a href="COMMON-LISP____TYPE.html">type</a> (unsigned-byte 2) mod)
+          (<a href="COMMON-LISP____TYPE.html">type</a> (unsigned-byte 8) sib)
+          (<a href="COMMON-LISP____TYPE.html">type</a> (unsigned-byte 3) num-imm-bytes))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a>
+  (<a href="ACL2____XARGS.html">xargs</a>
+      :guard
+      (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____BOOLEANP.html">booleanp</a> inst-ac?)
+           (<a href="ACL2____BOOLEANP.html">booleanp</a> memory-ptr?)
+           (<a href="ACL2____INTEGER-RANGE-P.html">integer-range-p</a> 0
+                            *segment-register-names-len* seg-reg))))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a>
+      (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> mod 3)
+                        (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____EQUAL.html">equal</a> reg-type 0)
+                               (<a href="COMMON-LISP____MEMBER.html">member</a> operand-size '(1 2 4 8)))
+                              (t (<a href="COMMON-LISP____MEMBER.html">member</a> operand-size '(4 8 16))))
+                        (<a href="COMMON-LISP____MEMBER.html">member</a> operand-size
+                                '(<a href="COMMON-LISP____MEMBER.html">member</a> 1 2 4 6 8 10 16)))))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'x86-operand-from-modr/m-and-sib-bytes))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+   (((<a href="ACL2____MV.html">mv</a> ?flg0 (<a href="COMMON-LISP____THE.html">the</a> (signed-byte 64) addr)
+         (<a href="COMMON-LISP____THE.html">the</a> (integer 0 4) increment-rip-by)
+         x86)
+     (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> mod 3)
+         (<a href="ACL2____MV.html">mv</a> nil 0 0 x86)
+         (<a href="X86ISA____X86-EFFECTIVE-ADDR.html">x86-effective-addr</a> proc-mode p4? temp-rip rex-byte
+                             r/m mod sib num-imm-bytes x86)))
+    ((when flg0)
+     (<a href="ACL2____MV.html">mv</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'x86-effective-addr-error flg0)
+         0 0 0 x86))
+    ((<a href="ACL2____MV.html">mv</a> ?flg2 operand x86)
+     (<a href="COMMON-LISP____IF.html">if</a>
+      (<a href="COMMON-LISP____EQUAL.html">equal</a> mod 3)
+      (<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2____INT_D3.html">int=</a> reg-type 0)
+          (<a href="ACL2____MV.html">mv</a> nil
+              (<a href="X86ISA____RGFI-SIZE.html">rgfi-size</a> operand-size (<a href="X86ISA____REG-INDEX.html">reg-index</a> r/m rex-byte 0)
+                         rex-byte x86)
+              x86)
+          (<a href="ACL2____MV.html">mv</a> nil
+              (<a href="X86ISA____XMMI-SIZE.html">xmmi-size</a> operand-size (<a href="X86ISA____REG-INDEX.html">reg-index</a> r/m rex-byte 0)
+                         x86)
+              x86))
+      (<a href="ACL2____B_A2.html">b*</a>
+       ((check-alignment? (<a href="COMMON-LISP____AND.html">and</a> inst-ac?
+                               (<a href="X86ISA____ALIGNMENT-CHECKING-ENABLED-P.html">alignment-checking-enabled-p</a> x86))))
+       (rme-size-opt proc-mode operand-size
+                     addr seg-reg :r check-alignment? x86
+                     :mem-ptr? memory-ptr?
+                     :check-canonicity t))))
+    ((when flg2)
+     (<a href="ACL2____MV.html">mv</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'rm-size-error flg2)
+         0 0 0 x86)))
+   (<a href="ACL2____MV.html">mv</a> nil
+       operand increment-rip-by addr x86))))</pre> 
+<p><b>Theorem: </b>natp-of-x86-operand-from-modr/m-and-sib-bytes.operand</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> natp-of-x86-operand-from-modr/m-and-sib-bytes.operand
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?flg
+                  ?operand ?increment-rip-by ?addr ?x86)
+              (<a href="X86ISA____X86-OPERAND-FROM-MODR_F2M-AND-SIB-BYTES.html">x86-operand-from-modr/m-and-sib-bytes</a>
+                   proc-mode reg-type
+                   operand-size inst-ac? memory-ptr?
+                   seg-reg p4? temp-rip rex-byte
+                   r/m mod sib num-imm-bytes x86)))
+            (<a href="ACL2____NATP.html">natp</a> operand))
+        :rule-classes :type-prescription)</pre> 
+<p><b>Theorem: </b>x86p-of-x86-operand-from-modr/m-and-sib-bytes.x86</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> x86p-of-x86-operand-from-modr/m-and-sib-bytes.x86
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____FORCE.html">force</a> (x86p x86))
+                 (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?flg
+                           ?operand ?increment-rip-by ?addr ?x86)
+                       (<a href="X86ISA____X86-OPERAND-FROM-MODR_F2M-AND-SIB-BYTES.html">x86-operand-from-modr/m-and-sib-bytes</a>
+                            proc-mode reg-type
+                            operand-size inst-ac? memory-ptr?
+                            seg-reg p4? temp-rip rex-byte
+                            r/m mod sib num-imm-bytes x86)))
+                     (x86p x86)))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>bound-of-mv-nth-1-x86-operand-from-modr/m-and-sib-bytes-operand</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ bound-of-mv-nth-1-x86-operand-from-modr/m-and-sib-bytes-operand
+ (<a href="ACL2____IMPLIES.html">implies</a>
+     (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> bound (<a href="COMMON-LISP____ASH.html">ash</a> operand-size 3))
+          (<a href="COMMON-LISP____MEMBER.html">member</a> operand-size '(1 2 4 8 16))
+          (x86p x86))
+     (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> bound
+                      (<a href="ACL2____MV-NTH.html">mv-nth</a> 1
+                              (<a href="X86ISA____X86-OPERAND-FROM-MODR_F2M-AND-SIB-BYTES.html">x86-operand-from-modr/m-and-sib-bytes</a>
+                                   proc-mode reg-type
+                                   operand-size inst-ac? memory-ptr?
+                                   seg-reg p4? temp-rip rex-byte
+                                   r/m mod sib num-imm-bytes x86))))
+ :rule-classes
+ (:rewrite
+  (:type-prescription
+      :corollary
+      (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> bound (<a href="COMMON-LISP____ASH.html">ash</a> operand-size 3))
+                    (<a href="COMMON-LISP____MEMBER.html">member</a> operand-size '(1 2 4 8 16))
+                    (x86p x86))
+               (<a href="ACL2____NATP.html">natp</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 1
+                             (<a href="X86ISA____X86-OPERAND-FROM-MODR_F2M-AND-SIB-BYTES.html">x86-operand-from-modr/m-and-sib-bytes</a>
+                                  proc-mode reg-type
+                                  operand-size inst-ac? memory-ptr?
+                                  seg-reg p4? temp-rip rex-byte
+                                  r/m mod sib num-imm-bytes x86))))
+      :hints
+      (("Goal" :in-theory '(<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> integer-range-p natp))))
+  (:linear
+   :corollary
+   (<a href="ACL2____IMPLIES.html">implies</a>
+       (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> bound (<a href="COMMON-LISP____ASH.html">ash</a> operand-size 3))
+            (<a href="COMMON-LISP____MEMBER.html">member</a> operand-size '(1 2 4 8 16))
+            (x86p x86))
+       (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> 0
+                (<a href="ACL2____MV-NTH.html">mv-nth</a> 1
+                        (<a href="X86ISA____X86-OPERAND-FROM-MODR_F2M-AND-SIB-BYTES.html">x86-operand-from-modr/m-and-sib-bytes</a>
+                             proc-mode reg-type
+                             operand-size inst-ac? memory-ptr?
+                             seg-reg p4? temp-rip rex-byte
+                             r/m mod sib num-imm-bytes x86)))
+            (<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 1
+                       (<a href="X86ISA____X86-OPERAND-FROM-MODR_F2M-AND-SIB-BYTES.html">x86-operand-from-modr/m-and-sib-bytes</a>
+                            proc-mode reg-type operand-size inst-ac?
+                            memory-ptr? seg-reg p4? temp-rip
+                            rex-byte r/m mod sib num-imm-bytes x86))
+               (<a href="COMMON-LISP____EXPT.html">expt</a> 2 bound))))
+   :hints
+   (("Goal"
+        :in-theory '(<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> integer-range-p (:e expt)))))))</pre> 
+<p><b>Theorem: </b>bigger-bound-of-mv-nth-1-x86-operand-from-modr/m-and-sib-bytes-operand</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ bigger-bound-of-mv-nth-1-x86-operand-from-modr/m-and-sib-bytes-operand
+ (<a href="ACL2____IMPLIES.html">implies</a>
+     (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> (<a href="COMMON-LISP____ASH.html">ash</a> operand-size 3) bound)
+          (<a href="COMMON-LISP____MEMBER.html">member</a> operand-size '(1 2 4 8 16))
+          (<a href="COMMON-LISP____INTEGERP.html">integerp</a> bound)
+          (x86p x86))
+     (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> bound
+                      (<a href="ACL2____MV-NTH.html">mv-nth</a> 1
+                              (<a href="X86ISA____X86-OPERAND-FROM-MODR_F2M-AND-SIB-BYTES.html">x86-operand-from-modr/m-and-sib-bytes</a>
+                                   proc-mode reg-type
+                                   operand-size inst-ac? memory-ptr?
+                                   seg-reg p4? temp-rip rex-byte
+                                   r/m mod sib num-imm-bytes x86))))
+ :rule-classes (:rewrite))</pre> 
+<p><b>Theorem: </b>bound-of-mv-nth-1-x86-operand-from-modr/m-and-sib-bytes-operand-6-and-10-bytes-read</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ bound-of-mv-nth-1-x86-operand-from-modr/m-and-sib-bytes-operand-6-and-10-bytes-read
+ (<a href="ACL2____IMPLIES.html">implies</a>
+     (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> bound (<a href="COMMON-LISP____ASH.html">ash</a> operand-size 3))
+          (<a href="COMMON-LISP____MEMBER.html">member</a> operand-size '(6 10))
+          (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> mod 3))
+          (x86p x86))
+     (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> bound
+                      (<a href="ACL2____MV-NTH.html">mv-nth</a> 1
+                              (<a href="X86ISA____X86-OPERAND-FROM-MODR_F2M-AND-SIB-BYTES.html">x86-operand-from-modr/m-and-sib-bytes</a>
+                                   proc-mode reg-type
+                                   operand-size inst-ac? memory-ptr?
+                                   seg-reg p4? temp-rip rex-byte
+                                   r/m mod sib num-imm-bytes x86))))
+ :rule-classes
+ (:rewrite
+  (:type-prescription
+      :corollary
+      (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> bound (<a href="COMMON-LISP____ASH.html">ash</a> operand-size 3))
+                    (<a href="COMMON-LISP____MEMBER.html">member</a> operand-size '(6 10))
+                    (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> mod 3))
+                    (x86p x86))
+               (<a href="ACL2____NATP.html">natp</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 1
+                             (<a href="X86ISA____X86-OPERAND-FROM-MODR_F2M-AND-SIB-BYTES.html">x86-operand-from-modr/m-and-sib-bytes</a>
+                                  proc-mode reg-type
+                                  operand-size inst-ac? memory-ptr?
+                                  seg-reg p4? temp-rip rex-byte
+                                  r/m mod sib num-imm-bytes x86))))
+      :hints
+      (("Goal" :in-theory '(<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> integer-range-p natp))))
+  (:linear
+   :corollary
+   (<a href="ACL2____IMPLIES.html">implies</a>
+       (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> bound (<a href="COMMON-LISP____ASH.html">ash</a> operand-size 3))
+            (<a href="COMMON-LISP____MEMBER.html">member</a> operand-size '(6 10))
+            (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> mod 3))
+            (x86p x86))
+       (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> 0
+                (<a href="ACL2____MV-NTH.html">mv-nth</a> 1
+                        (<a href="X86ISA____X86-OPERAND-FROM-MODR_F2M-AND-SIB-BYTES.html">x86-operand-from-modr/m-and-sib-bytes</a>
+                             proc-mode reg-type
+                             operand-size inst-ac? memory-ptr?
+                             seg-reg p4? temp-rip rex-byte
+                             r/m mod sib num-imm-bytes x86)))
+            (<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 1
+                       (<a href="X86ISA____X86-OPERAND-FROM-MODR_F2M-AND-SIB-BYTES.html">x86-operand-from-modr/m-and-sib-bytes</a>
+                            proc-mode reg-type operand-size inst-ac?
+                            memory-ptr? seg-reg p4? temp-rip
+                            rex-byte r/m mod sib num-imm-bytes x86))
+               (<a href="COMMON-LISP____EXPT.html">expt</a> 2 bound))))
+   :hints
+   (("Goal"
+        :in-theory '(<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> integer-range-p (:e expt)))))))</pre> 
+<p><b>Theorem: </b>integerp-x86-operand-from-modr/m-and-sib-bytes-increment-rip-by-type-prescription</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ integerp-x86-operand-from-modr/m-and-sib-bytes-increment-rip-by-type-prescription
+ (<a href="ACL2____IMPLIES.html">implies</a>
+      (<a href="ACL2____FORCE.html">force</a> (x86p x86))
+      (<a href="ACL2____NATP.html">natp</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 2
+                    (<a href="X86ISA____X86-OPERAND-FROM-MODR_F2M-AND-SIB-BYTES.html">x86-operand-from-modr/m-and-sib-bytes</a>
+                         proc-mode reg-type operand-size inst-ac?
+                         memory-ptr? seg-reg p4 temp-rip rex-byte
+                         r/m mod sib num-imm-bytes x86))))
+ :rule-classes :type-prescription)</pre> 
+<p><b>Theorem: </b>mv-nth-2-x86-operand-from-modr/m-and-sib-bytes-increment-rip-by-linear&lt;=4</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ mv-nth-2-x86-operand-from-modr/m-and-sib-bytes-increment-rip-by-linear&lt;=4
+ (<a href="ACL2____IMPLIES.html">implies</a> (x86p x86)
+          (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 2
+                      (<a href="X86ISA____X86-OPERAND-FROM-MODR_F2M-AND-SIB-BYTES.html">x86-operand-from-modr/m-and-sib-bytes</a>
+                           proc-mode reg-type operand-size
+                           inst-ac? memory-ptr? seg-reg p4 temp-rip
+                           rex-byte r/m mod sib num-imm-bytes x86))
+              4))
+ :rule-classes :linear)</pre> 
+<p><b>Theorem: </b>i48p-x86-operand-from-modr/m-and-sib-bytes</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ i48p-x86-operand-from-modr/m-and-sib-bytes
+ (<a href="ACL2____IMPLIES.html">implies</a> (forced-and (x86p x86))
+          (<a href="ACL2____SIGNED-BYTE-P.html">signed-byte-p</a>
+               48
+               (<a href="ACL2____MV-NTH.html">mv-nth</a> 2
+                       (<a href="X86ISA____X86-OPERAND-FROM-MODR_F2M-AND-SIB-BYTES.html">x86-operand-from-modr/m-and-sib-bytes</a>
+                            proc-mode reg-type operand-size inst-ac?
+                            memory-ptr? seg-reg p4 temp-rip rex-byte
+                            r/m mod sib num-imm-bytes x86))))
+ :rule-classes
+ (:rewrite
+  (:type-prescription
+   :corollary
+   (<a href="ACL2____IMPLIES.html">implies</a>
+     (forced-and (x86p x86))
+     (<a href="COMMON-LISP____INTEGERP.html">integerp</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 2
+                       (<a href="X86ISA____X86-OPERAND-FROM-MODR_F2M-AND-SIB-BYTES.html">x86-operand-from-modr/m-and-sib-bytes</a>
+                            proc-mode reg-type operand-size inst-ac?
+                            memory-ptr? seg-reg p4 temp-rip rex-byte
+                            r/m mod sib num-imm-bytes x86))))
+   :hints (("Goal" :in-theory '(<a href="ACL2____SIGNED-BYTE-P.html">signed-byte-p</a> integer-range-p))))
+  (:linear
+   :corollary
+   (<a href="ACL2____IMPLIES.html">implies</a>
+      (forced-and (x86p x86))
+      (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> -140737488355328
+               (<a href="ACL2____MV-NTH.html">mv-nth</a> 2
+                       (<a href="X86ISA____X86-OPERAND-FROM-MODR_F2M-AND-SIB-BYTES.html">x86-operand-from-modr/m-and-sib-bytes</a>
+                            proc-mode reg-type operand-size inst-ac?
+                            memory-ptr? seg-reg p4 temp-rip rex-byte
+                            r/m mod sib num-imm-bytes x86)))
+           (<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 2
+                      (<a href="X86ISA____X86-OPERAND-FROM-MODR_F2M-AND-SIB-BYTES.html">x86-operand-from-modr/m-and-sib-bytes</a>
+                           proc-mode reg-type operand-size
+                           inst-ac? memory-ptr? seg-reg p4 temp-rip
+                           rex-byte r/m mod sib num-imm-bytes x86))
+              140737488355328)))
+   :hints
+   (("Goal"
+         :in-theory '(<a href="ACL2____SIGNED-BYTE-P.html">signed-byte-p</a> integer-range-p (:e expt)))))))</pre> 
+<p><b>Theorem: </b>i64p-x86-operand-from-modr/m-and-sib-bytes</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ i64p-x86-operand-from-modr/m-and-sib-bytes
+ (<a href="ACL2____IMPLIES.html">implies</a> (forced-and (x86p x86))
+          (<a href="ACL2____SIGNED-BYTE-P.html">signed-byte-p</a>
+               64
+               (<a href="ACL2____MV-NTH.html">mv-nth</a> 3
+                       (<a href="X86ISA____X86-OPERAND-FROM-MODR_F2M-AND-SIB-BYTES.html">x86-operand-from-modr/m-and-sib-bytes</a>
+                            proc-mode reg-type operand-size inst-ac?
+                            memory-ptr? seg-reg p4 temp-rip rex-byte
+                            r/m mod sib num-imm-bytes x86))))
+ :rule-classes
+ (:rewrite
+  (:type-prescription
+   :corollary
+   (<a href="ACL2____IMPLIES.html">implies</a>
+     (forced-and (x86p x86))
+     (<a href="COMMON-LISP____INTEGERP.html">integerp</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 3
+                       (<a href="X86ISA____X86-OPERAND-FROM-MODR_F2M-AND-SIB-BYTES.html">x86-operand-from-modr/m-and-sib-bytes</a>
+                            proc-mode reg-type operand-size inst-ac?
+                            memory-ptr? seg-reg p4 temp-rip rex-byte
+                            r/m mod sib num-imm-bytes x86))))
+   :hints (("Goal" :in-theory '(<a href="ACL2____SIGNED-BYTE-P.html">signed-byte-p</a> integer-range-p))))
+  (:linear
+   :corollary
+   (<a href="ACL2____IMPLIES.html">implies</a>
+      (forced-and (x86p x86))
+      (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> -9223372036854775808
+               (<a href="ACL2____MV-NTH.html">mv-nth</a> 3
+                       (<a href="X86ISA____X86-OPERAND-FROM-MODR_F2M-AND-SIB-BYTES.html">x86-operand-from-modr/m-and-sib-bytes</a>
+                            proc-mode reg-type operand-size inst-ac?
+                            memory-ptr? seg-reg p4 temp-rip rex-byte
+                            r/m mod sib num-imm-bytes x86)))
+           (<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 3
+                      (<a href="X86ISA____X86-OPERAND-FROM-MODR_F2M-AND-SIB-BYTES.html">x86-operand-from-modr/m-and-sib-bytes</a>
+                           proc-mode reg-type operand-size
+                           inst-ac? memory-ptr? seg-reg p4 temp-rip
+                           rex-byte r/m mod sib num-imm-bytes x86))
+              9223372036854775808)))
+   :hints
+   (("Goal"
+         :in-theory '(<a href="ACL2____SIGNED-BYTE-P.html">signed-byte-p</a> integer-range-p (:e expt)))))))</pre> 
+
+</body>
+</html>

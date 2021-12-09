@@ -1,0 +1,229 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Svtv-data</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=SV____SVTV-DATA">Click for Svtv-data in the Full Manual</a></h3>
+
+<p>A stobj encapsulating an SVTV and the steps used in creating it, from 
+the initial SV design to (potentially) a pipelined symbolic run.</p> 
+ 
+<p>An svtv-data stobj holds an SV design and several other pieces of data, such 
+as finite-state machine and symbolic pipeline objects, tied to that design. 
+These data objects are constrained by the abstract stobj invariant to have 
+certain relationships among each other and to the design.  For example, one 
+invariant states that if the <span class="v">phase-fsm-validp</span> field is true, then the 
+<span class="v">phase-fsm</span> object is equivalent to the composition of the normalized signal 
+assignments from the <span class="v">flatten</span> field, which in turn (if <span class="v">flatten-validp</span> 
+is true) is a certain function of the original design.  Similarly, the 
+<span class="v">cycle-fsm</span> and <span class="v">pipeline</span> fields are known to equivalent to certain 
+functions of the other fields.  These relations are designed so that, for 
+example, a pipeline can be used to prove a lemma about a cycle FSM to aid in a 
+larger proof.</p> 
+ 
+<h3>Beta Warning</h3> 
+ 
+<p>This is relatively new and the structure/interface of the stobj may still 
+change in backward-incompatible ways.  Howeer, at least the high-level tools 
+<span class="v">defsvtv$</span> and <span class="v">defcycle</span> should retain their same interfaces.</p> 
+ 
+ 
+<h3>Steps</h3> 
+ 
+<p>The stobj contains data members that trace the following steps:</p> 
+ 
+<ul> 
+ 
+<li>The initial SV design is flattened, producing the <span class="v">flatten</span> 
+field, a product of type <span class="v">flatten-res</span> containing signal assignments, fixup 
+assignments, constraints, and a variable declaration map.</li> 
+ 
+<li>The flattened design is normalized, producing the <span class="v">flatnorm</span> 
+field, a product of type <span class="v">flatnorm-res</span> containing finalized signal 
+assignments and constraints and a signal delay map.</li> 
+ 
+<li>The flattened, normalized design is composed into a finite state machine 
+representation and stored in the <span class="v">phase-fsm</span> field.  This contains the 
+nextstate functions and the values for each signal in terms of previous states 
+and primary input.</li> 
+ 
+<li>The user may attach names to certain signals, which are processed into a 
+<span class="v">namemap</span>.</li> 
+ 
+<li>The user may define a cycle as a composition of one or 
+more (usually two) phases of the phase FSM into a new FSM.</li> 
+ 
+<li>The user may define a pipeline as a run of several cycles of the 
+cycle FSM in which certain inputs are given symbolic or concrete values at 
+particular times and certain outputs are read at particular times.</li> 
+ 
+</ul> 
+ 
+<h3>High-level tools</h3> 
+ 
+<p><span class="v">defsvtv$</span> provides a drop-in replacement for the old <a href="ACL2____DEFSVTV.html">defsvtv</a> 
+utility. However, it drops support for the <span class="v">:state-machine</span>, 
+<span class="v">:keep-final-states</span>, and <span class="v">:keep-all-states</span> options because these are 
+geared toward using a pipeline-style SVTV as a cycle FSM, which is now 
+deprecated since we have such FSMs as separate structures.  Similarly, 
+<span class="v">defsvtv$-phasewise</span> is a drop-in replacement for <a href="SV____DEFSVTV-PHASEWISE.html">defsvtv-phasewise</a>, 
+also producing an SVTV structure but using a different user input syntax to 
+supply the pipeline steps.</p> 
+ 
+<p><span class="v">defcycle</span> produces a cycle FSM from a design, given a name mapping and 
+phase specification.  This is intended to replace the use of <span class="v">defsvtv</span> with 
+the <span class="v">:state-machine</span> option.</p> 
+ 
+<p>A nice thing about these two tools is that they don't need to repeat work 
+whose results have already been stored in the svtv-data stobj.  For example, to 
+create two SVTV objects representing pipelines built on the same module with 
+the same clock cycle phases, only the pipeline composition needs to be 
+repeated, not the flattening, phase-FSM composition, or clock-cycle 
+composition.</p> 
+ 
+<h3>Lower-level tools</h3> 
+ 
+<p>The fields of the <span class="v">svtv-data</span> stobj may be updated directly, but there 
+are stringent guard requirements to prevent the invariants from being broken. 
+Because these guard obligations can be somewhat baroque, we define several 
+helper utilities that are lower level than <span class="v">defsvtv$</span> and <span class="v">defcycle</span> 
+but with easier guard requirements than the core updaters.  To ease these guard 
+requirements, these functions invalidate any fields that might violate 
+invariants.</p> 
+ 
+<p><span class="v">svtv-data-set-design</span> initializes the design of the <span class="v">svtv-data</span> 
+object to the given design.  If this differs from the current design, it 
+invalidates the <span class="v">flatten</span> and <span class="v">namemap</span> fields.</p> 
+ 
+<p><span class="v">svtv-data-maybe-compute-flatten</span> computes the <span class="v">flatten</span> field from 
+the current design, unless that field is already valid.  It invalidates 
+all the other derived fields since they all depend on the flatten field.</p> 
+ 
+<p><span class="v">svtv-data-maybe-compute-flatnorm</span> computes the <span class="v">flatnorm</span> field, 
+requiring that <span class="v">flatten</span> is valid.</p> 
+ 
+<p><span class="v">svtv-data-maybe-compute-namemap</span> computes the namemap from the given 
+user namemap, requiring that <span class="v">flatten</span> is valid and invalidating the 
+<span class="v">pipeline</span> since it is derived from the namemap.</p> 
+ 
+<p><span class="v">svtv-data-maybe-compute-phase-fsm</span> computes the <span class="v">phase-fsm</span> field, 
+requiring that <span class="v">flatnorm</span> is valid.  It invalidates the <span class="v">cycle-fsm</span>.</p> 
+ 
+<p><span class="v">svtv-data-maybe-compute-cycle-fsm</span> computes the <span class="v">cycle-fsm</span> field 
+given a list of phase specifications, requiring that the <span class="v">phase-fsm</span> is 
+valid.  It invalidates the <span class="v">pipeline</span>.</p> 
+ 
+<p><span class="v">svtv-data-maybe-compute-pipeline</span> computes the <span class="v">pipeline</span> given a 
+<span class="v">pipeline-setup</span> object.  It requires that the <span class="v">phase-fsm</span> and 
+<span class="v">cycle-fsm</span> fields are valid.</p> 
+ 
+<p>The following functions apply SVEX <span class="v">rewriting</span> to various fields:</p> 
+<ul> 
+<li>svtv-data-rewrite-phase-fsm</li> 
+<li>svtv-data-rewrite-cycle-fsm</li> 
+<li>svtv-data-rewrite-pipeline</li> 
+</ul> 
+ 
+<h3>Export and Import</h3> 
+ 
+<p>The svtv-data stobj is not saved by certify-book.  If you want to create an 
+svtv-data object in one book and include it elsewhere, we provide the utility 
+<span class="v">def-svtv-data-export/import</span>.  This saves (almost all) the current contents 
+of the svtv-data stobj (or some congruent stobj) as a constant function, with 
+theorems stating that this function satisfies the svtv-data invariant.  It also 
+produces a function which imports that object back into an svtv-data object, 
+recomputing the parts (the <span class="v">moddb</span> and <span class="v">aliases</span> sub-stobjs) that 
+couldn't be saved.</p> 
+ 
+<h3>Debugging and VCD dumping</h3> 
+ 
+<p>Various utilities are provided for dumping VCD files showing runs of the design:</p> 
+ 
+<ul> 
+ 
+<li>
+<span class="v">svtv-data-debug-pipeline</span> dumps a VCD showing the run of the 
+pipeline, given the assignments for the pipeline variables.</li> 
+ 
+<li>
+<span class="v">svtv-data-debug-cycle-fsm</span> dumps a VCD showing a cycle FSM run, given 
+an initial state environment and a list of input environments for the cycles to 
+be run.</li> 
+ 
+<li>
+<span class="v">svtv-data-debug-phase-fsm</span> dumps a VCD showing a phase FSM run, given 
+an initial state environment and a list of input environments for the phases to 
+be run.</li> 
+ 
+<li>
+<span class="v">fsm-debug</span> dumps a VCD from a <span class="v">base-fsm</span> data structure; it is used 
+as a helper function for the above.</li> 
+ 
+</ul> 
+ 
+<p>Additionally, the <a href="SV____SVTV-CHASE.html">svtv-chase</a> read-eval-print loop can be initialized 
+using the following entry points:</p> 
+ 
+<ul> 
+ 
+<li>
+<span class="v">svtv-data-chase-pipeline</span> sets up the chase environment to reflect a 
+run of the pipeline, given the assignments for the pipeline variables</li> 
+ 
+<li>
+<span class="v">svtv-data-chase-cycle-fsm</span> sets up the chase REPL for a cycle FSM run, given 
+an initial state environment and a list of input environments for the cycles to 
+be run.</li> 
+ 
+<li>
+<span class="v">svtv-data-chase-phase-fsm</span> sets up the chase REPL for a phase FSM run, 
+given an initial state environment and a list of input environments for the 
+phases to be run.</li> 
+ 
+<li>
+<span class="v">svtv-data-chase-repl</span> re-enters a chase REPL that was previously set up, 
+with the same input/initial state environments as before.</li> 
+ 
+</ul> 
+ 
+<p>A common debug loop to be stuck in is finding the right set of signals to 
+set in order to get a hardware module to produce a desired result.  In each 
+iteration, we find a signal that wasn't previously driven (by examining a VCD, 
+say), then add the signal to the pipeline and try again.  To support fast 
+iteration on this debug loop, we have three utilities based on the svtv-data 
+stobj.  These will set up the svtv-data stobj with a cycle FSM if it is not 
+already loaded.  They each take as input a <span class="v">defsvtv$</span> or 
+<span class="v">defsvtv$-phasewise</span> form or some form that macroexpands to one:</p> 
+ 
+<ul> 
+ 
+<li>
+<span class="v">svtv-data-debug-defsvtv$</span> performs a concrete run of the given 
+pipeline, producing an output environment; it takes a <span class="v">defsvtv$</span> or 
+<span class="v">defsvtv$-phasewise</span> form and keyword arguments <span class="v">:env</span> (an environment 
+binding the input variables of the SVTV) and <span class="v">:svtv-data</span> (to optionally 
+provide a congruent stobj to use in place of <span class="v">svtv-data</span>).</li> 
+ 
+<li>
+<span class="v">svtv-data-debug-defsvtv$</span> dumps a VCD for the pipeline; it takes a 
+<span class="v">defsvtv$</span> or <span class="v">defsvtv$-phasewise</span> form and keyword arguments 
+<span class="v">:env</span> (an environment binding the input variables of the SVTV), 
+<span class="v">:filename</span> (for the VCD file), and the stobjs 
+<span class="v">svtv-data</span>, <span class="v">vcd-wiremap</span>, and 
+<span class="v">vcd-vals</span>.  (The stobjs do not need to be initialized.)</li> 
+ 
+<li>
+<span class="v">svtv-data-chase-defsvtv$</span> sets up a <a href="SV____SVTV-CHASE.html">svtv-chase</a> REPL for a run of 
+the pipeline; it takes a <span class="v">defsvtv$</span> or <span class="v">defsvtv$-phasewise</span> form and 
+keyword arguments <span class="v">:env</span> (an environment binding the input variables of the 
+SVTV), and the stobjs <span class="v">svtv-data</span> and <span class="v">svtv-chase-data</span>. (The stobjs do not need to be 
+initialized.)</li> 
+          
+</ul> 
+ 
+
+</body>
+</html>

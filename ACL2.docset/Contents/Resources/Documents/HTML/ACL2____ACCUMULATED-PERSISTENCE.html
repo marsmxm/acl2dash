@@ -1,0 +1,409 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Accumulated-persistence</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____ACCUMULATED-PERSISTENCE">Click for Accumulated-persistence in the Full Manual</a></h3>
+
+<p>To get statistics on which <a href="ACL2____RUNE.html">rune</a>s are being tried</p><pre class="code">Useful Forms:
+(<a href="ACL2____ACCUMULATED-PERSISTENCE.html">accumulated-persistence</a> t)              ; Activate statistics gathering.
+(<a href="ACL2____ACCUMULATED-PERSISTENCE.html">accumulated-persistence</a> :all)           ; As above, ``enhanced'' (see below)
+
+(<a href="ACL2____SHOW-ACCUMULATED-PERSISTENCE.html">show-accumulated-persistence</a> :frames)   ; Display statistics ordered by
+(<a href="ACL2____SHOW-ACCUMULATED-PERSISTENCE.html">show-accumulated-persistence</a> :tries)    ; frames built, times tried,
+(<a href="ACL2____SHOW-ACCUMULATED-PERSISTENCE.html">show-accumulated-persistence</a> :ratio)    ; or their ratio.
+(<a href="ACL2____SHOW-ACCUMULATED-PERSISTENCE.html">show-accumulated-persistence</a>)           ; Same as supplying :frames argument.
+
+(<a href="ACL2____ACCUMULATED-PERSISTENCE.html">accumulated-persistence</a> nil)            ; Deactivate.
+
+(<a href="ACL2____ACCUMULATED-PERSISTENCE-OOPS.html">accumulated-persistence-oops</a>)           ; Undo the clearing effect of
+                                         ; (<a href="ACL2____ACCUMULATED-PERSISTENCE.html">accumulated-persistence</a> t).
+
+Advanced forms:
+(<a href="ACL2____SHOW-ACCUMULATED-PERSISTENCE.html">show-accumulated-persistence</a> :frames-s) ; The `s', `f', and `a' suffixes
+(<a href="ACL2____SHOW-ACCUMULATED-PERSISTENCE.html">show-accumulated-persistence</a> :frames-f) ; stand for `success' (`useful'),
+(<a href="ACL2____SHOW-ACCUMULATED-PERSISTENCE.html">show-accumulated-persistence</a> :frames-a) ; `failure' (`useless'), and `all',
+(<a href="ACL2____SHOW-ACCUMULATED-PERSISTENCE.html">show-accumulated-persistence</a> :tries-s)  ; respectively.  The only effect of
+(<a href="ACL2____SHOW-ACCUMULATED-PERSISTENCE.html">show-accumulated-persistence</a> :tries-f)  ; the `s' and `f' versions is to
+(<a href="ACL2____SHOW-ACCUMULATED-PERSISTENCE.html">show-accumulated-persistence</a> :tries-a)  ; sort first by useful or useless
+                                         ; applications, respectively (see
+                                         ; below).  The `a' versions avoid
+                                         ; showing the useful/useless
+                                         ; breakdown.
+
+(<a href="ACL2____SHOW-ACCUMULATED-PERSISTENCE.html">show-accumulated-persistence</a> :runes)    ; Just show runes alphabetically.
+(<a href="ACL2____SHOW-ACCUMULATED-PERSISTENCE.html">show-accumulated-persistence</a> :useless)  ; Just show useless runes.
+(<a href="ACL2____SHOW-ACCUMULATED-PERSISTENCE.html">show-accumulated-persistence</a> :useless :list)
+                                         ; Just show useless runes as a list.</pre> 
+ 
+ <p>In summary, <span class="v">(<a href="ACL2____ACCUMULATED-PERSISTENCE.html">accumulated-persistence</a> t)</span> turns on fresh statistics 
+ gathering for rules, <span class="v">(<a href="ACL2____ACCUMULATED-PERSISTENCE.html">accumulated-persistence</a> nil)</span> turns it off, 
+ <span class="v">(<a href="ACL2____SHOW-ACCUMULATED-PERSISTENCE.html">show-accumulated-persistence</a>)</span> displays the statistics that were 
+ gathered, and <span class="v">(<a href="ACL2____ACCUMULATED-PERSISTENCE-OOPS.html">accumulated-persistence-oops</a>)</span> restores the statistics, if 
+ any, that were cleared by <span class="v">(<a href="ACL2____ACCUMULATED-PERSISTENCE.html">accumulated-persistence</a> t)</span> or 
+ <span class="v">(<a href="ACL2____ACCUMULATED-PERSISTENCE.html">accumulated-persistence</a> :all)</span>.</p> 
+ 
+ <p>In general, if the optional second argument of 
+ <span class="v">show-accumulated-persistence</span> is supplied as <span class="v">:list</span>, then instead of 
+ the result being displayed a ``pretty'' human-readable format, the result will 
+ be displayed as a corresponding list of entries of the form <span class="v">(frames tries
+ xrune)</span>.</p> 
+ 
+ <p>Note: <span class="v">set-accumulated-persistence</span> is equivalent to 
+ <span class="v">accumulated-persistence</span>.</p> 
+ 
+ <p>See the end of this item for a discussion of ``enhanced statistics 
+ gathering,'' which can be useful for more fine-grained proof debugging.</p> 
+ 
+ <p>Generally speaking, the more ACL2 knows, the slower it runs.  That is 
+ because the search space grows with the number of alternative rules.  Often, 
+ the system tries to apply rules that you have forgotten were even there, if 
+ you knew about them in the first place!  ``Accumulated-persistence'' is a 
+ statistic (originally developed for Nqthm) that helps you identify the rules 
+ that are causing ACL2's search space to explode.</p> 
+ 
+ <p>For other proof debugging utilities, see <a href="ACL2____BREAK-REWRITE.html">break-rewrite</a> and see <a href="ACL2____DMR.html">dmr</a>.</p> 
+ 
+ <p>Accumulated persistence tracking can be turned on or off.  It is generally 
+ off.  When on, proofs may take a little more time than otherwise.  (We 
+ measured approximately 11% more time in a so-called ``everything'' regression 
+ run in May 2020.)  But some useful numbers are collected.  When it is turned 
+ on, by</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____ACCUMULATED-PERSISTENCE.html">accumulated-persistence</a> t)</pre> 
+ 
+ <p>an accumulation site is initialized and henceforth data about which rules 
+ are being tried is accumulated into that site.  That accumulated data can be 
+ displayed with <span class="v">show-accumulated-persistence</span>, as described in detail 
+ below.  When accumulated persistence is turned off, with 
+ <span class="v">(<a href="ACL2____ACCUMULATED-PERSISTENCE.html">accumulated-persistence</a> nil)</span>, the accumulation site is wiped out and the 
+ data in it is lost.</p> 
+ 
+ <p>The ``accumulated persistence'' of a <a href="ACL2____RUNE.html">rune</a> is the number of <a href="ACL2____RUNE.html">rune</a>s the system has attempted to apply (since accumulated persistence was 
+ last activated) while the given <a href="ACL2____RUNE.html">rune</a> was being tried.</p> 
+ 
+ <p>Consider a <span class="v">:</span><span class="tt"><a href="ACL2____REWRITE.html">rewrite</a></span> rule named <span class="tt"><a href="ACL2____RUNE.html">rune</a></span>.  For simplicity, 
+ let us imagine that <span class="tt"><a href="ACL2____RUNE.html">rune</a></span> is tried only once in the period during which 
+ accumulated persistence is being monitored.  Recall that to apply a rewrite 
+ rule we must match the left-hand side of the conclusion to some term we are 
+ trying to rewrite, establish the hypotheses of <span class="tt"><a href="ACL2____RUNE.html">rune</a></span> by rewriting, and, 
+ if successful, then rewrite the right-hand side of the conclusion.  We say 
+ <span class="tt"><a href="ACL2____RUNE.html">rune</a></span> is ``being tried'' from the time we have matched its left-hand 
+ side to the time we have either abandoned the attempt or finished rewriting 
+ its right-hand side.  (By ``match'' we mean to include any loop-stopper 
+ requirement; see <a href="ACL2____LOOP-STOPPER.html">loop-stopper</a>.)  During that period of time other rules 
+ might be tried, e.g., to establish the hypotheses.  The rules tried while 
+ <span class="tt"><a href="ACL2____RUNE.html">rune</a></span> is being tried are ``billed'' to <span class="tt"><a href="ACL2____RUNE.html">rune</a></span> in the sense that 
+ they are being considered here only because of the demands of <span class="tt"><a href="ACL2____RUNE.html">rune</a></span>. 
+ Thus, if no other rules are tried during that period, the accumulated 
+ persistence of <span class="tt"><a href="ACL2____RUNE.html">rune</a></span> is <span class="v">1</span>  we ``bill'' <span class="tt"><a href="ACL2____RUNE.html">rune</a></span> once 
+ for its own application attempt.  If, on the other hand, we tried <span class="v">10</span> 
+ rules on behalf of that application of <span class="tt"><a href="ACL2____RUNE.html">rune</a></span>, then <span class="tt"><a href="ACL2____RUNE.html">rune</a></span>'s 
+ accumulated persistence would be <span class="v">11</span>.</p> 
+ 
+ <p>One way to envision accumulated persistence is to imagine that every time a 
+ <a href="ACL2____RUNE.html">rune</a> is tried it is pushed onto a stack.  The rules tried on behalf of 
+ a given application of a <a href="ACL2____RUNE.html">rune</a> are thus pushed and popped on the stack 
+ above that <a href="ACL2____RUNE.html">rune</a>.  A lot of work might be done on its behalf  the 
+ stack above the <a href="ACL2____RUNE.html">rune</a> grows and shrinks repeatedly as the search 
+ continues for a way to use the <a href="ACL2____RUNE.html">rune</a>.  All the while, the <a href="ACL2____RUNE.html">rune</a> 
+ itself ``persists'' in the stack, until we finish with the attempt to apply 
+ it, at which time we pop it off.  The accumulated persistence of a <a href="ACL2____RUNE.html">rune</a> 
+ application is thus the number of stack frames built while that <a href="ACL2____RUNE.html">rune</a> 
+ was on the stack.</p> 
+ 
+ <p>Note that accumulated persistence is tallied whether or not the attempt to 
+ apply a <a href="ACL2____RUNE.html">rune</a> is successful.  Each of the rules tried on its behalf 
+ might have failed and the attempt to apply the <a href="ACL2____RUNE.html">rune</a> might have also 
+ failed.  The ACL2 proof script would make no mention of the <a href="ACL2____RUNE.html">rune</a> or the 
+ rules tried on its behalf because they did not contribute to the proof.  But 
+ time was spent pursuing the possible application of the <a href="ACL2____RUNE.html">rune</a> and 
+ accumulated persistence is a measure of that time.</p> 
+ 
+ <p>A high accumulated persistence might come about in two extreme ways.  One 
+ is that the rule causes a great deal of work every time it is tried.  The 
+ other is that the rule is ``cheap'' but is tried very often.  We therefore 
+ keep track of the number of times each rule is tried as well as its 
+ persistence.  The ratio between the two is the average amount of work done on 
+ behalf of the rule each time it is tried.</p> 
+ 
+ <p>We do not claim that tracking of runes for accumulated-persistence is 
+ perfect.  In practice, we believe it is quite reliable with the exception of 
+ <a href="ACL2____CONGRUENCE.html">congruence</a> runes and, in some cases <a href="ACL2____EXECUTABLE-COUNTERPART.html">executable-counterpart</a> 
+ runes. (For the latter, details are in a comment in the ACL2 source definition 
+ of function <span class="v">print-useless-runes</span>.)</p> 
+ 
+ <p>When the accumulated persistence totals are displayed by the function 
+ <span class="v">show-accumulated-persistence</span> we sort them so that the most expensive 
+ <a href="ACL2____RUNE.html">rune</a>s are shown first.  We can sort according to one of three basic 
+ keys:</p> 
+ 
+ <pre class="code">:frames - the number of frames built on behalf of the rune
+:tries  - the number of times the rune was tried
+:ratio  - frames built per try</pre> 
+ 
+ <p>The key simply determines the order in which the information is presented. 
+ If no argument is supplied to <span class="v">show-accumulated-persistence</span>, <span class="v">:frames</span> 
+ is used.</p> 
+ 
+ <p>The display breaks each total into ``useful'' and ``useless'' subtotals.  A 
+ ``useful'' rule try is one that is viewed as contributing to the progress of 
+ the proof, and the rest are ``useless'' rule applications.  For example, if a 
+ <span class="v">:</span><span class="tt"><a href="ACL2____REWRITE.html">rewrite</a></span> rule is tried but its hypotheses are not successfully 
+ relieved, then that rule application and all work done on behalf of those 
+ hypotheses is ``useless'' work.  In general, an attempt to apply a <a href="ACL2____RUNE.html">rune</a> 
+ is viewed as ``useful'' unless the attempt fails or the attempt is on the 
+ stack (as described above) for a <a href="ACL2____RUNE.html">rune</a> application that ultimately 
+ fails.  A large number of ``useless'' <span class="v">:frames</span> or <span class="v">:tries</span> along with 
+ correspondingly small ``useful'' counts may suggest <a href="ACL2____RUNE.html">rune</a>s to consider 
+ disabling (see <a href="ACL2____DISABLE.html">disable</a> and see <a href="ACL2____IN-THEORY.html">in-theory</a>).  Thus, here is a more 
+ complete list of the arguments that may be supplied to 
+ <span class="v">show-accumulated-persistence</span>.  Suffixes ``s'', ``f'', and ``a'' are 
+ intended to suggest ``success'' (``useful''), ``failure'' (``useless''), and 
+ ``all''.</p> 
+ 
+ <pre class="code">:frames     - sort by the number of frames built on behalf of the rune
+   :frames-s -   as above, but sort by useful applications
+   :frames-f -   as above, but sort by useless applications
+   :frames-a -   as above, but inhibit display of ``useful'' and
+                 ``useless'' subtotals
+:tries      - sort by the number of times the rune was tried
+   :tries-s  -   as above, but sort by useful applications
+   :tries-f  -   as above, but sort by useless applications
+   :tries-a  -   as above, but inhibit display of ``useful'' and
+                 ``useless'' subtotals
+:ratio      - sort by frames built per try
+:useless    - show only the runes tried whose tries were all ``useless''</pre> 
+ 
+ <p>For a given line of the report, every frame credited to a ``useful'' 
+ (respectively, ``useless'') rule application is considered ``useful'' 
+ (respectively, ``useless'').  We illustrate with the following example.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____PROGN.html">progn</a>
+  (<a href="ACL2____DEFSTUB.html">defstub</a> hyp (x) t)
+  (<a href="ACL2____DEFSTUB.html">defstub</a> concl (x) t)
+  (<a href="ACL2____DEFSTUB.html">defstub</a> bad (x) t)
+  (<a href="ACL2____DEFSTUB.html">defstub</a> good (x) t)
+  (<a href="ACL2____DEFAXIOM.html">defaxiom</a> good-ax
+    (<a href="ACL2____IMPLIES.html">implies</a> (good x) (hyp x)))
+  (<a href="ACL2____DEFAXIOM.html">defaxiom</a> bad-ax
+    (<a href="ACL2____IMPLIES.html">implies</a> (bad x) (hyp x)))
+  (<a href="ACL2____DEFAXIOM.html">defaxiom</a> hyp-implies-concl
+    (<a href="ACL2____IMPLIES.html">implies</a> (hyp x) (concl x)))
+  )
+(<a href="ACL2____ACCUMULATED-PERSISTENCE.html">accumulated-persistence</a> t)
+(<a href="ACL2____THM.html">thm</a> (<a href="ACL2____IMPLIES.html">implies</a> (good x) (concl x)))
+(<a href="ACL2____SHOW-ACCUMULATED-PERSISTENCE.html">show-accumulated-persistence</a>)</pre> 
+ 
+ <p>To prove the <span class="tt"><a href="ACL2____THM.html">thm</a></span> form, ACL2 attempts to rewrite <span class="v">(concl x)</span> to 
+ true by applying rule <span class="v">hyp-implies-concl</span>.  It then attempts to establish 
+ <span class="v">(hyp x)</span> first by trying rule <span class="v">bad-ax</span>, which fails, and second by 
+ trying rule <span class="v">good-ax</span>, which succeeds.  As expected, the report labels as 
+ ``useless'' the failure of the attempt to establish the hypothesis, <span class="v">(bad
+ x)</span>.</p> 
+ 
+ <pre class="code">--------------------------------
+      1        1 (    1.00) (:REWRITE BAD-AX)
+      0        0    [useful]
+      1        1    [useless]
+--------------------------------</pre> 
+ 
+ <p>Now consider the top-level application of rule <span class="v">hyp-implies-concl</span>. 
+ Even though the above report shows the application of <span class="v">bad-ax</span> as 
+ ``useless'', note that this rule was applied on behalf of the successful 
+ (``useful'') application of <span class="v">hyp-implies-concl</span>, and hence is incorporated 
+ into the ``useful'' line for <span class="v">hyp-implies-concl</span>, as follows.</p> 
+ 
+ <pre class="code">--------------------------------
+      3        1 (    3.00) (:REWRITE HYP-IMPLIES-CONCL)
+      3        1    [useful]
+      0        0    [useless]
+--------------------------------</pre> 
+ 
+ <p>In summary: categorization of <span class="v">:frames</span> as ``useful'' or ``useless'' is 
+ based on whether they support ``useful'' or ``useless'' <span class="v">:tries</span>.</p> 
+ 
+ <p>See <a href="ACL2____USELESS-RUNES.html">useless-runes</a> for a way to speed up proofs by automatically 
+ turning off useless rules.</p> 
+ 
+ <p>Note that a <a href="ACL2____RUNE.html">rune</a> with high accumulated persistence may not actually 
+ be the ``culprit.''  For example, suppose <span class="v">rune1</span> is reported to have a 
+ <span class="v">:ratio</span> of <span class="v">101</span>, meaning that on the average a hundred and one frames 
+ were built each time <span class="v">rune1</span> was tried.  Suppose <span class="v">rune2</span> has a 
+ <span class="v">:ratio</span> of <span class="v">100</span>.  It could be that the attempt to apply <span class="v">rune1</span> 
+ resulted in the attempted application of <span class="v">rune2</span> and no other <a href="ACL2____RUNE.html">rune</a>. 
+ Thus, in some sense, <span class="v">rune1</span> is ``cheap'' and <span class="v">rune2</span> is the ``culprit'' 
+ even though it is reported as costing less than <span class="v">rune1</span>.</p> 
+ 
+ <p>If a proof is aborted, then in general, <span class="tt"><a href="ACL2____SHOW-ACCUMULATED-PERSISTENCE.html">show-accumulated-persistence</a></span> will only display totals for runes whose 
+ attempted application is complete: that is, if the rewriter was in the process 
+ of relieving hypotheses for a rule, then information for that rule will not be 
+ included in the tally.  We say ``in general'' because, as indicated near the 
+ top of the output from <span class="tt"><a href="ACL2____SHOW-ACCUMULATED-PERSISTENCE.html">show-accumulated-persistence</a></span> when such 
+ incomplete information is omitted, you can get this information by using 
+ argument <span class="v">:frames-a</span> or <span class="v">:tries-a</span>.</p> 
+ 
+ <p>There are other subtleties in how rune applications are tallied, documented 
+ elsewhere: see <a href="ACL2____ACCUMULATED-PERSISTENCE-SUBTLETIES.html">accumulated-persistence-subtleties</a>.</p> 
+ 
+ <p>We conclude with a discussion of ``enhanced'' statistics gathering, which 
+ is enabled by supplying <span class="v">accumulated-persistence</span> the argument 
+ <span class="v">:ALL</span>:</p> 
+ 
+ <pre class="code">(<a href="ACL2____ACCUMULATED-PERSISTENCE.html">accumulated-persistence</a> :all)</pre> 
+ 
+ <p>At some additional performance expense (but probably well under a factor of 
+ 2 altogether), ACL2 then gathers additional statistics for individual 
+ hypotheses of rules as well as their conclusions.  To understand how this 
+ works, suppose <span class="v">rn</span> is a <a href="ACL2____RUNE.html">rune</a>.  Then we prepend the keyword 
+ <span class="v">:CONC</span> to <span class="v">rn</span> to form what we call its ``conclusion xrune'', and for 
+ its <span class="v">I</span>-th hypothesis we prepend <span class="v">:HYP I</span> to <span class="v">rn</span> to form its 
+ <span class="v">I</span>-th ``hypothesis xrune.''  Here, ``xrune'' is pronounced ``ex rune'', 
+ and is mnemonic for ``extended rune.''  For example, if <span class="v">(<a href="ACL2____REWRITE.html">REWRITE</a> FOO)</span> is 
+ a <a href="ACL2____RUNE.html">rune</a> then <span class="v">(:CONC REWRITE FOO)</span> is its conclusion xrune, and 
+ <span class="v">(:HYP 2 REWRITE FOO)</span> is a hypothesis xrune corresponding to the second 
+ hypothesis of the corresponding rewrite rule.</p> 
+ 
+ <p>With <span class="v">(<a href="ACL2____ACCUMULATED-PERSISTENCE.html">accumulated-persistence</a> :all)</span>, we instruct ACL2 to track not 
+ only runes but also xrunes.  Then, <span class="v">(<a href="ACL2____SHOW-ACCUMULATED-PERSISTENCE.html">show-accumulated-persistence</a>)</span> will 
+ display information for all xrunes in a format that we consider to be ``raw'', 
+ in the sense that data for xrunes are displayed just as for runes.  But a 
+ ``merged'' format is also available.  Here is a summary of display commands, 
+ followed below by further discussion.</p> 
+ 
+ <pre class="code">(<a href="ACL2____SHOW-ACCUMULATED-PERSISTENCE.html">show-accumulated-persistence</a> :frames t) ; t is optional, i.e., the default
+   ; Display enhanced statistics sorted by frames, in a ``raw'' format.
+(<a href="ACL2____SHOW-ACCUMULATED-PERSISTENCE.html">show-accumulated-persistence</a> :frames :merge)
+   ; Display enhanced statistics sorted by frames, in a ``merged'' format.
+(<a href="ACL2____SHOW-ACCUMULATED-PERSISTENCE.html">show-accumulated-persistence</a> :frames nil)
+   ; Display regular statistics sorted by frames
+   ; (runes only, that is, without the enhancements).
+(<a href="ACL2____SHOW-ACCUMULATED-PERSISTENCE.html">show-accumulated-persistence</a> :frames :merge)
+   ; Display a list of entries (frames tries xrune), sorted by frames
+
+; More generally, the descriptions just above apply for any legal first
+; argument:
+
+(<a href="ACL2____SHOW-ACCUMULATED-PERSISTENCE.html">show-accumulated-persistence</a> KEY t)
+(<a href="ACL2____SHOW-ACCUMULATED-PERSISTENCE.html">show-accumulated-persistence</a> KEY :merge)
+(<a href="ACL2____SHOW-ACCUMULATED-PERSISTENCE.html">show-accumulated-persistence</a> KEY nil)
+(<a href="ACL2____SHOW-ACCUMULATED-PERSISTENCE.html">show-accumulated-persistence</a> KEY :list)
+
+; Note also these alternate forms, equivalent to the first of the two forms
+; just above, i.e., the form with second argument of t:
+(<a href="ACL2____SHOW-ACCUMULATED-PERSISTENCE.html">show-accumulated-persistence</a> KEY :raw)
+(<a href="ACL2____SHOW-ACCUMULATED-PERSISTENCE.html">show-accumulated-persistence</a> KEY)</pre> 
+ 
+ <p>There is a significant difference between how runes are tracked and how 
+ ACL2 tracks hypothesis and conclusion xrunes: unlike regular runes, these 
+ xrunes do not contribute to the accumulated <span class="v">:frames</span> counts.  Rather, they 
+ serve as accumulation sites without contributing their <span class="v">:tries</span> to any 
+ accumulation.  Consider for example the snippet below, taken from a report 
+ created with the <span class="v">:merge</span> option (to be discussed further below), i.e., by 
+ evaluating the form <span class="v">(<a href="ACL2____SHOW-ACCUMULATED-PERSISTENCE.html">show-accumulated-persistence</a> :frames :merge)</span>.</p> 
+ 
+ <pre class="code">:frames   :tries    :ratio  rune
+--------------------------------
+    462      211 (    2.18) (:REWRITE PERM-MEM)
+     13        6    [useful]
+    449      205    [useless]
+   .............................
+    251       47 (    5.34) (:HYP 2 :REWRITE PERM-MEM)
+      6        6    [useful]
+    245       41    [useless]
+   .............................
+      0      211 (    0.00) (:HYP 1 :REWRITE PERM-MEM)
+      0        6    [useful]
+      0      205    [useless]
+   .............................
+      0        7 (    0.00) (:CONC :REWRITE PERM-MEM)
+      0        6    [useful]
+      0        1    [useless]
+--------------------------------</pre> 
+ 
+ <p>Notice that while <span class="v">:tries</span> are recorded for the xrune <span class="v">(:HYP 1
+ :REWRITE PERM-MEM)</span>, no <span class="v">:frames</span> are recorded.  This is because no stack 
+ frames were built for runes while this xrune was on the stack  only for 
+ the xrune itself, which as we explained above is not accumulated into the 
+ total <span class="v">:frames</span> counts.  As it turns out, this lack of stack frames is 
+ explained by the fact that the rewrite rule <span class="v">PERM-MEM</span> has a free variable 
+ in the first hypothesis.</p> 
+ 
+ <pre class="code">ACL2 !&gt;:pe perm-mem
+         18  (<a href="ACL2____DEFTHM.html">DEFTHM</a> PERM-MEM
+                     (<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____AND.html">AND</a> (PERM X Y) (MEM A X))
+                              (MEM A Y))
+                     :RULE-CLASSES ((:REWRITE :MATCH-FREE :ONCE)))
+ACL2 !&gt;</pre> 
+ 
+ <p>The second hypothesis, however, does cause additional rewriting in order to 
+ rewrite it to true, resulting in 251 stack frames for runes.  We see that the 
+ conclusion does not lead to creation of any rune stack frames, which might 
+ seem to suggest that only 251 stack frames for runes were created on behalf of 
+ this rule application  yet, we see that 462 frames were actually 
+ created.  The difference is the 211 frames created for the rewrite rule 
+ itself.  Even if the total had been a bit more than 462, one need not be 
+ surprised, as there could be some work recorded during application of the 
+ rewrite rule, such as type-prescription reasoning, that is not done during 
+ rewriting of a hypothesis or the conclusion.</p> 
+ 
+ <p>Now suppose we have executed <span class="v">(<a href="ACL2____ACCUMULATED-PERSISTENCE.html">accumulated-persistence</a> :all)</span> and 
+ attempted some proofs, and now we are ready to see statistics.  The form 
+ <span class="v">(<a href="ACL2____SHOW-ACCUMULATED-PERSISTENCE.html">show-accumulated-persistence</a>)</span> displays statistics exactly as described 
+ above, treating these extra xrunes just as though they are runes; similarly 
+ for the form <span class="v">(<a href="ACL2____SHOW-ACCUMULATED-PERSISTENCE.html">show-accumulated-persistence</a> KEY)</span>, for any legal <span class="v">KEY</span>. 
+ A second optional argument may however be supplied to 
+ <span class="v">show-accumulated-persistence</span>.  The default for that second argument is 
+ <span class="v">t</span>, and a second argument of <span class="v">:raw</span> is treated the same as <span class="v">t</span>; 
+ thus, these arguments provide the behavior just described, where data for 
+ xrunes are displayed just as for runes.  You may restrict output to runes, 
+ ignoring hypothesis and conclusion xrunes, by giving a second argument of 
+ <span class="v">nil</span>.  (This gives the same behavior as if we had started with the command 
+ <span class="v">(<a href="ACL2____ACCUMULATED-PERSISTENCE.html">accumulated-persistence</a> t)</span> instead of the command 
+ <span class="v">(<a href="ACL2____ACCUMULATED-PERSISTENCE.html">accumulated-persistence</a> :all)</span>.)  You may give a second argument 
+ of <span class="v">:merge</span>, in which case output will be sorted and displayed as though 
+ only runes were tracked (not the extra xrunes), but each data item for a 
+ non-rune xrune will be merged so that it is displayed in suitable order just 
+ below its corresponding rune, as in the <span class="v">PERM-MEM</span> example displayed 
+ above.  Finally, you may give a second argument of <span class="v">:list</span>, which is 
+ equivalent to the default second argument of <span class="v">t</span>, except that the results 
+ are printed as a list of entries <span class="v">(frames tries xrune)</span>.</p> 
+ 
+ <p>We close by mentioning two aspects of enhanced statistics display for 
+ <span class="v">:CONC</span> xrunes that have potential to be confusing.  First consider the 
+ following example.</p> 
+ 
+ <pre class="code">  :frames   :tries    :ratio  rune
+--------------------------------
+     14        4 (    3.50) (:REWRITE DEFAULT-+-2)
+      0        0    [useful]
+     14        4    [useless]
+   .............................
+     10        4 (    2.50) (:HYP 1 :REWRITE DEFAULT-+-2)
+      0        0    [useful]
+     10        4    [useless]
+--------------------------------</pre> 
+ 
+ <p>It may be surprising that no data is displayed for the corresponding 
+ <span class="v">:CONC</span> xrune.  The explanation, however, is simple: the hypothesis never 
+ rewrote to true, so the conclusion was never rewritten.  This is consistent 
+ with the marking as ``useless'' of all <span class="v">:frames</span> and <span class="v">:tries</span> for the 
+ rune and the hypothesis xrune.  Note by the way, once again, that the 
+ hypothesis xrune does not contribute to any <span class="v">:frames</span> count.</p> 
+ 
+ <p>Another reason not to see data displayed for a <span class="v">:CONC</span> xrune is that if 
+ a rule has no hypotheses, then no such data is collected.  This decision was 
+ made because in the case of no hypotheses, we expect it to be very rare that 
+ information for the <span class="v">:CONC</span> xrune will add any useful insight.</p> 
+ 
+ <p>On a final note: <span class="v">(<a href="ACL2____SHOW-ACCUMULATED-PERSISTENCE.html">show-accumulated-persistence</a> :runes)</span> may be used 
+ simply to see a list of all <a href="ACL2____RUNE.html">rune</a>s (or xrunes) displayed 
+ alphabetically.</p> 
+ 
+ <p>Users are encouraged to think about other meters we could install in ACL2 
+ to help diagnose performance problems.</p>
+</body>
+</html>

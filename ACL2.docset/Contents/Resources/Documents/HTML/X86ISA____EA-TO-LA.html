@@ -1,0 +1,296 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Ea-to-la</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=X86ISA____EA-TO-LA">Click for Ea-to-la in the Full Manual</a></h3>
+
+<p>Translate an effective address to a <i>canonical</i> linear address.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(ea-to-la proc-mode eff-addr seg-reg nbytes x86) 
+   
+(mv flg lin-addr)</pre></dt>
+<dt>Returns</dt>
+<dd>
+<span class="tt">lin-addr</span>  <font color="#606060">Type <span class="v">(<a href="X86ISA____I64P.html">i64p</a> lin-addr)</span>, given <span class="v">(<a href="X86ISA____I64P.html">i64p</a> eff-addr)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p> 
+   This translation is illustrated in Intel manual, Mar'17, Vol. 3A, Fig. 3-5, 
+   as well in AMD mamual, Oct'2013, Vol. 1, Fig. 2-3 and 2-4. 
+   In addition to the effective address, 
+   this function takes as input (the index of) a segment register, 
+   whose corresponding segment selector, with the effective address, 
+   forms the logical address that is turned into the linear address. 
+   </p> 
+   <p> 
+   This translation is used: 
+   when fetching instructions, 
+   in which case the effective address is in RIP, EIP, or IP; 
+   when accessing the stack implicitly, 
+   in which case the effective address is in RSP, ESP, or SP; 
+   and when accessing data explicitly, 
+   in which case the effective address is calculated by instructions 
+   via <span class="tt"><a href="X86ISA____X86-EFFECTIVE-ADDR.html">x86-effective-addr</a></span>. 
+   In the formal model, 
+   RIP contains a signed 48-bit integer, 
+   RSP contains a signed 64-bit integer, 
+   and <span class="tt"><a href="X86ISA____X86-EFFECTIVE-ADDR.html">x86-effective-addr</a></span> returns a signed 64-bit integer: 
+   thus, the guard of this function requires <span class="v">eff-addr</span> 
+   to be a signed 64-bit integer. 
+   In 64-bit mode, the caller of this function supplies as <span class="v">eff-addr</span> 
+   the content of RIP, 
+   the content of RSP, 
+   or the result of <span class="tt"><a href="X86ISA____X86-EFFECTIVE-ADDR.html">x86-effective-addr</a></span>. 
+   In 32-bit mode, the caller of this function supplies as <span class="v">eff-addr</span> 
+   the unsigned 32-bit or 16-bit truncation of 
+   the content of RIP (i.e. EIP or IP), 
+   the content of RSP (i.e. ESP or SP), 
+   or the result of <span class="tt"><a href="X86ISA____X86-EFFECTIVE-ADDR.html">x86-effective-addr</a></span>; 
+   the choice between 32-bit and 16-bit is determined by 
+   default address size and override prefixes. 
+   </p> 
+   <p> 
+   This function also takes as input the number of bytes 
+   that have to be read or written starting from the effective address; 
+   that is, the chunk of bytes to be accessed 
+   goes from <span class="v">eff-addr</span> to <span class="v">eff-addr + nbytes - 1</span>, both inclusive. 
+   In 32-bit mode, the <span class="v">eff-addr</span> (the start of the chunk) 
+   is checked against the lower bound of the segment, 
+   and <span class="v">eff-addr + nbytes - 1</span> (the end of the chunk) 
+   is checked against the upper bound of the segment. 
+   In 64-bit mode, these checks are skipped. 
+   It is not clear from the Intel and AMD manuals 
+   whether the calculation <span class="v">eff-addr + nbytes - 1</span> should be modular. 
+   If it were, the wrap-around would give rise to 
+   two separate chunks of bytes to be checked for containment in the segment. 
+   According to the article at 
+   <a href="https://www.embedded.com/electronics-blogs/significant-bits/4024943/Taming-the-x86-beast" target="_blank"><nobr>https://www.embedded.com/electronics-blogs/significant-bits/4024943/Taming-the-x86-beast<img src="../Icon_External_Link.png" title="External link to https://www.embedded.com/electronics-blogs/significant-bits/4024943/Taming-the-x86-beast"></nobr></a>, 
+   the calculation does not wrap around. 
+   This is a paragraph from the article: 
+   <blockquote> 
+   <i> 
+   You also can't ``wrap around'' the end of segment like before. 
+   Earlier x86 chips with their 64KB segments allowed pointers 
+   to roll over from FFFF to 0000 automatically. 
+   Programs that accidentally (or purposely) ran off the end of a segment 
+   started over at the beginning. 
+   Programs that run off the end of a segment 
+   now are greeted with a segmentation fault. 
+   </i> 
+   </blockquote> 
+   So for now we make the stricter check 
+   by calculating <span class="v">eff-addr + nbytes - 1</span> non-modularly 
+   and therefore always having one chunk to check. 
+   Note that operations like <span class="tt"><a href="X86ISA____RME-SIZE.html">rme-size</a></span> always access one contiguous chunk 
+   because they forward the translated addresses 
+   to operations like <span class="tt"><a href="X86ISA____RML-SIZE.html">rml-size</a></span>; 
+   so if it turned out that <span class="v">eff-addr + nbytes - 1</span> can wrap around 
+   (contrary to what the aforementioned article states), 
+   changes may need to be made 
+   in <span class="tt"><a href="X86ISA____RME-SIZE.html">rme-size</a></span> and similar operations as well. 
+   </p> 
+   <p> 
+   In 32-bit mode, 
+   the effective address is added to the base address of the segment; 
+   the result is truncated to 32 bits, 
+   because the addition should be modulo 2^32, 
+   given that the result must be 32 bits 
+   (cf. aforementioned figures in Intel and AMD manuals). 
+   In 64-bit mode, 
+   the addition of the base address of the segment is performed 
+   only if the segments are in registers FS and GS; 
+   the result is truncated to 64 bits, 
+   because the addition should be modulo 2^64, 
+   given that the result must be 32 bits 
+   (cf. aforementioned figures in Intel and AMD manuals); 
+   since in our model addresses are signed, 
+   we use <span class="v">i64</span> instead of <span class="v">n64</span> to perform this truncation. 
+   </p> 
+   <p> 
+   If the translation is successful, 
+   this function returns a signed 64-bit integer 
+   that represents a <i>canonical</i> linear address. 
+   In 64-bit mode, when the segment register is not FS or GS, the effective 
+   address is returned unmodified as a linear address, because segment 
+   translation should be a no-op in this case; otherwise, the effective address 
+   is translated to a linear address.  In both cases, this linear address is 
+   checked to be canonical; if not, an error flag is returned, otherwise, a 
+   canonical linear address is returned. 
+   In 32-bit mode, the 32-bit linear address that results from the translation 
+   is always canonical. 
+   If the translation fails, 
+   including the check that the linear address is canonical, 
+   a non-<span class="v">nil</span> error flag is returned, 
+   which provides some information about the failure. 
+   </p> 
+   <p> 
+   As explained in Intel manual, May'18, Volume 3, Sections 3.4.2 and 5.4.1, 
+   a null segment selector can be loaded into DS, ES, FS, and GS, 
+   but then a memory access through these segment registers causes a #GP. 
+   According to AMD manual, Dec'17, Volume 2, Section 4.5.1, 
+   a null segment selector has SI = TI = 0, 
+   but no explicit constraint is stated on RPL; 
+   Intel manual, May'18, Volume 2, POP specification says that 
+   a null segment selector has a value from 0 to 3, 
+   from which we infer that a null segment selector may have a non-zero RPL. 
+   In this function, 
+   we return an error if the visible portion of the segment register is 0-3, 
+   and the segment register is not CS or SS. 
+   Loading a null segment selector into CS and SS is not allowed, 
+   so it is a state invariant that 
+   CS and SS do not contain null segment selectors. 
+   The null segment selector check is skipped in 64-bit mode 
+   (see Intel manual, May'18, Volume 3, Section 5.4.1.1). 
+   </p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>ea-to-la$inline</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ ea-to-la$inline
+ (proc-mode eff-addr seg-reg nbytes x86)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (x86)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____TYPE.html">type</a> (integer 0 4) proc-mode)
+          (<a href="COMMON-LISP____TYPE.html">type</a> (signed-byte 64) eff-addr)
+          (<a href="COMMON-LISP____TYPE.html">type</a> (integer 0 5) seg-reg)
+          (<a href="COMMON-LISP____TYPE.html">type</a> (<a href="COMMON-LISP____MEMBER.html">member</a> 1 2 4 6 8 10 16 32 64)
+                nbytes))
+ (<a href="COMMON-LISP____CASE.html">case</a>
+  proc-mode
+  (0
+   (<a href="ACL2____B_A2.html">b*</a> ((lin-addr (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____EQL.html">eql</a> seg-reg 4) (<a href="COMMON-LISP____EQL.html">eql</a> seg-reg 5))
+                      (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> base &amp; &amp;)
+                            (<a href="X86ISA____SEGMENT-BASE-AND-BOUNDS.html">segment-base-and-bounds</a> 0 seg-reg x86))
+                           (lin-addr (<a href="X86ISA____I64.html">i64</a> (<a href="COMMON-LISP_____B2.html">+</a> base (<a href="X86ISA____N64.html">n64</a> eff-addr)))))
+                          lin-addr)
+                      eff-addr))
+        ((unless (<a href="X86ISA____CANONICAL-ADDRESS-P.html">canonical-address-p</a> lin-addr))
+         (<a href="ACL2____MV.html">mv</a> (<a href="COMMON-LISP____LIST.html">list</a> :non-canonical-address lin-addr)
+             0)))
+       (<a href="ACL2____MV.html">mv</a> nil lin-addr)))
+  (1
+   (<a href="ACL2____B_A2.html">b*</a>
+    (((when (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP_____D3.html">=</a> seg-reg *cs*))
+                 (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP_____D3.html">=</a> seg-reg *ss*))
+                 (<a href="COMMON-LISP_____C3.html">&lt;</a> (seg-visiblei seg-reg x86) 4)))
+      (<a href="ACL2____MV.html">mv</a> (<a href="COMMON-LISP____LIST.html">list</a> :null-segment-selector seg-reg)
+          0))
+     ((<a href="ACL2____MV.html">mv</a> (<a href="COMMON-LISP____THE.html">the</a> (unsigned-byte 32) base)
+          (<a href="COMMON-LISP____THE.html">the</a> (unsigned-byte 33) lower-bound)
+          (<a href="COMMON-LISP____THE.html">the</a> (unsigned-byte 32) upper-bound))
+      (<a href="X86ISA____SEGMENT-BASE-AND-BOUNDS.html">segment-base-and-bounds</a> proc-mode seg-reg x86))
+     (first-addr eff-addr)
+     (last-addr (<a href="COMMON-LISP_____B2.html">+</a> eff-addr nbytes -1))
+     ((unless (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> lower-bound first-addr)
+                   (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> last-addr upper-bound)))
+      (<a href="ACL2____MV.html">mv</a>
+       (<a href="COMMON-LISP____LIST.html">list</a>
+        :segment-limit-fail (<a href="COMMON-LISP____LIST.html">list</a> seg-reg
+                                  eff-addr lower-bound upper-bound))
+       0))
+     ((<a href="COMMON-LISP____THE.html">the</a> (unsigned-byte 32) lin-addr)
+      (<a href="X86ISA____N32.html">n32</a> (<a href="COMMON-LISP_____B2.html">+</a> (<a href="COMMON-LISP____THE.html">the</a> (unsigned-byte 32) base)
+              (<a href="COMMON-LISP____THE.html">the</a> (unsigned-byte 32) eff-addr)))))
+    (<a href="ACL2____MV.html">mv</a> nil lin-addr)))
+  (otherwise (<a href="ACL2____MV.html">mv</a> (<a href="COMMON-LISP____LIST.html">list</a> :unimplemented-proc-mode proc-mode)
+                 0))))</pre> 
+<p><b>Theorem: </b>i64p-of-ea-to-la.lin-addr</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ i64p-of-ea-to-la.lin-addr
+ (<a href="ACL2____IMPLIES.html">implies</a>
+     (<a href="X86ISA____I64P.html">i64p</a> eff-addr)
+     (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?flg ?lin-addr)
+           (ea-to-la$inline proc-mode eff-addr seg-reg nbytes x86)))
+         (<a href="X86ISA____I64P.html">i64p</a> lin-addr)))
+ :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>ea-to-la-is-i64p</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ ea-to-la-is-i64p
+ (<a href="ACL2____IMPLIES.html">implies</a>
+    (<a href="X86ISA____I64P.html">i64p</a> eff-addr)
+    (<a href="ACL2____SIGNED-BYTE-P.html">signed-byte-p</a> 64
+                   (<a href="ACL2____MV-NTH.html">mv-nth</a> 1
+                           (<a href="X86ISA____EA-TO-LA.html">ea-to-la</a> proc-mode
+                                     eff-addr seg-reg nbytes x86))))
+ :rule-classes
+ (:rewrite
+  (:type-prescription
+    :corollary
+    (<a href="ACL2____IMPLIES.html">implies</a>
+         (<a href="X86ISA____I64P.html">i64p</a> eff-addr)
+         (<a href="COMMON-LISP____INTEGERP.html">integerp</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 1
+                           (<a href="X86ISA____EA-TO-LA.html">ea-to-la</a> proc-mode
+                                     eff-addr seg-reg nbytes x86))))
+    :hints (("Goal" :in-theory '(<a href="ACL2____SIGNED-BYTE-P.html">signed-byte-p</a> integer-range-p))))
+  (:linear
+   :corollary
+   (<a href="ACL2____IMPLIES.html">implies</a>
+    (<a href="X86ISA____I64P.html">i64p</a> eff-addr)
+    (<a href="COMMON-LISP____AND.html">and</a>
+      (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> -9223372036854775808
+          (<a href="ACL2____MV-NTH.html">mv-nth</a> 1
+                  (<a href="X86ISA____EA-TO-LA.html">ea-to-la</a> proc-mode eff-addr seg-reg nbytes x86)))
+      (<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 1
+                 (<a href="X86ISA____EA-TO-LA.html">ea-to-la</a> proc-mode eff-addr seg-reg nbytes x86))
+         9223372036854775808)))
+   :hints
+   (("Goal"
+         :in-theory '(<a href="ACL2____SIGNED-BYTE-P.html">signed-byte-p</a> integer-range-p (:e expt)))))))</pre> 
+<p><b>Theorem: </b>ea-to-la-is-i48p-when-no-error</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ ea-to-la-is-i48p-when-no-error
+ (<a href="ACL2____IMPLIES.html">implies</a>
+    (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 0
+                 (<a href="X86ISA____EA-TO-LA.html">ea-to-la</a> proc-mode eff-addr seg-reg nbytes x86)))
+    (<a href="ACL2____SIGNED-BYTE-P.html">signed-byte-p</a> 48
+                   (<a href="ACL2____MV-NTH.html">mv-nth</a> 1
+                           (<a href="X86ISA____EA-TO-LA.html">ea-to-la</a> proc-mode
+                                     eff-addr seg-reg nbytes x86))))
+ :rule-classes
+ (:rewrite
+  (:type-prescription
+   :corollary
+   (<a href="ACL2____IMPLIES.html">implies</a>
+     (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 0
+                  (<a href="X86ISA____EA-TO-LA.html">ea-to-la</a> proc-mode eff-addr seg-reg nbytes x86)))
+     (<a href="COMMON-LISP____INTEGERP.html">integerp</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 1
+                       (<a href="X86ISA____EA-TO-LA.html">ea-to-la</a> proc-mode
+                                 eff-addr seg-reg nbytes x86))))
+   :hints (("Goal" :in-theory '(<a href="ACL2____SIGNED-BYTE-P.html">signed-byte-p</a> integer-range-p))))
+  (:linear
+   :corollary
+   (<a href="ACL2____IMPLIES.html">implies</a>
+    (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 0
+                 (<a href="X86ISA____EA-TO-LA.html">ea-to-la</a> proc-mode eff-addr seg-reg nbytes x86)))
+    (<a href="COMMON-LISP____AND.html">and</a>
+      (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> -140737488355328
+          (<a href="ACL2____MV-NTH.html">mv-nth</a> 1
+                  (<a href="X86ISA____EA-TO-LA.html">ea-to-la</a> proc-mode eff-addr seg-reg nbytes x86)))
+      (<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 1
+                 (<a href="X86ISA____EA-TO-LA.html">ea-to-la</a> proc-mode eff-addr seg-reg nbytes x86))
+         140737488355328)))
+   :hints
+   (("Goal"
+         :in-theory '(<a href="ACL2____SIGNED-BYTE-P.html">signed-byte-p</a> integer-range-p (:e expt)))))))</pre> 
+<p><b>Theorem: </b>ea-to-la-of-xw</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+  ea-to-la-of-xw
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> fld :msr))
+                (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> fld :seg-hidden-base))
+                (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> fld :seg-hidden-limit))
+                (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> fld :seg-hidden-attr))
+                (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> fld :seg-visible)))
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="X86ISA____EA-TO-LA.html">ea-to-la</a> proc-mode eff-addr
+                            seg-reg nbytes (xw fld index value x86))
+                  (<a href="X86ISA____EA-TO-LA.html">ea-to-la</a> proc-mode
+                            eff-addr seg-reg nbytes x86))))</pre> 
+<p><b>Theorem: </b>ea-to-la-when-64-bit-modep-and-not-fs/gs</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     ea-to-la-when-64-bit-modep-and-not-fs/gs
+     (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> seg-reg 4))
+                   (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> seg-reg 5)))
+              (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="X86ISA____EA-TO-LA.html">ea-to-la</a> 0 eff-addr seg-reg nbytes x86)
+                     (<a href="COMMON-LISP____IF.html">if</a> (<a href="X86ISA____CANONICAL-ADDRESS-P.html">canonical-address-p</a> eff-addr)
+                         (<a href="ACL2____MV.html">mv</a> nil eff-addr)
+                         (<a href="ACL2____MV.html">mv</a> (<a href="COMMON-LISP____LIST.html">list</a> :non-canonical-address eff-addr)
+                             0)))))</pre> 
+
+</body>
+</html>

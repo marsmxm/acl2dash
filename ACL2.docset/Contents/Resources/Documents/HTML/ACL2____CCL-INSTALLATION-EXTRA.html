@@ -1,0 +1,193 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Ccl-installation-extra</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____CCL-INSTALLATION-EXTRA">Click for Ccl-installation-extra in the Full Manual</a></h3>
+
+<p>Clozure Common Lisp (CCL) installation and implementation details</p><p>This topic, contributed by Warren A. Hunt, Jr., extends the basic 
+ information given in <a href="ACL2____CCL-INSTALLATION.html">ccl-installation</a>.  It may be useful to some, 
+ especially those who use ACL2 in ways that particularly stress memory. 
+ Another resource may be found on <a href="https://github.com/Clozure/ccl/releases/" target="_blank"><nobr>this page<img src="../Icon_External_Link.png" title="External link to https://github.com/Clozure/ccl/releases/"></nobr></a>.</p> 
+ 
+ <p>Below we provide instructions to build CCL on FreeBSD and MacOS; building 
+ on Linux will be similar.  Before providing the build instructions, we mention 
+ a few facts about CCL's implementation.</p> 
+ 
+ <p>CCL's implementation can't expand stack space automatically.  The sizes of 
+ various stacks are set at thread creation time.  Most programs don't need very 
+ big stacks.  The CCL default value and temp stack sizes may be too small for 
+ compute-intensive applications.</p> 
+ 
+ <p>The various stack sizes are set when creating a thread with code in 
+ <span class="v">CCL::MAKE-PROCESS</span> and <span class="v">CCL::PROCESS-RUN-FUNCTION</span>, and they set the 
+ three stack sizes of the initial listener thread that is created when CCL 
+ starts.</p> 
+ 
+ <p>The value stack is used for data in deeply-nested lisp recursion.  ACL2 can 
+ benefit from an increase in the size of the value stack.</p> 
+ 
+ <p>The temp stack is used for dynamic-extent objects.  This might need need to 
+ be larger than the default.</p> 
+ 
+ <p>The control stack is used to run C and binary code; it would be surprising 
+ to need to increase its size.</p> 
+ 
+ <p>If only one or two threads are needed, giant (e.g., 4 GB) stacks can 
+ be OK, but with many threads large stacks use lots of memory.  Below 
+ are the stacks along with their current (April, 2020) default sizes.</p> 
+ 
+  <pre class="code">ccl::*default-control-stack-size*                    ;; default 2^21
+ccl::*initial-listener-default-control-stack-size*   ;; default 2^21
+
+ccl::*default-value-stack-size*                      ;; default 2^21
+ccl::*initial-listener-default-value-stack-size*     ;; default 2^21
+
+ccl::*initial-listener-default-temp-stack-size*      ;; default 2^20
+ccl::*default-temp-stack-size*                       ;; default 2^20</pre> 
+ 
+ <p>If we are running on a 32-bit platform, we set the stack sizes modestly. 
+ If we are on a 64-bit platform, we set the stack sizes to much larger 
+ values.  See the later discussion about ``configure-ccl.lisp'' below to 
+ see how to alter (increase) stack sizes.</p> 
+ 
+ <h3>MacOS Build Instructions:</h3> 
+ 
+ <pre class="code">git clone https://github.com/Clozure/ccl.git ccl-dev
+curl -L -O https://github.com/Clozure/ccl/releases/download/v1.12-dev.5/darwinx86.tar.gz
+cd ccl-dev ; tar xf ../darwinx86.tar.gz</pre> 
+ 
+ <p>Rebuild C-based, Lisp kernel</p> 
+ 
+ <p>To rebuild the Lisp-code part of the kernel, do...</p> 
+ 
+ <pre class="code">cd lisp-kernel/darwinx8664 ; make ; cd ../..</pre> 
+ 
+ <p>Unlike for FreeBSD and Linux, we exclude ``:full t'' from the 
+ ``rebuild-ccl'' command just below Matt Emerson (a CCL expert) writes:</p> 
+ 
+ <blockquote> 
+ 
+ <p>After looking at your log, I was able to duplicate the problem myself. 
+ For some reason I do not understand, it appears that on Catalina, 
+ removing the running lisp kernel binary causes run-program to break 
+ (trying to run external programs gets signal 9).  This surprises me 
+ very much.</p> 
+ 
+ <p>One of the effects of running (rebuild-ccl :full t), is that it first does 
+ a "make clean" in the lisp kernel directory, and then does a regular make. 
+ This has worked for years, and I do not know why it has stopped working.</p> 
+ 
+ </blockquote> 
+ 
+ <p>To avoid this, rebuild the lisp with (rebuild-ccl :clean t) instead.  Do 
+ not specify ``<span class="v">:full t</span>''.  Since you have already built the lisp kernel, 
+ you gain nothing from ``<span class="v">:full t</span>'' doing it again.  So, once the C-based, 
+ Lisp kernel is built, then do:</p> 
+ 
+ <pre class="code">echo "(<a href="COMMON-LISP____IN-PACKAGE.html">in-package</a> :ccl) (rebuild-ccl :verbose t :clean t)" | \
+      ./dx86cl64 -n |&amp; tee ./ccl-build-compile.log</pre> 
+ 
+ <p>Matt Emerson suggests that one re-build again.  We asked Matt a 
+ long-simmering question: we have been told that it is a good idea to compile 
+ CCL twice.  Is that so that the CCL compiler produced by pass one on the 
+ target system is used to compile the CCL system that will be used (on the 
+ target system)?  Or, is compiling twice some silly myth?  Matt Emerson 
+ responded:</p> 
+ 
+ <blockquote> 
+ 
+ <p>It's not entirely mythic.  Some rare changes do need the lisp to be rebuilt 
+ twice for bootstrapping purposes, but usually it isn't required.</p> 
+ 
+ </blockquote> 
+ 
+ <p>Thus, we recommend you re-build (compile) the Lisp code again.</p> 
+ 
+ <pre class="code">echo "(<a href="COMMON-LISP____IN-PACKAGE.html">in-package</a> :ccl) (rebuild-ccl :verbose t :clean t)" | \
+      ./dx86cl64 -n |&amp; tee ./ccl-build-compile-2.log</pre> 
+ 
+ <p>Finally, one may specialize the final image by:</p> 
+ 
+ <pre class="code">cat configure-ccl.lisp | ./dx86cl64 -n |&amp; tee ~/ccl-build-specialize.log</pre> 
+ 
+ <p>where ``configure-ccl.lisp'' (not supplied) contains whatever CCL 
+ specialization commands you wish to have in the version of CCL you use for 
+ ACL2 or other work.  See the end of this note for an example of 
+ ``configure-ccl.lisp''.</p> 
+ 
+ <h3>FreeBSD Build Instructions:</h3> 
+ 
+ <p>The FreeBSD build instructions are similar to the MacOS build instruction, 
+ but the names are changed appropriately.</p> 
+ 
+ <pre class="code">git clone https://github.com/Clozure/ccl.git ccl-dev
+curl -L -O https://github.com/Clozure/ccl/releases/download/v1.12-dev.5/freebsd12-x8664.tar.gz
+cd ccl-dev
+tar xf ../freebsd12-x8664.tar.gz</pre> 
+ 
+ <p>Rebuild C-based Lisp kernel</p> 
+ 
+ <pre class="code">cd lisp-kernel/freebsdx8664 ; make ; cd ../..</pre> 
+ 
+ <p>To rebuild the Lisp-code part of the kernel, do...</p> 
+ 
+ <pre class="code">echo "(<a href="COMMON-LISP____IN-PACKAGE.html">in-package</a> :ccl) (rebuild-ccl :full t :verbose t :clean t)" | \
+      ./fx86cl64 -n |&amp; tee ./ccl-build-compile.log</pre> 
+ 
+ <p>FreeBSD is OK with the ``:full t'' flag, which as of MacOS 10.15 
+ breaks (but used to work on earlier versions of MacOS).  So, this 
+ option persists on the FreeBSD build.</p> 
+ 
+ <p>Matt Emerson recommends building the Lisp code a second time; see 
+ the ``MacOS Build Instructions'' above for his rationale.</p> 
+ 
+ <pre class="code">echo "(<a href="COMMON-LISP____IN-PACKAGE.html">in-package</a> :ccl) (rebuild-ccl :full t :verbose t :clean t)" | \
+      ./fx86cl64 -n |&amp; tee ./ccl-build-compile-2.log</pre> 
+ 
+ <p>Finally, one may specialize the final image by:</p> 
+ 
+ <pre class="code">cat ~/a/scripts/configure-ccl.lisp | ./fx86cl64 -n |&amp; tee ~/ccl-build-specialize.log</pre> 
+ 
+ <p>where ``configure-ccl.lisp'' (not supplied) contains whatever CCL 
+ specialization commands you wish to have in the version of CCL you use for 
+ ACL2 or other work.</p> 
+ 
+ <pre class="code"><h3>configure-ccl.lisp</h3></pre> 
+ 
+ <p>Sample ``configure-ccl.lisp'' file for 64-bit implementation:</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____PROGN.html">progn</a>
+  ;; Parameters to configure CCL for use on FreeBSD and MacOS
+
+  (<a href="COMMON-LISP____IN-PACKAGE.html">in-package</a> :ccl)
+
+  ;; Enlarge stack sizes
+  (setq *default-value-stack-size*                    (<a href="COMMON-LISP____EXPT.html">expt</a> 2 28))
+  (setq *initial-listener-value-stack-size*           (<a href="COMMON-LISP____EXPT.html">expt</a> 2 28))
+
+  (setq *default-temp-stack-size*                     (<a href="COMMON-LISP____EXPT.html">expt</a> 2 24))
+  (setq *initial-listener-temp-stack-size*            (<a href="COMMON-LISP____EXPT.html">expt</a> 2 24))
+
+  (setq *default-control-stack-size*                  (<a href="COMMON-LISP____EXPT.html">expt</a> 2 24))
+  (setq *initial-listener-default-control-stack-size* (<a href="COMMON-LISP____EXPT.html">expt</a> 2 24))
+
+  ;; For CCL double precision
+  (setf *read-default-float-format* 'double-float)
+
+  ;; Make DEFUN save the source code for later recovery via
+  ;; FUNCTION-LAMBDA-EXPRESSION.
+  (setq *save-definitions* t)
+  (setq *fasl-save-definitions* t)
+
+  ;; Make GC verbose; see ACL2 documentation topic GC-VERBOSE.
+  (<a href="ACL2____GC-VERBOSE.html">gc-verbose</a> t t)
+
+  ;; Dump executable heap image; see ACL2 documentation topic SAVE-EXEC.
+  (<a href="ACL2____SAVE-EXEC.html">save-exec</a> *heap-image-name* "Modification string to print at startup")
+  )</pre>
+</body>
+</html>

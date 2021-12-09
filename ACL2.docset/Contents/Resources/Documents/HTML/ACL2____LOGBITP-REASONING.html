@@ -1,0 +1,126 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Logbitp-reasoning</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____LOGBITP-REASONING">Click for Logbitp-reasoning in the Full Manual</a></h3>
+
+<p>A computed hint for proving bit-twiddling theorems by smartly sampling bits</p><p><span class="v">Logbitp-reasoning</span> is a computed hint for proving theorems 
+about bitvector operations.  Example usage:</p> 
+<pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> pass-context-of-ash
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____LOGAND.html">logand</a> (<a href="COMMON-LISP____ASH.html">ash</a> mask (<a href="COMMON-LISP____-.html">-</a> (<a href="ACL2____IFIX.html">ifix</a> n))) a1)
+                  (<a href="COMMON-LISP____LOGAND.html">logand</a> (<a href="COMMON-LISP____ASH.html">ash</a> mask (<a href="COMMON-LISP____-.html">-</a> (<a href="ACL2____IFIX.html">ifix</a> n))) a2))
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____LOGAND.html">logand</a> mask (<a href="COMMON-LISP____ASH.html">ash</a> a1 n))
+                  (<a href="COMMON-LISP____LOGAND.html">logand</a> mask (<a href="COMMON-LISP____ASH.html">ash</a> a2 n))))
+  :hints ((<a href="ACL2____LOGBITP-REASONING.html">logbitp-reasoning</a>)))</pre> 
+ 
+<p>It works by:</p> 
+<ul> 
+<li>Creating <i>witnesses</i> for inequality hyps/equality conclusions, replacing 
+ <span class="v">(<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> a b))</span> with: 
+<pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> x) (<a href="COMMON-LISP____INTEGERP.html">integerp</a> y))
+         (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____NATP.html">natp</a> bit)
+              (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____LOGBITP.html">logbitp</a> bit x)
+                          (<a href="COMMON-LISP____LOGBITP.html">logbitp</a> bit y)))))</pre> 
+where <span class="v">bit</span> is a fresh variable,</li> 
+<li>
+<i>Instantiating</i> equality hyps/inequality conclusions, replacing 
+<span class="v">(<a href="COMMON-LISP____EQUAL.html">equal</a> a b)</span> with <span class="v">(<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____LOGBITP.html">logbitp</a> bit a) (<a href="COMMON-LISP____LOGBITP.html">logbitp</a> bit b))</span>, for one or 
+more several values of <span class="v">bit</span>.</li> 
+</ul> 
+ 
+<p>The main work done by this computed hint is to decide how to instantiate 
+<span class="v">bit</span> for each of the equality hyps/inequality conclusions. To do this 
+we:</p> 
+<ol> 
+<li>Keep track of a list of logbitp term "targets", which we think of as 
+already appearing in our goal either due to witnessing or instantiation.</li> 
+<li>Try to instantiate equality hyps so as to create more occurrences of 
+existing targets.</li> 
+</ol> 
+ 
+<p>We take <span class="v">pass-context-of-ash</span> above as an example.</p> 
+<ol> 
+ 
+<li>First we find the literals of the clause that we'll create witnesses for -- 
+in this case, the conclusion.  We'll introduce some new variable <span class="v">wbit</span> and 
+our new conclusion will be (omitting some type info that isn't directly 
+relevant) 
+<pre class="code">(<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____LOGBITP.html">logbitp</a> wbit (<a href="COMMON-LISP____LOGAND.html">logand</a> mask (<a href="COMMON-LISP____ASH.html">ash</a> a1 n)))
+       (<a href="COMMON-LISP____LOGBITP.html">logbitp</a> wbit (<a href="COMMON-LISP____LOGAND.html">logand</a> mask (<a href="COMMON-LISP____ASH.html">ash</a> a2 n))))</pre> 
+</li> 
+ 
+<li>Next we simplify this new conclusion and extract the logbitp terms that the 
+simplified term contains: 
+<pre class="code">(<a href="COMMON-LISP____LOGBITP.html">logbitp</a> wbit mask)
+(<a href="COMMON-LISP____LOGBITP.html">logbitp</a> (<a href="COMMON-LISP_____B2.html">+</a> (<a href="COMMON-LISP____-.html">-</a> (<a href="ACL2____IFIX.html">ifix</a> n)) wbit) a1)
+(<a href="COMMON-LISP____LOGBITP.html">logbitp</a> (<a href="COMMON-LISP_____B2.html">+</a> (<a href="COMMON-LISP____-.html">-</a> (<a href="ACL2____IFIX.html">ifix</a> n)) wbit) a2)</pre> 
+These are now our target terms.</li> 
+ 
+<li>Next we look for instantiations of our hypothesis that, when simplified, 
+will contain one or more of these target terms.  To do this, we first 
+instantiate it with a variable <span class="v">ibit</span>, obtaining: 
+<pre class="code">(<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____LOGBITP.html">logbitp</a> ibit (<a href="COMMON-LISP____LOGAND.html">logand</a> (<a href="COMMON-LISP____ASH.html">ash</a> mask (<a href="COMMON-LISP____-.html">-</a> (<a href="ACL2____IFIX.html">ifix</a> n))) a1))
+       (<a href="COMMON-LISP____LOGBITP.html">logbitp</a> ibit (<a href="COMMON-LISP____LOGAND.html">logand</a> (<a href="COMMON-LISP____ASH.html">ash</a> mask (<a href="COMMON-LISP____-.html">-</a> (<a href="ACL2____IFIX.html">ifix</a> n))) a1)))</pre> 
+</li> 
+<li>Then we simplify the result and extract the resulting logbitp terms: 
+<pre class="code">(<a href="COMMON-LISP____LOGBITP.html">logbitp</a> ibit a1)
+(<a href="COMMON-LISP____LOGBITP.html">logbitp</a> ibit a2)
+(<a href="COMMON-LISP____LOGBITP.html">logbitp</a> (<a href="COMMON-LISP_____B2.html">+</a> (<a href="ACL2____IFIX.html">ifix</a> n) (<a href="ACL2____NFIX.html">nfix</a> ibit)) mask)</pre> 
+</li> 
+ 
+<li>Now we try to find values of <span class="v">ibit</span> that will make one or more of these 
+results match one or more of the target terms.  We immediately find that by 
+setting <span class="v">ibit</span> to <span class="v">(<a href="COMMON-LISP_____B2.html">+</a> (<a href="COMMON-LISP____-.html">-</a> (<a href="ACL2____NFIX.html">nfix</a> n)) wbit)</span> we create some matches.  So we 
+decide to instantiate the hyp using this term as our bit index.</li> 
+ 
+<li>All of the above was done just to compute a hint.  The actual hint we 
+provide is a call to <a href="ACL2____WITNESS-CP.html">witness-cp</a>, a clause processor that supports this 
+sort of witness creation and instantiation, with instructions to do the 
+witnessing and instantiation steps that we've settled on.  Once this clause 
+processor runs, the resulting proof splits into 8 subgoals that are all quickly 
+proved.</li> 
+ 
+</ol> 
+ 
+<p><span class="v">Logbitp-reasoning</span> is a macro that can take a few optional arguments, 
+but reasonable defaults (in the invocation below) are provided:</p> 
+<pre class="code">:hints ((<a href="ACL2____LOGBITP-REASONING.html">logbitp-reasoning</a>
+         :restrict t
+         :passes 1
+         :verbosep nil
+         :simp-hint (:in-theory
+                      (<a href="ACL2____ENABLE_A2.html">enable*</a> logbitp-case-splits
+                               logbitp-when-bit
+                               logbitp-of-const-split))
+         :add-hints (:in-theory
+                     (<a href="ACL2____ENABLE_A2.html">enable*</a> logbitp-case-splits
+                              logbitp-when-bit
+                              logbitp-of-const-split))))</pre> 
+ 
+<p>The meanings of these:</p> 
+ 
+<ul> <li>
+<span class="v">:restrict</span> is a term in the 
+variables <span class="v">x</span> and <span class="v">y</span> that restricts the equality literals to which we 
+will apply witnessing/instantiation.  For example, 
+ <pre class="code">:restrict (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x) (<a href="COMMON-LISP____EQ.html">eq</a> (<a href="COMMON-LISP____CAR.html">car</a> x) 'binary-logand))
+              (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____CONSP.html">consp</a> y) (<a href="COMMON-LISP____EQ.html">eq</a> (<a href="COMMON-LISP____CAR.html">car</a> y) 'binary-logand)))</pre> 
+will cause the hint to ignore any equality literals that don't have an argument 
+that is a call of logand.</li> 
+<li>
+<span class="v">:passes</span> determines the number of passes through the clause we use to 
+collect instantiations and target terms.  Instantiations can add new targets, 
+and the more targets there are, the more instantiations may be found.</li> 
+<li>
+<span class="v">:simp-hint</span> is the hint given to the simplifier while deciding on the 
+instantiations.</li> 
+<li>
+<span class="v">:add-hints</span> are hints given at the same time as the clause processor hint.</li> 
+</ul> 
+
+</body>
+</html>

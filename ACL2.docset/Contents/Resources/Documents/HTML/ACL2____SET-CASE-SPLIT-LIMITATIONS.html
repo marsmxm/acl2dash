@@ -1,0 +1,136 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Set-case-split-limitations</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____SET-CASE-SPLIT-LIMITATIONS">Click for Set-case-split-limitations in the Full Manual</a></h3>
+
+<p>Set the <a href="ACL2____CASE-SPLIT-LIMITATIONS.html">case-split-limitations</a></p><p>Also see <a href="ACL2____CASE-SPLIT-LIMITATIONS.html">case-split-limitations</a> for an example of how this 
+ utility inhibits case splitting.</p> 
+ 
+ <pre class="code">Examples:
+(<a href="ACL2____SET-CASE-SPLIT-LIMITATIONS.html">set-case-split-limitations</a> '(500 100))
+(<a href="ACL2____SET-CASE-SPLIT-LIMITATIONS.html">set-case-split-limitations</a> 'nil)
+(<a href="ACL2____SET-CASE-SPLIT-LIMITATIONS.html">set-case-split-limitations</a> '(500 nil))</pre> 
+ 
+ <p>The first of these prevents <span class="v">clausify</span> from trying the 
+ subsumption/replacement (see below) loop if more than 500 clauses are 
+ involved.  It also discourages the clause simplifier from splitting into more 
+ than 100 cases at once.</p> 
+ 
+ <p>Note: This is an event!  It does not print the usual event <a href="ACL2____SUMMARY.html">summary</a> 
+ but nevertheless changes the ACL2 logical <a href="ACL2____WORLD.html">world</a> and is so recorded. 
+ Moreover, its effect is to set the <span class="tt"><a href="ACL2____ACL2-DEFAULTS-TABLE.html">ACL2-defaults-table</a></span>, and hence its 
+ effect is <span class="tt"><a href="ACL2____LOCAL.html">local</a></span> to the book or <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span> form containing it; 
+ see <a href="ACL2____ACL2-DEFAULTS-TABLE.html">ACL2-defaults-table</a>.</p> 
+ 
+ <p>See <a href="ACL2____HINTS.html">hints</a> for discussion of a related hint, 
+ <span class="v">:case-split-limitations</span>.  Also see <a href="ACL2____SPLITTER.html">splitter</a> for information about 
+ reports on rules that may be responsible for case splits.</p> 
+ 
+ <pre class="code">General Form:
+(<a href="ACL2____SET-CASE-SPLIT-LIMITATIONS.html">set-case-split-limitations</a> lst)</pre> 
+ 
+ <p>where <span class="v">lst</span> is either <span class="v">nil</span> (denoting a list of two <span class="v">nil</span>s), or a 
+ list of length two, each element of which is either <span class="v">nil</span> or a natural 
+ number.  When <span class="v">nil</span> is used as an element, it is treated as positive 
+ infinity.  The default setting is <span class="v">(500 100)</span>.</p> 
+ 
+ <p>The first number specifies the maximum number of clauses that may 
+ participate in the ``subsumption/replacement'' loop.  Because of the expensive 
+ nature of that loop (which compares every clause to every other in a way that 
+ is quadratic in the number of literals in the clauses), when the number of 
+ clauses exceeds about 1000, the system tends to ``go into a black hole,'' 
+ printing nothing and not even doing many garbage collections (because the 
+ subsumption/replacement loop does not create new clauses so much as it just 
+ tries to delete old ones).  The initial setting is lower than the threshold at 
+ which we see noticeably bad performance, so you probably will not see this 
+ behavior unless you have raised or disabled the limit.</p> 
+ 
+ <p>Why raise the subsumption/replacement limit?  The subsumption/replacement 
+ loop cleans up the set of subgoals produced by the simplifier.  For example, 
+ if one subgoal is</p> 
+ 
+ <pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> p q r) s)            [1]</pre> 
+ 
+ <p>and another is</p> 
+ 
+ <pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> p (<a href="COMMON-LISP____NOT.html">not</a> q) r) s)      [2]</pre> 
+ 
+ <p>then the subsumption/replacement loop would produce the single subgoal</p> 
+ 
+ <pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> p r) s)              [3]</pre> 
+ 
+ <p>instead.  This cleanup process is simply skipped when the number of 
+ subgoals exceeds the subsumption/replacement limit.  But each subgoal must 
+ nonetheless be proved.  The proofs of [1] and [2] are likely to duplicate much 
+ work, which is only done once in proving [3].  So with a low limit, you may 
+ find the system quickly produces a set of subgoals but then takes a long time 
+ to prove that set.  With a higher limit, you may find the set of subgoals to 
+ be ``cleaner'' and faster to prove.</p> 
+ 
+ <p>Why lower the subsumption/replacement limit?  If you see the system go into 
+ a ``black hole'' of the sort described above (no output, and few garbage 
+ collections), it could due to the subsumption/replacement loop working on a 
+ large set of large subgoals.  You might temporarily lower the limit so that it 
+ begins to print the uncleaned set of subgoals.  Perhaps by looking at the 
+ output you will realize that some function can be disabled so as to prevent 
+ the case explosion.  Then raise or disable the limit again!</p> 
+ 
+ <p>The second number in the case-split-limitations specifies how many case 
+ splits the simplifier will allow before it begins to shut down case splitting. 
+ In normal operation, when a literal rewrites to a nest of <span class="v">IF</span>s, the system 
+ simplifies all subsequent literals in all the contexts generated by walking 
+ through the nest in all possible ways.  This can also cause the system to ``go 
+ into a black hole'' printing nothing except garbage collection messages.  This 
+ ``black hole'' behavior is different from than mentioned above because space 
+ is typically being consumed at a prodigious rate, since the system is 
+ rewriting the literals over and over in many different contexts.</p> 
+ 
+ <p>As the simplifier sweeps across the clause, it keeps track of the number of 
+ cases that have been generated.  When that number exceeds the second number in 
+ case-split-limitations, the simplifier stops rewriting literals.  The 
+ remaining, unrewritten, literals are copied over into the output clauses. 
+ <span class="v">IF</span>s in those literals are split out, but the literals themselves are not 
+ rewritten.  Each output clause is then attacked again, by subsequent 
+ simplification, and eventually the unrewritten literals in the tail of the 
+ clause will be rewritten because the earlier literals will stabilize and stop 
+ producing case splits.</p> 
+ 
+ <p>The default setting of 100 is fairly low.  We have seen successful proofs 
+ in which thousands of subgoals were created by a simplification.  By setting 
+ the second number to small values, you can force the system to case split 
+ slowly.  For example, a setting of 5 will cause it to generate ``about 5'' 
+ subgoals per simplification.</p> 
+ 
+ <p>You can read about how the simplifier works in the book Computer-Aided 
+ Reasoning: An Approach (Kaufmann, Manolios, Moore); also see <a href="ACL2____INTRODUCTION-TO-THE-THEOREM-PROVER.html">introduction-to-the-theorem-prover</a> for a detailed tutorial on using the ACL2 
+ prover.  If you think about it, you will see that with a low case limit, the 
+ initial literals of a goal are repeatedly simplified, because each time a 
+ subgoal is simplified we start at the left-most subterm.  So when case 
+ splitting prevents the later subterms from being fully split out, we revisit 
+ the earlier terms before getting to the later ones.  This can be good. 
+ Perhaps it takes several rounds of rewriting before the earlier terms are in 
+ normal form and then the later terms rewrite quickly.  But it could happen 
+ that the earlier terms are expensive to rewrite and do not change, making the 
+ strategy of delayed case splits less efficient.  It is up to you.</p> 
+ 
+ <p>Sometimes the simplifier produces more clauses than you might expect, even 
+ with case-split-limitations in effect.  As noted above, once the limit has 
+ been exceeded, the simplifier does not rewrite subsequent literals.  But 
+ <span class="v">IF</span>s in those literals are split out nonetheless.  Furthermore, the 
+ enforcement of the limit is  as described above  all or nothing: 
+ if the limit allows us to rewrite a literal then we rewrite the literal fully, 
+ without regard for limitations, and get as many cases as ``naturally'' are 
+ produced.  It quite often happens that a single literal, when expanded, may 
+ grossly exceed the specified limits.</p> 
+ 
+ <p>If the second ``number'' is <span class="v">nil</span> and the simplifier is going to produce 
+ more than 1000 clauses, a ``helpful little message'' to this effect is printed 
+ out.  This output is printed to the system's ``comment window'' not the 
+ standard proofs output.</p>
+</body>
+</html>

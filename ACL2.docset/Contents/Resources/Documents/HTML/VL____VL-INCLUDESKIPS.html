@@ -1,0 +1,68 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Vl-includeskips</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL____VL-INCLUDESKIPS">Click for Vl-includeskips in the Full Manual</a></h3>
+
+<p>A record of which files we have already included that have ``proper'' 
+include guards and may not need to be included again.</p><p>Header files often have the form</p> 
+ 
+<pre class="code">`ifndef included_foo
+`define included_foo
+   ...
+`endif</pre> 
+ 
+<p>Or equivalently (and possibly common in legacy code since historically 
+<span class="v">ifndef</span> wasn't supported by some tools):</p> 
+ 
+<pre class="code">`ifdef included_foo
+`else
+   `define included_foo
+   ...
+`endif</pre> 
+ 
+<p>In the typical case where <span class="v">included_foo</span> never gets undefined, it is good 
+for performance to completely skip subsequent includes of such files.</p> 
+ 
+<p>To accomplish this, we maintain an <span class="v">includeskips</span> alist, which is 
+a (fast) alist binding pathnames of files that we have <span class="v">`include</span>d so far to 
+<a href="VL____VL-ISKIPINFO.html">vl-iskipinfo</a>s that contain the names of their controlling define, e.g., 
+<span class="v">included_foo</span> (and some additional information).</p> 
+ 
+<p>These controlling defines should only be added to the <span class="v">includeskips</span> when 
+we determine that they have the proper form.  Later, when we encounter a new 
+<span class="v">`include</span>, we can check whether the file is in the <span class="v">includeskips</span> and, 
+if so, whether its controlling define is still <span class="v">`define</span>d.  If so, we can 
+avoid the pointless work of re-opening the file, re-reading its characters, and 
+re-preprocessing them, because we know that after expanding the <span class="v">ifdefs</span>, 
+the file will make no contribution to the post-preprocessed text we are 
+building.</p> 
+ 
+<p>To identify files that match the proper form, when we open a file due to an 
+<span class="v">`include</span>, we check whether the file begins with one of the above, 
+``proper'' include-guard formats; see <a href="VL____VL-MULTIPLE-INCLUDE-BEGIN.html">vl-multiple-include-begin</a>.  This 
+identification is pretty efficient: we only have to scan initial comments, 
+whitespace, and a few tokens.  If we find a proper include-guard start, we push 
+a special <a href="VL____VL-IFRAME.html">vl-iframe</a>, corresponding to the <span class="v">ifndef included_foo</span>. 
+This iframe is marked as <b>multiple-include candidate</b> whose controller is 
+<span class="v">included_foo</span>.  We then skip until just before the <span class="v">`define</span> and resume 
+preprocessing.</p> 
+ 
+<p>We have to be careful, as we process the body of the included file, to be 
+sure to remove this marking if we ever encounter an <span class="v">`else</span> or <span class="v">`elseif</span> 
+that's part of the special top-level <span class="v">`ifndef</span>.  This is done in <a href="VL____VL-PROCESS-IFDEF.html">vl-process-ifdef</a> and <a href="VL____VL-PROCESS-ELSE.html">vl-process-else</a>.</p> 
+ 
+<p>When we finally get to the <span class="v">`endif</span>, we notice in <a href="VL____VL-PROCESS-ENDIF.html">vl-process-endif</a> 
+that we have a special frame.  If so, we know that (1) the start of the file 
+begins with a suitable <span class="v">ifndef/define</span> pair and (2) there have been no 
+<span class="v">`else</span> or <span class="v">`elseif</span> directives attached with this pair along the way. 
+So, the only thing left to check is that the remainder of the file consists of 
+nothing but whitespace and comments, which is easy and efficient.  If so, we're 
+set: the file has the desired form, so we add it to the <span class="v">includeskips</span> 
+alist.</p>
+</body>
+</html>

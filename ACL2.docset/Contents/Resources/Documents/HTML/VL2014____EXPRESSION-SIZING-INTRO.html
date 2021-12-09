@@ -1,0 +1,140 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Expression-sizing-intro</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL2014____EXPRESSION-SIZING-INTRO">Click for Expression-sizing-intro in the Full Manual</a></h3>
+
+<p>Introduction to Verilog's expression sizing/typing algorithm.</p><p>Sizing expressions in Verilog is a <b>two-phase process</b>.</p> 
+ 
+<ol> 
+ 
+<li>We inspect the expression to determine what final size and signedness it 
+should have.  To a first approximation: the final size of the expression will 
+be the maximum size of any of its operands, and the final signedness will be 
+unsigned unless all operands are signed.  But the real story involves many 
+operand-specific rules and corner cases.</li> 
+ 
+<li>We then "propagate" the final size and signedness down to the operands. 
+Approximately true: if the final signedness is signed, then we globally 
+sign-extend every operand to the final width; if the final signedness is 
+unsigned, we instead always zero-extend the operands.  After this extension, 
+the operands all agree on a size, and the inputs to operators like <span class="v">+</span> will 
+have the same width, and the output of the operator will also have this same 
+width.  But again, the real story has many rules and corner cases to 
+cover.</li> 
+ 
+</ol> 
+ 
+<p><b>Stop!</b> Carefully read the above steps again.  Understanding the two 
+phases is a critical first step to making any sense of the rules.</p> 
+ 
+<p>Let us now begin making these steps more precise.</p> 
+ 
+<h4>Final-Size Computation</h4> 
+ 
+<p>First, the claim that "final size of the expression is the maximum size of 
+any of its operands" is basically true for expressions like <span class="v">a + b</span>.  But 
+it is completely wrong for, e.g., <span class="v">|foo</span> or <span class="v">foo == bar</span>, which basically 
+produce one-bit wide answers.  Another example is concatenations like <span class="v">{foo,
+bar}</span> where the width should be the sum of its arguments widths.</p> 
+ 
+<p>The actual rules for computing the final width of an expression are given in 
+Table 5-22 of the Verilog spec, which we now reproduce: </p> 
+ 
+<pre class="code">Expression                     Bit Length         Notes
+-----------------------------------------------------------------------------
+Unsized constants              "Same as integer"  (see ** below)
+Sized constants                As given
+i [+ - * / % &amp; | ^ ^~ ~^] j    max{L(i),L(j)}
+[+ - ~] i                      L(i)
+i [=== !== == != &gt; &gt;= &lt; &lt;=] j  1 bit              i,j sized to max(L(i),L(j))
+i [&amp;&amp; ||] j                    1 bit              i,j self-determined
+[&amp; ~&amp; | ~| ^ ~^ ^~ !] i        1 bit              i self-determined
+i [&gt;&gt; &lt;&lt; ** &gt;&gt;&gt; &lt;&lt;&lt;] j         L(i)               j self-determined
+i ? j : k                      max(L(j),L(k))     i self-determined
+{i, ..., j}                    L(i)+...+L(j)      all self-determined
+{i {j, ..., k}}                i*(L(j)+...+L(k))  all self-determined
+-----------------------------------------------------------------------------</pre> 
+ 
+<p>(**) What does "same as integer" mean?  From Section 4.8: Verilog 
+implementations may limit the size of integer variables.  The limit must be at 
+least 32 bits, but is not otherwise unconstrained.  Hence, expressions 
+involving unsized constants may have implementation-dependent sizes (and can in 
+fact have implementation-dependent results).</p> 
+ 
+<p>VL acts like a 32-bit implementation, so effectively any unsized constant is 
+treated as if it has size 32.  I historically tried to directly support 
+abstract "integer-sized" expressions so that we could warn about expressions 
+whose behavior might be implementation-dependent.  But I eventually decided 
+that this approach overly complicated the sizing code.  Today, the VL <a href="VL2014____LEXER.html">lexer</a> automatically treats unsized constants as if they were 32 bits so the 
+whole matter of "how large is integer-size?" is effectively settle a priori. 
+But the lexer also marks any unsized constants with the <span class="v">:wasunsized</span> 
+property, which allows us to still carry out this compatibility checking.</p> 
+ 
+<p>At any rate, the "bit length" column in the above table gives an almost 
+full story about how to determine the finalwidth of an expression.  But as a 
+final twist, when assignment statements are sized, the bit-length of the 
+left-hand side of the assignment also plays a role in the finalwidth 
+computation.  Essentially, the finalwidth of <span class="v">rhs</span> in <span class="v">assign lhs = rhs</span> 
+is <span class="v">max{L(lhs), L(rhs)}</span>.</p> 
+ 
+<p>Our main function for computing the desired finalwidth of an expression is 
+<a href="VL2014____VL-EXPR-SELFSIZE.html">vl-expr-selfsize</a>.</p> 
+ 
+ 
+<h4>Signedness Computation</h4> 
+ 
+<p>The above claim that "the final signedness will be unsigned unless all 
+operands are signed" is basically true for expressions like <span class="v">a + b</span>.  For 
+instance, if the full expression is <span class="v">(3 + 4) + 0</span>, then its final signedness 
+is signed because all of its operands are signed.  On the other hand, if we 
+change this to <span class="v">(3 + 4) + 1'b0</span>, then the final signedness is unsigned 
+because <span class="v">1'b0</span> is unsigned.</p> 
+ 
+<p>The Verilog rules for signedness are covered in Section 5.5.1 and 5.5.4. 
+We summarize these rules here:</p> 
+ 
+<ul> 
+ 
+<li>Constants are either signed or unsigned depending upon how they are written 
+in the source code, e.g., plain numbers like <span class="v">5</span> are signed, and otherwise 
+the signedness is controlled by the base specifier, e.g., <span class="v">10'b0</span> is 
+unsigned but <span class="v">10'sb0</span> is signed.  (All of this is handled by our <a href="VL2014____LEXER.html">lexer</a> and built into the <span class="v">:origtype</span> field of our <a href="VL2014____VL-CONSTINT-P.html">vl-constint-p</a> and 
+<a href="VL2014____VL-WEIRDINT-P.html">vl-weirdint-p</a> atomguts.)</li> 
+ 
+<li>Bit-selects, part-selects, concatenations (and presumably multiple 
+concatenations), and comparison results (e.g., from <span class="v">a == b</span>) are always 
+unsigned.</li> 
+ 
+<li>Reals converted to integers are signed (but we don't handle reals, so 
+this doesn't affect us).</li> 
+ 
+<li>The signedness of self-determined subexpressions is determined by the 
+subexpression itself, and doesn't depend on any other terms from the 
+expression, e.g., <span class="v">{ 3, 1'b0 }</span> is a concatenation with one signed and one 
+unsigned subexpression.</li> 
+ 
+<li>For nonself-determined operands, if any operand is real the result is real; 
+if any operand is unsigned the result is unsigned; otherwise all operands are 
+signed and the result is "signed, regardless of operator, except when 
+specified otherwise." (This is particularly unclear).</li> 
+ 
+</ul> 
+ 
+<p>Another rule is found in 5.1.12, which says the right-hand side of a shift 
+is always treated as unsigned.</p> 
+ 
+<p>Some additional technical questions and investigations may be found in <a href="VL2014____EXPRESSION-SIZING-MINUTIA.html">expression-sizing-minutia</a>.</p> 
+ 
+<p>In VL, our main function for computing the final signedness of an expression 
+is <a href="VL2014____VL-EXPR-TYPEDECIDE.html">vl-expr-typedecide</a>.</p> 
+ 
+<h4>Propagating the Context</h4> 
+ 
+<p>BOZO document this.</p>
+</body>
+</html>

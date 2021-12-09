@@ -1,0 +1,219 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Hints-and-the-waterfall</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____HINTS-AND-THE-WATERFALL">Click for Hints-and-the-waterfall in the Full Manual</a></h3>
+
+<p>How <a href="ACL2____HINTS.html">hints</a> fit into the ACL2 proof waterfall</p><p>Below we describe the flow of an ACL2 proof attempt, with special 
+ attention to how <a href="ACL2____HINTS.html">hints</a> are applied during a proof.  For most ACL2 
+ users, only one point is important to take away from this <a href="COMMON-LISP____DOCUMENTATION.html">documentation</a> 
+ topic: you may specify hints during a proof (see <a href="ACL2____HINTS.html">hints</a>; perhaps also 
+ see <a href="ACL2____COMPUTED-HINTS.html">computed-hints</a> and see <a href="ACL2____DEFAULT-HINTS.html">default-hints</a>), and they can be 
+ expected to behave intuitively.  See <a href="ACL2____THE-METHOD.html">the-method</a> for a summary of how to 
+ interact with the ACL2 prover; see <a href="ACL2____INTRODUCTION-TO-THE-THEOREM-PROVER.html">introduction-to-the-theorem-prover</a> 
+ for a more detailed tutorial; and see <a href="ACL2____HINTS.html">hints</a> for an introduction to ACL2 
+ hints, including detailed <a href="COMMON-LISP____DOCUMENTATION.html">documentation</a> for specific hint types.</p> 
+ 
+ <p>The remainder of this topic serves as a reference in case one needs a 
+ deeper understanding of the workings of ACL2's handling of hints.  Also, for 
+ examples of the sophisticated use of hints, primarily for experts, see 
+ community book <span class="v">books/hints/basic-tests.lisp</span>.</p> 
+ 
+ <p>First, we describe the ACL2 ``waterfall''.  Then, we describe how hints are 
+ handled by the waterfall.</p> 
+ 
+ <p><b>The Waterfall.</b></p> 
+ 
+ <p>The ACL2 <i>waterfall</i> is the heart of the ACL2 prover.  It attempts to 
+ prove a given goal and either completes the proof, fails, or produces goals to 
+ be proved by induction or forcing rounds.  The waterfall comprises a series of 
+ <i>steps</i>, such as simplification or generalization, each of which attempts 
+ to replace a given goal by zero or more subgoals whose provability implies 
+ provability of that goal.  Note that every proof by induction starts a new 
+ trip through the waterfall, as does every forcing round; and these occur only 
+ after all preceding trips through the waterfall are complete.  Let us see in 
+ more detail how the waterfall works.</p> 
+ 
+ <p>Each goal considered by the ACL2 prover passes through a series of proof 
+ processes, called the ``waterfall processes'', as stored in the constant 
+ <span class="v">*preprocess-clause-ledge*</span>.  The top process applies top-level hints, 
+ including <span class="v">:use</span> hints; the next is a lightweight ``preprocess'' simplifier 
+ for ``simple'' rules (see <a href="ACL2____SIMPLE.html">simple</a>); the next is the main ACL2 
+ simplifier; and finally ACL2 attempts (in this order) destructor elimination, 
+ fertilization (heuristic use of equalities), generalization, and elimination 
+ of irrelevance.  See <a href="ACL2____ARCHITECTURE-OF-THE-PROVER.html">architecture-of-the-prover</a> for more information on 
+ these processes.  Each process may ``hit'', creating zero or more child goals 
+ that are each then handled at the top of the waterfall; or it may ``miss'', in 
+ which case the next process in the above sequence is considered.  If all 
+ processes miss, then a ``push'' process defers the goal until it is later 
+ considered for proof by induction.  When all goals have been thus handled, the 
+ goal most recently pushed for proof by induction is considered, and the 
+ process repeats.</p> 
+ 
+ <p>We next describe the two additional ways in which control can be returned 
+ to the top of the waterfall.</p> 
+ 
+ <p>When the simplification process is attempted unsuccessfully for a goal, the 
+ goal is deemed to have ``settled down''.  This notion of ``settled down'' is 
+ handled, as follows, by the next waterfall process after simplification: the 
+ ``settled-down'' process.  If some ancestor of the goal (possibly the goal 
+ itself) has previously settled down, then the ``settled-down'' process is 
+ deemed to have missed on the goal.  Otherwise it hits on the goal, the effect 
+ being that the goal makes a new pass through all the waterfall 
+ processes.  (Other processes can then notice that settling down has occurred 
+ and modify their heuristics accordingly.)  For example, suppose that 
+ <span class="v">"Goal"</span> simplifies to <span class="v">"Subgoal 2"</span> (among others), and 
+ <span class="v">"Subgoal 2"</span> simplifies to <span class="v">"Subgoal 2.3"</span> (among others), which in 
+ turn is not further simplified.  Then the ``settled-down'' process hits on 
+ <span class="v">"Subgoal 2.3"</span>, but it does not hit not on any of its children or their 
+ children (and so on), because each of those has an ancestor, <span class="v">"Subgoal
+ 2.3"</span>, that has already been marked as ``settled-down''.</p> 
+ 
+ <p>The next proof process after settled-down is normally destructor 
+ elimination.  However, if a computed hint is suitable (in a sense described 
+ below; also see <a href="ACL2____COMPUTED-HINTS.html">computed-hints</a>, especially the discussion of 
+ <span class="v">stable-under-simplificationp</span>), then that hint is selected as control is 
+ returned to the top of the waterfall.  A subtlety is that in this case, if the 
+ most recent hit had been from settling down, then the prover ``changes its 
+ mind'' and considers that the goal has not yet settled down after all as it 
+ continues through the waterfall.</p> 
+ 
+ <p>Each time a goal is considered at the top of the waterfall, then before 
+ passing through the proof processes as described above, ACL2 searches for a 
+ relevant hint to select unless it has already been provided a hint in the 
+ ``<span class="v">stable-under-simplificationp</span>'' case mentioned above.  We turn now to a 
+ more thorough discussion of how hints are selected and applied.</p> 
+ 
+ <p><b>The handling of hints.</b></p> 
+ 
+ <p>In the discussion below we will ignore forcing rounds, as each forcing 
+ round is simply treated as a new proof attempt that uses the list of hints 
+ provided at the start of the proof.</p> 
+ 
+ <p>When the theorem prover is called by <span class="tt"><a href="ACL2____THM.html">thm</a></span> or <a href="ACL2____EVENTS.html">events</a> such as 
+ <span class="tt"><a href="ACL2____DEFTHM.html">defthm</a></span>, <span class="tt"><a href="COMMON-LISP____DEFUN.html">defun</a></span>, and <span class="tt"><a href="ACL2____VERIFY-GUARDS.html">verify-guards</a></span>, it gathers up the 
+ hints that have been supplied, often provided as a <span class="v">:</span><span class="tt"><a href="ACL2____HINTS.html">hints</a></span> 
+ argument, but for example using a <span class="v">:guard-hints</span> argument for <a href="ACL2____GUARD.html">guard</a> 
+ verification proofs.  (ACL2(r) users (see <a href="COMMON-LISP____REAL.html">real</a>) may also employ 
+ <span class="v">:std-hints</span>.)  It then appends these to the front of the list of default 
+ hints (see <a href="ACL2____DEFAULT-HINTS.html">default-hints</a>).  The resulting list becomes the initial 
+ value of the list of ``pending hints'', one of two critical lists maintained 
+ by the theorem prover to manage hints.  The other critical list is a list of 
+ ``hint settings''; the two lists are maintained as follows.</p> 
+ 
+ <p>When a goal is first considered, a hint is selected from the list of 
+ pending hints if any is found to apply, as described below.  If a hint is 
+ selected, then it takes effect and is removed from the pending hints.  Except: 
+ if the selected hint is a computed hint with value <span class="v">t</span> specified for 
+ <span class="v">:computed-hint-replacement</span>, then it is not removed; and if that value is 
+ a list of hints, then that list is appended to the front of the list of 
+ pending hints after the selected hint is removed (also see <a href="ACL2____COMPUTED-HINTS.html">computed-hints</a>).  The selected hint is also used to update the hint settings, 
+ as described below.</p> 
+ 
+ <p>The list of hint settings associates hint keywords with values.  It is 
+ passed from the current goal to its children (and hence the children's 
+ children, and so on), though modified by hints selected from pending hints, as 
+ described below.  This list is maintained so that when a goal is pushed for 
+ proof by induction, the hint settings are applied at the start of the proof by 
+ induction.  Note that the list of hint settings is not re-applied to 
+ descendants of a goal in the current waterfall; a hint is applied only when it 
+ is selected (and also perhaps later as just described, through the stored hint 
+ settings at the start of a proof by induction).  For example, if the hint 
+ selected for <span class="v">"Subgoal 3"</span> includes <span class="v">:in-theory (<a href="ACL2____ENABLE.html">enable</a> foo)</span>, then 
+ the hint settings are correspondingly updated when processing <span class="v">"Subgoal
+ 3"</span>, and they persist at subgoals such as <span class="v">"Subgoal 3.2"</span> and 
+ <span class="v">"Subgoal 3.2.1"</span> (unless overridden by hints on those goals); but the 
+ theory specifying <span class="v">foo</span> is not re-installed at every such subgoal.</p> 
+ 
+ <p>When a hint is selected, the list of hint settings is updated so that for 
+ each keyword <span class="v">:kwd</span> and associated value <span class="v">val</span> from the hint, <span class="v">:kwd</span> 
+ is associated with <span class="v">val</span> in the hint settings, discarding any previous 
+ association of <span class="v">:kwd</span> with a value in the hint settings.  Except, certain 
+ ``top-level'' hints are never saved in the hint settings: <span class="v">:use</span>, 
+ <span class="v">:cases</span>, <span class="v">:by</span>, <span class="v">:bdd</span>, <span class="v">:or</span>, and <span class="v">:clause-processor</span>.</p> 
+ 
+ <p>For example, suppose that we specify the following hints, with no default 
+ hints.</p> 
+ 
+ <pre class="code">(("Goal" :expand ((bar x y)))
+ ("Subgoal 3" :in-theory (<a href="ACL2____ENABLE.html">enable</a> foo)))</pre> 
+ 
+ <p>These hints then become the initial list of pending hints.  When the proof 
+ attempt begins, the prover encounters the top-level goal (<span class="v">"Goal"</span>) and 
+ pulls the <span class="v">"Goal"</span> hint from the pending hints, so that the list of hint 
+ settings contains a value only for keyword <span class="v">:expand</span>.  This hint setting 
+ will remain for all children of the top-level goal as well, and their 
+ children, and so on, and will be inherited by induction  in other 
+ words, it will remain throughout the entire proof.  Now consider what happens 
+ when the proof reaches <span class="v">"Subgoal 3"</span>.  At this point there is only one 
+ pending hint, which is in fact attached to that subgoal.  Therefore, this hint 
+ is pulled from the pending hints (leaving that list empty), and the hint 
+ settings are extended by associating the <span class="v">:in-theory</span> keyword with the 
+ theory represented by <span class="v">(<a href="ACL2____ENABLE.html">enable</a> foo)</span>.  That theory is immediately installed 
+ until the prover finishes addressing <span class="v">"Subgoal 3"</span>, its children, their 
+ children, and so on; and until that completion is reached, the <span class="v">:in-theory</span> 
+ keyword remains associated with the <span class="v">(<a href="ACL2____ENABLE.html">enable</a> foo)</span> in the hint settings, 
+ although of course there is no re-installation of the theory at any ensuing 
+ child goal.  When finally <span class="v">"Subgoal 3"</span> and its descendants have been 
+ completed and the prover is about to consider <span class="v">"Subgoal 2"</span>, the 
+ <span class="v">:in-theory</span> association is removed from the hint settings and the global 
+ theory is re-installed.  However, the list of pending hints remains empty.</p> 
+ 
+ <p>It remains to describe how a hint is selected for a goal.  When a goal is 
+ first considered (hence at the top of the waterfall), the list of pending 
+ hints is scanned, in order, until one of the hints is suitable for the goal. 
+ An explicit hint <span class="v">(goal-name :kwd1 val1 ... :kwdn valn)</span> is suitable if 
+ <span class="v">goal-name</span> is the name of the current goal and there is at least one 
+ keyword.  A computed hint is suitable if it evaluates to a non-<span class="v">nil</span> value. 
+ As indicated earlier in this documentation topic, an exception occurs when a 
+ computed hint is selected after simplification fails (the 
+ ``<span class="v">stable-under-simplificationp</span>'' case): in that case, the goal returns to 
+ the top of the waterfall with that hint as the selected hint, and no 
+ additional search for a hint to select is made at that time.</p> 
+ 
+ <p>The following slightly tricky example illustrates handling of hints.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____SET-DEFAULT-HINTS.html">set-default-hints</a> '(("Goal" :do-not '(preprocess))))
+ (("Goal" :DO-NOT '(PREPROCESS)))
+ACL2 !&gt;(<a href="ACL2____THM.html">thm</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____APPEND.html">append</a> (<a href="COMMON-LISP____APPEND.html">append</a> x y) z) (<a href="COMMON-LISP____APPEND.html">append</a> x y z))
+            :hints (("Goal" :in-theory (<a href="ACL2____DISABLE.html">disable</a> car-cons))))
+
+ACL2 Warning [Hints] in ( THM ...):  The goal-spec "Goal" is explicitly
+associated with more than one hint.  All but the first of these hints
+may be ignored.  If you intended to give all of these hints, combine
+them into a single hint of the form ("Goal" :kwd1 val1 :kwd2 val2 ...).
+See :DOC hints-and-the-waterfall.
+
+[Note:  A hint was supplied for our processing of the goal above.
+Thanks!]
+
+[Note:  A hint was supplied for our processing of the goal above.
+Thanks!]
+
+Name the formula above *1.</pre> 
+ 
+ <p>The warning above is printed because <span class="v">"Goal"</span> is associated with two 
+ pending hints: one given by the <span class="tt"><a href="ACL2____SET-DEFAULT-HINTS.html">set-default-hints</a></span> call and one 
+ supplied by the <span class="v">:</span><span class="tt"><a href="ACL2____HINTS.html">hints</a></span> keyword of the <span class="tt"><a href="ACL2____THM.html">thm</a></span> form.  The 
+ <span class="v">:in-theory</span> hint is selected because user-supplied hints are ahead of 
+ default hints in the list of pending hints; we then get the first ``Note'' 
+ above.  The goal progresses through the waterfall without any proof process 
+ applying to the goal; in particular, it cannot be further simplified.  After 
+ the simplification process, a ``settled-down'' process applies, as discussed 
+ above, immediately causing another trip through the waterfall.  Since the 
+ <span class="v">:in-theory</span> hint was earlier removed from the list of pending hints when 
+ it was applied, the default (<span class="v">:do-not</span>) hint is now the only pending hint. 
+ That hint is applied, resulting in the second ``Note'' above.</p> 
+ 
+ <p>Again, more examples may be found in the community book 
+ <span class="v">books/hints/basic-tests.lisp</span>.  A particularly tricky but informative 
+ example in that book is the one related to <span class="v">nonlinearp-default-hint</span>.</p> 
+ 
+ <p>Also see <a href="ACL2____OVERRIDE-HINTS.html">override-hints</a> for an advanced feature that allows 
+ modification of the hint selected for a goal.</p>
+</body>
+</html>

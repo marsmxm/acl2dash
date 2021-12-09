@@ -1,0 +1,132 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Stvs-and-testing</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=SV____STVS-AND-TESTING">Click for Stvs-and-testing in the Full Manual</a></h3>
+
+<p>Defining a simulation pattern (STV) and using it to run tests.</p> 
+ 
+<p>Part of the <a href="SV____SV-TUTORIAL.html">sv-tutorial</a>. Previous section: <a href="SV____TRANSLATING-VERILOG-TO-SVEX.html">translating-verilog-to-svex</a>.</p> 
+ 
+<h4>Defining a simulation pattern</h4> <p>To run a test of our SVEX design, 
+we'll first write a form that describes how to stimulate the module and grab 
+its output.  Looking at the ALU design, we have inputs coming into flip-flops. 
+The outputs of these flops are combined with the opcode input and used to 
+compute <span class="v">ans</span>.  This goes to another flop, the result of which is output. 
+So we need to provide the <span class="v">a</span> and <span class="v">b</span> inputs one cycle, <span class="v">opcode</span> the 
+next, and read the output the cycle after that.  The following form defines a 
+<a href="SV____SYMBOLIC-TEST-VECTOR.html">symbolic-test-vector</a> that describes this simulation pattern:</p> 
+ 
+<pre class="code">(<a href="ACL2____DEFSVTV.html">defsvtv</a> alu-test-vector
+         :mod *alu-svex-design*
+         :parents (<a href="SV____STVS-AND-TESTING.html">stvs-and-testing</a>)
+         :short "A simple test of the alu16 module."
+         :labels '(dat1 dat2 op1 op2 out1 out2)
+         :inputs '(("clk" 1 0 1 0 1 0)
+                   ("opcode" _ _ _ op _)
+                   ("abus" _ a _)
+                   ("bbus" _ b _))
+         :outputs '(("out" _ _ _ _ _ res)))</pre> 
+ 
+<p>The semantically significant fields here are <span class="v">:inputs</span> and <span class="v">:outputs</span> 
+-- in particular, <span class="v">:parents</span>, <span class="v">:short</span>, <span class="v">:labels</span>, and <span class="v">:long</span> (not 
+provided here) are just for documentation.  You can see the documentation 
+generated for this STV <a href="SV____ALU-TEST-VECTOR.html">here</a>.</p> 
+ 
+<p>The first column of <span class="v">:inputs</span> gives the Verilog signal names of 
+inputs we wish to set.  The first column after that describes what happens in 
+the first phase of simulation: we set the clock to 1.  All the other signals 
+have an underscore, meaning we don't set them.  The phase after that, we set 
+the clock to 0 and set the <span class="v">abus</span> and <span class="v">bbus</span> inputs to variables <span class="v">a</span> 
+and <span class="v">b</span>.</p> 
+ 
+<blockquote>Aside: Why do this on the clock-low phase rather than the 
+clock-high phase?  For <span class="v">posedge</span> flipflops, the updated value depends on the 
+input to the flop during the previous clock-low phase; nothing much of 
+consequence happens during the clock-high phase.</blockquote> 
+ 
+<p>The next phase, the clock is set to 1; the next one, back to 0 and the 
+opcode is set to variable <span class="v">op</span>, and after that we toggle the clock twice 
+more and are done.</p> 
+ 
+<p>The outputs have a similar format to the inputs, except that instead of 
+naming input variables we're naming output names.  So our output line says that 
+we record the value of signal <span class="v">out</span> in variable <span class="v">res</span> at phase 6 of our 
+simulation (one cycle after the opcode goes in).</p> 
+ 
+<p>The main effect of this <a href="ACL2____DEFSVTV.html">defsvtv</a> form is to create a 
+constant (accessed via a 0-ary function, <span class="v">(<a href="SV____ALU-TEST-VECTOR.html">alu-test-vector</a>)</span> that encapsulates 
+the given simulation pattern in a set of svex expressions, one for each output 
+variable, expressed in terms of the input variables.  So the resulting 
+<span class="v">(<a href="SV____ALU-TEST-VECTOR.html">alu-test-vector</a>)</span> from the <span class="v">defsvtv</span> above contains an svex expression for 
+<span class="v">res</span> as a combinational function in terms of <span class="v">a</span>, <span class="v">b</span>, and <span class="v">op</span>. 
+You can examine this function by looking at the <span class="v">outexprs</span> field of the SVTV 
+structure:</p> 
+ 
+<pre class="code">(<a href="SV____SVTV-_E3OUTEXPRS.html">svtv-&gt;outexprs</a> (<a href="SV____ALU-TEST-VECTOR.html">alu-test-vector</a>))</pre> 
+ 
+<p>Warning: This  prints a  lot of  output --  around 11,000  lines.  We  get a 
+somewhat nicer result if we  apply some <a href="SV____REWRITING.html">rewriting</a> before displaying 
+it:</p> 
+ 
+<pre class="code">(<a href="SV____SVEX-ALIST-REWRITE-FIXPOINT.html">svex-alist-rewrite-fixpoint</a> (<a href="SV____SVTV-_E3OUTEXPRS.html">svtv-&gt;outexprs</a> (<a href="SV____ALU-TEST-VECTOR.html">alu-test-vector</a>)))</pre> 
+ 
+<p>This is small enough to fit on two screens, and its meaning can be teased 
+out with some patience and reference to the <a href="SV____SVEX.html">svex</a> <a href="SV____FUNCTIONS.html">functions</a>.</p> 
+ 
+<h4>Running tests using the simulation pattern</h4> 
+ 
+<p>The basic way to run tests using the simulation pattern we've defined is 
+with <a href="ACL2____SVTV-RUN.html">svtv-run</a>:</p> 
+ 
+<pre class="code">(<a href="ACL2____SVTV-RUN.html">svtv-run</a> (<a href="SV____ALU-TEST-VECTOR.html">alu-test-vector</a>)
+          (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'op *op-plus*)
+                (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'a '5)
+                      (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'b '3) 'nil))))</pre> 
+ 
+<p>This takes as input an alist binding the STV input variables to integers. 
+Note that we don't have to do anything for the clock; its behavior was defined 
+by the <span class="v">defsvtv</span> form, and it has no input variable.  The output from 
+<span class="v">svtv-run</span> is just another alist binding the output variable(s) to their 
+values -- here, our ALU has added 3 and 5 and returned 8.</p> 
+ 
+<p>Sometimes you may need to drive a wire to X, Z, or some combination of X/Z 
+with good Boolean values.  The biggest difference in usage between svex's STV 
+functions and esim's is the notation used for this.  Svex constants, including 
+those in <span class="v">defsvtv</span> forms and in the inputs and outputs of <span class="v">svtv-run</span>, are 
+always expressed as <a href="SV____4VEC.html">4vec</a> objects.  Essentially, if your input or output 
+value is an all-Boolean vector, then you can just represent it as a single 
+integer.  If not, it is then a pair of integers; see <a href="SV____4VEC.html">4vec</a> for more 
+details. Examples:</p> 
+ 
+<pre class="code">(<a href="ACL2____SVTV-RUN.html">svtv-run</a> (<a href="SV____ALU-TEST-VECTOR.html">alu-test-vector</a>)
+          (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'op *op-plus*)
+                (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'a (<a href="SV____4VEC-X.html">4vec-x</a>))
+                      (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'b '3) 'nil))))</pre> 
+<pre class="code">(<a href="ACL2____SVTV-RUN.html">svtv-run</a> (<a href="SV____ALU-TEST-VECTOR.html">alu-test-vector</a>)
+          (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'op *op-bitand*)
+                (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'a (<a href="SV____4VEC.html">4vec</a> 64672 3322))
+                      (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'b 65535) 'nil))))</pre> 
+ 
+<p>When we do an <span class="v">svtv-run</span>, we are essentially applying <a href="SV____SVEX-EVAL.html">svex-eval</a> to 
+interpret the output expressions examined above.</p> 
+ 
+<h4>Viewing Simulation Waveforms</h4> 
+ 
+<p>To debug these simulations in more depth, we can use <span class="v">svtv-debug</span>, which 
+produces a VCD waveform that can be examined in a waveform viewer such as 
+gtkwave:</p> 
+ 
+<pre class="code">(<a href="ACL2____SVTV-DEBUG.html">svtv-debug</a> (<a href="SV____ALU-TEST-VECTOR.html">alu-test-vector</a>)
+            (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'op *op-mult*)
+                  (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'a '5)
+                        (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'b '3) 'nil)))
+            :filename "alu-min-debug.vcd")</pre> 
+ 
+<p>To continue, next see <a href="SV____PROOFS-WITH-STVS.html">proofs-with-stvs</a>.</p>
+</body>
+</html>

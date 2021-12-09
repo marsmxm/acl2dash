@@ -1,0 +1,284 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Note-2-9-3-ppr-change</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____NOTE-2-9-3-PPR-CHANGE">Click for Note-2-9-3-ppr-change in the Full Manual</a></h3>
+
+<p>Change in pretty-printing for ACL2 Version_2.9.3</p><p>We have improved pretty-printing in ACL2 Version_2.9.3 to handle 
+ keywords a little differently.  To see a discussion of the basics of this 
+ change, see <a href="ACL2____NOTE-2-9-3.html">note-2-9-3</a>.  In this note we describe it in considerable 
+ detail.</p> 
+ 
+ <p>Those who wish to understand the ACL2 pretty-printer's implementation can 
+ now find considerably more comments on it in the source code.  In this note, 
+ we do not focus on the implementation.  Rather, we motivate the change and 
+ show how the improved prettyprinter performs.</p> 
+ 
+ <p>Why do we want better keyword handling?  Imagine a macro that builds a new 
+ state from an old state by changing the values in the affected fields, leaving 
+ everything else unchanged.  One could write</p> 
+ 
+ <pre class="code">(modify th s :key1 val1 :key2 val2 :key3 val3)</pre> 
+ 
+ <p>where the three keys identify fields in the state.</p> 
+ 
+ <p>To make it easier to read new concrete states, we may have a function that 
+ prints them ``relative'' to a given base state, expressing the new state as a 
+ modification of the given base state.  So we may find ourselves prettyprinting 
+ modify forms like that above.</p> 
+ 
+ <p>The previous prettyprinter will sometimes print the form above as 
+ follows.</p> 
+ 
+ <pre class="code">(modify th s :key1
+        val1
+        :key2 val2 :key3 val3)</pre> 
+ 
+ <p>This can be unpleasant to read, because of the way <span class="v">:key1</span> and <span class="v">val1</span> 
+ are separated.  Here is an example of the old prettyprinter and the new one, 
+ both printing an expression from the ACL2 source code in a width of 40:</p> 
+ 
+ <pre class="code">Old:
+(ADD-TO-TAG-TREE
+ 'ASSUMPTION
+ (<a href="ACL2____MAKE.html">MAKE</a>
+  ASSUMPTION :TYPE-ALIST TYPE-ALIST
+  :TERM TERM :REWRITTENP REWRITTENP
+  :IMMEDIATEP IMMEDIATEP :ASSUMNOTES
+  (<a href="COMMON-LISP____LIST.html">LIST</a>
+   (<a href="ACL2____MAKE.html">MAKE</a>
+        ASSUMNOTE :CL-ID
+        NIL :RUNE RUNE :TARGET TARGET)))
+ TTREE)
+
+New:
+(ADD-TO-TAG-TREE
+     'ASSUMPTION
+     (<a href="ACL2____MAKE.html">MAKE</a> ASSUMPTION
+           :TYPE-ALIST TYPE-ALIST
+           :TERM TERM
+           :REWRITTENP REWRITTENP
+           :IMMEDIATEP IMMEDIATEP
+           :ASSUMNOTES
+           (<a href="COMMON-LISP____LIST.html">LIST</a> (<a href="ACL2____MAKE.html">MAKE</a> ASSUMNOTE
+                       :CL-ID NIL
+                       :RUNE RUNE
+                       :TARGET TARGET)))
+     TTREE)</pre> 
+ 
+ <p>Basically the change we made forces the prettyprinter to print each 
+ <span class="v">:key</span> on a new line unless they all fit on a single line.  So we would now 
+ get either</p> 
+ 
+ <pre class="code">(modify th s :key1 val1 :key2 :val2 :key3 val3)</pre> 
+ 
+ <p>or</p> 
+ 
+ <pre class="code">(modify th s
+        :key1 val1
+        :key2 val2
+        :key3 val3)</pre> 
+ 
+ <p>Furthermore, we fixed it so that if <span class="v">val1</span> (say) is a big s-expression 
+ we may still print it on the same line as its key.  The old prettyprinter 
+ enforced the rule that if you wanted to print <span class="v">(foo a b)</span> and <span class="v">b</span> gets 
+ broken up into several lines, then it has to start on a new line.  Thus, we'd 
+ never print</p> 
+ 
+ <pre class="code">(foo a (bbb
+        (mum x)))</pre> 
+ 
+ <p>but would print instead</p> 
+ 
+ <pre class="code">(foo a
+     (bbb
+      (mum x)))</pre> 
+ 
+ <p>Now, if a is a keyword, we can print the first way.</p> 
+ 
+ <p>So here are some nice examples of prettyprinted keyword forms.  All of 
+ these are printed for a page of width 40.</p> 
+ 
+ <pre class="code">&lt;--            40 chars               -&gt;
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+(MODIFY TH S :KEY1 V1 :KEY2 V2)
+
+(MODIFY TH S :KEY1 V1 :KEY2 V2 :KEY3 V3)
+
+(MODIFY TH S1                               ; Because of the extra char
+        :KEY1 V1                            ; in S1 the flat size exceeds
+        :KEY2 V2                            ; 40 and we break it.
+        :KEY3 V3)</pre> 
+ 
+ <p>The old ppr would have printed this as:</p> 
+ 
+ <pre class="code">(MODIFY
+     TH S1 :KEY1 V1 :KEY2 V2 :KEY3 V3)</pre> 
+ 
+ <p>Returning to new examples:</p> 
+ 
+ <pre class="code">&lt;--            40 chars               -&gt;
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+(MODIFY TH S
+        :KEY1 (<a href="COMMON-LISP____IF.html">IF</a> (<a href="COMMON-LISP____IF.html">IF</a> X Y Z) AAAA BBBB)
+        :KEY2 VAL2
+        :KEY3 VAL3)</pre> 
+ 
+ <p>Now we extend <span class="v">AAAA</span> and <span class="v">BBBB</span> by one char each, so it would 
+ overflow the right margin if printed as above, and we get:</p> 
+ 
+ <pre class="code">&lt;--            40 chars               -&gt;
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+(MODIFY
+     TH S
+     :KEY1 (<a href="COMMON-LISP____IF.html">IF</a> (<a href="COMMON-LISP____IF.html">IF</a> X Y Z) AAAAX BBBBX)
+     :KEY2 VAL2
+     :KEY3 VAL3)</pre> 
+ 
+ <p>If we make these names even longer we force the value off the line 
+ containing <span class="v">:key1</span>:</p> 
+ 
+ <pre class="code">(MODIFY
+     TH S
+     :KEY1
+     (<a href="COMMON-LISP____IF.html">IF</a> (<a href="COMMON-LISP____IF.html">IF</a> X Y Z) AAAAXXXXX BBBBXXXXX)
+     :KEY2 VAL2
+     :KEY3 VAL3)</pre> 
+ 
+ <p>Here are some examples from the ACL2 source code, printed in 40 
+ characters:</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">DEFTHM</a>
+ ALPHORDER-ANTI-SYMMETRIC
+ (<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____AND.html">AND</a> (<a href="COMMON-LISP____NOT.html">NOT</a> (<a href="COMMON-LISP____CONSP.html">CONSP</a> X))
+               (<a href="COMMON-LISP____NOT.html">NOT</a> (<a href="COMMON-LISP____CONSP.html">CONSP</a> Y))
+               (<a href="ACL2____ALPHORDER.html">ALPHORDER</a> X Y)
+               (<a href="ACL2____ALPHORDER.html">ALPHORDER</a> Y X))
+          (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> X Y))
+ :HINTS
+ (("Goal"
+   :IN-THEORY
+   (<a href="ACL2____UNION-THEORIES.html">UNION-THEORIES</a>
+    '(<a href="COMMON-LISP____STRING_C3.html">STRING&lt;</a> SYMBOL&lt;)
+    (<a href="ACL2____DISABLE.html">DISABLE</a>
+       CODE-CHAR-CHAR-CODE-IS-IDENTITY))
+   :USE
+   ((:INSTANCE SYMBOL-EQUALITY (S1 X)
+               (S2 Y))
+    (:INSTANCE BAD-ATOM&lt;=-ANTISYMMETRIC)
+    (:INSTANCE
+         CODE-CHAR-CHAR-CODE-IS-IDENTITY
+         (C Y))
+    (:INSTANCE
+         CODE-CHAR-CHAR-CODE-IS-IDENTITY
+         (C X)))))
+ :RULE-CLASSES
+ ((:FORWARD-CHAINING
+   :COROLLARY
+   (<a href="ACL2____IMPLIES.html">IMPLIES</a>
+      (<a href="COMMON-LISP____AND.html">AND</a> (<a href="ACL2____ALPHORDER.html">ALPHORDER</a> X Y)
+           (<a href="COMMON-LISP____NOT.html">NOT</a> (<a href="COMMON-LISP____CONSP.html">CONSP</a> X))
+           (<a href="COMMON-LISP____NOT.html">NOT</a> (<a href="COMMON-LISP____CONSP.html">CONSP</a> Y)))
+      (<a href="ACL2____IFF.html">IFF</a> (<a href="ACL2____ALPHORDER.html">ALPHORDER</a> Y X) (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> X Y)))
+   :HINTS
+   (("Goal"
+     :IN-THEORY (<a href="ACL2____DISABLE.html">DISABLE</a> ALPHORDER))))))</pre> 
+ 
+ <p>Here is that same one, printed in a width of 60.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">DEFTHM</a>
+ ALPHORDER-ANTI-SYMMETRIC
+ (<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____AND.html">AND</a> (<a href="COMMON-LISP____NOT.html">NOT</a> (<a href="COMMON-LISP____CONSP.html">CONSP</a> X))
+               (<a href="COMMON-LISP____NOT.html">NOT</a> (<a href="COMMON-LISP____CONSP.html">CONSP</a> Y))
+               (<a href="ACL2____ALPHORDER.html">ALPHORDER</a> X Y)
+               (<a href="ACL2____ALPHORDER.html">ALPHORDER</a> Y X))
+          (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> X Y))
+ :HINTS
+ (("Goal"
+     :IN-THEORY
+     (<a href="ACL2____UNION-THEORIES.html">UNION-THEORIES</a>
+          '(<a href="COMMON-LISP____STRING_C3.html">STRING&lt;</a> SYMBOL&lt;)
+          (<a href="ACL2____DISABLE.html">DISABLE</a> CODE-CHAR-CHAR-CODE-IS-IDENTITY))
+     :USE ((:INSTANCE SYMBOL-EQUALITY (S1 X)
+                      (S2 Y))
+           (:INSTANCE BAD-ATOM&lt;=-ANTISYMMETRIC)
+           (:INSTANCE CODE-CHAR-CHAR-CODE-IS-IDENTITY (C Y))
+           (:INSTANCE CODE-CHAR-CHAR-CODE-IS-IDENTITY
+                      (C X)))))
+ :RULE-CLASSES
+ ((:FORWARD-CHAINING
+      :COROLLARY (<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____AND.html">AND</a> (<a href="ACL2____ALPHORDER.html">ALPHORDER</a> X Y)
+                               (<a href="COMMON-LISP____NOT.html">NOT</a> (<a href="COMMON-LISP____CONSP.html">CONSP</a> X))
+                               (<a href="COMMON-LISP____NOT.html">NOT</a> (<a href="COMMON-LISP____CONSP.html">CONSP</a> Y)))
+                          (<a href="ACL2____IFF.html">IFF</a> (<a href="ACL2____ALPHORDER.html">ALPHORDER</a> Y X) (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> X Y)))
+      :HINTS (("Goal" :IN-THEORY (<a href="ACL2____DISABLE.html">DISABLE</a> ALPHORDER))))))</pre> 
+ 
+ <p>Just for comparison, here is the above printed in 60 columns by the old 
+ prettyprinter.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">DEFTHM</a>
+ ALPHORDER-ANTI-SYMMETRIC
+ (<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____AND.html">AND</a> (<a href="COMMON-LISP____NOT.html">NOT</a> (<a href="COMMON-LISP____CONSP.html">CONSP</a> X))
+               (<a href="COMMON-LISP____NOT.html">NOT</a> (<a href="COMMON-LISP____CONSP.html">CONSP</a> Y))
+               (<a href="ACL2____ALPHORDER.html">ALPHORDER</a> X Y)
+               (<a href="ACL2____ALPHORDER.html">ALPHORDER</a> Y X))
+          (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> X Y))
+ :HINTS
+ (("Goal" :IN-THEORY
+          (<a href="ACL2____UNION-THEORIES.html">UNION-THEORIES</a>
+               '(<a href="COMMON-LISP____STRING_C3.html">STRING&lt;</a> SYMBOL&lt;)
+               (<a href="ACL2____DISABLE.html">DISABLE</a> CODE-CHAR-CHAR-CODE-IS-IDENTITY))
+          :USE
+          ((:INSTANCE SYMBOL-EQUALITY (S1 X)
+                      (S2 Y))
+           (:INSTANCE BAD-ATOM&lt;=-ANTISYMMETRIC)
+           (:INSTANCE CODE-CHAR-CHAR-CODE-IS-IDENTITY (C Y))
+           (:INSTANCE CODE-CHAR-CHAR-CODE-IS-IDENTITY
+                      (C X)))))
+ :RULE-CLASSES
+ ((:FORWARD-CHAINING
+       :COROLLARY
+       (<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____AND.html">AND</a> (<a href="ACL2____ALPHORDER.html">ALPHORDER</a> X Y)
+                     (<a href="COMMON-LISP____NOT.html">NOT</a> (<a href="COMMON-LISP____CONSP.html">CONSP</a> X))
+                     (<a href="COMMON-LISP____NOT.html">NOT</a> (<a href="COMMON-LISP____CONSP.html">CONSP</a> Y)))
+                (<a href="ACL2____IFF.html">IFF</a> (<a href="ACL2____ALPHORDER.html">ALPHORDER</a> Y X) (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> X Y)))
+       :HINTS
+       (("Goal" :IN-THEORY (<a href="ACL2____DISABLE.html">DISABLE</a> ALPHORDER))))))</pre> 
+ 
+ <p>Of course, given that you cannot tell for sure whether the keywords you're 
+ seeing are part of a keyword/value parameter list or part of some constant 
+ containing random keywords, the prettyprinter can't solve the problem 
+ perfectly.  We just tried to make it work nicely on well-formed keyword/value 
+ parameter lists.</p> 
+ 
+ <p>For example, here is a form printed by the each prettyprinter.</p> 
+ 
+ <pre class="code">Old:
+(<a href="COMMON-LISP____MEMBER.html">MEMBER</a>
+ X
+ '(:MONDAY
+      :MON :TUESDAY :TUES :WEDNESDAY
+      :WED :THURSDAY :THURS :FRIDAY
+      :FRI :SATURDAY :SAT :SUNDAY :SUN))
+
+New:
+(<a href="COMMON-LISP____MEMBER.html">MEMBER</a> X
+        '(:MONDAY :MON
+                  :TUESDAY :TUES
+                  :WEDNESDAY :WED
+                  :THURSDAY :THURS
+                  :FRIDAY :FRI
+                  :SATURDAY :SAT
+                  :SUNDAY :SUN))</pre> 
+ 
+ <p>The new way is not how one would print it by hand!  But then, neither is 
+ the old way.</p>
+</body>
+</html>

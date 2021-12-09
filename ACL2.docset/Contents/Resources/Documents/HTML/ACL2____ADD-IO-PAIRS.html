@@ -1,0 +1,256 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Add-io-pairs</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____ADD-IO-PAIRS">Click for Add-io-pairs in the Full Manual</a></h3>
+
+<p>Speed up a function using verified input-output pairs</p><p>For examples, see the book <span class="v">std/util/add-io-pairs-tests.lisp</span> in 
+ <a href="ACL2____COMMUNITY-BOOKS.html">community-books</a>.  Also see <a href="ACL2____ADD-IO-PAIR.html">add-io-pair</a> for an equivalent utility 
+ with slightly simpler syntax that can add a single input-output pair.</p> 
+ 
+ <p><b>Summary</b>.  This utility provides a way to redefine a function so that 
+ it can quickly look up a function call <span class="v">(fn i1 ... ik)</span> to produce its 
+ output, <span class="v">val</span>, thus avoiding its usual computation.  We call such a pair 
+ <span class="v">((fn i1 ... ik) val)</span> an ``I/O pair'' (for <span class="v">fn</span>).  Each I/O pair is 
+ ``verified'': a proof obligation has been met showing that the input list is 
+ indeed mapped to the corresponding output.  The (verified) I/O pairs are 
+ stored efficiently in a <a href="ACL2____TABLE.html">table</a>.  See <span class="tt"><a href="ACL2____SHOW-IO-PAIRS.html">show-io-pairs</a></span> for how to 
+ print the current I/O pairs.  The present utility, <span class="v">add-io-pairs</span>, extends 
+ the table by adding the specified I/O pairs and also redefines the specified 
+ function to take advantage of the updated table.</p> 
+ 
+ <pre class="code">Examples (see std/util/add-io-pairs-tests.lisp):
+
+(<a href="ACL2____ADD-IO-PAIRS.html">add-io-pairs</a> (((f 3) '(3 . 3))))
+
+(<a href="ACL2____ADD-IO-PAIRS.html">add-io-pairs</a> (((<a href="ACL2____G.html">g</a> 3 6) (<a href="ACL2____MV.html">mv</a> (<a href="COMMON-LISP_____A2.html">*</a> 3 10) (<a href="COMMON-LISP_____A2.html">*</a> 6 10)))
+               ((<a href="ACL2____G.html">g</a> (<a href="COMMON-LISP_____F2.html">/</a> 40 10) (<a href="COMMON-LISP_____F2.html">/</a> 50 10)) (<a href="ACL2____MV.html">mv</a> 40 50))))
+
+(<a href="ACL2____ADD-IO-PAIRS.html">add-io-pairs</a>
+ (((rtl::primep (<a href="PRIMES____SECP256K1-FIELD-PRIME.html">primes::secp256k1-field-prime</a>)) t)
+  ((rtl::primep (<a href="PRIMES____BN-254-GROUP-PRIME.html">primes::bn-254-group-prime</a>)) t)
+  ((rtl::primep (<a href="PRIMES____BABY-JUBJUB-SUBGROUP-PRIME.html">primes::baby-jubjub-subgroup-prime</a>)) t))
+ :debug t
+ :hints (("Goal"
+          :in-theory
+          (<a href="ACL2____ENABLE.html">enable</a> primes::primep-of-baby-jubjub-subgroup-prime-constant
+                  primes::primep-of-bn-254-group-prime-constant
+                  primes::primep-of-secp256k1-field-prime-constant))))
+
+General Form:
+(<a href="ACL2____ADD-IO-PAIRS.html">add-io-pairs</a> tuples &amp;key hints debug test verbose)</pre> 
+ 
+ <p>where the arguments, which are not evaluated, are described below and the 
+ keyword arguments are optional.</p> 
+ 
+ <ul> 
+ 
+ <li>
+<span class="v">Tuples</span> is a list of I/O pairs, each of the form <span class="v">((fn i_1 ... i_k)
+ val)</span> where <span class="v">fn</span> is a <a href="ACL2____GUARD.html">guard</a>-verified function symbol, each <span class="v">i_n</span> 
+ is a term, and <span class="v">val</span> is a term.  (The <a href="ACL2____TERM.html">term</a>s need not be translated.) 
+ <span class="v">Fn</span> must be the same in each of these I/O pairs, and must not take <a href="ACL2____STATE.html">state</a> or any user-defined <a href="ACL2____STOBJ.html">stobj</a> as an argument.  All <span class="v">i_n</span> and 
+ <span class="v">val</span> are evaluated to produce values used as inputs and corresponding 
+ output; therefore, these terms should not contain any free variables.</li> 
+ 
+ <li>
+<span class="v">Hints</span> (optional, default <span class="v">nil</span>), when non-<span class="v">nil</span>, is used as the 
+ <span class="v">:</span><span class="tt"><a href="ACL2____HINTS.html">hints</a></span> argument for the theorem discussed below.</li> 
+ 
+ <li>
+<span class="v">Test</span> (optional, default <span class="v">equal</span>) is the equality variant  
+ <span class="tt"><a href="COMMON-LISP____EQ.html">eq</a></span>, <span class="tt"><a href="COMMON-LISP____EQL.html">eql</a></span>, or <span class="tt"><a href="COMMON-LISP____EQUAL.html">equal</a></span>  used for testing equality of 
+ each input of <span class="v">fn</span> to a corresponding input of an I/O pair; or, <span class="v">test</span> 
+ can be a true-list of such equality variants, as described in the concluding 
+ remarks below.</li> 
+ 
+ <li>
+<span class="v">Debug</span> (optional, default <span class="v">nil</span>), when non-<span class="v">nil</span>, causes <span class="tt"><a href="ACL2____CW.html">cw</a></span> to print a message to the terminal when an I/O pair is being used during 
+ evaluation (thus avoiding the usual computation for <span class="v">fn</span>).</li> 
+ 
+ <li>
+<span class="v">Verbose</span> (optional, default <span class="v">nil</span>), when non-<span class="v">nil</span>, avoids 
+ suppressing output (other than what is currently globally suppressed; see 
+ <a href="ACL2____SET-INHIBIT-OUTPUT-LST.html">set-inhibit-output-lst</a>).  This argument may be particularly useful when 
+ the proof fails for the theorem, described below, that equates <span class="v">fn</span> to the 
+ corresponding new function (that looks up inputs from a table of all verified 
+ I/O pairs).</li> 
+ 
+ </ul> 
+ 
+ <p>If <span class="v">tuples</span> is <span class="v">nil</span> then the call of <span class="v">add-io-pairs</span> is a no-op. 
+ Otherwise, as noted above, the function symbol (<span class="v">fn</span>, above) must be the 
+ same for each I/O pair.</p> 
+ 
+ <p>This event defines a new function, denoted <span class="v">new-fn</span> below (the actual 
+ name is generated automatically), to compute as follows.  First, the inputs 
+ <span class="v">i_n</span> and corresponding output <span class="v">val</span> of an I/O pair <span class="v">((fn i_1 ... i_k)
+ val)</span> are evaluated to produce a corresponding ``evaluated I/O pair'' <span class="v">((fn
+ j_1 ... j_k) v)</span>, where the values of <span class="v">i_n</span> and <span class="v">val</span> are <span class="v">j_n</span> and 
+ <span class="v">v</span>, respectively.  Then <span class="v">new-fn</span> is defined so that <span class="v">(fn j_1
+ ... j_k)</span> is computed by finding that evaluated I/O pair and returning 
+ <span class="v">v</span>, thus avoiding the usual computation for <span class="v">fn</span>.  That is: a call of 
+ <span class="v">new-fn</span> considers every evaluated I/O pair <span class="v">((fn j_1 ... j_k) val)</span>, 
+ whether added by this call of <span class="v">add-io-pairs</span> or a previous such call, 
+ searching for one whose inputs <span class="v">(j_1 ... j_k)</span> equal that call's actual 
+ parameters, and returning the corresponding output <span class="v">v</span> in that case; if no 
+ such evaluated I/O pair is found, then <span class="v">new-fn</span> just calls <span class="v">fn</span>.  This 
+ description is accurate if <span class="v">fn</span> returns a single value; otherwise, if 
+ <span class="v">fn</span> returns <span class="v">n</span> values where <span class="v">n</span> is greater than 1, <span class="v">val</span> should 
+ evaluate to multiple values <span class="v">(<a href="ACL2____MV.html">mv</a> v_1 .... v_n)</span>, in which case the multiple 
+ values returned by <span class="v">new-fn</span> are <span class="v">v_1</span> through <span class="v">v_n</span>.  The definition 
+ of <span class="v">new-fn</span> thus has roughly the following form, where: <span class="v">IO-LOOKUP</span> 
+ denotes a lookup utility that searches for the given inputs among evaluated 
+ I/O pairs, returning the one-element list containing the value associated with 
+ those inputs, if found; <span class="v">TEST</span> is the value for <span class="v">:test</span> discussed 
+ above (defaulting to <span class="v">equal</span>); and <span class="v">IO-PAIRS</span> is the extension of the 
+ existing evaluated I/O pairs for <span class="v">fn</span> by the current call of 
+ <span class="v">add-io-pairs</span>, as described above.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> new-fn (x1 ... xk) ; same formals as for fn
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t)) ; ensure guard-verified
+  &lt;declare_forms&gt; ; same declare forms as for fn
+  (<a href="COMMON-LISP____LET.html">let</a> ((pair &lt;&lt;IO-LOOKUP (x1 ... xk) in 'IO-PAIRS using 'TEST&gt;&gt;))
+    (<a href="COMMON-LISP____IF.html">if</a> pair
+        (<a href="COMMON-LISP____CAR.html">car</a> pair)
+      (fn x))))</pre> 
+ 
+ <p>The event displayed above is approximate.  One can see the precise 
+ definition produced by evaluating a call of <span class="v">add-io-pairs</span> and using 
+ <span class="v">:</span><span class="tt"><a href="ACL2____PCB_12.html">pcb!</a></span><span class="v"> :x</span> to see what has been generated.  Alternatively, run 
+ <span class="v">add-io-pairs</span> using option <span class="v">:verbose t</span> and peruse the log.</p> 
+ 
+ <p>In the underlying Common Lisp, <span class="v">fn</span> is redefined to be <span class="v">new-fn</span>, but 
+ with a twist: once control passes from <span class="v">fn</span> to <span class="v">new-fn</span>, all recursive 
+ calls of <span class="v">fn</span> will be calls of the old version of <span class="v">fn</span>, without 
+ re-entering <span class="v">new-fn</span>.  Note that when <span class="v">new-fn</span> is called on an input 
+ list that has an associated I/O pair, the corresponding output is returned 
+ immediately without calling <span class="v">fn</span> (which of course is the point of this 
+ tool); thus, in particular, side effects from <span class="v">fn</span> such as printing with 
+ <span class="tt"><a href="ACL2____CW.html">cw</a></span> will not take place for such an input list.</p> 
+ 
+ <p>A generated proof obligation has the following form, where <span class="v">HINTS</span> below 
+ is the non-<span class="v">nil</span> <span class="v">:hints</span> keyword if supplied by <span class="v">add-io-pairs</span>; 
+ otherwise the <span class="v">:hints</span> keyword below is omitted.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> &lt;generated_name&gt;
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> (fn x1 ... xk)
+         (new-fn x1 ... xk))
+  :hints HINTS ; omitted if the given :hints is nil or omitted
+  :rule-classes nil)</pre> 
+ 
+ <p>We conclude with a few remarks.</p> 
+ 
+ <p>Remark 1.  When the value <span class="v">:test</span> is a non-<span class="v">nil</span> list, its length 
+ should be the number of inputs of <span class="v">fn</span> and each member should be <span class="v">eq</span>, 
+ <span class="v">eql</span>, or <span class="v">equal</span>, indicating the test used when comparing an input at 
+ that position to an input specified in an evaluated I/O pairs for <span class="v">fn</span>.</p> 
+ 
+ <p>Remark 2.  Evaluation of input and output terms in an I/O pair is performed 
+ with guard-checking set to <span class="v">nil</span> (see <a href="ACL2____SET-GUARD-CHECKING.html">set-guard-checking</a>) and 
+ attachments allowed (see <a href="ACL2____DEFATTACH.html">defattach</a>).</p> 
+ 
+ <p>Remark 3.  Although <span class="v">fn</span> is required to be <a href="ACL2____GUARD.html">guard</a>-verified, one 
+ may be able to avoid most of the effort of guard verification by using <span class="tt"><a href="ACL2____EC-CALL.html">ec-call</a></span>.  Here is a trivial example that illustrates the technique.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="COMMON-LISP____DEFUN.html">defun</a> h (x)
+         (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t))
+         (<a href="ACL2____EC-CALL.html">ec-call</a> (<a href="COMMON-LISP____CAR.html">car</a> x)))
+
+Since H is non-recursive, its admission is trivial.  We could deduce
+no constraints on the type of H.
+
+Computing the guard conjecture for H....
+
+The guard conjecture for H is trivial to prove.  H is compliant with
+Common Lisp.
+
+Summary
+Form:  ( DEFUN H ...)
+Rules: NIL
+Time:  0.00 seconds (prove: 0.00, print: 0.00, other: 0.00)
+ H
+ACL2 !&gt;(<a href="ACL2____ADD-IO-PAIRS.html">add-io-pairs</a> (((h 3) nil) ((h '(a b c)) 'a)) :debug t)
+ H
+ACL2 !&gt;(h 3)
+; DEBUG: Found io-pair for input list (3).
+NIL
+ACL2 !&gt;(h '(a b c))
+; DEBUG: Found io-pair for input list ((A B C)).
+A
+ACL2 !&gt;(h '(e f))
+E
+ACL2 !&gt;(h 7)
+
+
+ACL2 Error in TOP-LEVEL:  The guard for the function call (<a href="COMMON-LISP____CAR.html">CAR</a> X),
+which is (<a href="COMMON-LISP____OR.html">OR</a> (<a href="COMMON-LISP____CONSP.html">CONSP</a> X) (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> X NIL)), is violated by the arguments
+in the call (<a href="COMMON-LISP____CAR.html">CAR</a> 7).
+See :DOC set-guard-checking for information about suppressing this
+check with (<a href="ACL2____SET-GUARD-CHECKING.html">set-guard-checking</a> :none), as recommended for new users.
+To debug see :DOC print-gv, see :DOC trace, and see :DOC wet.
+
+ACL2 !&gt;(<a href="ACL2____ADD-IO-PAIR.html">add-io-pair</a> (h 7) nil)
+ H
+ACL2 !&gt;(h 7)
+NIL
+ACL2 !&gt;(h '(a b c))
+A
+ACL2 !&gt;</pre> 
+ 
+ <p>Note that there is no debug printing in the final two calls.  This isn't 
+ surprising for <span class="v">(h 7)</span>, since the call of <span class="v">add-io-pair</span> for <span class="v">(h 7)</span> 
+ did not specify keyword argument <span class="v">:debug</span>.  It may be more surprising that 
+ debug printing no longer occurs for <span class="v">(h '(a b c))</span>.  The reason is that 
+ each invocation of <span class="v">add-io-pair</span> or <span class="v">add-io-pairs</span> defines a new 
+ replacement function (denoted <span class="v">new-fn</span> in the discussions above), which is 
+ based on the updated table of evaluated I/O pairs and the <span class="v">:debug</span> option 
+ provided to the new invocation.</p> 
+ 
+ <p>Remark 4.  A more general utility, which allows the substitution of one 
+ function for another during execution, is available with the <span class="v">:invoke</span> 
+ argument of <span class="tt"><a href="ACL2____MEMOIZE.html">memoize</a></span>.  Indeed, <span class="v">add-io-pairs</span> actually works by 
+ invoking <span class="v">(<a href="ACL2____MEMOIZE.html">memoize</a> 'fn :invoke 'new-fn)</span>, where <span class="v">new-fn</span> is as above. 
+ Note that this memoization does not perform <span class="v">memoize</span>'s usual function of 
+ saving computational results.</p> 
+ 
+ <p>Remark 5.  If you include a book with an <span class="v">add-io-pairs</span> form for a 
+ function symbol, <span class="v">fn</span>, to which you have already added I/O pairs in the 
+ current session, then by default an error will occur.  The key relevant 
+ observation is that during book certification, when <span class="v">add-io-pairs</span> defines 
+ <span class="v">new-fn</span> as discussed above, that definition is saved in the book's <a href="ACL2____CERTIFICATE.html">certificate</a>.  (Technical note: This is a consequence of the use of <span class="tt"><a href="ACL2____MAKE-EVENT.html">make-event</a></span> in the implementation of <span class="v">add-io-pairs</span>.)  Without an error, 
+ ACL2 would simply use that saved definition of <span class="v">new-fn</span>, discarding the I/O 
+ pairs previously added in the current session.</p> 
+ 
+ <p>The error message explains how to allow the <span class="tt"><a href="ACL2____INCLUDE-BOOK.html">include-book</a></span> to 
+ complete without error, merging in all I/O pairs from the current session and 
+ included books by wrapping it in a call of the macro, <span class="tt"><a href="ACL2____MERGE-IO-PAIRS.html">merge-io-pairs</a></span>, 
+ whose first argument is <span class="v">fn</span>.  So a sequence of events might look like 
+ this.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> f (x)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t))
+  (<a href="COMMON-LISP____CONS.html">cons</a> x x))
+(<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "book1") ; has calls of add-io-pair(<a href="ACL2____S.html">s</a>) for f
+(<a href="ACL2____MERGE-IO-PAIRS.html">merge-io-pairs</a>
+  f
+  (<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "book2") ; has calls of add-io-pair(<a href="ACL2____S.html">s</a>) for f
+  )</pre> 
+ 
+ <p>An analogous problem occurs with <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span>, when there are <a href="ACL2____LOCAL.html">local</a> calls of <span class="v">add-io-pairs</span> followed by non-local calls.  Much as 
+ <span class="v">certify-book</span> saves the definition of <span class="v">new-fn</span> in the book's 
+ certificate, ACL2 saves such a definition from the first pass of the 
+ <span class="v">encapsulate</span> and detects missing I/O pairs (the local ones) in the second 
+ pass.  We expect local calls of <span class="v">add-io-pairs</span> inside <span class="v">encapsulate</span> to 
+ be rare, so we do not discuss them further.</p> 
+ 
+ <p>Although the discussion above and the error message should suffice, you can 
+ get more understanding by looking at examples in the section ``Including a 
+ book'' in <a href="ACL2____COMMUNITY-BOOK.html">community-book</a> <span class="v">std/util/add-io-pairs-tests.lisp</span>.  For 
+ technical details (probably not necessary), you are also welcome to see <a href="ACL2____ADD-IO-PAIRS-DETAILS.html">add-io-pairs-details</a>.</p>
+</body>
+</html>

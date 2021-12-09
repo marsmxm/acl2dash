@@ -1,0 +1,202 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Rewrite-lambda-object</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____REWRITE-LAMBDA-OBJECT">Click for Rewrite-lambda-object in the Full Manual</a></h3>
+
+<p>rewriting lambda objects in :FN slots</p><p><span class="tt"><a href="COMMON-LISP____LAMBDA.html">Lambda</a></span> objects are quoted constants passed to <a href="ACL2____SCION.html">scion</a>s 
+  and applied as functions by <span class="tt"><a href="ACL2____APPLY_42.html">apply$</a></span>.  The ACL2 rewriter rewrites the 
+  bodies of quoted <span class="v">lambda</span> objects when they occur in slots of <a href="ACL2____ILK.html">ilk</a> 
+  <span class="v">:FN</span>.  However, there are restrictions on which lambda objects are 
+  rewritten, restrictions on the techniques available to the rewriter during 
+  the rewriting of <span class="v">lambda</span> bodies, and restrictions controlling whether the 
+  rewritten object replaces the original object or is is ignored.  We explain 
+  below.</p> 
+ 
+  <h3>When Rewriting of <span class="v">lambda</span> Objects Is Attempted</h3> 
+ 
+  <p>The rewriter attempts to rewrite the body of a quoted <span class="v">lambda</span> constant 
+  provided</p> 
+ 
+  <ul> 
+  <li>(a) it occurs in a <span class="v">:FN</span> position of a call of a <a href="ACL2____SCION.html">scion</a>,</li> 
+ 
+  <li>(b) the <a href="ACL2____RUNE.html">rune</a> <span class="v">(:executable-counterpart rewrite-lambda-modep)</span>) 
+  is <a href="ACL2____ENABLE.html">enable</a>d (which it is by default),</li> 
+ 
+  <li>(c) the <span class="v">lambda</span> object is well-formed (see <span class="tt"><a href="ACL2____WELL-FORMED-LAMBDA-OBJECTP.html">well-formed-lambda-objectp</a></span>),</li> 
+ 
+  <li>(d) every function symbol mentioned in the body has been warranted</li> 
+ 
+  </ul> 
+ 
+  <p>Condition (c) implies the body of the <span class="v">lambda</span> is in fact a well-formed 
+  ACL2 term (so the rewriter can explore it), every function symbol in it is 
+  <a href="ACL2____WARRANT.html">warrant</a>ed (so that function objects mentioned are used properly), that 
+  every variable symbol occurring freely in the body is among the formals of 
+  the <span class="v">lambda</span> object, and together with (d) implies that the term 
+  ``behaves'' as expected if the appropriate warrant hypotheses govern this 
+  occurrence of the object.  This last implication means that <span class="tt"><a href="ACL2____EV_42.html">ev$</a></span> of 
+  the body is equal to unquoted body (under a suitable assignment), which means 
+  we can rewrite the unquoted body.</p> 
+ 
+  <p>If (a) and (b) above hold but either (c) or (d) fails, then a 
+  <span class="v">"rewrite-lambda-object"</span> warning message is printed during the proof. 
+  However, this message is only printed once per <span class="v">lambda</span> object per proof 
+  attempt because otherwise the presence of ill-formed <span class="v">lambda</span>-like objects 
+  in a conjecture will litter the output with repeated warnings.  You may turn 
+  these warnings off with <span class="v">(</span><span class="tt"><a href="ACL2____TOGGLE-INHIBIT-WARNING.html">toggle-inhibit-warning</a></span> 
+  <span class="v">"Rewrite-lambda-object")</span>.</p> 
+ 
+  <h3>Restrictions During Rewriting of a <span class="v">Lambda</span> Body</h3> 
+ 
+  <p>The rewriter is restricted in two ways when rewriting <span class="v">lambda</span> 
+  bodies.</p> 
+ 
+  <p>First, warrant hypotheses in the goal clause are the only contextual 
+  information ``imported'' from the goal clause and made available while 
+  rewriting a <span class="v">lambda</span> body.  That means type information about variables 
+  and other terms is forgotten, as are any linear arithmetic relationships. 
+  The reason is simple: the variables in the body are in a different scope than 
+  the variables outside the <span class="v">lambda</span> object.  Put another way, we do not 
+  know, in general, to what the <span class="v">lambda</span> object will eventually be applied 
+  and so, in ACL2's untyped logic, we know nothing about its formal variables. 
+ 
+  (Actually, we not only ``import'' the warrants from the goal clause, we 
+  import every ground hypothesis governing the <span class="v">lambda</span> object's occurrence. 
+  But practically speaking that means we only import warrant hypotheses.  A 
+  more sophisticated handling of contextual information can be imagined.  For 
+  example, if the <span class="v">lambda</span> object occurs as the first argument of a <span class="tt"><a href="ACL2____LOOP_42.html">loop$</a></span> scion, like <span class="v">collect$</span> or <span class="v">sum$</span>, then the rewriter could 
+  perhaps extract type information from the target and import that information. 
+  For example, perhaps every element of the target is a number.  In that case, 
+  since we know the <span class="v">lambda</span> object in a <span class="v">loop$</span> scion call is only 
+  applied to elements of that list, we would then be allowed to assume the 
+  corresponding formal of the <span class="v">lambda</span> object is a number.  But that more 
+  sophisticated handling of contextual information has not been 
+  implemented.)</p> 
+ 
+  <p>Second, recursive functions are never opened when rewriting <span class="v">lambda</span> 
+  bodies.  For example, if <span class="v">(<a href="ACL2____LEN.html">len</a> (<a href="COMMON-LISP____CONS.html">cons</a> e x))</span> occurs in a <span class="v">lambda</span> body, 
+  you might expect it to be simplified to <span class="v">(<a href="COMMON-LISP_____B2.html">+</a> 1 (<a href="ACL2____LEN.html">len</a> x))</span>, because that is 
+  what generally happens to that term when occurrences outside <span class="v">lambda</span> 
+  objects are rewritten.  ACL2 normally controls the expansion of recursive 
+  functions by reference to terms that already occur within the current goal. 
+  But the <span class="v">lambda</span> object effectively shares no variables with the 
+  surrounding goal and those heuristics are inapplicable.  Preliminary 
+  experiments with allowing expansions of recursive functions inside 
+  <span class="v">lambda</span> objects have produced unsatisfactory results such as runaway 
+  expansions.  So at the moment we allow no recursive expansions.</p> 
+ 
+  <p>The ACL2 implementors hope to address both of the above problems in 
+  eventual future releases.</p> 
+ 
+  <h3>What Happens After Rewriting a <span class="v">Lambda</span> Body</h3> 
+ 
+  <p>Upon rewriting the body, <i>b</i>, of 
+  <span class="v">(<a href="COMMON-LISP____LAMBDA.html">lambda</a>(</span><i>v1...vn</i><span class="v">)</span><i>b</i><span class="v">)</span> to produce <i>b'</i> the 
+  decision must be made as to whether to return the <span class="v">lambda</span> with the 
+  rewritten body, <span class="v">(<a href="COMMON-LISP____LAMBDA.html">lambda</a>(</span><i>v1...vn</i><span class="v">)</span><i>b'</i><span class="v">)</span>, or to 
+  ignore the rewrite and return the original (unrewritten) object.  ACL2 
+  ignores the rewrite and returns the original <span class="v">lambda</span> object if any of the 
+  following three cases obtains:</p> 
+ 
+  <ul> 
+  <li>(a) <i>b'</i> contains variables other than 
+  the <span class="v">lambda</span> formals <i>v1,...,vn</i>,</li> 
+ 
+  <li>(b) <i>b'</i> is not tame, or</li> 
+ 
+  <li>(c) some function symbol appearing in <i>b'</i> has no warrant 
+  hypothesis in the goal clause but forcing is disabled (see <span class="tt"><a href="ACL2____FORCE.html">force</a></span>).</li> 
+  </ul> 
+ 
+  <p>In all cases, the rewriter prints a <span class="v">"rewrite-lambda-object"</span> warning 
+  when the rewritten body is different from the original one but the rewrite is 
+  rejected.  The warning message displays the before and after <span class="v">lambda</span> 
+  objects, lists the rewrite rules used, and explains which of the three 
+  conditions above was violated.  However, this message is only printed once 
+  per <span class="v">lambda</span> object per proof attempt because otherwise the presence of a 
+  <span class="v">lambda</span> object that rewrites inappropriately will litter the output with 
+  repeated warnings.  You may turn these warnings off with <span class="v">(</span><span class="tt"><a href="ACL2____TOGGLE-INHIBIT-WARNING.html">toggle-inhibit-warning</a></span> <span class="v">"Rewrite-lambda-object")</span>.</p> 
+ 
+  <p>Condition (a) can arise if a rewrite rule introduces a free variable; 
+  disabling that rewrite rule is recommended.  Condition (b) can arise if some 
+  rewrite rule introduces a function symbol that has not been warranted; 
+  disabling that rule can often solve that problem but perhaps a better 
+  response is to use <span class="tt"><a href="ACL2____DEFWARRANT.html">defwarrant</a></span> to issue a warrant for the offending 
+  function symbol and then supply that warrant as a hypothesis to the goal; the 
+  latter response is perhaps better because it means all the ``usual'' 
+  rewriting is done, normalizing terms as expected.  Condition (c) arises when 
+  forcing has been disabled and the offending function symbol's warrant is not 
+  among the hypotheses; enabling forcing or adding the warrant as a hypothesis 
+  is recommended.</p> 
+ 
+  <p>The warning message noted above can become annoying.  It can be inhibited 
+  with <span class="v">(<a href="ACL2____TOGGLE-INHIBIT-WARNING.html">toggle-inhibit-warning</a> "Rewrite-lambda-object")</span>.</p> 
+ 
+  <p>Be advised that if the <span class="v">"rewrite-lambda-object"</span> warning has been 
+  inhibited (by you or some book included in your session) and then, when 
+  looking at, say, the checkpoints in a failed proof, you see a <span class="v">lambda</span> 
+  object that you expected to be simplified but was not, you may think 
+  rewriting was not attempted for it, for some reason, when in fact it was 
+  attempted but rejected.  You can <span class="v">(<a href="ACL2____TOGGLE-INHIBIT-WARNING.html">toggle-inhibit-warning</a>
+  "Rewrite-lambda-object")</span> and replay the proof attempt to see (all) the 
+  rejected <span class="v">lambda</span> object rewrites.</p> 
+ 
+  <h3>A Possible Confusion</h3> 
+ 
+  <p>A metafunction that is included in the book <span class="v">projects/apply/top</span> can 
+  also cause quoted <span class="v">lambda</span> objects to be rewritten.  This metafunction, 
+  called <span class="v">relink-fancy-scion</span>, is called on certain calls of the fancy 
+  <span class="v">loop$</span> scions, e.g., calls of <span class="tt"><a href="ACL2____ALWAYS_42_B2.html">always$+</a></span>, <span class="tt"><a href="ACL2____COLLECT_42_B2.html">collect$+</a></span>, <span class="tt"><a href="ACL2____SUM_42_B2.html">sum$+</a></span>, etc.  The goal of that metafunction is to keep the list of ``global 
+  variables'' in some normal form.</p> 
+ 
+  <p>For example,consider the term</p> 
+ 
+  <pre class="code">(<a href="ACL2____COLLECT_42_B2.html">collect$+</a> (<a href="COMMON-LISP____QUOTE.html">quote</a>
+            (<a href="COMMON-LISP____LAMBDA.html">lambda</a> (loop$-gvars loop$-ivars)
+              (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CAR.html">car</a> loop$-gvars)
+                    (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CAR.html">car</a> (<a href="COMMON-LISP____CDR.html">cdr</a> loop$-gvars))
+                          (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CAR.html">car</a> loop$-ivars) 'nil)))))
+           (<a href="COMMON-LISP____LIST.html">list</a> a b)
+           target)</pre> 
+ 
+  <p>which is (essentially) the translation of <span class="v">(<a href="ACL2____LOOP_42.html">loop$</a> for e in target
+  collect (<a href="COMMON-LISP____LIST.html">list</a> a b e))</span>.  Suppose that in some case of a proof about this 
+  term the hypothesis <span class="v">(<a href="COMMON-LISP____EQUAL.html">equal</a> a b)</span> governs this term.  The term would thus 
+  become</p> 
+ 
+  <pre class="code">(<a href="ACL2____COLLECT_42_B2.html">collect$+</a> (<a href="COMMON-LISP____QUOTE.html">quote</a>
+            (<a href="COMMON-LISP____LAMBDA.html">lambda</a> (loop$-gvars loop$-ivars)
+              (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CAR.html">car</a> loop$-gvars)
+                    (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CAR.html">car</a> (<a href="COMMON-LISP____CDR.html">cdr</a> loop$-gvars))
+                          (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CAR.html">car</a> loop$-ivars) 'nil)))))
+           (<a href="COMMON-LISP____LIST.html">list</a> a a)
+           target)</pre> 
+ 
+  <p><span class="v">Relink-fancy-scion</span> will rewrite that term to</p> 
+ 
+  <pre class="code">(<a href="ACL2____COLLECT_42_B2.html">collect$+</a> (<a href="COMMON-LISP____QUOTE.html">quote</a>
+            (<a href="COMMON-LISP____LAMBDA.html">lambda</a> (loop$-gvars loop$-ivars)
+              (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CAR.html">car</a> loop$-gvars)
+                    (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CAR.html">car</a> loop$-gvars)
+                          (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CAR.html">car</a> loop$-ivars) 'nil)))))
+           (<a href="COMMON-LISP____LIST.html">list</a> a)
+           target)</pre> 
+ 
+  <p>which eliminates the duplicate entry in the list of globals and, as a 
+  necessary side effect, also replaces the body of the lambda object to 
+  eliminate the term <span class="v">(<a href="COMMON-LISP____CAR.html">car</a> (<a href="COMMON-LISP____CDR.html">cdr</a> loop$-gvars))</span>.</p> 
+ 
+  <p>The application of the metafunction <span class="v">relink-fancy-scion</span> can easily but 
+  mistakenly be attributed to the rewriting of <span class="v">lambda</span> objects but it is not! 
+  The metafunction is applied to the whole <span class="v">collect$</span> term (and calls of every 
+  other fancy scion), not just the <span class="v">lambda</span> object.</p> 
+ 
+  <p>If you want to avoid this normalization of the globals, disable the <a href="ACL2____RUNE.html">rune</a> <span class="v">(:meta relink-fancy-scion-correct)</span>.</p>
+</body>
+</html>

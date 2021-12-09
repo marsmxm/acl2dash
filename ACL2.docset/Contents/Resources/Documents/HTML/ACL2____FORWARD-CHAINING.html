@@ -1,0 +1,172 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Forward-chaining</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____FORWARD-CHAINING">Click for Forward-chaining in the Full Manual</a></h3>
+
+<p>Make a rule to forward chain when a certain trigger arises</p><p>See <a href="ACL2____RULE-CLASSES.html">rule-classes</a> for a general discussion of rule classes, 
+ including how they are used to build rules from formulas and a discussion of 
+ the various keywords in a rule class description.</p> 
+ 
+ <pre class="code">Examples:
+
+(<a href="ACL2____DEFTHM.html">defthm</a> p-and-r-forward           ; When (p a) appears in a formula to be
+ (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (p x) (r x))       ; simplified, try to establish (p a) and
+          (<a href="ACL2____Q.html">q</a> (f x)))              ; (r a) and, if successful, add (<a href="ACL2____Q.html">q</a> (f a))
+ :rule-classes :forward-chaining) ; to the known assumptions.
+
+(<a href="ACL2____DEFTHM.html">defthm</a> p-and-r-forward           ; as above with most defaults filled in
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (p x) (r x))
+           (<a href="ACL2____Q.html">q</a> (f x)))
+  :rule-classes ((:forward-chaining :trigger-terms ((p x))
+                                    :corollary (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (p x) (r x))
+                                                        (<a href="ACL2____Q.html">q</a> (f x)))
+                                    :match-free :all)))</pre> 
+ 
+ <p>To specify the triggering terms provide a non-empty list of terms as the 
+ value of the <span class="v">:trigger-terms</span> field of the rule class object.</p> 
+ 
+ <pre class="code">General Form:
+Any theorem, provided an acceptable triggering term exists.</pre> 
+ 
+ <p>The structure of this documentation is as follows.  First we give a brief 
+ overview of forward chaining and contrast it to backchaining (rewriting). 
+ Then we lay out the syntactic restrictions on <span class="v">:forward-chaining</span> rules. 
+ Then we give more details about the process and point to a tool to assist you 
+ in debugging your <span class="v">:forward-chaining</span> rules.</p> 
+ 
+ <p><i>Overview and When to Use Forward Chaining</i></p> 
+ 
+ <p>Forward chaining is performed as part of the simplification process: before 
+ the goal is rewritten a <i>context</i> is established.  The context tells the 
+ theorem prover what may be assumed during rewriting, in particular, to 
+ establish hypotheses of rewrite rules.  Forward chaining is used to extend the 
+ context before rewriting begins.  For example, the <span class="v">:forward-chaining</span> rule 
+ <span class="v">(<a href="ACL2____IMPLIES.html">implies</a> (p x) (p1 x))</span> would add <span class="v">(p1 A)</span> to the context, where <span class="v">A</span> 
+ is some term, if <span class="v">(p A)</span> is already in the context.</p> 
+ 
+ <p>Forward chaining and backchaining are duals.  If a rewrite rule requires 
+ that <span class="v">(p1 A)</span> be established and <span class="v">(p A)</span> is known, it could be done 
+ either by making <span class="v">(<a href="ACL2____IMPLIES.html">implies</a> (p x) (p1 x))</span> a <span class="v">:forward-chaining</span> rule or 
+ a <span class="v">:rewrite</span> rule.  Which should you choose?</p> 
+ 
+ <p>As a rule of thumb, if a conclusion like <span class="v">(p1 A)</span> is expected to be 
+ widely needed, it is better to derive it via forward chaining because then it 
+ is available ``for free'' during the rewriting after paying the one-time cost 
+ of forward chaining.  Alternatively, if <span class="v">(p1 A)</span> is a rather special 
+ hypothesis of key importance to only a few rewrite rules, it is best to derive 
+ it only when needed through backchaining.  Thus forward chaining is pro-active 
+ and backward chaining (rewriting) is reactive.</p> 
+ 
+ <p>The following example illustrates that forward chaining may be 
+ indispensable in a scenario with <a href="ACL2____FREE-VARIABLES.html">free-variables</a>, whose handling is 
+ quite weak with rewrite rules.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFSTUB.html">defstub</a> p0 (x) t)
+(<a href="ACL2____DEFSTUB.html">defstub</a> p1 (x) t)
+(<a href="ACL2____DEFSTUB.html">defstub</a> p2 (y) t)
+(<a href="ACL2____DEFAXIOM.html">defaxiom</a> p0-implies-p1
+  (<a href="ACL2____IMPLIES.html">implies</a> (p0 x)
+           (p1 x))
+  :rule-classes :forward-chaining)
+(<a href="ACL2____DEFAXIOM.html">defaxiom</a> p1-implies-p2
+  (<a href="ACL2____IMPLIES.html">implies</a> (p1 x)
+           (p2 y)))
+; ACL2 proves the following, but only because p0-implies-p1 is a
+; :forward-chaining rule.  If p0-implies-p1 is instead a :rewrite
+; rule, then the proof fails for the following event.
+(<a href="ACL2____THM.html">thm</a> (<a href="ACL2____IMPLIES.html">implies</a> (p0 x)
+              (p2 y)))</pre> 
+ 
+ <p><i>Syntactic Restrictions</i></p> 
+ 
+ <p>Forward chaining rules are generated from the corollary term (see <a href="ACL2____RULE-CLASSES.html">rule-classes</a>) as follows.  First, every <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span> expression is expanded 
+ away (hence, so is every <span class="tt"><a href="COMMON-LISP____LET_A2.html">let*</a></span> and <span class="tt"><a href="COMMON-LISP____LAMBDA.html">lambda</a></span> expression), and 
+ trivial ``guard holders'' are removed; see <a href="ACL2____GUARD-HOLDERS.html">guard-holders</a>.  If the 
+ resulting term has the form <span class="v">(<a href="ACL2____IMPLIES.html">implies</a> hyp concl)</span>, then <span class="v">concl</span> is 
+ treated as a conjunction, with one forward chaining rule with hypothesis 
+ <span class="v">hyp</span> created for each conjunct.  In the other case, where the corollary 
+ term is not an <span class="tt"><a href="ACL2____IMPLIES.html">implies</a></span>, we process it as we process the conclusion in 
+ the first case.</p> 
+ 
+ <p>Note that unlike rewrite rules, a nested implication is not folded into a 
+ single implication.  Consider for example the following term.</p> 
+ 
+ <pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (p1 x)
+         (<a href="ACL2____IMPLIES.html">implies</a> (p2 x)
+                  (p3 x)))</pre> 
+ 
+ <p>Although this term is parsed for a rewrite rule as <span class="v">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (p1 x)
+ (p2 x)) (p3 x))</span>, that is not the case when this term is parsed for a 
+ forward-chaining rule, in which case <span class="v">(p1 x)</span> is treated as the hypothesis 
+ and <span class="v">(<a href="ACL2____IMPLIES.html">implies</a> (p2 x) (p3 x))</span> is treated as the conclusion.</p> 
+ 
+ <p>The <span class="v">:trigger-terms</span> field of a <span class="v">:forward-chaining</span> rule class object 
+ should be a non-empty list of terms, if provided, and should have certain 
+ properties described below.  If the <span class="v">:trigger-terms</span> field is not provided, 
+ it defaults to the singleton list containing the ``atom'' of the first 
+ hypothesis of the formula.  (The atom of <span class="v">(<a href="COMMON-LISP____NOT.html">not</a> x)</span> is <span class="v">x</span>; the atom of 
+ any other term is the term itself.)  If there are no hypotheses and no 
+ <span class="v">:trigger-terms</span> were provided, an error is caused.</p> 
+ 
+ <p>A triggering term is acceptable if it is not a variable, a quoted constant, 
+ a lambda application, a <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span>- (or <span class="tt"><a href="COMMON-LISP____LET_A2.html">let*</a></span>-) expression, or a 
+ <span class="tt"><a href="COMMON-LISP____NOT.html">not</a></span>-expression, and every variable symbol in the conclusion of the 
+ theorem either occurs in the hypotheses or occurs in the trigger.</p> 
+ 
+ <p><i>More Details about Forward Chaining</i></p> 
+ 
+ <p><span class="v">:Forward-chaining</span> rules are used by the simplifier <i>before</i> it 
+ begins to rewrite the literals of the goal.  (Forward chaining is thus carried 
+ out from scratch for each goal.)  If any term in the goal is an instance of a 
+ trigger of some forward chaining rule, we try to establish the hypotheses of 
+ that forward chaining theorem (from the negation of the goal).  To relieve a 
+ hypothesis we only use type reasoning, evaluation of ground terms, and 
+ presence among our known assumptions.  We do not use rewriting.  So-called 
+ free variables in hypotheses are treated specially; see <a href="ACL2____FREE-VARIABLES.html">free-variables</a>. 
+ If all hypotheses are relieved, and certain heuristics approve of the newly 
+ derived conclusion, we add the instantiated conclusion to our known 
+ assumptions.  Since this might introduce new terms into the assumptions, 
+ forward chaining is repeated.  Heuristic approval of each new addition is 
+ necessary to avoid infinite looping as would happen with the rule <span class="v">(<a href="ACL2____IMPLIES.html">implies</a>
+ (p x) (p (f x)))</span>, which might otherwise forward chain from <span class="v">(p A)</span> to 
+ <span class="v">(p (f A))</span> to <span class="v">(p (f (f A)))</span>, etc.</p> 
+ 
+ <p><i>Caution</i>.  Forward chaining does not actually add terms to the goals 
+ displayed during proof attempts.  Instead, it extends an associated 
+ <i>context</i>, called ``assumptions'' in the preceding paragraph, that ACL2 
+ builds from the goal currently being proved.  (For insiders: forward chaining 
+ extends the <span class="tt"><a href="ACL2____TYPE-ALIST.html">type-alist</a></span>.)  The context starts out with ``obvious'' 
+ consequences of the negation of the goal.  For example, if the goal is</p> 
+ 
+ <pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (p A) (<a href="ACL2____Q.html">q</a> (f A)))
+         (c A))</pre> 
+ 
+ <p>then the context notes that <span class="v">(p A)</span> and <span class="v">(<a href="ACL2____Q.html">q</a> (f A))</span> are non-<span class="v">nil</span> 
+ and <span class="v">(c A)</span> is <span class="v">nil</span>.  Forward chaining is then used to expand the 
+ context.  For example, if a forward chaining rule has <span class="v">(f x)</span> as a trigger 
+ term and has body <span class="v">(<a href="ACL2____IMPLIES.html">implies</a> (p x) (r (f x)))</span>, then the context is extended 
+ by binding <span class="v">(r (f A))</span> to non-<span class="v">nil</span>, provided the heuristics approve of 
+ this extension.  Note however that since <span class="v">(r (f A))</span> is put into the 
+ context, not the goal, you will not see it in the goal formula.  Furthermore, 
+ the assumption added to the context is just the instantiation of the 
+ conclusion of the rule, with no simplification or rewriting applied.  Thus, 
+ for example, if it contains an enabled non-recursive function symbol it is 
+ unlikely ever to match a (rewritten) term arising during subsequent 
+ simplification of the goal.</p> 
+ 
+ <p>However, forward-chaining does support the linear arithmetic reasoning 
+ package.  For example, suppose that forward-chaining puts <span class="v">(<a href="COMMON-LISP_____C3.html">&lt;</a> (f x) (<a href="ACL2____G.html">g</a> x))</span> 
+ into the context.  Then this inequality also goes into the linear arithmetic 
+ database, together with suitable instances of linear lemmas whose trigger term 
+ is a call of <span class="v">g</span>.  See <a href="ACL2____LINEAR.html">linear</a>.</p> 
+ 
+ <p>Debugging <span class="v">:forward-chaining</span> rules can be difficult since their effects 
+ are not directly visible on the goal being simplified.  Tools are available to 
+ help you discover what forward chaining has occurred see <a href="ACL2____FORWARD-CHAINING-REPORTS.html">forward-chaining-reports</a>.</p>
+</body>
+</html>

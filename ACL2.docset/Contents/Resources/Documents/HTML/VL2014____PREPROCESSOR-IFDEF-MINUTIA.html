@@ -1,0 +1,215 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Preprocessor-ifdef-minutia</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL2014____PREPROCESSOR-IFDEF-MINUTIA">Click for Preprocessor-ifdef-minutia in the Full Manual</a></h3>
+
+<p>Subtle notes about or <span class="v">`define</span> and <span class="v">`ifdef</span> handling.</p><p>There are many subtleties related to <span class="v">`define</span> and <span class="v">`ifdef</span> 
+that make my head hurt.</p> 
+ 
+<p><b>BOZO</b> most of my testing was done on Verilog-XL before I really knew 
+much about NCVerilog.  It would be good to double-check all of these things on 
+NCVerilog and make sure it behaves the same.</p> 
+ 
+ 
+<h5>Define is Lazy</h5> 
+ 
+<p>An important thing to realize is that the text which follows "<span class="v">`define
+foo</span>" is not preprocessed once when it is read.  Instead, it is separately 
+preprocessed each time `foo is encountered.  Hence, upon running</p> 
+ 
+<pre class="code">`define foo 3
+`define bar `foo
+`undef foo
+`define foo 4</pre> 
+ 
+<p>the value of `bar will be 4.</p> 
+ 
+ 
+<h5>Includes are not followed if they are <span class="v">ifdef</span>ed away.</h5> 
+ 
+<p>On both Verilog-XL and NCVerilog, it appears that an <span class="v">`include</span> 
+directives within <span class="v">ifdef</span>-ed away blocks are NOT expanded.  An easy way to 
+test this is by writing a file called <span class="v">endif.v</span> which simply contains:</p> 
+ 
+<pre class="code">`endif</pre> 
+ 
+<p>Then we can do things like this:</p> 
+ 
+<pre class="code">`define foo
+`ifdef foo
+  `include "endif.v"
+// the `ifdef has now ended</pre> 
+ 
+<p>And this:</p> 
+ 
+<pre class="code">// suppose bar is undefined
+`ifdef bar
+  `include "endif.v"
+  // the `ifdef has not ended yet, so the include is not expanded
+`endif</pre> 
+ 
+<p>We think this is pretty reasonable so we mimic this behavior.</p> 
+ 
+ 
+<h5>We Prohibit Certain Directives In Defines</h5> 
+ 
+<p>In Verilog-XL, <span class="v">`define</span> can interact with the <span class="v">`ifdef</span> tree in subtle 
+ways.  For instance, Verilog-XL accepts the following input:</p> 
+ 
+<pre class="code">`define condition 1
+`define myendif `endif
+`ifdef condition
+   assign w1 = 1 ;
+`myendif</pre> 
+ 
+<p>Yet when <span class="v">`foo</span> is used inside of an ifdef'd-away section, it is not 
+expanded.  And so, the above example becomes a parse error if you merely remove 
+the <span class="v">`define condition 1</span> line.</p> 
+ 
+<p>Another subtlety.  As expected, defines found within ifdefed-away parts of 
+the code have no effect.  For example, if not_defined is not defined, then upon 
+running</p> 
+ 
+<pre class="code">`define foo 3
+`ifdef not_defined
+   `define foo 4
+`endif</pre> 
+ 
+<p>the value of <span class="v">`foo</span> will correctly be 3.  Similarly, writing <span class="v">`undef
+foo</span> in the not_defined block does not actually undefine foo.  But the 
+preprocessor is not mindlessly skipping text until an `else or `elseif is 
+encountered.  For example, the following is well-formed and does not result in 
+a too-many-endifs warning.</p> 
+ 
+<pre class="code">`ifdef not_defined
+   `define myendif `endif
+`endif</pre> 
+ 
+<p>This is insane, so we prohibit things like <span class="v">`define myendif `endif</span> by 
+disallowing the use of built-in directives in macro text.  Note that we still 
+permit the use of <span class="v">`define foo `bar</span>, with the same lazy semantics that 
+Verilog-XL uses.</p> 
+ 
+ 
+<h5>We Prohibit Defining or Testing Built-in Directive Names</h5> 
+ 
+<p>We do not allow compiler directive names to be <span class="v">`define</span>d, or to be used 
+within <span class="v">ifdef</span>, <span class="v">ifndef</span>, or <span class="v">elsif</span> directives.  Why is this?</p> 
+ 
+<p>Note that macro names can be simple or escaped identifiers.  In Section 
+3.7.1, we are told that the leading backslash character and trailing whitespace 
+are not considered part of an escaped identifier, and that the escaped 
+identifier <span class="v">\cpu3</span> is to be treated the same as <span class="v">cpu3</span>.  Indeed, in 
+Verilog-XL we find that the following works as expected:</p> 
+ 
+<pre class="code">`define foo 3
+`define \bar 4
+
+assign w1 = `foo ;
+assign w2 = `\foo ;
+assign w3 = `bar ;
+assign w4 = '\bar ;</pre> 
+ 
+<p>In Section 19.3.1, we are told that all compiler directives shall be 
+considered predefined macro names, and it shall be illegal to redefine a 
+compiler directive as a macro name.  And Verilog-XL seems to rightfully complain 
+about things like:</p> 
+ 
+<pre class="code">`define define 5
+`define ifdef 6</pre> 
+ 
+<p>And yet, Verilog-XL permits the following:</p> 
+ 
+<pre class="code">`define \define 5
+`define \ifdef 6
+
+assign w1 = `\define ;
+assign w2 = `\ifdef ;</pre> 
+ 
+<p>While the following will be errors:</p> 
+ 
+<pre class="code">assign w3 = `define ;
+assign w4 = `ifdef ;</pre> 
+ 
+<p>Should <span class="v">\define</span> be treated differently from <span class="v">define</span>?  Maybe.  After 
+all, the point of escaped identifiers is probably to not clash with regular 
+keywords.  But on the other hand, if the predefined names are to be considered 
+predefined, then shouldn't things like this</p> 
+ 
+<pre class="code">`ifdef define</pre> 
+ 
+<p>always evaluate to true?  But in Verilog-XL this is false unless you have 
+done a <span class="v">`define \define</span> like above.  Verilog-XL also does not complain 
+about <span class="v">`undef</span> define, which seems strange.</p> 
+ 
+<p>At any rate, to entirely avoid the question of what the right behavior is 
+here, we simply prohibit the use of compiler directives, whether escaped or 
+not, as names anywhere in <span class="v">defines</span>, <span class="v">undefs</span>, <span class="v">ifdefs</span>, <span class="v">ifndefs</span>, 
+and <span class="v">elsifs</span>.  In practice this only prevents people from writing things 
+like <span class="v">`define define</span> and <span class="v">`ifdef undef</span>, anyway, so this should not be 
+too controversial.</p> 
+ 
+ 
+<h5>We make certain restrictions to disambiguate line continuations and 
+comments.</h5> 
+ 
+<p>From 19.3.1, the macro text for a define is:</p> 
+ 
+<ul> 
+ <li>any arbitrary text specified on the same line as the macro name,</li> 
+ 
+ <li>except that the sequence <span class="v">\&lt;newline&gt;</span> may be used to extend the macro 
+     text across multiple lines,</li> 
+ 
+ <li>and single-line comments are not to become part of the substituted 
+     text.</li> 
+</ul> 
+ 
+<p>On the surface, this is straightforward enough.  But it is difficult to know 
+exactly how comments and these line continuations are supposed to interact. 
+And Verilog-XL, in particular, has some very strange and seemingly inconsistent 
+rules:</p> 
+ 
+<pre class="code">`define foo 5 // comment             (accepted)
+         'h4
+
+`define foo 5 // comment \           (rejected)
+         'h4
+
+`define foo 5 \/* comment */         (rejected)
+         'h4
+
+`define foo 5 /* comment \           (accepted)
+      */ 'h4
+
+`define foo 5 /* comment              (rejected)
+      */ 'h4</pre> 
+ 
+<p>To prevent any amiguity, we prohibit any combination of comments and 
+continuations that seems difficult to understand.  In particular, we impose the 
+following "cowardly" restrictions on macro text:</p> 
+ 
+<ol> 
+ 
+<li>Single-line comments are not allowed to end with <span class="v">\</span>
+</li> 
+ 
+<li>Block comments are not allowed to contain newlines</li> 
+ 
+<li>The sequences <span class="v">\//</span> and <span class="v">\/*</span> are not allowed except within 
+comments, string literals, and escaped identifiers</li> 
+ 
+</ol> 
+ 
+<p>These constriants make reading until the end of the macro text fairly 
+complicated since we cannot stupidly read the text without interpreting it; 
+rather we have to look for string literals, comments, escaped identifiers, etc. 
+The goal is for everything we support will be interpreted in the same way by 
+Verilog-XL and other tools.</p>
+</body>
+</html>

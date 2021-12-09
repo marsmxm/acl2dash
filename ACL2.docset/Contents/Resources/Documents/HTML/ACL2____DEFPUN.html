@@ -1,0 +1,121 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Defpun</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____DEFPUN">Click for Defpun in the Full Manual</a></h3>
+
+<p>Define a tail-recursive function symbol</p><p><span class="v">Defpun</span> is a macro developed by Pete Manolios and J Moore that 
+ allows tail-recursive definitions, as well as some other ``partial'' 
+ definitions.  Related utilities are discussed at the end of this topic.</p> 
+ 
+ <pre class="code">General Form:
+
+(<a href="ACL2____DEFPUN.html">defpun</a> g (v1 ... vk)
+  dcl ; optional
+  body
+  :kwd1 val1 :kwd2 val2 ... :kwdn valn)</pre> 
+ 
+ <p>where <span class="v">dcl</span> is an optional <span class="tt"><a href="COMMON-LISP____DECLARE.html">declare</a></span> form and the pairs <span class="v">:kwdi
+ vali</span> are optional (that is <span class="v">n</span> can be 0).  If the optional arguments are 
+ omitted, then ACL2 will introduce a constrained function <span class="v">g</span> with this 
+ exported event:</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">DEFTHM</a> g-DEF
+  (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (<a href="ACL2____G.html">g</a> v1 ... vk)
+         body)
+  :RULE-CLASSES :DEFINITION)</pre> 
+ 
+ <p>First suppose that <span class="v">dcl</span> is not present.  Then the proposed definition 
+ must have a simple tail-recursive structure (see the discussion of 
+ <span class="v">defp</span> below for a workaround if this is not the case).</p> 
+ 
+ <p>If <span class="v">dcl</span> is present, then the definition need not be tail-recursive, and 
+ <span class="v">dcl</span> must have one of the following three forms.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DECLARE.html">DECLARE</a> (<a href="ACL2____XARGS.html">XARGS</a> :witness defpun-fn))
+(<a href="COMMON-LISP____DECLARE.html">DECLARE</a> (<a href="ACL2____XARGS.html">XARGS</a> :domain dom-expr :measure m . rest))
+(<a href="COMMON-LISP____DECLARE.html">DECLARE</a> (<a href="ACL2____XARGS.html">XARGS</a> :gdomain dom-expr :measure m . rest)).</pre> 
+ 
+ <p>You are encouraged to experiment by using <span class="v">:</span><span class="tt"><a href="ACL2____TRANS1.html">trans1</a></span> to see the 
+ expansions of <span class="v">defpun</span> forms that use these <span class="tt"><a href="COMMON-LISP____DECLARE.html">declare</a></span> forms; but here 
+ is a summary of what is generated.</p> 
+ 
+ <p>The first form specifies a function, <span class="v">defpun-fn</span>, and instructs ACL2 to 
+ use that function as a witness for the function <span class="v">g</span> to be introduced, as 
+ follows.</p> 
+ 
+ <pre class="code">(<a href="ACL2____ENCAPSULATE.html">ENCAPSULATE</a>
+  ((<a href="ACL2____G.html">g</a> (v1 ... vk) t))
+  (<a href="ACL2____LOCAL.html">LOCAL</a> (DEFUN-NONEXEC g (v1 ... vk) (defpun-fn v1 ... vk)))
+  (<a href="ACL2____DEFTHM.html">DEFTHM</a> g-DEF
+    (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (<a href="ACL2____G.html">g</a> v1 ... vk))
+           body)
+    :RULE-CLASSES :DEFINITION)</pre> 
+ 
+ <p>The remaining two <span class="v">declare</span> forms introduce a function, defined 
+ recursively, with the given measure and with a modified body:</p> 
+ 
+ <pre class="code">(THE-g v1 ... vk)
+=
+(<a href="COMMON-LISP____IF.html">IF</a> dom-expr body 'UNDEF)</pre> 
+ 
+ <p>The following  theorem is exported.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> g-DEF
+  (<a href="ACL2____IMPLIES.html">IMPLIES</a> domain-expr
+           (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (<a href="ACL2____G.html">g</a> v1 ... vk)
+                  body))
+  :RULE-CLASSES :DEFINITION)</pre> 
+ 
+ <p>If <span class="v">:gdomain</span> is used (as opposed to <span class="v">:domain</span>), then the following 
+ events are also introduced, where <span class="v">body\{g:=THE-g}</span> denotes the result of 
+ replacing each call of <span class="v">g</span> in <span class="v">body</span> with the corresponding call of 
+ <span class="v">THE-g</span>.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">DEFUN</a> THE-g (v1 ... vk)
+  (<a href="COMMON-LISP____DECLARE.html">DECLARE</a> (<a href="ACL2____XARGS.html">XARGS</a> :MEASURE (<a href="COMMON-LISP____IF.html">IF</a> dom-expr m 0)
+                  :GUARD domain-expr
+                  :VERIFY-GUARDS NIL))
+  (<a href="COMMON-LISP____IF.html">IF</a> dom-expr body 'UNDEF))
+
+(<a href="ACL2____DEFTHM.html">DEFTHM</a> g-IS-UNIQUE
+  (<a href="ACL2____IMPLIES.html">IMPLIES</a> domain-expr
+           (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (<a href="ACL2____G.html">g</a> v1 ... vk) (THE-g v1 ... vk))))</pre> 
+ 
+ <p>The optional keyword alist <span class="v">:kwd1 val1 :kwd2 val2 ... :kwdn valn</span> is 
+ attached to the end of the generated <span class="tt"><a href="ACL2____DEFTHM.html">defthm</a></span> event.  If the 
+ <span class="v">:</span><span class="tt"><a href="ACL2____RULE-CLASSES.html">rule-classes</a></span> keyword is not specified by the keyword alist, 
+ <span class="v">:</span><span class="tt"><a href="ACL2____DEFINITION.html">definition</a></span> is used.</p> 
+ 
+ <p>Details of defpun are provided by Manolios and Moore in the chapter 
+ ``Partial Functions in ACL2'' published with the <a href="http://www.cs.utexas.edu/users/moore/acl2/workshop-2000/" target="_blank"><nobr>ACL2 2000 
+ workshop<img src="../Icon_External_Link.png" title="External link to http://www.cs.utexas.edu/users/moore/acl2/workshop-2000/"></nobr></a>.  Also see <a href="http://www.cs.utexas.edu/users/moore/publications/defpun/index.html" target="_blank"><nobr>Partial 
+ Functions in ACL2<img src="../Icon_External_Link.png" title="External link to http://www.cs.utexas.edu/users/moore/publications/defpun/index.html"></nobr></a>.</p> 
+ 
+ <h3>Variants of <span class="v">defpun</span>
+</h3> 
+ 
+ <p>A variant, <span class="v">defp</span>, allows more general forms of tail recursion.  If 
+ <span class="v">defpun</span> doesn't work for you, try <span class="v">defp</span> by first executing the 
+ following event.</p> 
+ 
+ <pre class="code">(<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "misc/defp" :dir :system)</pre> 
+ 
+ <p>Sandip Ray has contributed a variant of <span class="v">defpun</span>, <span class="v">defpun-exec</span>, that 
+ supports executability.  See community book 
+ <span class="v">books/defexec/defpun-exec/defpun-exec.lisp</span>:</p> 
+ 
+ <pre class="code">(<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "defexec/defpun-exec/defpun-exec" :dir :system)</pre> 
+ 
+ <p>He has also contributed community book 
+ <span class="v">books/misc/misc2/defpun-exec-domain-example.lisp</span>, for functions that are 
+ uniquely defined in a particular domain.</p> 
+ 
+ <p>Finally, it is possible to avoid termination proofs even for functions that 
+ are not tail-recursive.  See <a href="ACL2____DEF-PARTIAL-MEASURE.html">def-partial-measure</a>.</p>
+</body>
+</html>

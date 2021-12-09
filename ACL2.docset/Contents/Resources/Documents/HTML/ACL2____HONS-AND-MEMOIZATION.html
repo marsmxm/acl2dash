@@ -1,0 +1,289 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Hons-and-memoization</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____HONS-AND-MEMOIZATION">Click for Hons-and-memoization in the Full Manual</a></h3>
+
+<p>Hash cons, function memoization, and applicative hash tables</p><p>This topic describes the hash cons, function memoization, and 
+ applicative hash tables features available in ACL2, sometimes called the 
+ ``<a href="ACL2____HONS-ENABLED.html">hons-enabled</a>'' features.</p> 
+ 
+ <p>Bob Boyer and Warren Hunt, and later Jared Davis and Sol Swords, have 
+ developed a canonical representation for ACL2 data objects and a function 
+ memoization mechanism to facilitate reuse of previously computed results. 
+ This facility includes procedures to read and print ACL2 expressions in such a 
+ way that repetition of some ACL2 objects is eliminated, thereby permitting a 
+ kind of on-the-fly file compression.  The implementation does not alter the 
+ semantics of ACL2 except to add a handful of definitions.</p> 
+ 
+ <p>We historically gave the name ``ACL2(h)'' to the experimental extension of 
+ the ACL2 system including hash cons, function memoization, and fast 
+ association lists (applicative hash tables).  These features, which we call 
+ the ``<a href="ACL2____HONS-ENABLED.html">hons-enabled</a>'' features, are now present in ACL2.  The 
+ hons-enabled features are optimized for Clozure Common Lisp (CCL) and to some 
+ extent, GNU Common Lisp (GCL ANSI); but they are also supported in every ACL2 
+ build.</p> 
+ 
+ <p>Power users who want to take advantage of the <a href="ACL2____HONS-ENABLED.html">hons-enabled</a> features 
+ of ACL2 might find it helpful to consult the document <span class="v">centaur/README.html</span> 
+ in the ACL2 community books.</p> 
+ 
+ <p>Much of the documentation for the remainder of this topic is taken from the 
+ paper ``Function Memoization and Unique Object Representation for ACL2 
+ Functions'' by Robert S. Boyer and Warren A. Hunt, Jr., which has appeared in 
+ the Sixth International Workshop on the ACL2 Theorem Prover and Its 
+ Applications, ACM Digital Library, 2006.</p> 
+ 
+ <p>In the implementation of the ACL2 logic, ACL2 data objects are represented 
+ by Common Lisp objects of the same type, and the ACL2 pairing operation is 
+ internally implemented by the Common Lisp <span class="tt"><a href="COMMON-LISP____CONS.html">cons</a></span> function.  In Common 
+ Lisp, <span class="v">cons</span> is guaranteed to provide a new pair, distinct from any 
+ previously created pair.  We have defined a new ACL2 function <span class="tt"><a href="ACL2____HONS.html">hons</a></span> 
+ that is logically identical to the ACL2 <span class="v">cons</span> function, but whose 
+ implementation usually reuses an existing pair if its components are identical 
+ to the components of an existing pair.  A record of ACL2 HONS objects is kept, 
+ and when an ACL2 function calls <span class="v">hons</span> ACL2 searches for an existing 
+ identical pair before allocating a new pair; this operation been called ``hash 
+ consing''.</p> 
+ 
+ <p>It appears that hash consing was first conceived by A. P. Ershov in 1957, 
+ to speed up the recognition of common subexpressions.  Ershov showed how to 
+ collapse trees to minimal DAGs by traversing trees bottom up, and he used 
+ hashing to eliminate the re-evaluation of common subexpressions.  In his 1973 
+ PhD dissertation L. Peter Deutsch describes a program verifier that uses hash 
+ cons to represent terms and his rewriter operated on hash consed terms. 
+ Later, Eiichi Goto implemented a Lisp system with a built-in hash consing 
+ operation: his h-CONS cells were rewrite protected and free of duplicate 
+ copies, and Goto used this hash consing operation to facilitate the 
+ implementation of a symbolic algebra system he developed.</p> 
+ 
+ <p>Memoizing functions also has a long history.  In 1967, Donald Michie 
+ proposed using memoized functions to improve the performance of machine 
+ learning.  Rote learning was improved by a learning function not forgetting 
+ what it had previously learned; this information was stored as memoized 
+ function values.</p> 
+ 
+ <p>The use of hash consing has appeared many times.  For instance, Henry Baker 
+ used hash consing to improve the performance of the well-known Boyer rewriting 
+ benchmark.  Baker used both hash consing and function memoization to improve 
+ the speed of the Takeuchi function, exactly in the spirit of our 
+ implementation, but without the automated, system-wide integration we report 
+ here.</p> 
+ 
+ <p>The ACL2 implementation permits memoization of user-defined functions. 
+ During execution a user may enable or disable function memoization on an 
+ individual function basis, may clear memoization tables, and may even keep a 
+ stack of memoization tables.  This facility takes advantage of our 
+ implementation where we keep one copy of each distinct ACL2 data object.  Due 
+ to the functional nature of ACL2, it is sufficient to have at most one copy of 
+ any data structure; thus, a user may arrange to keep data canonicalized.  This 
+ implementation extends to the entire ACL2 system the benefits enjoyed by BDDs: 
+ canonicalization, memoization, and fast equality check.</p> 
+ 
+ <p>We have defined various algorithms using these features, and we have 
+ observed, in some cases, substantial performance increases.  For instance, we 
+ have implemented unordered set intersection and union operations that operate 
+ in time roughly linear in the size of the sets.  Without using arrays, we 
+ defined a canonical representation for Boolean functions using ACL2 objects. 
+ We have investigated the performance of rewriting and tree consensus 
+ algorithms to good effect, and we believe function memoization offers 
+ interesting opportunities to simplify algorithm definition while 
+ simultaneously providing performance improvements.</p> 
+ 
+ <p>We recommend that users focus at first on the logical definitions of <span class="tt"><a href="ACL2____HONS.html">hons</a></span> and other primitives rather than their underlying Common Lisp 
+ implementations.  Integrated with this memoization system is a performance 
+ monitoring system, which can provide real-time feedback on the operation and 
+ usefulness of <span class="tt"><a href="ACL2____HONS.html">hons</a></span> and function memoization.  For a more detailed 
+ description of these tools, please see the ACL2 2006 workshop paper mentioned 
+ above.</p> 
+ 
+ <p>The Fibonacci function is a small example that demonstrates the utility of 
+ function memoization.  The following definition exhibits a runtime that is 
+ exponential in its input argument.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> fib (x)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____NATP.html">natp</a> x)))
+  (<a href="ACL2____MBE.html">mbe</a>
+   :logic
+   (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="ACL2____ZP.html">zp</a> x) 0)
+         ((<a href="COMMON-LISP_____D3.html">=</a> x 1) 1)
+         (t (<a href="COMMON-LISP_____B2.html">+</a> (fib (<a href="COMMON-LISP____-.html">-</a> x 1)) (fib (<a href="COMMON-LISP____-.html">-</a> x 2)))))
+   :exec
+   (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP_____C3.html">&lt;</a> x 2)
+       x
+     (<a href="COMMON-LISP_____B2.html">+</a> (fib (<a href="COMMON-LISP____-.html">-</a> x 1)) (fib (<a href="COMMON-LISP____-.html">-</a> x 2))))))</pre> 
+ 
+ <p>Below we show how the ACL2 <span class="tt"><a href="ACL2____TIME_42.html">time$</a></span> utility can measure the time to 
+ execute a call to the <span class="v">fib</span> function (with some editing to avoid noise from 
+ the underlying Common Lisp implementation).  <span class="tt"><a href="ACL2____MEMOIZE.html">Memoize</a></span> is actually an 
+ ACL2 macro that expands to a call of the ACL2 function used to identify a 
+ function for memoization; see <a href="ACL2____MEMOIZE.html">memoize</a>.  This function also accepts a 
+ well-formed term that must be true in order for the system to memoize a call 
+ of the memoized function; to ensure that an instance of the term is safe for 
+ evaluation in Common Lisp, a check is performed that if the <a href="ACL2____GUARD.html">guard</a> of 
+ the memoized function is satisfied, then this instance will execute without 
+ error.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____TIME_42.html">time$</a> (fib 40))
+; (EV-REC *RETURN-LAST-ARG3* ...) took
+; 0.99 seconds realtime, 0.98 seconds runtime
+; (1,296 bytes allocated).
+102334155
+ACL2 !&gt;(<a href="ACL2____MEMOIZE.html">memoize</a> 'fib)
+
+Summary
+Form:  ( TABLE MEMOIZE-TABLE ...)
+Rules: NIL
+Time:  0.01 seconds (prove: 0.00, print: 0.00, other: 0.01)
+
+Summary
+Form:  ( PROGN (<a href="ACL2____TABLE.html">TABLE</a> MEMOIZE-TABLE ...) ...)
+Rules: NIL
+Time:  0.01 seconds (prove: 0.00, print: 0.00, other: 0.01)
+ FIB
+ACL2 !&gt;(<a href="ACL2____TIME_42.html">time$</a> (fib 40))
+; (EV-REC *RETURN-LAST-ARG3* ...) took
+; 0.00 seconds realtime, 0.00 seconds runtime
+; (2,864 bytes allocated).
+102334155
+ACL2 !&gt;(<a href="ACL2____TIME_42.html">time$</a> (fib 100))
+; (EV-REC *RETURN-LAST-ARG3* ...) took
+; 0.00 seconds realtime, 0.00 seconds runtime
+; (7,024 bytes allocated).
+354224848179261915075
+ACL2 !&gt;(<a href="ACL2____UNMEMOIZE.html">unmemoize</a> 'fib)</pre> 
+ 
+ <p>We see that once the function <span class="v">fib</span> is identified as a function for 
+ which function calls should be memoized, the execution times are substantially 
+ reduced.  Finally, we can prevent <span class="v">fib</span> from being further memoized; in 
+ fact, <span class="tt"><a href="ACL2____UNMEMOIZE.html">unmemoize</a></span> erases the previously memoized values.</p> 
+ 
+ <p>The implementation of hash consing, memoization, and applicative hash 
+ tables involves several facets: canonical representation of ACL2 data, 
+ function memoization, and the use of Lisp hash tables to improve the 
+ performance of association list operations.  We discuss each of these in turn, 
+ and we mention some subtle interrelationships.  Although it is not necessary 
+ to understand the discussion in this section, it may permit some users to 
+ better use this implementation.  This discussion may be confusing for some 
+ ACL2 users as it makes references to Lisp implementation features.</p> 
+ 
+ <p>The ACL2 system is actually implemented as a Lisp program that is layered 
+ on top of a Common Lisp system implementation.  ACL2 data constants are 
+ implemented with their corresponding counterparts in Common Lisp; that is, 
+ ACL2 cons pairs, strings, characters, numbers, and symbols are implemented 
+ with their specific Common Lisp counterparts.  This choice permits a number of 
+ ACL2 primitive functions to be implemented with their corresponding Common 
+ Lisp functions, but there are indeed differences.  ACL2 is a logic, and as 
+ such, it does not specify anything to do with physical storage or execution 
+ performance.  When ACL2 is used, the knowledgeable user can write functions to 
+ facilitate the reuse of some previously computed values.</p> 
+ 
+ <p>Recall the three mechanisms under discussion: hash consing, function 
+ memoization, and fast association list operations.  The function memoization 
+ mechanism takes advantage of the canonical representation of data objects 
+ provided by the <span class="tt"><a href="ACL2____HONS.html">hons</a></span> operation as does the fast association list 
+ operation mechanism.  Each time <span class="v">hons</span> is invoked, its arguments are 
+ themselves converted, if necessary, to uniquely represented objects.</p> 
+ 
+ <p>The ACL2 universe is recursively closed under the <span class="v">cons</span> pairing 
+ operation and the atoms.  Hash consing (<span class="tt"><a href="ACL2____HONS.html">hons</a></span>) is logically identical 
+ to <span class="v">cons</span>, but a set of tables is used to record each <span class="v">hons</span> pair.  When 
+ a <span class="v">hons</span> pair is requested, the implementation checks, in the current set 
+ of tables, whether the requested pair already exists.  If not, a new pair is 
+ created and a record of that pair is made; otherwise, a reference to the 
+ previously created pair is returned.  Thus, any data object created with 
+ <span class="v">hons</span> has a unique representation, as does every subcomponent.  We also 
+ arrange for strings to have a unique representation  only one copy of 
+ each different string is kept  and when any previously unseen string is 
+ an argument to <span class="v">hons</span>, we add the string to a unique table of strings.  A 
+ system-wide benefit of having a canonical representation for data is that 
+ equality comparisons between any two data objects can be done in constant 
+ time.</p> 
+ 
+ <p>The definition of <span class="tt"><a href="ACL2____HONS.html">hons</a></span> in no way changes the operation of <span class="v">cons</span> 
+  <span class="v">hons</span> creates a <span class="v">cons</span> pair.  When asked to create a <span class="v">hons</span>, 
+ the implementation checks to see if there is a <span class="v">cons</span> with the same <span class="tt"><a href="COMMON-LISP____CAR.html">car</a></span> and <span class="tt"><a href="COMMON-LISP____CDR.html">cdr</a></span> as the <span class="v">hons</span> being requested.  Thus, the only 
+ difference between the results of a <span class="v">hons</span> call and a corresponding 
+ <span class="v">cons</span> call is a notation in some invisible (to the ACL2 logic) tables 
+ where we record which <span class="v">cons</span> elements are also <span class="v">hons</span> elements.  Since a 
+ <span class="v">hons</span> is nothing but a <span class="v">cons</span>, the operation of <span class="v">car</span> and <span class="v">cdr</span> 
+ is unchanged.  In fact, the implementation is designed so that at any time it 
+ is safe to clear the table identifying which <span class="v">cons</span> elements are also 
+ considered <span class="v">hons</span> elements.</p> 
+ 
+ <p>User-defined functions with defined and verified guards can be memoized. 
+ When a function is memoized, a user-supplied condition restricts the domain 
+ when memoization is attempted.  When the condition is satisfied, memoization 
+ is attempted (assuming that memoization for the function is presently 
+ enabled); otherwise, the function is just evaluated.  Each memoized function 
+ has a hash table that is used to keep track of a unique list of function 
+ arguments paired with their values.  If appropriate, for each function the 
+ corresponding table is checked to see if a previous call with exactly the same 
+ arguments already exists in the table: if so, then the associated value is 
+ returned; if not, then the function is evaluated and a new key-value pair is 
+ added to the table of memoized values so that some future call will benefit 
+ from the memoization.  With ACL2 user functions memoization can be dynamically 
+ enabled and disabled.  There is an ACL2 function that clears a specific 
+ memoization table.  And finally, just as with the <span class="v">hons</span> table, a stack of 
+ these function memoization tables is maintained; that is, it is possible to 
+ memoize a function, use it a bit, set the memoized values aside, start a new 
+ table, use it, and then return to the original table.</p> 
+ 
+ <p>We next discuss the fast lookup operation for association lists.  When a 
+ pair is added to an association list using the functions <span class="tt"><a href="ACL2____HONS-ACONS.html">hons-acons</a></span> or 
+ <span class="tt"><a href="ACL2____HONS-ACONS_12.html">hons-acons!</a></span>, the system also records the key-value pair in an 
+ associated hash table.  As long as a user only used these two functions when 
+ placing key-value pairs on an association list, the key-value pairs in the 
+ corresponding hash table will be synchronized with the key-value pairs in the 
+ association list.  Later, if <span class="tt"><a href="ACL2____HONS-GET.html">hons-get</a></span> is used to look up a key, then 
+ instead of performing a linear search of the association list we consult the 
+ associated hash table.  If a user does not strictly follow this discipline, 
+ then a linear search may be required.  In some sense, these association lists 
+ are much like ACL2 arrays, but without the burden of explicitly naming the 
+ arrays.  The ACL2 array <span class="tt"><a href="ACL2____COMPRESS1.html">compress1</a></span> function is analogous to the 
+ functions <span class="tt"><a href="ACL2____FAST-ALIST-CLEAN.html">fast-alist-clean</a></span> and <span class="tt"><a href="ACL2____FAST-ALIST-CLEAN_12.html">fast-alist-clean!</a></span>.  There are 
+ user-level ACL2 functions that allow the associated hash tables to be cleared 
+ and removed.</p> 
+ 
+ <p>As mentioned above, the <a href="ACL2____HONS-ENABLED.html">hons-enabled</a> features are optimized for CCL 
+ and GCL.  See <a href="ACL2____CCL-UPDATES.html">ccl-updates</a> for easy instructions for obtaining the 
+ latest version of CCL.</p> 
+ 
+ <p>REFERENCES</p> 
+ 
+ <p>Baker, Henry G., The Boyer Benchmark at Warp Speed. ACM Lisp Pointers V,3 
+ (Jul-Sep 1992), pages 13-14.</p> 
+ 
+ <p>Baker, Henry G., A Tachy 'TAK'.  ACM Lisp Pointers Volume 3, 
+ July-September, 1992, pages 22-23.</p> 
+ 
+ <p>Robert S. Boyer and Warren A. Hunt, Jr., Function Memoization and Unique 
+ Object Representation for ACL2 Functions, in the Sixth International Workshop 
+ on the ACL2 Theorem Prover and Its Applications, ACM Digital Library, 
+ 2006.</p> 
+ 
+ <p>L.P. Deutsch. An Interactive Program Verifier. Tech. Rept. CSL-73-1, Xerox 
+ Palo Alto Research Center, May, 1973.</p> 
+ 
+ <p>A. P. Ershov.  On Programming of Arithmetic Operations.  In the 
+ Communications of the ACM, Volume 118, Number 3, August, 1958, pages 
+ 427-430.</p> 
+ 
+ <p>Eiichi Goto, Monocopy and Associative Algorithms in Extended Lisp, 
+ TR-74-03, University of Tokyo, 1974.</p> 
+ 
+ <p>Richard P. Gabriel.  Performance and Evaluation of Lisp Systems.  MIT 
+ Press, 1985.</p> 
+ 
+ <p>Donald Michie.  Memo functions: a Language Feature with Rote Learning 
+ Properties.  Technical Report MIP-R-29, Department of Artificial Intelligence, 
+ University of Edinburgh, Scotland, 1967.</p> 
+ 
+ <p>Donald Michie.  Memo Functions and Machine Learning.  In Nature, Volume 
+ 218, 1968, pages 19-22.</p>
+</body>
+</html>

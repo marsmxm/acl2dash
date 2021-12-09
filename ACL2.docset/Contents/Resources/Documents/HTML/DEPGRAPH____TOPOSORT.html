@@ -1,0 +1,123 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Toposort</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=DEPGRAPH____TOPOSORT">Click for Toposort in the Full Manual</a></h3>
+
+<p>General-purpose, depth-first topological sort for dependency graphs.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(toposort graph)  (mv successp result)</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">graph</span>  Alist that binds nodes to the lists of nodes they (directly) depend 
+           on.  See below.</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">successp</span>  True when the graph is loop-free and hence can be topologically 
+                 sorted, or <span class="v">nil</span> when there is a loop.<br><font color="#606060">Type <span class="v">(<a href="ACL2____BOOLEANP.html">booleanp</a> successp)</span>.</font>
+</dd> 
+<dd>
+<span class="tt">result</span>  On success: a list of nodes in topological order, guaranteed 
+                 equivalent to <span class="v">(<a href="ACL2____ALIST-KEYS.html">alist-keys</a> graph)</span> and in dependency order. 
+                 On failure: a list of nodes that have a dependency loop.<br><font color="#606060">Type <span class="v">(<a href="ACL2____TRUE-LISTP.html">true-listp</a> result)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>We implement a depth-first topological sort of the graph.  If the 
+graph is loop-free, this produces <span class="v">(<a href="ACL2____MV.html">mv</a> t nodes)</span>, where <span class="v">nodes</span> are set 
+equivalent to <span class="v">(<a href="ACL2____ALIST-KEYS.html">alist-keys</a> graph)</span> and are in dependency order.  Otherwise 
+the graph has loops; we will find some loop and return <span class="v">(<a href="ACL2____MV.html">mv</a> nil loop)</span>, 
+where <span class="v">loop</span> is a list of nodes such as <span class="v">(a b c a)</span>, where <span class="v">a</span> depends 
+on <span class="v">b</span>, which depends on <span class="v">c</span>, which depends on <span class="v">a</span>.</p> 
+ 
+<p>The graph is as described in <a href="DEPGRAPH____DEPGRAPH.html">depgraph</a>, but note:</p> 
+ 
+<ul> 
+ 
+<li>
+<span class="v">graph</span> is expected to be complete, i.e., every node that is ever listed 
+as a dependent should be bound in <span class="v">graph</span>; we will <b>cause a hard error</b> 
+if this is not the case.</li> 
+ 
+<li>
+<span class="v">graph</span> should (typically) not contain nodes that depend on themselves; 
+any such nodes form trivial self-loops and will cause topological ordering to 
+fail.</li> 
+ 
+</ul> 
+ 
+<h3>Usage Notes</h3> 
+ 
+<p>In rare cases you may actually be able to directly use this to sort some 
+structures in a dependency order.  But most of the time, we imagine that you 
+will need to:</p> 
+ 
+<ol> 
+<li>Extract a dependency graph in the expected "toposort format",</li> 
+<li>Run toposort to get a topological ordering (or find a loop), and finally</li> 
+<li>Reorder your data according to the ordering that has been produced.</li> 
+</ol> 
+ 
+<p>It might sometimes be more efficient to write custom topological sorts for 
+various data structures.  But that's a lot of work.  We think that the 
+translation steps are usually cheap enough that in most cases, the above 
+strategy is the easiest way to topologically sort your data.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>toposort</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ toposort (graph)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t))
+ (<a href="COMMON-LISP____LET.html">let</a>
+   ((__function__ 'toposort))
+   (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+   (<a href="ACL2____B_A2.html">b*</a> (((with-fast graph))
+        (keys (<a href="ACL2____ALIST-KEYS.html">alist-keys</a> graph))
+        ((<a href="ACL2____MV.html">mv</a> successp seen)
+         (<a href="DEPGRAPH____TOPOSORT-AUX.html">toposort-aux</a> keys (<a href="ACL2____LEN.html">len</a> keys) graph))
+        ((unless successp)
+         (<a href="ACL2____B_A2.html">b*</a> ((loop (<a href="DEPGRAPH____EXTRACT-TOPOLOGICAL-LOOP.html">extract-topological-loop</a> (<a href="COMMON-LISP____CDR.html">cdr</a> seen)
+                                              (<a href="COMMON-LISP____CAAR.html">caar</a> seen)
+                                              (<a href="COMMON-LISP____LIST.html">list</a> (<a href="COMMON-LISP____CAAR.html">caar</a> seen))
+                                              seen)))
+             (<a href="ACL2____FAST-ALIST-FREE.html">fast-alist-free</a> seen)
+             (<a href="COMMON-LISP____OR.html">or</a> (<a href="DEPGRAPH____DEPENDENCY-CHAIN-P.html">dependency-chain-p</a> loop graph)
+                 (<a href="ACL2____ER.html">er</a> hard? 'toposort
+                     "failed to produce a valid dependency chain!"))
+             (<a href="COMMON-LISP____OR.html">or</a> (<a href="ACL2____HONS-EQUAL.html">hons-equal</a> (<a href="COMMON-LISP____CAR.html">car</a> loop)
+                             (<a href="COMMON-LISP____CAR.html">car</a> (<a href="COMMON-LISP____LAST.html">last</a> loop)))
+                 (<a href="ACL2____ER.html">er</a> hard? 'toposort
+                     "failed to produce a loop!"))
+             (<a href="ACL2____MV.html">mv</a> nil loop)))
+        (nodes (<a href="DEPGRAPH____EXTRACT-TOPOLOGICAL-ORDER.html">extract-topological-order</a> seen nil)))
+       (<a href="ACL2____FAST-ALIST-FREE.html">fast-alist-free</a> seen)
+       (<a href="COMMON-LISP____OR.html">or</a> (<a href="DEPGRAPH____TOPOLOGICALLY-ORDERED-P.html">topologically-ordered-p</a> nodes graph)
+           (<a href="ACL2____ER.html">er</a> hard? 'toposort
+               "failed to produce a topological ordering!"))
+       (<a href="ACL2____MV.html">mv</a> t nodes))))</pre> 
+<p><b>Theorem: </b>booleanp-of-toposort.successp</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> booleanp-of-toposort.successp
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?successp ?result)
+              (<a href="DEPGRAPH____TOPOSORT.html">toposort</a> graph)))
+            (<a href="ACL2____BOOLEANP.html">booleanp</a> successp))
+        :rule-classes :type-prescription)</pre> 
+<p><b>Theorem: </b>true-listp-of-toposort.result</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> true-listp-of-toposort.result
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?successp ?result)
+              (<a href="DEPGRAPH____TOPOSORT.html">toposort</a> graph)))
+            (<a href="ACL2____TRUE-LISTP.html">true-listp</a> result))
+        :rule-classes :type-prescription)</pre> 
+<p>We always know, regardless of success, that the nodes we return in our 
+   ordering or in our loop must be members of the graph:</p><p><b>Theorem: </b>subsetp-equal-of-toposort</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> subsetp-equal-of-toposort
+        (<a href="ACL2____SUBSETP-EQUAL.html">subsetp-equal</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 1 (<a href="DEPGRAPH____TOPOSORT.html">toposort</a> graph))
+                       (<a href="ACL2____ALIST-KEYS.html">alist-keys</a> graph)))</pre> 
+<p>On success, we know something even better, namely that our ordering 
+   contains <i>all</i> of the nodes of the graph:</p><p><b>Theorem: </b>toposort-set-equiv</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> toposort-set-equiv
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 0 (<a href="DEPGRAPH____TOPOSORT.html">toposort</a> graph))
+                 (<a href="ACL2____SET-EQUIV.html">set-equiv</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 1 (<a href="DEPGRAPH____TOPOSORT.html">toposort</a> graph))
+                            (<a href="ACL2____ALIST-KEYS.html">alist-keys</a> graph))))</pre> 
+<p>And incidentally, on success, our ordering contains no duplicates:</p><p><b>Theorem: </b>no-duplicatesp-equal-of-toposort</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     no-duplicatesp-equal-of-toposort
+     (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 0 (<a href="DEPGRAPH____TOPOSORT.html">toposort</a> graph))
+              (<a href="ACL2____NO-DUPLICATESP-EQUAL.html">no-duplicatesp-equal</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 1 (<a href="DEPGRAPH____TOPOSORT.html">toposort</a> graph)))))</pre> 
+
+</body>
+</html>
