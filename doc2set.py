@@ -25,7 +25,7 @@ failed_pages = []
 for filename in pages:
     try:
         with open(filename) as page:
-            soup = BeautifulSoup(page, 'lxml')
+            soup = BeautifulSoup(page, 'html.parser')
             name = soup.title.text.strip()
             type = 'Entry'
             paths = soup.h3.a.attrs['href'].strip().split('/')
@@ -33,7 +33,8 @@ for filename in pages:
             cur.execute(
                 'INSERT OR IGNORE INTO searchIndex(name, type, path) VALUES (?,?,?)', (name, type, path))
             print('name: %s, path: %s' % (name, path))
-    except:
+    except Exception as e:
+        print(e)
         failed_pages.append(filename)
 
 print('Failed pages: %s' % failed_pages)
