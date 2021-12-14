@@ -1,0 +1,187 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Atc-typed-formals</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=C____ATC-TYPED-FORMALS">Click for Atc-typed-formals in the Full Manual</a></h3>
+
+<p>Calculate the C types of the formal parameters of a target function.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(atc-typed-formals fn ctx state) 
+  → 
+(mv erp typed-formals state)</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">fn</span> — <font color="#606060">Guard <span class="v">(<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> fn)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">ctx</span> — <font color="#606060">Guard <span class="v">(<a href="ACL2____CTXP.html">ctxp</a> ctx)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">typed-formals</span> — <font color="#606060">Type <span class="v">(<a href="C____ATC-SYMBOL-TYPE-ALISTP.html">atc-symbol-type-alistp</a> typed-formals)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>We look for a term of the form <span class="v">(&lt;type&gt; &lt;formal&gt;)</span> 
+     among the conjuncts of the function's guard, 
+     for each formal <span class="v">&lt;formal&gt;</span> of <span class="v">fn</span>, 
+     where <span class="v">&lt;type&gt;</span> is a predicate corresponding to a C type. 
+     For now we only accept certain types, 
+     namely the supported integer types and pointer types to them; 
+     note that the array predicates correspond to pointer types.</p><p>We ensure that there is exactly one such term for each formal. 
+     If this is successful, 
+     we return an alist from the formals to the types. 
+     The alist has unique keys, in the order of the formals.</p><p>We first extract the guard's conjuncts, 
+     then we go through the conjuncts, looking for the pattern, 
+     and we expand an alist from formals to types as we find patterns; 
+     this preliminary alist may not have the keys in order, 
+     because it goes according to the order of the guard's conjuncts. 
+     As we construct this preliminary alist, 
+     we check for multiple terms for the same formal, 
+     rejecting them even if they are identical. 
+     Then we construct the final alist by going through the formals in order, 
+     and looking up their types in the preliminary alist; 
+     here we detect when a formal has no corresponding conjunct in the guard.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>atc-typed-formals-prelim-alist</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ atc-typed-formals-prelim-alist
+ (fn formals guard
+     guard-conjuncts prelim-alist ctx state)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (<a href="ACL2____STATE.html">state</a>)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> fn)
+                             (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> formals)
+                             (<a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a> guard)
+                             (<a href="ACL2____PSEUDO-TERM-LISTP.html">pseudo-term-listp</a> guard-conjuncts)
+                             (<a href="C____ATC-SYMBOL-TYPE-ALISTP.html">atc-symbol-type-alistp</a> prelim-alist)
+                             (<a href="ACL2____CTXP.html">ctxp</a> ctx))))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'atc-typed-formals-prelim-alist))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+   (((when (<a href="COMMON-LISP____ENDP.html">endp</a> guard-conjuncts))
+     (<a href="ACL2____VALUE.html">acl2::value</a> (<a href="C____ATC-SYMBOL-TYPE-ALIST-FIX.html">atc-symbol-type-alist-fix</a> prelim-alist)))
+    (conjunct (<a href="COMMON-LISP____CAR.html">car</a> guard-conjuncts))
+    ((unless (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____NVARIABLEP.html">nvariablep</a> conjunct)
+                  (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____FQUOTEP.html">fquotep</a> conjunct))
+                  (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____FLAMBDA-APPLICATIONP.html">flambda-applicationp</a> conjunct))))
+     (atc-typed-formals-prelim-alist
+          fn formals guard (<a href="COMMON-LISP____CDR.html">cdr</a> guard-conjuncts)
+          prelim-alist ctx state))
+    (type-fn (<a href="ACL2____FFN-SYMB.html">ffn-symb</a> conjunct))
+    (<a href="C____TYPE.html">type</a> (<a href="COMMON-LISP____CASE.html">case</a> type-fn (<a href="C____SCHARP.html">scharp</a> (<a href="C____TYPE-SCHAR.html">type-schar</a>))
+                (<a href="C____UCHARP.html">ucharp</a> (<a href="C____TYPE-UCHAR.html">type-uchar</a>))
+                (<a href="C____SSHORTP.html">sshortp</a> (<a href="C____TYPE-SSHORT.html">type-sshort</a>))
+                (<a href="C____USHORTP.html">ushortp</a> (<a href="C____TYPE-USHORT.html">type-ushort</a>))
+                (<a href="C____SINTP.html">sintp</a> (<a href="C____TYPE-SINT.html">type-sint</a>))
+                (<a href="C____UINTP.html">uintp</a> (<a href="C____TYPE-UINT.html">type-uint</a>))
+                (<a href="C____SLONGP.html">slongp</a> (<a href="C____TYPE-SLONG.html">type-slong</a>))
+                (<a href="C____ULONGP.html">ulongp</a> (<a href="C____TYPE-ULONG.html">type-ulong</a>))
+                (<a href="C____SLLONGP.html">sllongp</a> (<a href="C____TYPE-SLLONG.html">type-sllong</a>))
+                (<a href="C____ULLONGP.html">ullongp</a> (<a href="C____TYPE-ULLONG.html">type-ullong</a>))
+                (<a href="C____SCHAR-ARRAYP.html">schar-arrayp</a> (<a href="C____TYPE-POINTER.html">type-pointer</a> (<a href="C____TYPE-SCHAR.html">type-schar</a>)))
+                (<a href="C____UCHAR-ARRAYP.html">uchar-arrayp</a> (<a href="C____TYPE-POINTER.html">type-pointer</a> (<a href="C____TYPE-UCHAR.html">type-uchar</a>)))
+                (<a href="C____SSHORT-ARRAYP.html">sshort-arrayp</a> (<a href="C____TYPE-POINTER.html">type-pointer</a> (<a href="C____TYPE-SSHORT.html">type-sshort</a>)))
+                (<a href="C____USHORT-ARRAYP.html">ushort-arrayp</a> (<a href="C____TYPE-POINTER.html">type-pointer</a> (<a href="C____TYPE-USHORT.html">type-ushort</a>)))
+                (<a href="C____SINT-ARRAYP.html">sint-arrayp</a> (<a href="C____TYPE-POINTER.html">type-pointer</a> (<a href="C____TYPE-SINT.html">type-sint</a>)))
+                (<a href="C____UINT-ARRAYP.html">uint-arrayp</a> (<a href="C____TYPE-POINTER.html">type-pointer</a> (<a href="C____TYPE-UINT.html">type-uint</a>)))
+                (<a href="C____SLONG-ARRAYP.html">slong-arrayp</a> (<a href="C____TYPE-POINTER.html">type-pointer</a> (<a href="C____TYPE-SLONG.html">type-slong</a>)))
+                (<a href="C____ULONG-ARRAYP.html">ulong-arrayp</a> (<a href="C____TYPE-POINTER.html">type-pointer</a> (<a href="C____TYPE-ULONG.html">type-ulong</a>)))
+                (<a href="C____SLLONG-ARRAYP.html">sllong-arrayp</a> (<a href="C____TYPE-POINTER.html">type-pointer</a> (<a href="C____TYPE-SLLONG.html">type-sllong</a>)))
+                (<a href="C____ULLONG-ARRAYP.html">ullong-arrayp</a> (<a href="C____TYPE-POINTER.html">type-pointer</a> (<a href="C____TYPE-ULLONG.html">type-ullong</a>)))
+                (t nil)))
+    ((when (<a href="COMMON-LISP____NOT.html">not</a> type))
+     (atc-typed-formals-prelim-alist
+          fn formals guard (<a href="COMMON-LISP____CDR.html">cdr</a> guard-conjuncts)
+          prelim-alist ctx state))
+    (arg (<a href="ACL2____FARGN.html">fargn</a> conjunct 1))
+    ((unless (<a href="ACL2____MEMBER-EQ.html">member-eq</a> arg formals))
+     (atc-typed-formals-prelim-alist
+          fn formals guard (<a href="COMMON-LISP____CDR.html">cdr</a> guard-conjuncts)
+          prelim-alist ctx state))
+    ((when (<a href="COMMON-LISP____CONSP.html">consp</a> (<a href="ACL2____ASSOC-EQ.html">assoc-eq</a> arg prelim-alist)))
+     (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
+      ctx t nil
+      "The guard ~x0 of the target function ~x1 ~
+                      includes multiple type predicates ~
+                      for the formal parameter ~x2. ~
+                      This is disallowed: every formal paramter ~
+                      must have exactly one type predicate in the guard, ~
+                      even when the multiple predicates are the same."
+      guard fn arg))
+    (prelim-alist (<a href="COMMON-LISP____ACONS.html">acons</a> arg type prelim-alist)))
+   (atc-typed-formals-prelim-alist
+        fn formals guard (<a href="COMMON-LISP____CDR.html">cdr</a> guard-conjuncts)
+        prelim-alist ctx state))))</pre> 
+<p><b>Theorem: </b>atc-symbol-type-alistp-of-atc-typed-formals-prelim-alist.prelim-alist-final</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ atc-symbol-type-alistp-of-atc-typed-formals-prelim-alist.prelim-alist-final
+ (<a href="ACL2____B_A2.html">b*</a>
+  (((<a href="ACL2____MV.html">mv</a> ?erp ?prelim-alist-final acl2::?state)
+    (atc-typed-formals-prelim-alist fn formals guard guard-conjuncts
+                                    prelim-alist ctx state)))
+  (<a href="C____ATC-SYMBOL-TYPE-ALISTP.html">atc-symbol-type-alistp</a> prelim-alist-final))
+ :rule-classes :rewrite)</pre> 
+<p><b>Function: </b>atc-typed-formals-final-alist</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ atc-typed-formals-final-alist
+ (fn formals guard prelim-alist ctx state)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (<a href="ACL2____STATE.html">state</a>)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> fn)
+                             (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> formals)
+                             (<a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a> guard)
+                             (<a href="C____ATC-SYMBOL-TYPE-ALISTP.html">atc-symbol-type-alistp</a> prelim-alist)
+                             (<a href="ACL2____CTXP.html">ctxp</a> ctx))))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'atc-typed-formals-final-alist))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+   (((when (<a href="COMMON-LISP____ENDP.html">endp</a> formals))
+     (<a href="ACL2____VALUE.html">acl2::value</a> nil))
+    (formal (<a href="ACL2____SYMBOL-FIX.html">symbol-fix</a> (<a href="COMMON-LISP____CAR.html">car</a> formals)))
+    (formal+type
+         (<a href="ACL2____ASSOC-EQ.html">assoc-eq</a> formal
+                   (<a href="C____ATC-SYMBOL-TYPE-ALIST-FIX.html">atc-symbol-type-alist-fix</a> prelim-alist)))
+    ((when (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____CONSP.html">consp</a> formal+type)))
+     (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
+      ctx t nil
+      "The guard ~x0 of the target function ~x1 ~
+                      has no type predicate for the formal parameter ~x2. ~
+                      Every formal parameter must have a type predicate."
+      guard fn formal))
+    (<a href="C____TYPE.html">type</a> (<a href="COMMON-LISP____CDR.html">cdr</a> formal+type))
+    ((<a href="ACL2____ER.html">er</a> typed-formals)
+     (atc-typed-formals-final-alist fn (<a href="COMMON-LISP____CDR.html">cdr</a> formals)
+                                    guard prelim-alist ctx state)))
+   (<a href="ACL2____VALUE.html">acl2::value</a> (<a href="COMMON-LISP____ACONS.html">acons</a> formal type typed-formals)))))</pre> 
+<p><b>Theorem: </b>atc-symbol-type-alistp-of-atc-typed-formals-final-alist.typed-formals</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ atc-symbol-type-alistp-of-atc-typed-formals-final-alist.typed-formals
+ (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?erp ?typed-formals acl2::?state)
+       (atc-typed-formals-final-alist
+            fn
+            formals guard prelim-alist ctx state)))
+     (<a href="C____ATC-SYMBOL-TYPE-ALISTP.html">atc-symbol-type-alistp</a> typed-formals))
+ :rule-classes :rewrite)</pre> 
+<p><b>Function: </b>atc-typed-formals</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> atc-typed-formals (fn ctx state)
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (<a href="ACL2____STATE.html">state</a>)))
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> fn) (<a href="ACL2____CTXP.html">ctxp</a> ctx))))
+       (<a href="COMMON-LISP____LET.html">let</a> ((__function__ 'atc-typed-formals))
+            (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+            (<a href="ACL2____B_A2.html">b*</a> ((wrld (<a href="ACL2____W.html">w</a> state))
+                 (formals (<a href="ACL2____FORMALS_B2.html">formals+</a> fn wrld))
+                 (<a href="ACL2____GUARD.html">guard</a> (<a href="ACL2____UGUARD_B2.html">uguard+</a> fn wrld))
+                 (guard-conjuncts (<a href="ACL2____FLATTEN-ANDS-IN-LIT.html">flatten-ands-in-lit</a> guard))
+                 ((<a href="ACL2____ER.html">er</a> prelim-alist)
+                  (atc-typed-formals-prelim-alist
+                       fn formals
+                       guard guard-conjuncts nil ctx state)))
+                (atc-typed-formals-final-alist
+                     fn
+                     formals guard prelim-alist ctx state))))</pre> 
+<p><b>Theorem: </b>atc-symbol-type-alistp-of-atc-typed-formals.typed-formals</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> atc-symbol-type-alistp-of-atc-typed-formals.typed-formals
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?erp ?typed-formals acl2::?state)
+              (<a href="C____ATC-TYPED-FORMALS.html">atc-typed-formals</a> fn ctx state)))
+            (<a href="C____ATC-SYMBOL-TYPE-ALISTP.html">atc-symbol-type-alistp</a> typed-formals))
+        :rule-classes :rewrite)</pre> 
+
+</body>
+</html>

@@ -1,0 +1,175 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Atc-tutorial-conditionals-nonconcluding</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=C____ATC-TUTORIAL-CONDITIONALS-NONCONCLUDING">Click for Atc-tutorial-conditionals-nonconcluding in the Full Manual</a></h3>
+
+<p>ATC tutorial: ACL2 representation of C conditional statements followed by more code.</p><p>The preceding tutorial pages show how to represent C code 
+    whose flow of control is ``tree-shaped'': 
+    a function body is 
+    a return statement, 
+    or a local variable declaration followed by more code, 
+    or an assignment followed by more code, 
+    or a conditional statement whose branches have recursively the same form. 
+    Thus, each conditional statement forks the tree, 
+    while declarations and assignments extend the current tree branch, 
+    and nested conditional statements fork subtrees. 
+    Each path in the tree eventually concludes the execution of the function, 
+    via a return statement. 
+    This code structure excludes 
+    conditional statements whose branches do not return, 
+    but instead continue execution of subsequent code.</p><p>The execution of a C conditional statement that does not return 
+    (but instead continues execution with the code after the statement) 
+    generally causes side effects, 
+    such as updating local variables or function parameters; 
+    these are the only side effects of interest to us for now. 
+    In a functional language like ACL2, these side effects must be explicit: 
+    the representation of the conditional statement must yield something, 
+    which must be used in the representation of the code after the statement. 
+    We use <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span> and <span class="tt"><a href="ACL2____MV-LET.html">mv-let</a></span> for this purpose: 
+    the former if one local variable or function parameter is updated; 
+    the latter if multiple ones are updated. 
+    These <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span>s are disinguished from the ones that represent <a href="C____ATC-TUTORIAL-LOCAL-VARIABLES.html">local variable declarations</a> and <a href="C____ATC-TUTORIAL-ASSIGNMENTS.html">assignments</a> because the term to which the variable is bound 
+    does not have the <span class="tt"><a href="C____DECLAR.html">declar</a></span> or <span class="tt"><a href="C____ASSIGN.html">assign</a></span> wrapper. 
+    Consistently with that, 
+    the terms to which the <span class="tt"><a href="ACL2____MV-LET.html">mv-let</a></span> variables are bound 
+    do not have any wrapper either.</p><p>For example, the ACL2 function</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> |j| (|x|)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a>
+   (<a href="ACL2____XARGS.html">xargs</a>
+    :guard (<a href="C____SINTP.html">c::sintp</a> |x|)
+    :guard-hints (("Goal" :in-theory (<a href="ACL2____ENABLE.html">enable</a> c::declar c::assign)))))
+  (<a href="COMMON-LISP____LET.html">let</a> ((|y| (<a href="C____DECLAR.html">c::declar</a> (<a href="C____SINT-DEC-CONST.html">c::sint-dec-const</a> 0))))
+    (<a href="COMMON-LISP____LET.html">let</a> ((|y| (<a href="COMMON-LISP____IF.html">if</a> (<a href="C____BOOLEAN-FROM-SINT.html">c::boolean-from-sint</a>
+                    (<a href="C____LT-SINT-SINT.html">c::lt-sint-sint</a> |x| (<a href="C____SINT-DEC-CONST.html">c::sint-dec-const</a> 100)))
+                   (<a href="COMMON-LISP____LET.html">let</a> ((|y| (<a href="C____ASSIGN.html">c::assign</a>
+                               (<a href="C____BITIOR-SINT-SINT.html">c::bitior-sint-sint</a>
+                                |y|
+                                (<a href="C____SINT-DEC-CONST.html">c::sint-dec-const</a> 6666)))))
+                     |y|)
+                 (<a href="COMMON-LISP____LET.html">let</a> ((|y| (<a href="C____ASSIGN.html">c::assign</a>
+                             (<a href="C____BITXOR-SINT-SINT.html">c::bitxor-sint-sint</a>
+                              |y|
+                              (<a href="C____SINT-DEC-CONST.html">c::sint-dec-const</a> 7777)))))
+                   |y|))))
+      (<a href="C____BITAND-SINT-SINT.html">c::bitand-sint-sint</a> |x| |y|))))</pre><p>represents the C function</p><pre class="code">int j(int x) {
+    int y = 0;
+    if (x &lt; 100) {
+        y = y | 6666;
+    } else {
+        y = y ^ 7777;
+    }
+    return x &amp; y;
+}</pre><p>The first <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span> represents a local variable declaration 
+    as explained in <a href="C____ATC-TUTORIAL-LOCAL-VARIABLES.html">atc-tutorial-local-variables</a>, 
+    but the second <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span> binds a homonymous variable 
+    to an <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span> that represents a side-effecting conditional statement. 
+    The binding represents the side effects of the conditional statement, 
+    and the body of the second <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span> 
+    (i.e. the <span class="tt"><a href="C____BITAND-SINT-SINT.html">bitand-sint-sint</a></span> call) 
+    ``sees'' those side effects by referencing the bound variable. 
+    The variable bound in the second <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span> must be one in scope; 
+    as also in the representation of <a href="C____ATC-TUTORIAL-ASSIGNMENTS.html">assignments</a>, it is a distinct shadowing variable in ACL2, 
+    but it represents the same variable in C. 
+    Indeed, the execution of a side-effecting conditional statement 
+    is a bit like an assignment to the variable, 
+    but performed via a statement instead of via an expression. 
+    It is required that both branches of the <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span> 
+    end with the variable bound to the <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span>: 
+    this is why both branches have a <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span> 
+    that represents an assignment that modifies the variable. 
+    The function</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> |j| (|x|)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a>
+   (<a href="ACL2____XARGS.html">xargs</a>
+    :guard (<a href="C____SINTP.html">c::sintp</a> |x|)
+    :guard-hints (("Goal" :in-theory (<a href="ACL2____ENABLE.html">enable</a> c::declar c::assign)))))
+  (<a href="COMMON-LISP____LET.html">let</a> ((|y| (<a href="C____DECLAR.html">c::declar</a> (<a href="C____SINT-DEC-CONST.html">c::sint-dec-const</a> 0))))
+    (<a href="COMMON-LISP____LET.html">let</a> ((|y| (<a href="COMMON-LISP____IF.html">if</a> (<a href="C____BOOLEAN-FROM-SINT.html">c::boolean-from-sint</a>
+                    (<a href="C____LT-SINT-SINT.html">c::lt-sint-sint</a> |x| (<a href="C____SINT-DEC-CONST.html">c::sint-dec-const</a> 100)))
+                   (<a href="C____BITIOR-SINT-SINT.html">c::bitior-sint-sint</a>
+                    |y|
+                    (<a href="C____SINT-DEC-CONST.html">c::sint-dec-const</a> 6666))
+                 (<a href="C____BITXOR-SINT-SINT.html">c::bitxor-sint-sint</a>
+                  |y|
+                  (<a href="C____SINT-DEC-CONST.html">c::sint-dec-const</a> 7777)))))
+      (<a href="C____BITAND-SINT-SINT.html">c::bitand-sint-sint</a> |x| |y|))))</pre><p>is equivalent to the one above in ACL2 but is rejected by ATC. 
+    Requiring the branches to end with the bound variable 
+    forces the assignment to be made explicit in the ACL2 representation, 
+    thus simplifying ATC's task. 
+    As already explained, ATC is meant to be used in conjunction with APT; 
+    transformations could explicate these assignments automatically.</p><p>It is important to note that 
+    <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span>s that represent local variable declarations or assignments 
+    cannot bind the variable (directly) to an <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span>, 
+    but only to a term that represents a C expression, 
+    wrapped with <span class="tt"><a href="C____DECLAR.html">declar</a></span> or <span class="tt"><a href="C____ASSIGN.html">assign</a></span>. 
+    (The term may have the form <span class="v">(<a href="C____CONDEXPR.html">condexpr</a> (<a href="COMMON-LISP____IF.html">if</a> ...))</span>, 
+    representing a conditional expression, 
+    used as initializer of the declaration 
+    or right-hand side of the assignment; 
+    in this case the variable could be bound to an <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span>, 
+    but only indirectly, which is why above we said `directly'.) 
+    This kind of <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span> may have bodies that are <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span>s, 
+    which represent conditional statements 
+    that follow the declaration or assignment, 
+    and not side-effecting conditional statements. 
+    In contrast, 
+    <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span>s that represent side-effecting conditional statements, 
+    as in the example above, 
+    bind the variable directly to the <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span>, without wrappers. 
+    Their bodies may be also <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span>s, 
+    but again those do not represent side-effecting conditional statemnent.</p><p>As another example, the ACL2 function</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> |k| (|x| |y|)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a>
+   (<a href="ACL2____XARGS.html">xargs</a>
+    :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="C____SINTP.html">c::sintp</a> |x|)
+                (<a href="C____SINTP.html">c::sintp</a> |y|))
+    :guard-hints (("Goal" :in-theory (<a href="ACL2____ENABLE.html">enable</a> c::declar c::assign)))))
+  (<a href="COMMON-LISP____LET_A2.html">let*</a> ((|a| (<a href="C____DECLAR.html">c::declar</a> (<a href="C____LOGNOT-SINT.html">c::lognot-sint</a> |x|)))
+         (|b| (<a href="C____DECLAR.html">c::declar</a> (<a href="C____BITNOT-SINT.html">c::bitnot-sint</a> |x|))))
+    (<a href="ACL2____MV-LET.html">mv-let</a> (|a| |b|)
+      (<a href="COMMON-LISP____IF.html">if</a> (<a href="C____BOOLEAN-FROM-SINT.html">c::boolean-from-sint</a> |y|)
+          (<a href="COMMON-LISP____LET.html">let</a> ((|a| (<a href="C____ASSIGN.html">c::assign</a> (<a href="C____BITNOT-SINT.html">c::bitnot-sint</a> |a|))))
+            (<a href="ACL2____MV.html">mv</a> |a| |b|))
+        (<a href="COMMON-LISP____LET_A2.html">let*</a> ((|b| (<a href="C____ASSIGN.html">c::assign</a> (<a href="C____SINT-DEC-CONST.html">c::sint-dec-const</a> 2)))
+               (|a| (<a href="C____ASSIGN.html">c::assign</a> (<a href="C____SINT-DEC-CONST.html">c::sint-dec-const</a> 14))))
+          (<a href="ACL2____MV.html">mv</a> |a| |b|)))
+      (<a href="C____BITXOR-SINT-SINT.html">c::bitxor-sint-sint</a> |a| |b|))))</pre><p>represents the C function</p><pre class="code">int k(int x, int y) {
+    int a = !x;
+    int b = ~x;
+    if (y) {
+        a = ~a;
+    } else {
+        b = 2;
+        a = 14;
+    }
+    return a ^ b;
+}</pre><p>The structure is the same as the previous example, 
+    but the side effects involve two variables, 
+    and therefore we use an <span class="tt"><a href="ACL2____MV-LET.html">mv-let</a></span> instead of a <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span>. 
+    The first two <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span>s (to which the <span class="tt"><a href="COMMON-LISP____LET_A2.html">let*</a></span> expands) 
+    just represent local variable declarations, 
+    but the <span class="tt"><a href="ACL2____MV-LET.html">mv-let</a></span> represents 
+    a conditional statement that side-effects two variables 
+    followed by more code (a return statement in this case). 
+    Similarly to the one-variable <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span> case, 
+    both branches of the <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span> are required to end with 
+    an <span class="tt"><a href="ACL2____MV.html">mv</a></span> of the bound variables, in the same order. 
+    Again, this facilitates ATC's task, 
+    and APT transformations could automatically produce terms of this form.</p><p>Note that, in this example, 
+    one branch modifies only one variable, 
+    while the other branch modifies both variables. 
+    However, each branch must return all the variables; 
+    for the first branch, only one is actually modified.</p><p>The above structures can be nested, in a way that should be obvious. 
+    For instance, a branch of a conditional 
+    could itself contain side-effecting conditionals. 
+    The ability to represent side-effecting conditional statements 
+    greatly expands the range of C code generable by ATC.</p><p>A branch that just returns the variable(s) without modification 
+    represents an empty branch. 
+    When that happens for the `else' branch, 
+    ATC could generate an <span class="v">if</span> statement 
+    instead of an <span class="v">if</span>-<span class="v">else</span> statement. 
+    This is not supported yet, but could be supported with ease.</p><div class="box"></div><p><b>Previous:</b> <a href="C____ATC-TUTORIAL-CONDITIONALS-WITH-MBT.html">Treatment of ACL2 conditionals with <span class="tt"><a href="ACL2____MBT.html">mbt</a></span> or <span class="tt"><a href="ACL2____MBT_42.html">mbt$</a></span></a></p>
+</body>
+</html>

@@ -1,0 +1,126 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Vl-iframe-p</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL2014____VL-IFRAME-P">Click for Vl-iframe-p in the Full Manual</a></h3>
+
+<p><span class="v">`ifdef</span> stack frame objects.</p><p><span class="tt">(vl-iframe-p x)</span> is a <a href="STD____DEFAGGREGATE.html">defaggregate</a> of the following fields.</p><ul>
+<li>
+<span class="tt">initially-activep</span> — <font color="#606060">Invariant <span class="v">(<a href="ACL2____BOOLEANP.html">booleanp</a> initially-activep)</span>.</font>
+</li> 
+<li>
+<span class="tt">some-thing-satisfiedp</span> — <font color="#606060">Invariant <span class="v">(<a href="ACL2____BOOLEANP.html">booleanp</a> some-thing-satisfiedp)</span>.</font>
+</li> 
+<li>
+<span class="tt">already-saw-elsep</span> — <font color="#606060">Invariant <span class="v">(<a href="ACL2____BOOLEANP.html">booleanp</a> already-saw-elsep)</span>.</font>
+</li> 
+</ul><p>Source link: vl-iframe-p</p><p>Iframes ("ifdef frames") are essential in our approach to 
+handling <span class="v">`ifdef</span> directives.  Our main preprocessing function, <a href="VL2014____VL-PREPROCESS-LOOP.html">vl-preprocess-loop</a>, takes three arguments that have to do with handling 
+ifdefs:</p> 
+ 
+<ul> 
+ 
+<li>
+<span class="v">defines</span> is the current <a href="VL2014____VL-DEFINES-P.html">vl-defines-p</a> alist.  For now, just 
+assume that we are able to appropriately keep this list updated as we encounter 
+defines and undefs.</li> 
+ 
+<li>
+<span class="v">activep</span> is a boolean which is true whenever the characters are are now 
+reading from the file ought to be given to the lexer -- the idea is that when 
+we encounter an <span class="v">`ifdef</span> whose condition isn't satisfied, we turn off 
+<span class="v">activep</span> until the closing <span class="v">`endif</span> is encountered.</li> 
+ 
+<li>
+<span class="v">istack</span> is a stack of <span class="v">vl-iframe-p</span> objects which explain how to 
+manage <span class="v">activep</span> as we descend through a nest of <span class="v">`ifdef</span>, <span class="v">`ifndef</span>, 
+<span class="v">`elsif</span>, <span class="v">`else</span>, and <span class="v">`endif</span> directives.</li> 
+ 
+</ul> 
+ 
+<p>Let us temporarily ignore nested directives.  Then, our task would be to 
+decide when activep should be turned on during sequences like this:</p> 
+ 
+<pre class="code">`if[n]def THING
+  stuff1
+`elsif THING2
+  stuff2
+`elsif THING3
+  stuff3
+`else
+  stuff4
+`endif</pre> 
+ 
+<p>The semantics of this (Section 19.4) are essentially: figure out the first 
+<i>THING</i> that is satisfied, include its stuff, and ignore the rest.  So for 
+instance, if <i>THING2</i> and <i>THING3</i> are both satisfied, we still only 
+want to include <i>stuff2</i> since it comes first.</p> 
+ 
+<p>To implement this, the basic idea is that when we encounter an <span class="v">`ifdef</span> 
+or <span class="v">`ifndef</span> directive, we construct an iframe that helps us set 
+<span class="v">activep</span> correctly.  The first two fields of the iframe are:</p> 
+ 
+<dl> 
+ 
+<dt><span class="v">some-thing-satisfiedp</span></dt> 
+ 
+<dd>which indicates if any of the <i>THING</i>s we have seen so far was 
+satisfied, and</dd> 
+ 
+<dt><span class="v">already-saw-elsep</span></dt> 
+ 
+<dd>which indicates whether we have seen an <span class="v">`else</span> and is used only as a 
+sanity check to prevent multiple <span class="v">`else</span> clauses.</dd> 
+ 
+</dl> 
+ 
+<p>And as we descend through the above sequences, we update the iframe and 
+ensure that <span class="v">activep</span> is set exactly when the current <i>THING</i> is 
+satisfied and no previous <i>THING</i> was satisfied.</p> 
+ 
+<p>But the story is not quite complete yet, because we also have to handle 
+nested ifdefs.  For example, imagine we have:</p> 
+ 
+<pre class="code">`ifdef OUTER
+  ...
+  `ifdef INNER_THING1
+    stuff1
+  `elsif INNER2_THING2
+    stuff2
+  `else
+    stuff3
+  `endif
+  ...
+`endif</pre> 
+ 
+<p>This is almost the same, except that now we only want to turn on 
+<span class="v">activep</span> when <i>OUTER</i> is also satisfied.  To keep track of this, we 
+add another field to our iframe objects:</p> 
+ 
+<dl> 
+ 
+<dt><span class="v">initially-activep</span></dt> 
+ 
+<dd>which indicates whether <span class="v">activep</span> was set when we encountered the 
+<span class="v">`ifdef</span> or <span class="v">ifndef</span> for this iframe.</dd> 
+ 
+</dl> 
+ 
+<p>Now, <span class="v">activep</span> should be enabled exactly when:</p> 
+ 
+<ul> 
+ 
+<li>(inner criteria): the current <i>THING</i> is satisfied and no previous 
+<i>THING</i> was sastified, and</li> 
+ 
+<li>(outer-criteria): <span class="v">initially-activep</span> was also set, i.e., this chunk of 
+code is not being blocked by some <i>THING</i> in an outer <span class="v">ifdef</span> 
+tree.</li> 
+ 
+</ul>
+</body>
+</html>

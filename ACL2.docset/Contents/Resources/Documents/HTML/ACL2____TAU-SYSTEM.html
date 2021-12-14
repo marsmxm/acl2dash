@@ -1,0 +1,385 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Tau-system</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____TAU-SYSTEM">Click for Tau-system in the Full Manual</a></h3>
+
+<p>Make a rule for the ACL2 ``type checker''</p><p>This documentation topic describes the syntactic form of 
+ ``tau-system'' rules; these rules extend ACL2's ``type checker.''  For an 
+ introduction to the tau system, see <a href="ACL2____INTRODUCTION-TO-THE-TAU-SYSTEM.html">introduction-to-the-tau-system</a>.</p> 
+ 
+ <p>There happens to be a <i>function</i> named <span class="v">tau-system</span>, defined as the 
+ identity function.  Its only role is to provide the rune 
+ <span class="v">(:EXECUTABLE-COUNTERPART TAU-SYSTEM)</span>, which is used to enable and disable 
+ the tau system.  Otherwise the function <span class="v">tau-system</span> has no purpose and we 
+ recommend that you avoid using it so you are free to enable and disable the 
+ tau system.</p> 
+ 
+ <p>When in the default (``greedy'') mode (see <span class="tt"><a href="ACL2____SET-TAU-AUTO-MODE.html">set-tau-auto-mode</a></span>), 
+ every <span class="tt"><a href="COMMON-LISP____DEFUN.html">defun</a></span> and every <span class="v">:corollary</span> (see <span class="v">:</span><span class="tt"><a href="ACL2____RULE-CLASSES.html">rule-classes</a></span>) 
+ of every <span class="tt"><a href="ACL2____DEFTHM.html">defthm</a></span> stored as a rule <i>of any</i> <span class="v">:rule-class</span> is 
+ inspected to determine if it is of one of the forms below.  Rules of these 
+ forms are added to the tau database, even if they are not labeled as 
+ <span class="v">:tau-system</span> rules, e.g., a <span class="v">:</span><span class="tt"><a href="ACL2____REWRITE.html">rewrite</a></span> rule might contribute to 
+ the tau database!  To add a rule to the tau database without adding any other 
+ kind of rule, tag it with <span class="v">:</span><span class="tt"><a href="ACL2____RULE-CLASSES.html">rule-classes</a></span> <span class="v">:tau-system</span>.  If a 
+ theorem has <span class="v">:</span><span class="tt"><a href="ACL2____RULE-CLASSES.html">rule-classes</a></span> <span class="v">nil</span>, it is not considered for the 
+ tau database.</p> 
+ 
+ <pre class="code">General Forms: 
+<i>Boolean</i>: 
+(booleanp (p v)) 
+ 
+<i>Eval</i>: 
+(p 'const) or 
+(p *const*) 
+ 
+<i>Simple</i>: 
+(implies (p v) (q v)) 
+ 
+<i>Conjunctive</i>: 
+(implies (and (p1 v) ... (pk v)) (q v)), ; Here k must exceed 1. 
+ 
+<i>Signature Form 1</i>: 
+(implies (and (p1 x1) (p2 x2) ...) 
+         (q (fn x1 x2 ...))) 
+ 
+<i>Signature Form 2</i>: 
+(implies (and (p1 x1) (p2 x2) ...) 
+         (q (mv-nth 'n (fn x1 x2 ...)))) 
+ 
+<i>Bounder Form 1 (or Form 2)</i>: 
+(implies (and (tau-intervalp i1) 
+              ... 
+              (or (equal (tau-interval-dom i1) 'dom1-1) 
+                  ...) 
+              ... 
+              (in-tau-intervalp x1 i1) 
+              ...) 
+         (and (tau-intervalp (bounder-fn i1 ...)) 
+              (in-tau-intervalp <i>target</i> 
+                                (bounder-fn i1 ...)))) 
+ 
+where <i>target</i> is 
+(fn x1 ... y1 ...)             in <i>Form 1</i>, and 
+(mv-nth 'n (fn x1 ... y1 ...)) in <i>Form 2</i> 
+ 
+<i>Big Switch</i>: 
+(equal (fn . formals) body) 
+ 
+<i>MV-NTH Synonym</i>: 
+(equal (nth-alt x y) (mv-nth x y)) or 
+(equal (mv-nth x y) (nth-alt x y)) 
+</pre> 
+ 
+ <p>The symbols <span class="v">p</span>, <span class="v">q</span>, <span class="v">p1</span>, etc., denote monadic (one-argument) 
+ Boolean-valued function symbols, or equalities in which one argument is 
+ constant, arithmetic comparisons in which one argument is a rational or 
+ integer constant, or the logical negations of such terms.  By ``equalities'' 
+ we allow <span class="tt"><a href="COMMON-LISP____EQUAL.html">equal</a></span>, <span class="tt"><a href="COMMON-LISP____EQ.html">eq</a></span>, <span class="tt"><a href="COMMON-LISP____EQL.html">eql</a></span>, and <span class="tt"><a href="COMMON-LISP_____D3.html">=</a></span>.  By 
+ ``arithmetic comparison'' we mean <span class="tt"><a href="COMMON-LISP_____C3.html">&lt;</a></span>, <span class="tt"><a href="COMMON-LISP_____C3_D3.html">&lt;=</a></span>, <span class="tt"><a href="COMMON-LISP_____E3_D3.html">&gt;=</a></span>, or <span class="tt"><a href="COMMON-LISP_____E3.html">&gt;</a></span>.  Any of these tau predicates may appear negated.</p> 
+ 
+ <p>The notation <span class="v">(p v)</span> above might stand for any one of:</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____INTEGERP.html">INTEGERP</a> X)
+(<a href="COMMON-LISP____EQUAL.html">EQUAL</a> V 'MONDAY)
+(<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> I 16)
+(<a href="COMMON-LISP____NOT.html">NOT</a> (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> X 'SUNDAY))</pre> 
+ 
+ <p>The different rule forms above affect different aspects of the tau system. 
+ We discuss each form in more detail below.</p> 
+ 
+ <p>The documentation below is written as though the tau system is in auto 
+ mode!  To ensure that the only rules added to the tau system are those 
+ explicitly assigned to <span class="v">:rule-class</span> <span class="v">:tau-system</span>, you should use 
+ <span class="tt"><a href="ACL2____SET-TAU-AUTO-MODE.html">set-tau-auto-mode</a></span> to select manual mode.</p> 
+ 
+ <pre class="code">General Form: <i>Boolean</i>: 
+(booleanp (p v)) 
+</pre> 
+ 
+ <p>Here <span class="v">p</span> must be a function symbol and <span class="v">v</span> must be a variable.  Such 
+ a <span class="v">:tau-system</span> rule adds <span class="v">p</span> to the list of tau predicates.  If <span class="v">p</span> 
+ was recognized as Boolean when it was defined, there is no need to state this 
+ rule.  This form is needed if you define a monadic Boolean function in such a 
+ way that the system does not recognize that it is Boolean.</p> 
+ 
+ <pre class="code">General Form: <i>Eval</i>: 
+(p 'const) or 
+(p *const*) 
+</pre> 
+ 
+ <p>Here <span class="v">p</span> must be a function symbol.  In addition, recall that these 
+ general tau predicate forms may appear negated.  So the form above includes 
+ such theorems as <span class="v">(<a href="COMMON-LISP____NOT.html">NOT</a> (GOOD-STATEP *INITIAL-STATE*))</span>.  A theorem of this 
+ form thus records whether a named predicate is true or false on the given 
+ constant.</p> 
+ 
+ <p>Generally, when the tau system must determine whether an enabled tau 
+ predicate is true or false on a constant, it simply evaluates the predicate on 
+ the constant.  This can be impossible or very inefficient if <span class="v">p</span> is not 
+ defined but constrained, or if <span class="v">p</span> is defined in a hard-to-compute way 
+ (e.g., <span class="v">(<a href="COMMON-LISP____DEFUN.html">defun</a> p (x) (<a href="COMMON-LISP____EVENP.html">evenp</a> (ack x x)))</span> where <span class="v">ack</span> is the Ackermann 
+ function), or perhaps if the constant is very large.  By proving a 
+ <span class="v">:tau-system</span> rule of Eval form, you cause the tau system to note the value 
+ of the predicate on the constant and henceforth to look it up instead of 
+ evaluating the definition.</p> 
+ 
+ <p>A difficulty, however, is determining that a slow down is due to the 
+ evaluation of tau predicates and not some other reason.  The first step is 
+ determining that tau is slowing the proof down.  See <span class="tt"><a href="ACL2____TIME-TRACKER-TAU.html">time-tracker-tau</a></span> 
+ for an explanation of <span class="v">TIME-TRACKER-NOTE</span>s output during some proofs 
+ involving tau reasoning.  These notes can alert you to the fact that 
+ significant amounts of time are being spent in the tau system.  <span class="tt"><a href="ACL2____TIME-TRACKER-TAU.html">Time-tracker-tau</a></span> gives some ways of determining whether tau predicate 
+ evaluation is involved.  (If worse comes to worst, consider the following 
+ hack: In the ACL2 source file <span class="v">tau.lisp</span>, immediately after the definition 
+ of the system function <span class="v">ev-fncall-w-tau-recog</span>, there is a comment which 
+ contains some raw Lisp code that can be used to investigate whether tau's use 
+ of evaluation on constants is causing a problem.)  However, once a recognizer 
+ and the constants on which it is being evaluated are identified, the tau 
+ system can be sped up by proving Eval rules to pre-compute and store the 
+ values of the recognizer on those constants.  Alternatively, at the possible 
+ loss of some completeness in the tau system, the executable-counterpart of the 
+ recognizer can be disabled.</p> 
+ 
+ <pre class="code">General Form: <i>Simple</i>: 
+(implies (p v) (q v)) 
+</pre> 
+ 
+ <p>Here <span class="v">v</span> must be a variable symbol.  This rule builds-in the information 
+ that anything satisfying <span class="v">p</span> must also satisfy <span class="v">q</span>, i.e., the ``type'' 
+ <span class="v">q</span> includes the ``type'' <span class="v">p</span>.  Recall that the forms may be negated. 
+ Most of the time, <span class="v">p</span> and <span class="v">q</span> will be predicate symbols but it is 
+ possible they will be equalities- or inequalities-with-constants.  Examples of 
+ Simple rules include the following, which are in fact built-in:</p> 
+ 
+ <pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____NATP.html">natp</a> x) (<a href="COMMON-LISP____INTEGERP.html">integerp</a> x))
+(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> x) (<a href="COMMON-LISP____RATIONALP.html">rationalp</a> x))
+(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> x) (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____TRUE-LISTP.html">true-listp</a> x)))
+(<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____NATP.html">natp</a> x) (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP_____C3.html">&lt;</a> x 0)))
+(<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____SYMBOL-ALISTP.html">symbol-alistp</a> x) (<a href="ACL2____ALISTP.html">alistp</a> x))</pre> 
+ 
+ <p>Because the tau system records the transitive closure of the Simple rules, 
+ any time a term is known to satisfy <span class="v">natp</span> it is also known to satisfy 
+ <span class="v">integerp</span> and <span class="v">rationalp</span>, and known not to satisfy <span class="v">true-listp</span>, 
+ and known to be non-negative.</p> 
+ 
+ <pre class="code">General Form: <i>Conjunctive</i>: 
+(implies (and (p1 v) ... (pk v)) (q v)), ; Here k must exceed 1. 
+</pre> 
+ 
+ <p>The <span class="v">pi</span> and <span class="v">q</span> may be any tau predicates or their negations, <span class="v">v</span> 
+ must be a variable symbol, and <span class="v">i</span> must exceed 1 or else this is a Simple 
+ rule.  An obvious operational interpretation of this rule is that if an object 
+ is known to satisfy all of the <span class="v">pi</span>, then it is known to satisfy <span class="v">q</span>. 
+ However, the actual interpretation is more general.  For example, if an object 
+ is known to satisfy all but one of the <span class="v">pi</span> and is known not to satisfy 
+ <span class="v">q</span>, then the object is known not to satisfy the ``missing'' <span class="v">pi</span>.</p> 
+ 
+ <p>For example, the following Conjunctive rule allows tau to conclude that if 
+ weekday <span class="v">D</span> is not <span class="v">MON</span>, <span class="v">TUE</span>, <span class="v">THU</span> or <span class="v">FRI</span>, then it is 
+ <span class="v">WED</span>:</p> 
+ 
+ <pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (weekdayp d)
+              (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQ.html">eq</a> d 'MON))
+              (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQ.html">eq</a> d 'TUE))
+              (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQ.html">eq</a> d 'WED))
+              (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQ.html">eq</a> d 'THU)))
+         (<a href="COMMON-LISP____EQ.html">eq</a> d 'FRI))</pre> 
+ 
+ <p>The tau database is not closed under conjunctive rules; they are applied 
+ dynamically.</p> 
+ 
+ <pre class="code">General Form: <i>Signature Form 1</i>: 
+(implies (and (p1 x1) (p2 x2) ... (pn xn) dep-hyp) 
+         (q (fn x1 x2 ... xn))) 
+</pre> 
+ 
+ <p>The <span class="v">pi</span> and <span class="v">q</span> may be any tau predicates or their negations, 
+ <span class="v">fn</span> must be a function symbol of arity <span class="v">n</span>, the <span class="v">xi</span> must be 
+ distinct variable symbols and <span class="v">dep-hyp</span> may be any term, provided it is not 
+ of the <span class="v">(pi xi)</span> shape and the only the variables in it are the 
+ <span class="v">xi</span>.</p> 
+ 
+ <p>The Signature form actually allows multiple tau predicates to be applied to 
+ each variable, e.g., x1 might be required to be both an <span class="v">INTEGERP</span> and 
+ <span class="v">EVENP</span>.  The Signature form allows there to be multiple hypotheses 
+ classified as <span class="v">dep-hyp</span>s, i.e., not fitting any of the previous shapes, and 
+ they are implicitly just conjoined.  The name ``dep-hyp'' is an abbreviation 
+ of ``dependent hypothesis'' and stems from the fact they often express 
+ relations between several of the function's inputs rather than type-like 
+ constraints on individual inputs.</p> 
+ 
+ <p>A Signature rule informs tau that the function <span class="v">fn</span> returns an object 
+ satisfying <span class="v">q</span> provided that the arguments satisfy the respective <span class="v">pi</span> 
+ and provided that <span class="v">dep-hyp</span> occurs in the current context.  Note: to be 
+ precise, dependent hypotheses are relieved only by applying ACL2's most 
+ primitive form of reasoning, <a href="ACL2____TYPE-SET.html">type-set</a>.  In particular, tau reasoning is 
+ not used to establish dependent hypotheses.  The presence of a <span class="v">dep-hyp</span> in 
+ a signature rule may severely restrict its applicability.  We discuss this 
+ after showing a few mundane examples.</p> 
+ 
+ <p>An example Signature rule is</p> 
+ 
+ <pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____INTEGER-LISTP.html">integer-listp</a> x)
+              (<a href="ACL2____INTEGER-LISTP.html">integer-listp</a> y))
+         (<a href="ACL2____INTEGER-LISTP.html">integer-listp</a> (<a href="COMMON-LISP____APPEND.html">append</a> x y)))</pre> 
+ 
+ <p>Of course, a function may have multiple signatures:</p> 
+ 
+ <pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> x)
+              (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> y))
+         (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> (<a href="COMMON-LISP____APPEND.html">append</a> x y)))</pre> 
+ 
+ <p>Here is a Signature rule for the function <span class="v">pairlis$</span>:</p> 
+ 
+ <pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> x)
+              (<a href="ACL2____INTEGER-LISTP.html">integer-listp</a> y))
+         (<a href="ACL2____SYMBOL-ALISTP.html">symbol-alistp</a> (<a href="ACL2____PAIRLIS_42.html">pairlis$</a> x y)))</pre> 
+ 
+ <p>The tau system can consequently check this theorem by composing the last 
+ two rules shown and exploiting Simple rule stating that symbol-alists are also 
+ alists:</p> 
+ 
+ <pre class="code">(<a href="ACL2____THM.html">thm</a> (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> a)
+                   (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> b)
+                   (<a href="ACL2____INTEGER-LISTP.html">integer-listp</a> y))
+              (<a href="ACL2____ALISTP.html">alistp</a> (<a href="ACL2____PAIRLIS_42.html">pairlis$</a> (<a href="COMMON-LISP____APPEND.html">append</a> a b) y))))</pre> 
+ 
+ <p>Since <span class="v">a</span> and <span class="v">b</span> are known to be lists of symbols and a signature 
+ for <span class="v">append</span> is that it preserves that predicate, the first argument to the 
+ <span class="v">pairlis$</span> expression is known to be a list of symbols.  This means the 
+ Signature rule for <span class="v">pairlis$</span> tells us the result is a <span class="v">symbol-alistp</span>, 
+ but the previously mentioned Simple rule, <span class="v">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____SYMBOL-ALISTP.html">symbol-alistp</a> x)
+ (<a href="ACL2____ALISTP.html">alistp</a> x))</span>, tells us the result is also an <span class="v">alistp</span>.</p> 
+ 
+ <p>When a Signature rule has an <span class="v">dep-hyp</span>, that hypothesis is not an 
+ expression in the tau system.  Tau is not used to check that hypothesis. 
+ Instead, tau uses the more primitive <a href="ACL2____TYPE-SET.html">type-set</a> mechanism of ACL2.  Here 
+ is an example of a Signature rule with a <span class="v">dep-hyp</span>:</p> 
+ 
+ <pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____NATP.html">natp</a> n)
+              (<a href="ACL2____INTEGER-LISTP.html">integer-listp</a> a)
+              (<a href="COMMON-LISP_____C3.html">&lt;</a> n (<a href="ACL2____LEN.html">len</a> a)))
+         (<a href="COMMON-LISP____INTEGERP.html">integerp</a> (<a href="COMMON-LISP____NTH.html">nth</a> n a)))</pre> 
+ 
+ <p>Note that the last hypothesis is a dependent hypothesis: it is not a tau 
+ predicate but a relationship between <span class="v">n</span> and <span class="v">a</span>.  It is relieved by 
+ <a href="ACL2____TYPE-SET.html">type-set</a>.  If one is trying to compute the signature of an <span class="v">(<a href="COMMON-LISP____NTH.html">nth</a> n
+ a)</span> expression in a context in which <span class="v">(<a href="COMMON-LISP_____C3.html">&lt;</a> n (<a href="ACL2____LEN.html">len</a> a))</span> is explicitly 
+ assumed, then this mechanism would establish the dependent hypothesis.  But 
+ one can easily imagine an almost identical context where, say <span class="v">(<a href="COMMON-LISP_____C3.html">&lt;</a> n (<a href="ACL2____LEN.html">len</a>
+ (<a href="ACL2____REV.html">rev</a> a)))</span> is explicitly assumed.  In that context, the Signature rule would 
+ not be fired because <span class="tt"><a href="ACL2____TYPE-SET.html">type-set</a></span> cannot establish <span class="v">(<a href="COMMON-LISP_____C3.html">&lt;</a> n (<a href="ACL2____LEN.html">len</a> a))</span> from 
+ <span class="v">(<a href="COMMON-LISP_____C3.html">&lt;</a> n (<a href="ACL2____LEN.html">len</a> (<a href="ACL2____REV.html">rev</a> a)))</span>, even though it would be easily proved by rewriting 
+ using the theorem <span class="v">(<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____LEN.html">len</a> (<a href="ACL2____REV.html">rev</a> a)) (<a href="ACL2____LEN.html">len</a> a))</span>.</p> 
+ 
+ <p>Note also that if this signature could be phrased in a way that eliminates 
+ the dependency between <span class="v">n</span> and <span class="v">a</span> it would be more effective.  For 
+ example, here is a related Signature rule without a dependent hypothesis:</p> 
+ 
+ <pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____NATP.html">natp</a> n)
+              (register-filep a)
+              (<a href="COMMON-LISP_____C3.html">&lt;</a> n 16))
+         (<a href="COMMON-LISP____INTEGERP.html">integerp</a> (<a href="COMMON-LISP____NTH.html">nth</a> n a)))</pre> 
+ 
+ <p>In this theorem we require only that <span class="v">n</span> be less than 16, which is a tau 
+ predicate and hence just an additional tau constraint on <span class="v">n</span>.</p> 
+ 
+ <pre class="code">General Form: <i>Signature Form 2</i>: 
+(implies (and (p1 x1) (p2 x2) ... (pn xn) dep-hyp) 
+ 
+         (q (mv-nth 'n (fn x1 x2 ... xn)))) 
+</pre> 
+ 
+ <p>This form of signature rule is just like form 1 except that it is useful 
+ for functions that return multiple-values and allows us to ``type-check'' 
+ their individual outputs.</p> 
+ 
+ <pre class="code">General Form: <i>Bounder Forms 1 and 2</i>: 
+(implies (and (tau-intervalp i1) 
+              ... 
+              (or (equal (tau-interval-dom i1) 'dom1-1) 
+                  ...) 
+              ... 
+              (in-tau-intervalp x1 i1) 
+              ...) 
+         (and (tau-intervalp (bounder-fn i1 ...)) 
+              (in-tau-intervalp <i>target</i> 
+                                (bounder-fn i1 ...)))) 
+</pre> 
+ 
+ <p>where <i>target</i> is either <span class="v">(fn x1 ... y1 ...)</span> in <i>Form 1</i> or 
+ <span class="v">(<a href="ACL2____MV-NTH.html">mv-nth</a> 'n (fn x1 ... y1 ...))</span> in <i>Form 2</i>.</p> 
+ 
+ <p>This form is for advanced users only and the schema given above is just a 
+ reminder of the general shape.  A ``bounder'' for a given function symbol, 
+ <span class="v">fn</span>, is a function symbol <span class="v">bounder-fn</span> that computes an interval 
+ containing <span class="v">(fn x1 ... y1 ...)</span> (or its <span class="v">n</span>th component in the case of 
+ Form 2 rules) from the intervals containing certain of the arguments of 
+ <span class="v">fn</span>.  The correctness theorem for a bounder function informs the tau 
+ system that bounds for <span class="v">fn</span> are computed by <span class="v">bounder-fn</span> and sets up the 
+ correspondence between the relevant arguments, <span class="v">xi</span>, of <span class="v">fn</span> and the 
+ intervals containing those arguments, <span class="v">ii</span> to which <span class="v">bounder-fn</span> is 
+ applied.  When the tau system computes the tau for a call of <span class="v">fn</span>, it 
+ computes the tau of the relevant arguments and applies the bounder to the 
+ intervals of those tau.  This provides a domain and upper and/or lower bounds 
+ for the value of the term.  The tau system then further augments that with 
+ signature rules.  See <a href="ACL2____BOUNDERS.html">bounders</a> for details on intervals, bounders, and 
+ bounder correctness theorems.</p> 
+ 
+ <pre class="code">General Form: <i>Big Switch</i>: 
+(equal (fn . formals) body) 
+</pre> 
+ 
+ <p>In the Big Switch form, <span class="v">fn</span> must be a function symbol, <span class="v">formals</span> 
+ must be a list of distinct variable symbols, and <span class="v">body</span> must be a ``big 
+ switch'' term, i.e., one that case splits on tau predicates about a single 
+ variable and produces a term not involving that variable.  An example of a Big 
+ Switch rule is</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____EQUAL.html">equal</a> (conditional-type x y)
+       (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x)
+           (<a href="COMMON-LISP____CONSP.html">consp</a> y)
+           (<a href="COMMON-LISP____INTEGERP.html">integerp</a> y)))</pre> 
+ 
+ <p>The idea is that the tau system can treat calls of <span class="v">conditional-type</span> as 
+ a tau-predicate after determining the tau of an argument.</p> 
+ 
+ <p>Since equality-to-constants are tau predicates, a more common example of a 
+ Big Switch rule is</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____EQUAL.html">equal</a> (dtypep x expr)
+       (<a href="COMMON-LISP____CASE.html">case</a> x
+             (STMT (stmt-typep expr))
+             (EXPR (expr-typep expr))
+             (MODULE (module-typep expr))
+             (otherwise nil)))</pre> 
+ 
+ <p>This is because <span class="v">(<a href="COMMON-LISP____CASE.html">case</a> x (STMT ...) ...)</span> macroexpands in ACL2 to <span class="v">(<a href="COMMON-LISP____IF.html">if</a>
+ (<a href="COMMON-LISP____EQL.html">eql</a> x 'STMT) ... ...)</span> and <span class="v">(<a href="COMMON-LISP____EQL.html">eql</a> x 'STMT)</span> is a tau predicate about 
+ <span class="v">x</span>.</p> 
+ 
+ <p>Big Switch rules are recognized when a function is defined (if tau is in 
+ automatic mode).  They generally do not have to be proved explicitly, though 
+ they might be when mutual recursion is involved.  Only the first detected Big 
+ Switch rule about a function <span class="v">fn</span> is recognized.</p> 
+ 
+ <pre class="code">General Form: <i>MV-NTH Synonym</i>: 
+(equal (nth-alt x y) (mv-nth x y)) or 
+(equal (mv-nth x y) (nth-alt x y)) 
+</pre> 
+ 
+ <p>Rules of this form just tell the tau system that the user-defined function 
+ <span class="v">nth-alt</span> is synonymous with the ACL2 primitive function <span class="tt"><a href="ACL2____MV-NTH.html">mv-nth</a></span>. 
+ Because ACL2's rewriter gives special handling to <span class="v">mv-nth</span> by default, 
+ users sometimes define their own versions of that function so they can disable 
+ them and control rewriting better.  By revealing to the tau system that such a 
+ synonym has been introduced you allow Signature rules of Form 2 to be 
+ used.</p>
+</body>
+</html>

@@ -1,0 +1,108 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Nrev</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____NREV">Click for Nrev in the Full Manual</a></h3>
+
+<p>A safe mechanism for implementing something like <span class="v">nreverse</span>, for 
+writing tail-recursive functions that use less memory by avoiding the final 
+<a href="COMMON-LISP____REVERSE.html">reverse</a> step.</p><h3>Motivation</h3> 
+ 
+<p>To avoid stack overflows, you sometimes need tail-recursive executable 
+versions of your functions.  These tail-recursive functions often produce their 
+elements in the reverse of the desired order.  For instance, here is a basic, 
+tail-recursive <a href="https://en.wikipedia.org/wiki/Map_(higher-order_function)" target="_blank"><nobr>map<img src="../Icon_External_Link.png" title="External link to https://en.wikipedia.org/wiki/Map_(higher-order_function)"></nobr></a>:</p> 
+ 
+<pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> map-exec (x acc)
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ATOM.html">atom</a> x)
+      acc
+    (map-exec (<a href="COMMON-LISP____CDR.html">cdr</a> x) (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="NREV____F.html">f</a> (<a href="COMMON-LISP____CAR.html">car</a> x)) acc))))</pre> 
+ 
+<p>But this produces elements in the wrong order.  To correct for this, you 
+might explicitly reverse the elements, e.g.,:</p> 
+ 
+<pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> map (x)
+  (<a href="ACL2____MBE.html">mbe</a> :logic (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ATOM.html">atom</a> x)
+                  nil
+                (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="NREV____F.html">f</a> (<a href="COMMON-LISP____CAR.html">car</a> x)) (map (<a href="COMMON-LISP____CDR.html">cdr</a> x))))
+       :exec (<a href="COMMON-LISP____REVERSE.html">reverse</a> (map-exec x nil))))</pre> 
+ 
+<p>This successfully avoids stack overflows, but since <a href="COMMON-LISP____REVERSE.html">reverse</a> is 
+applicative, this approach allocates twice as many conses as the naive, non 
+tail-recursive version.</p> 
+ 
+<p>In Common Lisp, we could avoid this overhead using <span class="v">nreverse</span>, a 
+destructive routine that can reverse a list in-place by swapping pointers.  But 
+since <span class="v">nreverse</span> is destructive, it wouldn't be sound to just make it 
+generally available in ACL2.</p> 
+ 
+<p>Even so, we would like to have something like <span class="v">nreverse</span> that would allow 
+us to write tail-recursive versions of <span class="v">map</span> without having to allocate 
+double the conses.  In principle, it is okay to use <span class="v">nreverse</span> here because 
+we are only tampering with fresh conses that are not reachable from anywhere 
+else in the program.  (Well, that's almost true; if <span class="v">map-exec</span> were <a href="ACL2____MEMOIZE.html">memoize</a>d, then we could get into trouble.)</p> 
+ 
+<h3>Solution</h3> 
+ 
+<p><span class="v">nrev</span> is, we believe, a safe mechanism for writing tail-recursive 
+functions that can (at your option) avoid this double consing by using 
+destructive, under-the-hood operations.</p> 
+ 
+<p>Without trust tags, <span class="v">nrev</span> is roughly on par with the ordinary 
+<span class="v">reverse</span> based solution:</p> 
+ 
+<ul> 
+ 
+<li>Memory — same as <span class="v">reverse</span>, i.e., still twice as many as the non 
+tail-recursive version.</li> 
+ 
+<li>Runtime — perhaps around 1.3x worse than <span class="v">reverse</span> due to the 
+<a href="ACL2____STOBJ.html">ACL2::stobj</a> overhead.</li> 
+ 
+</ul> 
+ 
+<p>With a trust tag, <span class="v">nrev</span> is roughly on par with the <span class="v">nreverse</span> 
+solution:</p> 
+ 
+<ul> 
+ 
+<li>Memory — same as <span class="v">nreverse</span>, i.e., avoids the double consing 
+problem.</li> 
+ 
+<li>Runtime — perhaps around 1.25x worse than <span class="v">nreverse</span> due to the 
+<a href="ACL2____STOBJ.html">ACL2::stobj</a> overhead, but still faster than a traditional <span class="v">reverse</span> 
+based solution.</li> 
+ 
+</ul> 
+ 
+<h3>Loading <span class="v">nrev</span>
+</h3> 
+ 
+<p>For the pure ACL2 (no trust tags) version, you can use:</p> 
+ 
+<pre class="code">(<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "centaur/nrev/pure" :dir :system)</pre> 
+ 
+<p>For the optimized (trust tags) version, you can instead load:</p> 
+ 
+<pre class="code">(<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "centaur/nrev/fast" :dir :system)</pre> 
+ 
+<p>Note that it's perfectly fine to start with the pure book and then load the 
+fast version later.  Loading the fast version will "retroactively" optimize 
+all functions that are based on <span class="v">nrev</span>.</p> 
+ 
+<h3>Using <span class="v">nrev</span>
+</h3> 
+ 
+<p>These books implement an abstract stobj called <span class="v">nrev</span>.  The logical story 
+is that <span class="v">nrev</span> is just a list.  The fundamental operation on <span class="v">nrev</span> is 
+<a href="ACL2____NREV-PUSH.html">nrev-push</a>, which logically conses "onto the right," like <a href="ACL2____RCONS.html">rcons</a>. 
+Once you have pushed the desired elements, you can get them back out in queue 
+order using <a href="ACL2____NREV-FINISH.html">nrev-finish</a>.</p> 
+ 
+<p>See <a href="NREV____NREV-DEMO.html">nrev-demo</a> for a basic example.</p>
+</body>
+</html>

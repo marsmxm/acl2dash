@@ -1,0 +1,212 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Using-computed-hints-7</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____USING-COMPUTED-HINTS-7">Click for Using-computed-hints-7 in the Full Manual</a></h3>
+
+<p>Using the <span class="v">stable-under-simplificationp</span> flag</p><p>A problem with the example in <a href="ACL2____USING-COMPUTED-HINTS-6.html">using-computed-hints-6</a> is that 
+ exactly one simplification occurs between each (effective) firing of the hint. 
+ Much more commonly we wish to fire a hint once a subgoal has become stable 
+ under simplification.</p> 
+ 
+ <p>A classic example of this is when we are dealing with an interpreter for 
+ some state machine.  We typically do not want the ``step'' function to open up 
+ on the symbolic representation of a state until that state has been maximally 
+ simplified.  We will illustrate with a simple state machine.</p> 
+ 
+ <p>Let us start by defining the step function, <span class="v">stp</span>, and the corresponding 
+ <span class="v">run</span> function that applies it a given number of times.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> stp (<a href="ACL2____S.html">s</a>)
+  (<a href="COMMON-LISP_____B2.html">+</a> 1 s))
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> run (<a href="ACL2____S.html">s</a> n)
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2____ZP.html">zp</a> n)
+      s
+      (run (<a href="ACL2____STP.html">stp</a> s) (<a href="COMMON-LISP____-.html">-</a> n 1))))</pre> 
+ 
+ <p>The step function here is trivial: a state is just a number and the step 
+ function increments it.  In this example we will not be interested in the 
+ theorems we prove but in how we prove them.  The formula we will focus on 
+ is</p> 
+ 
+ <pre class="code">(<a href="ACL2____THM.html">thm</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (run s 7) xxx))</pre> 
+ 
+ <p>This is not a theorem, of course.  But we want to test our advice on 
+ non-theorems because we do not want the advice to work only for proofs that 
+ succeed.  (In the past, we gave advice about using computed hints and that 
+ advice caused the theorem prover to run forever when given formulas that it 
+ couldn't prove — but most of the time the system is presented with 
+ formulas it cannot prove!)</p> 
+ 
+ <p>Furthermore, without some kind of additional rules, the <span class="v">(run s 7)</span> 
+ expression in the conjecture above will not expand at all, because ACL2's 
+ heuristics do not approve.</p> 
+ 
+ <p>In fact, we do not want to take chances that <span class="v">run</span> will be expanded 
+ — we want to control its expansion completely.  Therefore, disable 
+ <span class="v">run</span>.</p> 
+ 
+ <pre class="code">(<a href="ACL2____IN-THEORY.html">in-theory</a> (<a href="ACL2____DISABLE.html">disable</a> run))</pre> 
+ 
+ <p>Now, what do we want?  (That is always a good question to ask!)  We want 
+ <span class="v">(run s 7)</span> to expand ``slowly.''  In particular, we want it to expand 
+ once, to <span class="v">(run (<a href="ACL2____STP.html">stp</a> s) 6)</span>.  Then we want the <span class="v">stp</span> to be expanded and 
+ fully simplified before the <span class="v">run</span> expression is expanded again.  That is, 
+ we want to force the expansion of <span class="v">run</span> whenever the goal is stable under 
+ simplification.  This is sometimes called ``staged simplification.''</p> 
+ 
+ <p>We can achieve staged simplification for any given function symbol by 
+ defining the functions shown below and then using a simple computed hint:</p> 
+ 
+ <pre class="code">(<a href="ACL2____THM.html">thm</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (run s 7) xxx)
+     :hints ((stage run)))</pre> 
+ 
+ <p>By inspecting how <span class="v">stage</span> is defined you can see how to extend it, but 
+ we explain as we go.  To experiment, you can just paste the definitions (and 
+ defmacro) below into your ACL2 shell and then try the <span class="v">thm</span> command.</p> 
+ 
+ <p>First, define this pair of mutually recursive functions. 
+ <span class="v">Find-first-call</span> finds the first call of the function symbol <span class="v">fn</span> in a 
+ given term.</p> 
+ 
+ <pre class="code">(<a href="ACL2____MUTUAL-RECURSION.html">mutual-recursion</a>
+ (<a href="COMMON-LISP____DEFUN.html">defun</a> find-first-call (fn term)
+ ; Find the first call of fn in term.
+  (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="ACL2____VARIABLEP.html">variablep</a> term) nil)
+        ((<a href="ACL2____FQUOTEP.html">fquotep</a> term) nil)
+        ((<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____FFN-SYMB.html">ffn-symb</a> term) fn)
+         term)
+        (t (find-first-call-lst fn (<a href="ACL2____FARGS.html">fargs</a> term)))))
+ (<a href="COMMON-LISP____DEFUN.html">defun</a> find-first-call-lst (fn lst)
+ ; Find the first call of fn in a list of terms.
+  (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____ENDP.html">endp</a> lst) nil)
+        (t (<a href="COMMON-LISP____OR.html">or</a> (find-first-call fn (<a href="COMMON-LISP____CAR.html">car</a> lst))
+               (find-first-call-lst fn (<a href="COMMON-LISP____CDR.html">cdr</a> lst)))))))</pre> 
+ 
+ <p>We will arrange for the computed hint to generate an <span class="v">:EXPAND</span> hint for 
+ the first call of <span class="v">fn</span>, whenever the goal becomes stable under 
+ simplification.  If no call is found, the hint will do nothing.  To make sure 
+ the hint will not loop indefinitely (for example, by forcing <span class="v">fn</span> to expand 
+ only to have the rewriter ``fold'' it back up again), we will provide the hint 
+ with a bound that stops it after some number of iterations.  Here is the basic 
+ function that creates the <span class="v">expand</span> hint and replaces itself to count 
+ down.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> stage1 (fn max clause flg)
+; If the clause is stable under simplification and there is a call of
+; fn in it, expand it.  But don't do it more than max times.
+ (<a href="COMMON-LISP____LET.html">let</a> ((temp (<a href="COMMON-LISP____AND.html">and</a> flg
+                  (find-first-call-lst fn clause))))
+   (<a href="COMMON-LISP____IF.html">if</a> temp
+       (<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2____ZP.html">zp</a> max)
+           (<a href="ACL2____CW.html">cw</a> "~%~%HINT PROBLEM:  The maximum repetition count of ~
+                your STAGE hint been reached without eliminating ~
+                all of the calls of ~x0.  You could supply a larger ~
+                count with the optional second argument to STAGE ~
+                (which defaults to 100).  But think about what is ~
+                happening! Is each stage permanently eliminating a ~
+                call of ~x0?~%~%"
+               fn)
+         `(:computed-hint-replacement
+            ((stage1 ',fn ,(<a href="COMMON-LISP____-.html">-</a> max 1)
+                     clause
+                     stable-under-simplificationp))
+           :expand (,temp)))
+     nil)))</pre> 
+ 
+ <p>Suppose that when <span class="v">stage1</span> is called, <span class="v">fn</span> is the function we want to 
+ expand, <span class="v">max</span> is the maximum number of iterations of this expansion, 
+ <span class="v">clause</span> is the current goal clause, and <span class="v">flg</span> is the value of the 
+ <span class="v">stable-under-simplificationp</span> flag.  Then if <span class="v">clause</span> is stable and we 
+ can find a call of <span class="v">fn</span> in it, we ask whether <span class="v">max</span> is exhausted.  If 
+ so, we print an ``error message'' to the comment window with <span class="tt"><a href="ACL2____CW.html">cw</a></span> and 
+ return <span class="v">nil</span> (the value of <span class="v">cw</span>).  That <span class="v">nil</span> means the hint does 
+ nothing.  But if <span class="v">max</span> is not yet exhausted, we return a new hint.  As you 
+ can see above, the hint replaces itself with another <span class="v">stage1</span> hint with the 
+ same <span class="v">fn</span> and a decremented <span class="v">max</span> to be applied to the new <span class="v">clause</span> 
+ and the then-current value of <span class="v">stable-under-simplificationp</span>.  The hint 
+ also contains an <span class="v">:expand</span> directive for the call of <span class="v">fn</span> found.</p> 
+ 
+ <p>Thus, if the computed hint was:</p> 
+ 
+ <pre class="code">(stage1 'run 5 clause stable-under-simplificationp)</pre> 
+ 
+ <p>and <span class="v">(run s 7)</span> occurs in the clause, then it will generate</p> 
+ 
+ <pre class="code">(:computed-hint-replacement
+  ((stage1 'run 4 clause stable-under-simplificationp))
+ :expand ((run s 7)))</pre> 
+ 
+ <p>which will in turn replace the old <span class="v">stage1</span> hint with the new one and 
+ will apply <span class="v">:expand ((run s 7))</span> to the current goal.</p> 
+ 
+ <p>We can make this more convenient by defining the macro:</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> stage (fn &amp;optional (<a href="COMMON-LISP____MAX.html">max</a> '100))
+ `(stage1 ',fn ,max clause stable-under-simplificationp))</pre> 
+ 
+ <p>Note that the macro allows us to either provide the maximum bound or let it 
+ default to 100.</p> 
+ 
+ <p>Henceforth, we can type</p> 
+ 
+ <pre class="code">(<a href="ACL2____THM.html">thm</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (run s 7) xxx)
+     :hints ((stage run)))</pre> 
+ 
+ <p>to stage the opening of <span class="v">run</span> up to 100 times, or we can write</p> 
+ 
+ <pre class="code">(<a href="ACL2____THM.html">thm</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (run s 7) xxx)
+     :hints ((stage run 5)))</pre> 
+ 
+ <p>to stage it only 5 times.  In the latter example, the system with print a 
+ ``error message'' after the fifth expansion.</p> 
+ 
+ <p>Note that if we executed</p> 
+ 
+ <pre class="code">(<a href="ACL2____SET-DEFAULT-HINTS.html">set-default-hints</a> '((stage run)))</pre> 
+ 
+ <p>then we could attack all theorems (involving <span class="v">run</span>) with staged 
+ simplification (up to bound 100), without typing an explicit hint.</p> 
+ 
+ <pre class="code">(<a href="ACL2____THM.html">thm</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (run s 7) xxx))</pre> 
+ 
+ <p>Using techniques similar to those above we have implemented ``priority 
+ phased simplification'' and provided it as a book.  See community book 
+ <span class="v">books/misc/priorities.lisp</span>.  This is an idea suggested by Pete Manolios, 
+ by which priorities may be assigned to rules and then the simplifier 
+ simplifies each subgoal maximally under the rules of a given priority before 
+ enabling the rules of the next priority level.  The book above documents both 
+ how we implement it with computed hints and how to use it.</p> 
+ 
+ <p>Here is another example of using the <span class="v">stable-under-simplificationp</span> flag 
+ to delay certain actions.  It defines a default hint, see <a href="ACL2____DEFAULT-HINTS.html">default-hints</a>, which will enable <a href="ACL2____NON-LINEAR-ARITHMETIC.html">non-linear-arithmetic</a> on precisely 
+ those goals which are stable-under-simplificationp.  It also uses the 
+ <span class="v">HISTORY</span> and <span class="v">PSPV</span> variables to determine when toggling <a href="ACL2____NON-LINEAR-ARITHMETIC.html">non-linear-arithmetic</a> is appropriate.  These variables are documented only in 
+ the source code.  If you start using these variables extensively, please 
+ contact the developers of ACL2 or Robert Krug (<span class="v">rkrug@cs.utexas.edu</span>) and 
+ let us know how we can help.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> nonlinearp-default-hint (<a href="ACL2____STABLE-UNDER-SIMPLIFICATIONP.html">stable-under-simplificationp</a> hist pspv)
+  (<a href="COMMON-LISP____COND.html">cond</a> (<a href="ACL2____STABLE-UNDER-SIMPLIFICATIONP.html">stable-under-simplificationp</a>
+         (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____ACCESS.html">access</a> rewrite-constant
+                          (<a href="ACL2____ACCESS.html">access</a> prove-spec-var pspv :rewrite-constant)
+                          :nonlinearp))
+             '(:computed-hint-replacement t
+               :nonlinearp t)
+           nil))
+        ((<a href="ACL2____ACCESS.html">access</a> rewrite-constant
+                 (<a href="ACL2____ACCESS.html">access</a> prove-spec-var pspv :rewrite-constant)
+                 :nonlinearp)
+         (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____CAAR.html">caar</a> hist) 'SETTLED-DOWN-CLAUSE))
+             '(:computed-hint-replacement t
+               :nonlinearp nil)
+           nil))
+        (t
+         nil)))</pre>
+</body>
+</html>

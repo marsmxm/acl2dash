@@ -1,0 +1,490 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Free-variables-examples-rewrite</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____FREE-VARIABLES-EXAMPLES-REWRITE">Click for Free-variables-examples-rewrite in the Full Manual</a></h3>
+
+<p>Examples pertaining to free variables in <a href="ACL2____REWRITE.html">rewrite</a> rules</p><p>The following examples illustrate ACL2's handling of free variables 
+ in <a href="ACL2____REWRITE.html">rewrite</a> rules, as well as user control over how such free variables 
+ are handled.  See <a href="ACL2____FREE-VARIABLES.html">free-variables</a> for a background discussion.</p> 
+ 
+ <pre class="code">;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Example 1
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(<a href="ACL2____DEFSTUB.html">defstub</a> p2 (x y) t) ; introduce unconstrained function
+
+; Get warning because of free variable.  This would be an error if you had
+; first executed (<a href="ACL2____SET-MATCH-FREE-ERROR.html">set-match-free-error</a> t) in order to force yourself to
+; specify :match-free (illustrated later, below).
+(<a href="ACL2____DEFAXIOM.html">defaxiom</a> p2-trans
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (p2 x y)
+                (p2 y z))
+           (p2 x z)))
+
+; Succeeds.
+(<a href="ACL2____THM.html">thm</a> (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (p2 a c)
+                   (p2 a b)
+                   (p2 c d))
+              (p2 a d)))
+
+; The following causes an error because p2-trans is not a rune.
+(<a href="ACL2____ADD-MATCH-FREE-OVERRIDE.html">add-match-free-override</a> :once p2-trans)
+
+; After the following, the rewrite rule p2-trans will only allow one
+; attempt per hypothesis to bind free variables.
+(<a href="ACL2____ADD-MATCH-FREE-OVERRIDE.html">add-match-free-override</a> :once (:rewrite p2-trans))
+
+; Now this same theorem fails to be proved.  Here's why.  The
+; context for proving (p2 a d) happens to include the hypotheses in
+; reverse order.  So when the first hypothesis of p2-trans, namely
+; (p2 x y), is relieved, where x is bound to a (as we are attempting
+; to rewrite the current literal (p2 a d)), we find (p2 a b) in the
+; context before (p2 a c) and hence y is bound to b.  The
+; instantiated second hypothesis of p2-trans is thus (p2 b d), and
+; the proof fails.  Before the add-match-free-override form above,
+; the proof succeeded because the rewriter was allowed to backtrack
+; and find the other binding for the first hypothesis of p2-trans,
+; namely, y bound to c.  Then the instantiated second hypothesis of
+; p2-trans is (p2 c d), which is known to be true in the current
+; context.
+(<a href="ACL2____THM.html">thm</a> (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (p2 a c)
+                   (p2 a b)
+                   (p2 c d))
+              (p2 a d)))
+
+; Return to original behavior for binding free variables.
+(<a href="ACL2____ADD-MATCH-FREE-OVERRIDE.html">add-match-free-override</a> :all t)
+
+; Succeeds once again.
+(<a href="ACL2____THM.html">thm</a> (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (p2 a c)
+                   (p2 a b)
+                   (p2 c d))
+              (p2 a d)))
+
+(<a href="ACL2____U.html">u</a>) ; undo (<a href="ACL2____ADD-MATCH-FREE-OVERRIDE.html">add-match-free-override</a> :all t)
+
+; This is an error, since no further arguments should appear after
+; :clear.
+(<a href="ACL2____ADD-MATCH-FREE-OVERRIDE.html">add-match-free-override</a> :clear t)
+
+; Return all rules to original behavior for binding free variables,
+; regardless of which previous add-match-free-override forms have
+; been executed.
+(<a href="ACL2____ADD-MATCH-FREE-OVERRIDE.html">add-match-free-override</a> :clear)
+
+; This succeeds just as it did originally.
+(<a href="ACL2____THM.html">thm</a> (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (p2 a c)
+                   (p2 a b)
+                   (p2 c d))
+              (p2 a d)))
+
+(<a href="ACL2____UBT_12.html">ubt!</a> 'p2-trans) ; back to the start, except retain the defstub
+
+; Require that :match-free be specified for :linear and :rewrite rules with
+; free variables.
+(<a href="ACL2____SET-MATCH-FREE-ERROR.html">set-match-free-error</a> t)
+
+; Fails because :match-free is missing.
+(<a href="ACL2____DEFAXIOM.html">defaxiom</a> p2-trans
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (p2 x y)
+                (p2 y z))
+           (p2 x z)))
+
+; Fails because :match-free must be followed by :once or :all.
+(<a href="ACL2____DEFAXIOM.html">defaxiom</a> p2-trans
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (p2 x y)
+                (p2 y z))
+           (p2 x z))
+  :rule-classes ((:rewrite :match-free nil)))
+
+; Succeeds, this time with no warning at all.
+(<a href="ACL2____DEFAXIOM.html">defaxiom</a> p2-trans
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (p2 x y)
+                (p2 y z))
+           (p2 x z))
+  :rule-classes ((:rewrite :match-free :once)))
+
+; Fails because we only bind once (see earlier long comment).
+(<a href="ACL2____THM.html">thm</a> (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (p2 a c)
+                   (p2 a b)
+                   (p2 c d))
+              (p2 a d)))
+
+; Treat p2-trans as though `:match-free :all' had been specified.
+(<a href="ACL2____ADD-MATCH-FREE-OVERRIDE.html">add-match-free-override</a> :all (:rewrite p2-trans))
+
+; Succeeds since more than one binding is allowed for p2-trans.
+(<a href="ACL2____THM.html">thm</a> (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (p2 a c)
+                   (p2 a b)
+                   (p2 c d))
+              (p2 a d)))
+
+(<a href="ACL2____U.html">u</a>)
+(<a href="ACL2____U.html">u</a>)
+
+; Specify that future :linear and :rewrite rules with free variables
+; that do not have :match-free specified are treated as though
+; `:match-free :once' were specified.
+(<a href="ACL2____SET-MATCH-FREE-DEFAULT.html">set-match-free-default</a> :once)
+
+; Succeeds without error since `:match-free' is specified, as described
+; above.  But there is a warning, since :match-free is not specified for this
+; :rewrite rule.
+(<a href="ACL2____DEFAXIOM.html">defaxiom</a> p2-trans
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (p2 x y)
+                (p2 y z))
+           (p2 x z)))
+
+; Fails since only single bindings are allowed for p2-trans.
+(<a href="ACL2____THM.html">thm</a> (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (p2 a c)
+                   (p2 a b)
+                   (p2 c d))
+              (p2 a d)))
+
+; Treat p2-trans as though `:match-free :all' had been specified.
+(<a href="ACL2____ADD-MATCH-FREE-OVERRIDE.html">add-match-free-override</a> :all t)
+
+; Succeeds.
+(<a href="ACL2____THM.html">thm</a> (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (p2 a c)
+                   (p2 a b)
+                   (p2 c d))
+              (p2 a d)))
+
+; Test searching of ground units, i.e. rewrite rules without variables on the
+; left side of the conclusion, for use in relieving hypotheses with free
+; variables.  This is a very contrived example.
+
+(<a href="ACL2____UBT_12.html">ubt!</a> 1) ; back to the start
+
+(<a href="ACL2____ENCAPSULATE.html">encapsulate</a>
+ (((p1 *) =&gt; *)
+  ((p2 * *) =&gt; *)
+  ((p3 *) =&gt; *)
+  ((a) =&gt; *)
+  ((b) =&gt; *))
+ (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> p1 (x) x))
+ (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> p2 (x y) (<a href="COMMON-LISP____LIST.html">list</a> x y)))
+ (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> p3 (x) x))
+ (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> a () 0))
+ (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> b () 0)))
+
+; Allow default of :match-free :all (form may be omitted).
+(<a href="ACL2____SET-MATCH-FREE-ERROR.html">set-match-free-error</a> nil)
+
+(<a href="ACL2____DEFAXIOM.html">defaxiom</a> ax1
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (p2 x y)
+                (p1 y))
+           (p3 x)))
+
+(<a href="ACL2____DEFAXIOM.html">defaxiom</a> p2-a-b
+  (p2 (a) (b)))
+
+(<a href="ACL2____DEFAXIOM.html">defaxiom</a> p2-a-a
+  (p2 (a) (a)))
+
+(<a href="ACL2____DEFAXIOM.html">defaxiom</a> p1-b
+  (p1 (b)))
+
+; Succeeds; see long comment below on next attempt to prove this
+; theorem.
+(<a href="ACL2____THM.html">thm</a> (<a href="ACL2____IMPLIES.html">implies</a> (p2 (a) y)
+              (p3 (a))))
+
+; Now ax1 will only relieve hypothesis (p2 x y) for one binding of y:
+(<a href="ACL2____ADD-MATCH-FREE-OVERRIDE.html">add-match-free-override</a> :once t)
+
+; Fails when ax1 attempts to rewrite the conclusion to true, because
+; the most recent ground unit for hypothesis (p2 x y) with x bound
+; to (a) is rule p2-a-a, which binds y to (a).  If more than one ground
+; unit could be used then we would backtrack and apply rule p2-a-b,
+; which binds y to (b) and hence hypothesis (p1 y) of ax1 is
+; relieved by rule p1-b.
+(<a href="ACL2____THM.html">thm</a> (<a href="ACL2____IMPLIES.html">implies</a> (p2 (a) y)
+              (p3 (a))))
+
+; Return rules to original :match-free behavior.
+(<a href="ACL2____ADD-MATCH-FREE-OVERRIDE.html">add-match-free-override</a> :clear)
+
+; Succeeds once again.
+(<a href="ACL2____THM.html">thm</a> (<a href="ACL2____IMPLIES.html">implies</a> (p2 (a) y)
+              (p3 (a))))
+
+; Just for kicks, change the behavior of a built-in rule irrelevant
+; to the proof at hand.
+(<a href="ACL2____ADD-MATCH-FREE-OVERRIDE.html">add-match-free-override</a> :once (:rewrite string&lt;-l-trichotomy))
+
+; Still succeeds.
+(<a href="ACL2____THM.html">thm</a> (<a href="ACL2____IMPLIES.html">implies</a> (p2 (a) y)
+              (p3 (a))))</pre> 
+ 
+ <pre class="code">;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Example 2
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;</pre> 
+ 
+ <p>The next example illustrates the use of the <a href="ACL2____BREAK-REWRITE.html">break-rewrite</a> facility 
+ to get information about handling of free variables by the rewriter. 
+ Explanation is given after this (edited) transcript.  Input begins on lines 
+ with a prompt (search for ``ACL2''); the rest is output.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____ENCAPSULATE.html">encapsulate</a>
+        ((p1 (<a href="ACL2____U.html">u</a> x) t)
+         (bad (x) t)
+         (p2 (x y z) t)
+         (bar (x y) t)
+         (foo (x y) t)
+         (poo (x y) t)
+         (prop (<a href="ACL2____U.html">u</a>) t))
+
+        (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> p1 (<a href="ACL2____U.html">u</a> x) (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORE.html">ignore</a> u x)) nil))
+        (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> bad (x) (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORE.html">ignore</a> x)) nil))
+        (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> p2 (x y z) (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORE.html">ignore</a> x y z)) nil))
+        (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> bar (x y) (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORE.html">ignore</a> x y)) nil))
+        (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> foo (x y) (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORE.html">ignore</a> x y)) nil))
+        (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> poo (x y) (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORE.html">ignore</a> x y)) nil))
+        (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> prop (<a href="ACL2____U.html">u</a>) (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORE.html">ignore</a> u)) t))
+
+        (<a href="ACL2____DEFTHM.html">defthm</a> foo-poo
+          (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____SYNTAXP.html">syntaxp</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> y 'y3))
+                   (<a href="COMMON-LISP____EQUAL.html">equal</a> (foo x y)
+                          (poo x y))))
+
+        (<a href="ACL2____DEFTHM.html">defthm</a> lemma-1
+          (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (p1 u x)
+                        (bad x)
+                        (p2 x y z)
+                        (bar x y)
+                        (<a href="COMMON-LISP____EQUAL.html">equal</a> x x) ; admittedly silly!
+                        (foo x y))
+                   (prop u))
+          :rule-classes ((:rewrite :match-free :all))))
+
+; [[ output omitted ]]
+
+Summary
+Form:  ( ENCAPSULATE ((P1 ...) ...) ...)
+Rules: NIL
+Warnings:  Subsume and Non-rec
+Time:  0.08 seconds (prove: 0.00, print: 0.01, other: 0.06)
+ T
+ACL2 !&gt;:brr t
+The monitored runes are:
+NIL
+ T
+ACL2 !&gt;:monitor (:rewrite lemma-1) t
+(((:REWRITE LEMMA-1) 'T))
+ACL2 !&gt;(<a href="ACL2____THM.html">thm</a> (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (p1 u0 x1)
+                          (bad x1)
+                          (bad x3)
+                          (bar x3 y1)
+                          (bar x3 y3)
+                          (p1 u0 x2)
+                          (p1 u0 x3)
+                          (p2 x3 y1 z1)
+                          (p2 x3 y3 z1))
+                     (prop u0)))
+
+(1 Breaking (:REWRITE LEMMA-1) on (PROP U0):
+1 ACL2 &gt;:eval
+
+1x (:REWRITE LEMMA-1) failed because :HYP 1 contains free variables.
+The following display summarizes the attempts to relieve hypotheses
+by binding free variables; see :DOC free-variables.
+
+    [1] X : X1
+Failed because :HYP 3 contains free variables Y and Z, for which no
+suitable bindings were found.
+    [1] X : X2
+Failed because :HYP 2 rewrote to (BAD X2).
+    [1] X : X3
+        [3] Z : Z1
+            Y : Y1
+Failed because :HYP 6 rewrote to (FOO X3 Y1).
+        [3] Z : Z1
+            Y : Y3
+Failed because :HYP 6 rewrote to (POO X3 Y3).
+
+1 ACL2 &gt;:unify-subst
+     U : U0
+1 ACL2 &gt;</pre> 
+ 
+ <p>The <span class="v">:eval</span> command above asks the rewriter to attempt to apply the 
+ rewrite rule <span class="v">lemma-1</span> to the term <span class="v">(prop u0)</span>, shown just above the 
+ line with <span class="v">:eval</span>.  As we can see at the end, the variable <span class="v">u</span> in the 
+ conclusion of <span class="v">lemma-1</span> is being bound to the variable <span class="v">u0</span> in the 
+ conjecture.  The first hypothesis of <span class="v">lemma-1</span> is <span class="v">(p1 u x)</span>, so the 
+ rewriter looks for some <span class="v">x</span> for which <span class="v">(p1 u0 x)</span> is known to be true. 
+ It finds <span class="v">x1</span>, and then goes on to consider the second hypothesis, <span class="v">(bad
+ x)</span>.  Since the theorem we are proving has <span class="v">(bad x1)</span> in the hypothesis 
+ and <span class="v">x</span> is currently bound to <span class="v">x1</span>, the rewriter is satisfied and moves 
+ on to the third hypothesis of <span class="v">lemma-1</span>, <span class="v">(p2 x y z)</span>.  However, <span class="v">x</span> 
+ is bound to <span class="v">x1</span> and there are no instances of <span class="v">y</span> and <span class="v">z</span> for which 
+ <span class="v">(p2 x1 y z)</span> is known in the current context.  All of the above analysis 
+ is summarized in the first part of the output from <span class="v">:eval</span> above:</p> 
+ 
+ <pre class="code">    [1] X : X1
+Failed because :HYP 3 contains free variables Y and Z, for which no
+suitable bindings were found.</pre> 
+ 
+ <p>Thus, the binding of <span class="v">x</span> to <span class="v">x1</span> on behalf of the first hypothesis 
+ has failed.</p> 
+ 
+ <p>The rewriter now backs up to look for other values of <span class="v">x</span> that satisfy 
+ the first hypothesis, and finds <span class="v">x2</span> because our current theorem has a 
+ hypothesis of <span class="v">(p1 u0 x2)</span>.  But this time, the second hypothesis of 
+ <span class="v">lemma-1</span>, <span class="v">(bad x)</span>, is not known to be true for <span class="v">x</span>; that is, 
+ <span class="v">(bad x2)</span> does not rewrite to <span class="v">t</span>; in fact, it rewrites to itself. 
+ That explains the next part of the output from <span class="v">:eval</span> above:</p> 
+ 
+ <pre class="code">    [1] X : X2
+Failed because :HYP 2 rewrote to (BAD X2).</pre> 
+ 
+ <p>The rewriter now backs up again to look for other values of <span class="v">x</span> that 
+ satisfy the first hypothesis, and finds <span class="v">x3</span> because our current theorem 
+ has a hypothesis of <span class="v">(p1 u0 x3)</span>.  This time, the second hypothesis of 
+ <span class="v">lemma-1</span> is not a problem, and moreover, the rewriter is able to bind 
+ <span class="v">y</span> and <span class="v">z</span> to <span class="v">y1</span> and <span class="v">z1</span>, respectively, in order to satisfy 
+ the third hypothesis, <span class="v">(p2 x y z)</span>: that is, <span class="v">(p2 x2 y1 z1)</span> is known in 
+ the current context.  That explains more of the above output from 
+ <span class="v">:eval</span>:</p> 
+ 
+ <pre class="code">[1] X : X3
+    [3] Z : Z1
+        Y : Y1</pre> 
+ 
+ <p>Unfortunately, the sixth hypothesis, <span class="v">(foo x y)</span>, rewrites to itself 
+ under the above bindings:</p> 
+ 
+ <pre class="code">Failed because :HYP 6 rewrote to (FOO X3 Y1).</pre> 
+ 
+ <p>So the rewriter looks for other bindings to satisfy the third hypothesis 
+ and finds these.</p> 
+ 
+ <pre class="code">[3] Z : Z1
+    Y : Y3</pre> 
+ 
+ <p>This time, the sixth hypothesis can be rewritten under the above bindings, 
+ from <span class="v">(foo x3 y3)</span> to <span class="v">(poo x3 y3)</span> by lemma <span class="v">foo-poo</span>, but still not 
+ to <span class="v">t</span>.</p> 
+ 
+ <pre class="code">Failed because :HYP 6 rewrote to (POO X3 Y3).</pre> 
+ 
+ <p>There are no more free variable bindings to try, so this concludes the 
+ output from <span class="v">:eval</span>.</p> 
+ 
+ <pre class="code">;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Example 3
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;</pre> 
+ 
+ <p>The next pair of examples illustrates so-called ``binding hypotheses'' (see 
+ <a href="ACL2____FREE-VARIABLES.html">free-variables</a>) and explores some of their subtleties.  The first shows 
+ binding hypotheses in action on a simple example.  The second shows how 
+ binding hypotheses interact with equivalence relations and explains the role 
+ of <span class="tt"><a href="ACL2____DOUBLE-REWRITE.html">double-rewrite</a></span>.</p> 
+ 
+ <p>Our first example sets up a theory with two user-supplied rewrite rules, 
+ one of which has a binding hypothesis.  Below we explain how that binding 
+ hypothesis contributes to the proof.</p> 
+ 
+ <pre class="code">; Define some unary functions.
+(<a href="COMMON-LISP____DEFUN.html">defun</a> f (x) (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORE.html">ignore</a> x)) t)
+(<a href="COMMON-LISP____DEFUN.html">defun</a> g (x) x)
+(<a href="COMMON-LISP____DEFUN.html">defun</a> h (x) x)
+(<a href="COMMON-LISP____DEFUN.html">defun</a> k (x) x)
+
+; Prove some simple lemmas.  Note the binding hypothesis in g-rewrite.
+(<a href="ACL2____DEFTHM.html">defthm</a> f-k-h
+  (f (k (h x))))
+(<a href="ACL2____DEFTHM.html">defthm</a> g-rewrite
+       (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> y (k x)) ; binding hypothesis
+                     (f y))
+                (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____G.html">g</a> x) y)))
+
+; Restrict to a theory that includes the above lemmas but avoids the above
+; definitions.
+(<a href="ACL2____IN-THEORY.html">in-theory</a> (<a href="ACL2____UNION-THEORIES.html">union-theories</a> (<a href="ACL2____THEORY.html">theory</a> 'minimal-theory)
+                           '(f-k-h g-rewrite)))
+
+; Prove a theorem.
+(<a href="ACL2____THM.html">thm</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____G.html">g</a> (h a)) (k (h a))))</pre> 
+ 
+ <p>Let us look at how ACL2 uses the above binding hypothesis in the proof of 
+ the preceding <span class="v">thm</span> form.  The rewriter considers the term <span class="v">(<a href="ACL2____G.html">g</a> (h a))</span> 
+ and finds a match with the left-hand side of the rule <span class="v">g-rewrite</span>, binding 
+ <span class="v">x</span> to <span class="v">(h a)</span>.  The first hypothesis binds <span class="v">y</span> to the result of 
+ rewriting <span class="v">(k x)</span> in the current context, where the variable <span class="v">x</span> is 
+ bound to the term <span class="v">(h a)</span>; thus <span class="v">y</span> is bound to <span class="v">(k (h a))</span>.  The 
+ second hypothesis, <span class="v">(f y)</span>, is then rewritten under this binding, and the 
+ result is <span class="v">t</span> by application of the rewrite rule <span class="v">f-k-h</span>.  The rule 
+ <span class="v">g-rewrite</span> is then applied under the already-mentioned binding of <span class="v">x</span> 
+ to <span class="v">(h a)</span>.  This rule application triggers a recursive rewrite of the 
+ right-hand side of <span class="v">g-rewrite</span>, which is <span class="v">y</span>, in a context where <span class="v">y</span> 
+ is bound (as discussed above) to <span class="v">(k (h a))</span>.  The result of this rewrite 
+ is that same term, <span class="v">(k (h a))</span>.  The original call of <span class="v">equal</span> then 
+ trivially rewrites to <span class="v">t</span>.</p> 
+ 
+ <p>We move on now to our second example, which is similar but involves a 
+ user-defined equivalence relation.  You may find it helpful to review 
+ <span class="v">:equivalence</span> rules; see <a href="ACL2____EQUIVALENCE.html">equivalence</a>.</p> 
+ 
+ <p>Recall that when a hypothesis is a call of an equivalence relation other 
+ than <span class="v">equal</span>, the second argument must be a call of <span class="tt"><a href="ACL2____DOUBLE-REWRITE.html">double-rewrite</a></span> 
+ in order for the hypothesis to be treated as a binding hypothesis.  That is 
+ indeed the case below; an explanation follows.</p> 
+ 
+ <pre class="code">; Define an equivalence relation.
+(<a href="COMMON-LISP____DEFUN.html">defun</a> my-equiv (x y) (<a href="COMMON-LISP____EQUAL.html">equal</a> x y))
+(<a href="ACL2____DEFEQUIV.html">defequiv</a> my-equiv) ; introduces rule MY-EQUIV-IS-AN-EQUIVALENCE
+
+; Define some unary functions
+(<a href="COMMON-LISP____DEFUN.html">defun</a> f (x) (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORE.html">ignore</a> x)) t)
+(<a href="COMMON-LISP____DEFUN.html">defun</a> g (x) x)
+(<a href="COMMON-LISP____DEFUN.html">defun</a> h1 (x) x)
+(<a href="COMMON-LISP____DEFUN.html">defun</a> h2 (x) x)
+
+; Prove some simple lemmas.  Note the binding hypothesis in lemma-3.
+(<a href="ACL2____DEFTHM.html">defthm</a> lemma-1
+  (my-equiv (h1 x) (h2 x)))
+(<a href="ACL2____DEFTHM.html">defthm</a> lemma-2
+  (f (h2 x)))
+(<a href="ACL2____DEFTHM.html">defthm</a> lemma-3
+       (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (my-equiv y (<a href="ACL2____DOUBLE-REWRITE.html">double-rewrite</a> x)) ; binding hypothesis
+                     (f y))
+                (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____G.html">g</a> x) y)))
+
+; Restrict to a theory that includes the above lemmas but avoids the above
+; definitions.
+(<a href="ACL2____IN-THEORY.html">in-theory</a> (<a href="ACL2____UNION-THEORIES.html">union-theories</a> (<a href="ACL2____THEORY.html">theory</a> 'minimal-theory)
+                           '(lemma-1 lemma-2 lemma-3
+                                     my-equiv-is-an-equivalence)))
+
+; Prove a theorem.
+(<a href="ACL2____THM.html">thm</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____G.html">g</a> (h1 a)) (h2 a)))</pre> 
+ 
+ <p>The proof succeeds much as in the first example, but the following 
+ observation is key: when ACL2 binds <span class="v">y</span> upon considering the first 
+ hypothesis of <span class="v">lemma-3</span>, it rewrites the term <span class="v">(<a href="ACL2____DOUBLE-REWRITE.html">double-rewrite</a> x)</span> in a 
+ context where it need only preserve the equivalence relation <span class="v">my-equiv</span>. 
+ At this point, <span class="v">x</span> is bound by applying <span class="v">lemma-3</span> to the term <span class="v">(<a href="ACL2____G.html">g</a> (h1
+ a))</span>; so, <span class="v">x</span> is bound to <span class="v">(h1 a)</span>.  The rule <span class="v">lemma-1</span> then applies 
+ to rewrite this occurrence of <span class="v">x</span> to <span class="v">(h2 a)</span>, but only because it 
+ suffices to preserve <span class="v">my-equiv</span>.  Thus <span class="v">y</span> is ultimately bound to <span class="v">(h2
+ a)</span>, and the proof succeeds as one would expect.</p> 
+ 
+ <p>If we tweak the above example slightly by disabling the user's <a href="ACL2____EQUIVALENCE.html">equivalence</a> <a href="ACL2____RUNE.html">rune</a>, then the proof of the <span class="tt"><a href="ACL2____THM.html">thm</a></span> form fails because 
+ the above rewrite of <span class="v">(<a href="ACL2____DOUBLE-REWRITE.html">double-rewrite</a> x)</span> is done in a context where it no 
+ longer suffices to preserve <span class="v">my-equiv</span> as we dive into the second argument 
+ of <span class="v">my-equiv</span> in the first hypothesis of <span class="v">lemma-3</span>; so, <span class="v">lemma-1</span> 
+ does not apply this time.</p> 
+ 
+ <pre class="code">(<a href="ACL2____IN-THEORY.html">in-theory</a> (<a href="ACL2____UNION-THEORIES.html">union-theories</a> (<a href="ACL2____THEORY.html">theory</a> 'minimal-theory)
+                           '(lemma-1 lemma-2 lemma-3)))
+
+; Proof fails in this case!
+(<a href="ACL2____THM.html">thm</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____G.html">g</a> (h1 a)) (h2 a)))</pre>
+</body>
+</html>

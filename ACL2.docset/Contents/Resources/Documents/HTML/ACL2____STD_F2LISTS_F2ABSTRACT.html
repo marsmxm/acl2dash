@@ -1,0 +1,186 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Std/lists/abstract</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____STD_F2LISTS_F2ABSTRACT">Click for Std/lists/abstract in the Full Manual</a></h3>
+
+<p>Abstract theories for listp, projection, and mapappend functions</p><p>This book defines various generic functions:</p> 
+<ul> 
+<li>element-p</li> 
+<li>element-fix</li> 
+<li>element-equiv</li> 
+<li>element-list-p</li> 
+<li>element-list-fix</li> 
+<li>element-list-equiv</li> 
+<li>element-list-projection</li> 
+<li>element-list-mapappend</li> 
+</ul> 
+ 
+<p>The idea is that in other books, we can add various theorems about how these 
+generic functions behave in relation to other functions such as nth, index-of, 
+member, etc, which we can use in pluggable forms of <a href="STD____DEFLIST.html">std::deflist</a>, <a href="STD____DEFPROJECTION.html">std::defprojection</a>, or <a href="STD____DEFMAPAPPEND.html">std::defmapappend</a>.  However, as yet this 
+functionality is only implemented for <a href="STD____DEFLIST.html">std::deflist</a> (and through <a href="STD____DEFLIST.html">std::deflist</a>, also <a href="FTY____DEFLIST.html">fty::deflist</a>).</p> 
+ 
+<p>We'll describe in this documentation how to write theorems that can be 
+instantiated by <a href="STD____DEFLIST.html">std::deflist</a> so that they can be used for arbitrary 
+typed lists.  Eventually, this will also apply to <a href="STD____DEFPROJECTION.html">std::defprojection</a> and 
+<a href="STD____DEFMAPAPPEND.html">std::defmapappend</a>.</p> 
+ 
+<h2>Writing Generic Typed-list Rules</h2> 
+ 
+<h3>Generic Rule Macros</h3> 
+<p>Deflist creates theorems for each new list type it defines by instantiating 
+a list of theorems recorded in a table.  To create a new theorem and add it to 
+that table so that it is available to deflist, use the <a href="ACL2____DEF-LISTP-RULE.html">def-listp-rule</a> 
+macro, which is similar to defthm.  There are other such macros for rules about 
+other kinds of functions as well:</p> 
+ 
+<ul> 
+<li>
+<span class="v">def-listp-rule</span> theorems will be instantiated by <a href="STD____DEFLIST.html">std::deflist</a> and <a href="FTY____DEFLIST.html">fty::deflist</a>
+</li> 
+<li>
+<span class="v">def-listfix-rule</span> theorems will be instantiated by <a href="FTY____DEFLIST.html">fty::deflist</a>, pertaining to the list-fix function it introduces</li> 
+<li>
+<span class="v">def-projection-rule</span> theorems will be instantiated by <a href="STD____DEFPROJECTION.html">std::defprojection</a>
+</li> 
+<li>
+<span class="v">def-mapappend-rule</span> theorems will be instantiated by <a href="STD____DEFMAPAPPEND.html">std::defmapappend</a>.</li> 
+</ul> 
+ 
+<p>These macros all take the same basic arguments as <a href="ACL2____DEFTHM.html">defthm</a> but some 
+additional keyword arguments as well; the following shows an elaborate example.</p> 
+ 
+<pre class="code">(<a href="ACL2____DEF-LISTP-RULE.html">def-listp-rule</a> element-list-p-when-not-consp-non-true-list
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (element-list-final-cdr-p t)
+                (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x)))
+           (<a href="ACL2____ELEMENT-LIST-P.html">element-list-p</a> x))
+  :hints (("goal" :expand ((<a href="ACL2____ELEMENT-LIST-P.html">element-list-p</a>))))
+  :rule-classes :rewrite
+  :otf-flg nil
+  :requirement (<a href="COMMON-LISP____NOT.html">not</a> true-listp)
+  :name element-list-p-when-not-consp
+  :body (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x))
+                 (<a href="ACL2____ELEMENT-LIST-P.html">element-list-p</a> x))
+  :inst-rule-classes  ((:rewrite :backchain-limit-lst 2))
+  :cheap-rule-classes ((:rewrite :backchain-limit-lst 0))
+  :tags (:basic))</pre> 
+ 
+<p>To briefly describe the keyword arguments:</p> 
+<ul> 
+<li>
+<span class="v">:hints</span>, <span class="v">:rule-classes</span>, and <span class="v">:otf-flg</span> are the same as in <a href="ACL2____DEFTHM.html">defthm</a> and do not affect what is stored for later instantiation</li> 
+<li>
+<span class="v">:requirement</span> restricts this rule to only apply to certain kinds of 
+typed lists; see the section "Variants and Requirements" below</li> 
+<li>
+<span class="v">:name</span> overrides the theorem name template used by instantiations of 
+this theorem</li> 
+<li>
+<span class="v">:body</span> overrides the theorem body as the template to be used for 
+instantiations; see the "Variants and Requirements" section</li> 
+<li>
+<span class="v">:inst-rule-classes</span> overrides the rule-classes used by instantiations 
+of this theorem</li> 
+<li>
+<span class="v">:cheap-rule-classes</span> provide an alternative rule-classes if the option 
+<span class="v">:cheap t</span> is given to deflist</li> 
+<li>
+<span class="v">:tags</span> are freeform annotations of the rules, which can be used to 
+disable in bulk certain sets of rules from being instantiated.</li> 
+</ul> 
+ 
+<h3>Variants and Requirements</h3> 
+ 
+<p>Some theorems pertaining to typed lists are best phrased differently when:</p> 
+<ul> 
+<li>the list recognizer requires/does not require a NIL final cdr</li> 
+<li>the list element recognizer is true of/is not true of NIL, or its value on 
+NIL is unknown or varies with other parameters.</li> 
+</ul> 
+<p>The example <span class="v">def-listp-rule</span> form above, here reproduced with irrelevant 
+parts removed, helps to show how we accommodate these variants:</p> 
+ 
+<pre class="code">(<a href="ACL2____DEF-LISTP-RULE.html">def-listp-rule</a> element-list-p-when-not-consp-non-true-list
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (element-list-final-cdr-p t)
+                (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x)))
+           (<a href="ACL2____ELEMENT-LIST-P.html">element-list-p</a> x))
+  :requirement (<a href="COMMON-LISP____NOT.html">not</a> true-listp)
+  :name element-list-p-when-not-consp
+  :body (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x))
+                 (<a href="ACL2____ELEMENT-LIST-P.html">element-list-p</a> x)))</pre> 
+ 
+<p>The <span class="v">:body</span> shows the theorem that will be produced by instantiations of 
+this rule.  However, this is only true when element-list-p is non-strict, 
+i.e. it allows a non-nil final cdr.  The generic definition of element-list-p 
+accomodates both strict and non-strict versions by calling a constrained 
+function <span class="v">element-list-final-cdr-p</span> on its final cdr.  This function is 
+constrained to either be true on every input, or to only be true on NIL; thus, 
+it matches the two typical final cdr behaviors of list recognizers.  To prove 
+that any non-cons is element-list-p, we need to assume we are in the non-strict 
+case -- where <span class="v">element-list-final-cdr-p</span> is true of every input -- which, by 
+its constraint, is true iff <span class="v">(element-list-final-cdr-p t)</span>.  To avoid 
+instantiating this rule on typed lists that are strict, we add the 
+<span class="v">:requirement</span> field.  In <span class="v">std::deflist</span>, before instantiating a rule, 
+the <span class="v">:requirement</span> field is evaluated with variables such as <span class="v">true-listp</span> 
+bound to values based on the particular variant.  Finally, the <span class="v">:name</span> field 
+lets us consistently name the instantiated theorems when there are different 
+variants; e.g., for the strict case, we can have this other form that produces 
+a different theorem but uses the same naming convention:</p> 
+ 
+<pre class="code">(<a href="ACL2____DEF-LISTP-RULE.html">def-listp-rule</a> element-list-p-when-not-consp-true-list
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____NOT.html">not</a> (element-list-final-cdr-p t))
+                (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x)))
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____ELEMENT-LIST-P.html">element-list-p</a> x) (<a href="COMMON-LISP____NOT.html">not</a> x)))
+  :requirement true-listp
+  :name element-list-p-when-not-consp
+  :body (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x))
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____ELEMENT-LIST-P.html">element-list-p</a> x)
+                        (<a href="COMMON-LISP____NOT.html">not</a> x))))</pre> 
+ 
+<h3>List of requirement variables recognized by <a href="STD____DEFLIST.html">std::deflist</a>
+</h3> 
+<p>Note: All of these are symbols in the ACL2 package.</p> 
+<ul> 
+<li>
+<span class="v">element-p-of-nil</span> is true if NIL is known to be an element</li> 
+<li>
+<span class="v">not-element-p-of-nil</span> is true if NIL is known not to be an element. 
+Note: mutually exclusive with <span class="v">element-p-of-nil</span>, but both may be false in 
+cases where the status of NIL as an element is unknown or depends on other 
+input parameters.</li> 
+<li>
+<span class="v">negatedp</span> is true if we are creating a list that recognizes elements 
+defined by <span class="v">NOT</span> of some predicate, which may affect the correct formulation 
+of rewrite rules</li> 
+<li>
+<span class="v">true-listp</span> is true if the list recognizer is strict, i.e., implies true-listp</li> 
+<li>
+<span class="v">single-var</span> is true if the list recognizer has no parameters other than the list variable</li> 
+<li>
+<span class="v">cheap</span> is true if the user gave an extra option requesting cheaper versions of some rules.</li> 
+<li>
+<span class="v">simple</span> is true if the element recognizer is a simple function, rather 
+than some more complicated term.</li> 
+</ul> 
+ 
+<h3>Using Tags to Disable Instantiation</h3> 
+ 
+<p>Certain generic rules are tagged so as to group them with other rules.  For 
+example, all the rules defined in "std/osets/element-list.lisp" are tagged 
+with <span class="v">:osets</span>.  This makes it easy to turn these rules off so that a 
+subsequent deflist form will not instantiate this set of rules.  This form does 
+that:</p> 
+<pre class="code">(<a href="ACL2____LOCAL.html">local</a> (ruletable-delete-tags! acl2::listp-rules (:osets)))</pre> 
+ 
+<p>On the other hand, in the unlikely event that you only wanted the rules 
+tagged with <span class="v">:osets</span> you could do:</p> 
+<pre class="code">(<a href="ACL2____LOCAL.html">local</a> (ruletable-keep-tags! acl2::listp-rules (:osets)))</pre> 
+ 
+
+</body>
+</html>

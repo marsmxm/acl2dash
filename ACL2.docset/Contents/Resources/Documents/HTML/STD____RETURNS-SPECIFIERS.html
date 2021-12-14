@@ -1,0 +1,176 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Returns-specifiers</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=STD____RETURNS-SPECIFIERS">Click for Returns-specifiers in the Full Manual</a></h3>
+
+<p>A concise way to name, document, and prove basic type-like theorems 
+about a function's return values.</p><p>The <a href="ACL2____DEFINE.html">define</a> macro and some other <a href="ACL2____STD_F2UTIL.html">std/util</a> macros 
+support a <span class="v">:returns</span> option.  This option provides a concise way to name, 
+document, and prove basic type-like theorems about the return values of your 
+functions.  Named return values also allow your function to be used with the 
+special <a href="ACL2____PATBIND-RET.html">ret</a> binder for <a href="ACL2____B_A2.html">b*</a>.</p> 
+ 
+<p>The general form is:</p> 
+ 
+<pre class="code">   :returns return-spec       ;; for single-value functions
+or :returns (<a href="ACL2____MV.html">mv</a> return-spec*) ;; for multiple-valued functions</pre> 
+ 
+<p>There should be exactly one <span class="v">return-spec</span> per return value.  Each 
+return-spec has the form:</p> 
+ 
+<pre class="code">   name               ;; just for naming return values
+or (name [option]*)   ;; for naming, documenting, and proving theorems</pre> 
+ 
+<p>where <span class="v">name</span> is a symbol and the options can come in any order.  To 
+distinguish between the two forms of <span class="v">:returns</span>, it is not legal to use 
+<span class="v">mv</span> as the name of a return value.  The options are:</p> 
+ 
+<dl> 
+ 
+<dt>
+<span class="v">&lt;xdoc&gt;</span>, any string literal</dt> 
+ 
+<dd>You can document each return value with a string literal.  The string may 
+make use of <a href="XDOC____MARKUP.html">xdoc::markup</a> and <a href="XDOC____PREPROCESSOR.html">xdoc::preprocessor</a> directives. 
+Typically these descriptions should be short and not include 
+document-structuring tags like <span class="v">&lt;p&gt;</span>, <span class="v">&lt;ul&gt;</span>, <span class="v">&lt;h3&gt;</span>, and so forth. 
+See the section on xdoc integration, below, for more details.</dd> 
+ 
+<dt>
+<span class="v">&lt;return-type&gt;</span>, a symbol or term</dt> 
+ 
+<dd>When provided, the return type is used to generate a basic type-like 
+theorems about the return values.  A default hint is provided if no <span class="v">:hints</span> 
+keyword is present; see the discussion of <span class="v">:hints</span> below.</dd> 
+ 
+<dd>
+<b>Important Note</b> in the multiple-valued case, this approach assumes 
+you are using the <span class="v">tools/mv-nth</span> book.  The theorems we prove target terms 
+like <span class="v">(<a href="ACL2____MV-NTH.html">mv-nth</a> 0 (f ...))</span> and <span class="v">(<a href="ACL2____MV-NTH.html">mv-nth</a> 1 (f ...))</span>.  This will not work 
+well if <a href="ACL2____MV-NTH.html">mv-nth</a> is enabled, especially about the 0th return value. For 
+your convenience, <span class="v">define</span> automatically includes the <span class="v">tools/mv-nth</span> 
+book.  You really should be using it, you know.</dd> 
+ 
+<dd>As a convenient shorthand, you can use a single symbol like <span class="v">evenp</span>. 
+The theorem to be proven in this case might be, e.g., <span class="v">(<a href="COMMON-LISP____EVENP.html">evenp</a> (f x))</span> for a 
+single-valued function, or <span class="v">(<a href="COMMON-LISP____EVENP.html">evenp</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 3 (f x)))</span> if this is the 
+fourth (because of zero-indexing) return value of a multiply-valued function. 
+The symbol <span class="v">t</span> is explicitly allowed and results in no theorem.  The symbol 
+<span class="v">nil</span> and keyword symbols are explicitly invalid as return types.</dd> 
+ 
+<dd>In certain cases, you may wish to prove a more complex theorem, e.g., say 
+we want to prove this return value is always greater than 5.  To support this, 
+you can write a return type like <span class="v">(<a href="COMMON-LISP_____C3.html">&lt;</a> 5 ans)</span>, where <span class="v">ans</span> is the 
+<span class="v">name</span> of this return value.  You can also refer to the names of other 
+return values in this term.  To make it easy to distinguish return types from 
+other options, the return type term must be a cons and must not begin with 
+<span class="v">quote</span>.</dd> 
+ 
+<dt><span class="v">:hyp hyp-term</span></dt> 
+ 
+<dd>This option only makes sense when there is a return-type term.  By default, 
+the return-type theorem is unconditional.  If the theorem needs a hypothesis, 
+you can put it here.</dd> 
+ 
+<dd>Frequently, the hypothesis you want for a type-like theorem is for the 
+guards of the function to be met.  As a convenient shorthand, <span class="v">hyp-term</span> may 
+be: 
+ 
+<ul> 
+<li>
+<span class="v">:guard</span> -- use the function's guard as the hypothesis</li> 
+<li>
+<span class="v">:fguard</span> -- like <span class="v">:guard</span>, but <a href="ACL2____FORCE.html">force</a> the entire guard</li> 
+</ul> 
+ 
+If neither of these is what you want, you can provide an arbitrary 
+<span class="v">hyp-term</span>.  Typically this term should mention only the formals of your 
+function.  The return values of the theorem will not be bound in scope of the 
+hyp, so trying to refer to them in a hypothesis is generally an error.</dd> 
+ 
+<dt><span class="v">:hints hints-term</span></dt> 
+ 
+<dd>This option only makes sense when there is a return-type term; when 
+specified, the given hints are passed to the proof attempt for the associated 
+return-type.  When no <span class="v">:hints</span> keyword is present, a default hint is taken 
+from the <span class="v">std::returnspec</span> entry of the <span class="v">std::default-hints-table</span> table, 
+but this is overridden if the <span class="v">:hints</span> keyword is present, even for 
+<span class="v">:hints nil</span>.  To change the default hints, you may use 
+<span class="v">set-returnspec-default-hints</span>.  The setting for this provided in the 
+std/util books provides an induction and expand hint when the 
+function introduced is singly-recursive.</dd> 
+ 
+<dd>A few special symbols (and even substrings of symbols) are substituted into 
+hints; see the section "Substitutions" below.</dd> 
+ 
+<dt><span class="v">:rule-classes classes</span></dt> 
+ 
+<dd>This option only makes sense when there is a return-type term.  By default, 
+the return-type theorem is added as a <span class="v">:rewrite</span> rule.  If you want to use 
+other <a href="ACL2____RULE-CLASSES.html">ACL2::rule-classes</a>, then you will want to override this default.</dd> 
+ 
+<dd>A few special symbols (and even substrings of symbols) are substituted into 
+hints; see the section "Substitutions" below.</dd> 
+ 
+<dt><span class="v">:name name</span></dt> 
+ 
+<dd>This allows you to control the name of the associated theorem.</dd> 
+ 
+<dd>The default value of <span class="v">name</span> is type-of-your-function. 
+For example, <span class="v">natp-of-foo</span>.</dd> 
+ 
+<dt><span class="v">:hints-sub-returnnames</span></dt> 
+ 
+<dd>This option determines whether the 
+return-name substitution is applied to the hints. See "Substitutions" 
+below.</dd> 
+ 
+</dl> 
+ 
+<h3>Substitutions</h3> 
+ 
+<p>Certain symbols and certain substrings of symbols are 
+replaced in the theorem body, hints, and rule-classes.</p> 
+ 
+<p>The following substitutions replace any symbol matching the given name in 
+all three places (body, hints, and rule-classes):</p> 
+ 
+<ul> 
+<li>
+<span class="v">&lt;CALL&gt;</span> is replaced by the function applied to the formals.</li> 
+<li>
+<span class="v">&lt;FN&gt;</span> is replaced by the function's macro alias, if it has one, or else its name.  That is, for a form that introduces <span class="v">foo</span> with macro arguments, creating a function named <span class="v">foo-fn</span>, this produces <span class="v">foo</span>.</li> 
+<li>
+<span class="v">&lt;FN!&gt;</span> is replaced by the functions name, strictly, i.e. <span class="v">foo-fn</span> in the example above.</li> 
+<li>
+<span class="v">&lt;VALUES&gt;</span> is replaced by the list of return value names.</li> 
+</ul> 
+ 
+<p>In the hints, the substrings <span class="v">&lt;FN&gt;</span> and <span class="v">&lt;FN!&gt;</span> of symbol names are 
+also substituted as above.  This allows hints to refer to <a href="ACL2____DEFRET.html">defret</a>-style 
+theorem names.</p> 
+ 
+<p>In the rule-classes, the return value names are substituted for appropriate 
+terms; i.e., if the second return value of <span class="v">foo</span> is named <span class="v">bar</span>, then 
+<span class="v">bar</span> becomes <span class="v">(<a href="ACL2____MV-NTH.html">mv-nth</a> 1 (foo ...))</span>.  This substitution may also 
+optionally be applied to the hints by setting the <span class="v">:hints-sub-returnnames</span> option. 
+This return name substitution is not applied to the theorem body, but the let-binding 
+of the return names to the function call has a similar effect.</p> 
+ 
+<h3>Configuration Object</h3> 
+ 
+<p>Similar to <a href="ACL2____DEFINE.html">define</a>, a configuration object can be set up to set some 
+options globally (local to a book).  At the moment only the 
+<span class="v">:hints-sub-returnnames</span> option is read from this configuration object.  The 
+following form sets that option:</p> 
+ 
+<pre class="code">(make-returnspec-config :hints-sub-returnnames t)</pre> 
+ 
+
+</body>
+</html>

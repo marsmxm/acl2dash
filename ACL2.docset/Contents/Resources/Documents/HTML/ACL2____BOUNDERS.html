@@ -1,0 +1,327 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Bounders</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____BOUNDERS">Click for Bounders in the Full Manual</a></h3>
+
+<p>Intervals, bounder functions, and bounder correctness</p><pre class="code"><i>Bounder Forms 1 and 2</i>: 
+(implies (and (tau-intervalp i1) 
+              ... 
+              (or (equal (tau-interval-dom i1) 'dom1-1) 
+                  ...) 
+              ... 
+              (in-tau-intervalp x1 i1) 
+              ...) 
+         (and (tau-intervalp (bounder-fn i1 ...)) 
+              (in-tau-intervalp <i>target</i> 
+                                (bounder-fn i1 ...)))) 
+</pre> 
+ 
+ <p>where <i>target</i> is either <span class="v">(fn x1 ... y1 ...)</span> or <span class="v">(<a href="ACL2____MV-NTH.html">mv-nth</a> 'n (fn
+ x1 ... y1 ...))</span>, depending on whether we are in the <i>Form 1</i> or <i>Form 
+ 2</i> case, respectively.  However, the shape above is meant just as a 
+ reminder.  Details are given below.</p> 
+ 
+ <p>This topic first explains the basic shape of <i>Bounder Form 1</i>.  Then 
+ it illustrates <i>Bounder Form 2</i>.  Finally, it deals briefly with proving 
+ bounder correctness theorems.  The community book 
+ <span class="v">tau-bounders/elementary-bounders</span> contains bounders for various elementary 
+ functions including <span class="tt"><a href="COMMON-LISP_____B2.html">+</a></span>, <span class="tt"><a href="COMMON-LISP_____A2.html">*</a></span>, <span class="tt"><a href="COMMON-LISP_____F2.html">/</a></span>, <span class="tt"><a href="COMMON-LISP____FLOOR.html">floor</a></span>, <span class="tt"><a href="COMMON-LISP____MOD.html">mod</a></span>, <span class="tt"><a href="COMMON-LISP____LOGAND.html">logand</a></span>, <span class="tt"><a href="COMMON-LISP____LOGNOT.html">lognot</a></span>, <span class="tt"><a href="COMMON-LISP____LOGIOR.html">logior</a></span>, <span class="tt"><a href="COMMON-LISP____LOGORC1.html">logorc1</a></span>, <span class="tt"><a href="COMMON-LISP____LOGEQV.html">logeqv</a></span>, <span class="tt"><a href="COMMON-LISP____LOGXOR.html">logxor</a></span>, and <span class="tt"><a href="COMMON-LISP____ASH.html">ash</a></span>.  You might look at or include this 
+ book to see more example theorems, to see how proofs of such theorems are 
+ managed, and to experiment with their effects on proving theorems involving 
+ arithmetic over finite or half-finite intervals.</p> 
+ 
+ <p>A bounder correctness theorem establishes that <span class="v">bounder-fn</span> is a 
+ ``bounder'' for the function <span class="v">fn</span>.  That means that when trying to compute 
+ a tau for a call of <span class="v">fn</span> (or, in the case of <i>Form 2</i>, for the 
+ <span class="v">n</span>th component of the multiple-value vector returned by a call of <span class="v">fn</span>) 
+ the tau system can call <span class="v">bounder-fn</span> on the intervals containing certain 
+ arguments of <span class="v">fn</span>.</p> 
+ 
+ <p>Let us start with an example.  Let <span class="v">fn</span> be the addition function, <span class="v">+</span> 
+ (actually, <span class="tt"><a href="ACL2____BINARY-_B2.html">binary-+</a></span>).  Consider the target term <span class="v">(<a href="COMMON-LISP_____B2.html">+</a> x y)</span> and 
+ contemplate the question: if you know intervals containing <span class="v">x</span> and <span class="v">y</span>, 
+ say <span class="v">intx</span> and <span class="v">inty</span> respectively, what is an interval containing their 
+ sum?  The answer is pretty easy to state in English: the domain of the answer 
+ interval is the less restrictive of the domains of <span class="v">intx</span> and <span class="v">inty</span>. 
+ The lower bound of the answer interval is the sum of the lower bounds of 
+ <span class="v">intx</span> and <span class="v">inty</span>, and the lower relation is the stronger of the lower 
+ relations of <span class="v">intx</span> and <span class="v">inty</span>.  Analogous comments define the upper 
+ bound and relation of the answer interval.  So for example, if <span class="v">x</span> is an 
+ <span class="v">INTEGERP</span> such that <span class="v">0 &lt;= x &lt;= 10</span> and <span class="v">y</span> is a <span class="v">RATIONALP</span> such 
+ that <span class="v">0 &lt; y &lt;= 20</span>, then <span class="v">(<a href="COMMON-LISP_____B2.html">+</a> x y)</span> is a <span class="v">RATIONALP</span> such that <span class="v">0 &lt;
+ (<a href="COMMON-LISP_____B2.html">+</a> x y) &lt;= 30</span>.</p> 
+ 
+ <p>Defining this precisely is more tedious than describing it in English 
+ because one must make precise the notions of ``less restrictive'' domains, 
+ ``weaker'' relations, and the possibility that either or both of the bounds 
+ could be ``infinite.''  But we can easily imagine defining the function 
+ <span class="v">bounder-for-+</span> that returns the answer interval described, given <span class="v">intx</span> 
+ and <span class="v">inty</span>.</p> 
+ 
+ <p>Then the following <i>Bounder Form 1</i> formula establishes the 
+ correctness of <span class="v">bounder-for-+</span> and allows the tau system to use it to 
+ produce bounds in the tau computed for <span class="v">+</span>-expressions:</p> 
+ 
+ <pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____TAU-INTERVALP.html">tau-intervalp</a> intx)
+              (<a href="ACL2____TAU-INTERVALP.html">tau-intervalp</a> inty)
+              (<a href="ACL2____IN-TAU-INTERVALP.html">in-tau-intervalp</a> x intx)
+              (<a href="ACL2____IN-TAU-INTERVALP.html">in-tau-intervalp</a> y inty))
+         (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____TAU-INTERVALP.html">tau-intervalp</a> (bounder-for-+ intx inty))
+              (<a href="ACL2____IN-TAU-INTERVALP.html">in-tau-intervalp</a> (<a href="COMMON-LISP_____B2.html">+</a> x y)
+                                (bounder-for-+ intx inty))))</pre> 
+ 
+ <p>For example, suppose we have a formula with the following hypotheses</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> a)
+     (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> 0 a)
+     (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> a 10)
+     (<a href="COMMON-LISP____RATIONALP.html">rationalp</a> b)
+     (<a href="COMMON-LISP_____C3.html">&lt;</a> 0 b)
+     (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> b 20))</pre> 
+ 
+ <p>and suppose the tau system encounters the term <span class="v">(<a href="COMMON-LISP_____B2.html">+</a> a b)</span>.  When the term 
+ is encountered, the tau for <span class="v">a</span> would include an <span class="v">INTEGERP</span> interval such 
+ that <span class="v">0 &lt;= a &lt;= 10</span> and the tau for <span class="v">b</span> would include a <span class="v">RATIONALP</span> 
+ interval such that <span class="v">0 &lt; b &lt;= 20</span>.  In its most primitive configuration, the 
+ tau system would only know that the tau for <span class="v">(<a href="COMMON-LISP_____B2.html">+</a> a b)</span> includes the 
+ recognizer <span class="v">RATIONALP</span> (and all that it is known to imply).  But after the 
+ bounder theorem above is proved and available as a <span class="v">:tau-system</span> rule the 
+ tau system would infer that <span class="v">(<a href="COMMON-LISP_____B2.html">+</a> a b)</span> was in the <span class="v">RATIONALP</span> interval 
+ such that <span class="v">0 &lt; (<a href="COMMON-LISP_____B2.html">+</a> a b) &lt;= 30</span>.</p> 
+ 
+ <p>Thus, by defining bounder functions and proving them correct the user can 
+ give the tau system the ability to compute the bounds on function calls as a 
+ function of the known bounds on their actuals.</p> 
+ 
+ <p>It is sometimes useful to restrict the domains of the intervals to be 
+ considered.  For example, in bounding <span class="v">*</span>-expressions it is simplifying to 
+ restrict one's attention to intervals over the integers or rationals (and thus 
+ exclude the complex rationals so one need not think about the getting negative 
+ bounds by multiplying two ``positive'' complex rationals or how to ``round 
+ up'' from complex bounds to the rationals required by our intervals).</p> 
+ 
+ <p>If we were to define <span class="v">bounder-for-*</span> so that it works correctly to bound 
+ <span class="v">*</span>-expressions, but only for integer or rational arguments, its 
+ correctness theorem would be:</p> 
+ 
+ <pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____TAU-INTERVALP.html">tau-intervalp</a> intx)                             ; (a)
+              (<a href="ACL2____TAU-INTERVALP.html">tau-intervalp</a> inty)
+              (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____TAU-INTERVAL-DOM.html">tau-interval-dom</a> intx) 'INTEGERP)    ; (b)
+                  (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____TAU-INTERVAL-DOM.html">tau-interval-dom</a> intx) 'RATIONALP))
+              (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____TAU-INTERVAL-DOM.html">tau-interval-dom</a> inty) 'INTEGERP)
+                  (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____TAU-INTERVAL-DOM.html">tau-interval-dom</a> inty) 'RATIONALP))
+              (<a href="ACL2____IN-TAU-INTERVALP.html">in-tau-intervalp</a> x intx)                        ; (c)
+              (<a href="ACL2____IN-TAU-INTERVALP.html">in-tau-intervalp</a> y inty))
+         (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____TAU-INTERVALP.html">tau-intervalp</a> (bounder-for-* intx inty))       ; (d)
+              (<a href="ACL2____IN-TAU-INTERVALP.html">in-tau-intervalp</a> (<a href="COMMON-LISP_____A2.html">*</a> x y)                        ; (e)
+                                (bounder-for-* intx inty))))</pre> 
+ 
+ <p>In this case, <span class="v">bounder-for-*</span> would be applied to the intervals for 
+ <span class="v">x</span> and <span class="v">y</span> only if those intervals were over the integers or the 
+ rationals.</p> 
+ 
+ <p>The above theorem for <span class="v">bounder-for-*</span> begins to suggest the general form 
+ of a bounder theorem and we will use it to explain the general form.</p> 
+ 
+ <p>The hypotheses of a bounder theorem must be a conjunction and the conjuncts 
+ must be partitionable into three parts, (a), (b), and (c).  The conclusion, 
+ must be a conjunction, must contain at least two conjuncts, (d) and (e), and 
+ is allowed to contain others that are simply ignored for purposes of bounders. 
+ (See the note below about why we allow but ignore additional conjuncts in the 
+ conclusion.)</p> 
+ 
+ <p>Part (a) introduces some distinct ``interval variables,'' here called 
+ ``ivars,'' that are known to denote intervals; for the example above, the 
+ ivars are <span class="v">intx</span> and <span class="v">inty</span>.  Each hypothesis in part (a) is of the form 
+ <span class="v">(<a href="ACL2____TAU-INTERVALP.html">TAU-INTERVALP</a> ivar)</span>.</p> 
+ 
+ <p>Part (b) allows us to restrict the domains of some of the intervals.  Each 
+ hypothesis in part (b) must be a disjunction and each of the disjuncts must be 
+ of the form <span class="v">(<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (<a href="ACL2____TAU-INTERVAL-DOM.html">TAU-INTERVAL-DOM</a> ivar) 'dom)</span>, where <span class="v">ivar</span> is one 
+ of the interval variables and <span class="v">dom</span> is one of <span class="v">INTEGERP</span>, 
+ <span class="v">RATIONALP</span>, <span class="v">ACL2-NUMBERP</span>, or <span class="v">NIL</span>.  It is not necessary to 
+ restrict every interval variable.  Indeed, part (b) may be empty, as in the 
+ theorem for <span class="v">bounder-for-+</span> above.</p> 
+ 
+ <p>Part (c) consists of a set of <span class="v">(<a href="ACL2____IN-TAU-INTERVALP.html">IN-TAU-INTERVALP</a> avar ivar)</span> hypotheses 
+ where each <span class="v">avar</span> is a variable and no two hypotheses in part (c) use the 
+ same <span class="v">avar</span> or <span class="v">ivar</span>.  We call the set of all such <span class="v">avar</span> the 
+ ``actual variables'' or ``avars.''  The avars and ivars must be distinct. 
+ Part (c) sets up a correspondence between the avars and the ivars, each avar 
+ is in an interval denoted by one ivar.</p> 
+ 
+ <p>Part (d) introduces the name of the bounder function, here 
+ <span class="v">bounder-for-*</span>, and the order of its ivar arguments.  We see that 
+ <span class="v">bounder-for-*</span> takes two arguments and they correspond, in order, to the 
+ intervals containing <span class="v">x</span> and <span class="v">y</span>.  Part (d) also establishes that the 
+ bounder function always returns an interval under hypotheses (a), (b), and 
+ (c).  Note that it is sometimes useful to return the ``universal interval'' 
+ (one that contains everything) if you don't want to compute a better interval 
+ for some case; see <span class="tt"><a href="ACL2____TAU-INTERVALP.html">tau-intervalp</a></span> or <span class="tt"><a href="ACL2____IN-TAU-INTERVALP.html">in-tau-intervalp</a></span>.</p> 
+ 
+ <p>Part (e) introduces the name of the function being bounded, here <span class="v">*</span>, 
+ and the order of its arguments.  It establishes that the function being 
+ bounded really is bounded by the interval computed by the bounder function. 
+ In general, the function being bounded may take additional arguments.  It is 
+ possible that the function being bounded takes some arguments that do not 
+ affect the bounds of its output.</p> 
+ 
+ <p>Thus, parts (c) and (e) together establish a mapping between the actuals of 
+ a call of the function being bounded and the intervals to be supplied to the 
+ bounder.</p> 
+ 
+ <p>The parts identified above may be presented in any order and the literals 
+ constituting those parts may be mingled.  Thus, for example, here is another 
+ version of the theorem above that generates the same bounding information for 
+ the tau system.  In this version, the hypotheses and conclusions are 
+ rearranged, <span class="v">bounder-for-*</span> takes its arguments in the opposite order, and 
+ the theorem includes an additional conclusion.</p> 
+ 
+ <pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____TAU-INTERVALP.html">tau-intervalp</a> intx)                             ; (a)
+              (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____TAU-INTERVAL-DOM.html">tau-interval-dom</a> intx) 'INTEGERP)    ; (b)
+                  (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____TAU-INTERVAL-DOM.html">tau-interval-dom</a> intx) 'RATIONALP))
+              (<a href="ACL2____IN-TAU-INTERVALP.html">in-tau-intervalp</a> x intx)                        ; (c)
+
+              (<a href="ACL2____TAU-INTERVALP.html">tau-intervalp</a> inty)                             ; (a)
+              (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____TAU-INTERVAL-DOM.html">tau-interval-dom</a> inty) 'INTEGERP)    ; (b)
+                  (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____TAU-INTERVAL-DOM.html">tau-interval-dom</a> inty) 'RATIONALP))
+              (<a href="ACL2____IN-TAU-INTERVALP.html">in-tau-intervalp</a> y inty))
+         (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____IN-TAU-INTERVALP.html">in-tau-intervalp</a> (<a href="COMMON-LISP_____A2.html">*</a> x y)                        ; (e)
+                                (bounder-for-* inty intx))
+              (<a href="ACL2____TAU-INTERVALP.html">tau-intervalp</a> (bounder-for-* inty intx))        ; (d)))
+
+              (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____TAU-INTERVAL-DOM.html">tau-interval-dom</a> (bounder-for-* inty intx))
+                         'INTEGERP)
+                  (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____TAU-INTERVAL-DOM.html">tau-interval-dom</a> (bounder-for-* inty intx))
+                         'RATIONALP))</pre> 
+ 
+ <p><i>Note on why bounder forms allow additional conjuncts in the 
+ conclusion</i>: It is often the case that one creates bounders by composing 
+ other bounders.  To prove compositional bounds correct one must often prove 
+ more than the mere correctness of the components.  For example, one might need 
+ to prove that the domain of the new bounding interval is <span class="v">INTEGERP</span> or 
+ otherwise restricted.  We allow such ``unnecessary'' conclusions simply to 
+ save the user the burden of stating multiple theorems.</p> 
+ 
+ <p><i>An Illustration of Bounder Form 2</i>: Suppose <span class="v">(quad i)</span> is defined 
+ so that truncates the integer <span class="v">i</span> to the largest multiple of 4 weakly below 
+ <span class="v">i</span> and, additionally, returns the remainder.  For example, <span class="v">(quad 26)</span> 
+ returns <span class="v">(<a href="ACL2____MV.html">mv</a> 24 2)</span>.  Then here are bounders for each of its return 
+ values:</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> quad-bounds-0 (i)
+  (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____TAU-INTERVAL-LO.html">tau-interval-lo</a> i)
+              (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> 0 (<a href="ACL2____TAU-INTERVAL-LO.html">tau-interval-lo</a> i)))
+         (<a href="ACL2____MAKE-TAU-INTERVAL.html">make-tau-interval</a> 'integerp nil 0 nil (<a href="ACL2____TAU-INTERVAL-HI.html">tau-interval-hi</a> i)))
+        (t (<a href="ACL2____MAKE-TAU-INTERVAL.html">make-tau-interval</a> nil nil nil nil nil))))
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> quad-bounds-1 (i)
+  (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____TAU-INTERVAL-LO.html">tau-interval-lo</a> i)
+              (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> 0 (<a href="ACL2____TAU-INTERVAL-LO.html">tau-interval-lo</a> i)))
+         (<a href="ACL2____MAKE-TAU-INTERVAL.html">make-tau-interval</a> 'integerp nil 0 nil 3))
+        (t (<a href="ACL2____MAKE-TAU-INTERVAL.html">make-tau-interval</a> nil nil nil nil nil))))</pre> 
+ 
+ <p>Note that the bounders assume <span class="v">i</span> is an <span class="v">INTEGERP</span> and return the 
+ universal interval when <span class="v">i</span> is not a natural.</p> 
+ 
+ <p>As noted in the discussion below about how to prove bounder correctness 
+ theorems, proving these bounders correct will require an arithmetic book, 
+ e.g.,</p> 
+ 
+ <pre class="code">(<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "arithmetic-5/top" :dir :system)</pre> 
+ 
+ <p>Here then are two bounder correctness theorems of <i>Form 2</i>:</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> quad-bounds-0-correct
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____TAU-INTERVALP.html">tau-intervalp</a> i)
+                (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____TAU-INTERVAL-DOM.html">tau-interval-dom</a> i) 'INTEGERP)
+                (<a href="ACL2____IN-TAU-INTERVALP.html">in-tau-intervalp</a> x i))
+           (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____TAU-INTERVALP.html">tau-intervalp</a> (quad-bounds-0 i))
+                (<a href="ACL2____IN-TAU-INTERVALP.html">in-tau-intervalp</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 0 (quad x))
+                                  (quad-bounds-0 i))))
+  :rule-classes :tau-system)
+
+(<a href="ACL2____DEFTHM.html">defthm</a> quad-bounds-1-correct
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____TAU-INTERVALP.html">tau-intervalp</a> i)
+                (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____TAU-INTERVAL-DOM.html">tau-interval-dom</a> i) 'INTEGERP)
+                (<a href="ACL2____IN-TAU-INTERVALP.html">in-tau-intervalp</a> x i))
+           (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____TAU-INTERVALP.html">tau-intervalp</a> (quad-bounds-1 i))
+                (<a href="ACL2____IN-TAU-INTERVALP.html">in-tau-intervalp</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 1 (quad x)) (quad-bounds-1 i))))
+  :rule-classes :tau-system)</pre> 
+ 
+ <p>As noted above, if these bounders are to be used in constructing other 
+ bounders, we might include (in the first theorem) an additional concluding 
+ conjunct, such as</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____TAU-INTERVAL-DOM.html">tau-interval-dom</a> (quad-bounds-0 i)) 'INTEGERP)</pre> 
+ 
+ <p>so that we can keep <span class="v">quad-bounds-0</span> disabled to allow us to use 
+ <span class="v">quad-bounds-0-correct</span> as a <span class="v">:rewrite</span> or other rule and still relieve 
+ hypotheses about the domain of the interval it produces.  These hypotheses 
+ would arise if some other verified bounder was called on the produced 
+ interval.  In addition, as noted below, we might replace the 
+ <span class="v">:rule-classes</span> above with</p> 
+ 
+ <pre class="code">:rule-classes
+ ((:rewrite)
+  (:forward-chaining :trigger-terms ((quad-bounds-0 i))))</pre> 
+ 
+ <p>Since the theorem is being stored as some kind of rule and since it 
+ satisfies the <i>Bounder Form 2</i> shape, it will additionally be stored as a 
+ <span class="v">:tau-system</span> rule.</p> 
+ 
+ <p><i>Note on proving bounder theorems</i>: Proving bounder theorems is just 
+ like proving any other arithmetic theorem and you will need whatever libraries 
+ are appropriate for the problem domain you are working in.  Do not expect the 
+ tau system to be of much use in proving bounder theorems.  A typical bounder 
+ theorem might require you to prove a subgoal like <span class="v">(<a href="COMMON-LISP_____C3.html">&lt;</a> (fn x y) (<a href="ACL2____G.html">g</a>
+ (<a href="ACL2____TAU-INTERVAL-HI.html">tau-interval-hi</a> int1) int2))</span>.  But tau deals with inequalities relating 
+ terms to constants, e.g., <span class="v">(<a href="COMMON-LISP_____C3.html">&lt;</a> ... 16)</span>.  A bounder theorem is a sort of 
+ ``metatheorem'' about <i>how to construct</i> bounded intervals from other 
+ bounded intervals.  So when you undertake to define a bounder and prove it 
+ correct, go into the project with your eyes open!</p> 
+ 
+ <p>But bounder functions can be broadly divided into two classes, those 
+ defined in terms of arithmetic on the interval bounds and those defined in 
+ terms of other bounders.  For example, given that</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____LOGXOR.html">LOGXOR</a> x y) = (<a href="COMMON-LISP____LOGNOT.html">LOGNOT</a> (<a href="COMMON-LISP____LOGEQV.html">LOGEQV</a> x y))</pre> 
+ 
+ <p>an interval for bounding <span class="v">LOGXOR</span> can be constructed by composing the 
+ constructions of intervals for <span class="v">LOGEQV</span> and <span class="v">LOGNOT</span>.  So some bounder 
+ correctness proofs will involve direct manipulation of arithmetic inequalities 
+ and others might involve appeal to the correctness of other bounders, 
+ depending on how the new bounder is defined.</p> 
+ 
+ <p>Regardless of which style of bounder we are dealing with, we have found it 
+ useful to prove the basic theorems relating the tau interval accessors to 
+ <span class="tt"><a href="ACL2____MAKE-TAU-INTERVAL.html">make-tau-interval</a></span>, e.g.,</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____TAU-INTERVAL-DOM.html">tau-interval-dom</a> (<a href="ACL2____MAKE-TAU-INTERVAL.html">make-tau-interval</a> dom lo-rel lo hi-rel hi)) dom)</pre> 
+ 
+ <p>and then disable those functions to avoid seeing excessive <span class="v">car</span>s and 
+ <span class="v">cdr</span>s.</p> 
+ 
+ <p>When dealing with bounders defined in the direct, arithmetic style, we tend 
+ to keep <span class="tt"><a href="ACL2____TAU-INTERVALP.html">tau-intervalp</a></span> and <span class="tt"><a href="ACL2____IN-TAU-INTERVALP.html">in-tau-intervalp</a></span> enabled so they 
+ unfold and expose the algebra.</p> 
+ 
+ <p>When dealing with bounders defined compositionally in terms of other 
+ verified bounders, we tend to keep <span class="tt"><a href="ACL2____TAU-INTERVALP.html">tau-intervalp</a></span> and <span class="tt"><a href="ACL2____IN-TAU-INTERVALP.html">in-tau-intervalp</a></span> disabled so we can rely on the previously proved bounder 
+ theorems as rewrite and forward chaining rules.</p> 
+ 
+ <p>Note that this last remark means that when you prove bounder correctness 
+ theorems you should include corollaries that are useful <span class="v">:rewrite</span> and 
+ possibly <span class="v">:forward-chaining</span> rules if you anticipate using that bounder in 
+ more complex ones.  We tend to trigger the forward chaining with the bounder 
+ expression itself, rather than one of the hypotheses.  For example in the rule 
+ above for <span class="v">bounder-for-*</span> we would include <span class="v">(:forward-chaining
+ :trigger-terms ((tau-bounder-expt2 int2)))</span> and let the <span class="v">in-tau-intervalp</span> 
+ hypotheses select the free variables <span class="v">x</span> and <span class="v">y</span>.</p>
+</body>
+</html>

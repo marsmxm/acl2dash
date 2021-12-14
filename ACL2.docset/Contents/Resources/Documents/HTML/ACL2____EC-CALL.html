@@ -1,0 +1,190 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Ec-call</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____EC-CALL">Click for Ec-call in the Full Manual</a></h3>
+
+<p>Execute a call in the ACL2 logic instead of raw Lisp</p><p>The name ``<span class="v">ec-call</span>'' represents ``executable-counterpart 
+ call.''  This utility is intended for users who are familiar with guards.  See 
+ <a href="ACL2____GUARD.html">guard</a> for a general discussion of guards.</p> 
+ 
+ <p>Logically, <span class="v">ec-call</span> behaves like the identity macro; during proofs, 
+ <span class="v">(<a href="ACL2____EC-CALL.html">ec-call</a> TERM)</span> is typically replaced quickly by <span class="v">TERM</span> during a proof 
+ attempt.  However, <span class="v">ec-call</span> causes function calls to be evaluated in the 
+ ACL2 logic rather than raw Lisp, as explained below.</p> 
+ 
+ <pre class="code">General Form:
+(<a href="ACL2____EC-CALL.html">ec-call</a> (fn term1 ... termk))</pre> 
+ 
+ <p>where <span class="v">fn</span> is a known function symbol other than those in the list that 
+ is the value of the constant <span class="v">*ec-call-bad-ops*</span>.  (But see the Final Note 
+ below for an exception pertaining to inlining.)  In particular, <span class="v">fn</span> is not 
+ a macro.  Semantically, <span class="v">(<a href="ACL2____EC-CALL.html">ec-call</a> (fn term1 ... termk))</span> equals <span class="v">(fn
+ term1 ... termk)</span>.  However, this use of <span class="v">ec-call</span> has two effects.</p> 
+ 
+ <blockquote> 
+ 
+ <p>(1) <a href="ACL2____GUARD.html">Guard</a> verification generates no proof obligations from the guard 
+ of <span class="v">fn</span> for this call.  Indeed, guards need not have been verified for 
+ <span class="v">fn</span>.</p> 
+ 
+ <p>(2) During evaluation, after the arguments of <span class="v">fn</span> are evaluated as 
+ usual, the executable-counterpart of <span class="v">fn</span> is called, rather than its 
+ submitted version (see <a href="ACL2____EVALUATION.html">evaluation</a>).  That is, the call of <span class="v">fn</span> is 
+ made on its evaluated arguments as though this call is being made in the ACL2 
+ top-level loop, rather than in raw Lisp.  In particular, the <a href="ACL2____GUARD.html">guard</a> of 
+ <span class="v">fn</span> is checked, at least by default (see <a href="ACL2____SET-GUARD-CHECKING.html">set-guard-checking</a>).</p>
+</blockquote> 
+ 
+ <p>The use of <span class="v">ec-call</span> does not turn off guard-checking, but that can be 
+ accomplished by using <span class="tt"><a href="ACL2____WITH-GUARD-CHECKING.html">with-guard-checking</a></span> as well.  Consider the 
+ following example.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> f1 (x)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t))
+  (<a href="ACL2____EC-CALL.html">ec-call</a> (<a href="COMMON-LISP____NTH.html">nth</a> t x)))</pre> 
+ 
+ <p>This definition is admitted, but evaluation of <span class="v">(f1 '(a b c))</span> 
+ nevertheless causes a guard violation (at least, by default).  However, if 
+ instead we submit the following definition, then there is no guard violation 
+ for that call of <span class="v">f1</span>.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> f1 (x)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t))
+  (<a href="ACL2____WITH-GUARD-CHECKING.html">with-guard-checking</a> nil (<a href="ACL2____EC-CALL.html">ec-call</a> (<a href="COMMON-LISP____NTH.html">nth</a> t x))))</pre> 
+ 
+ <p>Note that in the term <span class="v">(<a href="ACL2____EC-CALL.html">ec-call</a> (fn term1 ... termk))</span>, only the 
+ indicated call of <span class="v">fn</span> is made in the logic; each <span class="v">termi</span> is evaluated 
+ in the normal manner.  If you want an entire term evaluated in the logic, wrap 
+ <span class="v">ec-call</span> around each function call in the term (other than calls of 
+ <span class="v">if</span> and <span class="v">ec-call</span>).</p> 
+ 
+ <p><b>Technical Remark</b> (probably best ignored).  During evaluation of a 
+ call of <span class="tt"><a href="ACL2____DEFCONST.html">defconst</a></span> or <span class="tt"><a href="ACL2____DEFPKG.html">defpkg</a></span> in raw Lisp, a form <span class="v">(<a href="ACL2____EC-CALL.html">ec-call</a> (fn
+ term1 ... termk))</span> is treated as <span class="v">(fn term1 ... termk)</span>, that is, without 
+ calling the executable-counterpart of <span class="v">fn</span>.  This situation occurs when 
+ loading a compiled file (or expansion file) on behalf of an <span class="tt"><a href="ACL2____INCLUDE-BOOK.html">include-book</a></span> event.  The reason is technical: executable-counterparts are 
+ defined below a book's events in the book's compiled file.  End of Technical 
+ Remark.</p> 
+ 
+ <p>Here is another small example.  We define <span class="v">foo</span> recursively but with 
+ guard verification inhibited on the recursive call, which is to be evaluated 
+ in the ACL2 logic.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="COMMON-LISP____DEFUN.html">defun</a> foo (x y)
+        (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____CONSP.html">consp</a> y)))
+        (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x)
+            (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CAR.html">car</a> x) (<a href="ACL2____EC-CALL.html">ec-call</a> (foo (<a href="COMMON-LISP____CDR.html">cdr</a> x) (<a href="COMMON-LISP____CDR.html">cdr</a> y))))
+          (<a href="COMMON-LISP____CAR.html">car</a> y)))
+
+The admission of FOO is trivial, using the relation O&lt; (which is known
+to be well-founded on the domain recognized by O-P) and the measure
+(<a href="ACL2____ACL2-COUNT.html">ACL2-COUNT</a> X).  We could deduce no constraints on the type of FOO.
+
+Computing the guard conjecture for FOO....
+
+The guard conjecture for FOO is trivial to prove.  FOO is compliant
+with Common Lisp.
+
+Summary
+Form:  ( DEFUN FOO ...)
+Rules: NIL
+Warnings:  None
+Time:  0.00 seconds (prove: 0.00, print: 0.00, other: 0.00)
+ FOO
+ACL2 !&gt;(foo '(2 3 4 5) '(6 7))
+
+ACL2 Error in TOP-LEVEL:  The guard for the function call (FOO X Y),
+which is (<a href="COMMON-LISP____CONSP.html">CONSP</a> Y), is violated by the arguments in the call
+(FOO '(4 5) NIL).  To debug see :DOC print-gv, see :DOC trace, and
+see :DOC wet.  See :DOC set-guard-checking for information about suppressing
+this check with (<a href="ACL2____SET-GUARD-CHECKING.html">set-guard-checking</a> :none), as recommended for new
+users.
+
+ACL2 !&gt;</pre> 
+ 
+ <p>The error above arises because eventually, <span class="v">foo</span> recurs down to a value 
+ of parameter <span class="v">y</span> that violates the guard.  This is clear from tracing (see 
+ <a href="ACL2____TRACE_42.html">trace$</a> and see <a href="COMMON-LISP____TRACE.html">trace</a>).  Each call of the executable-counterpart 
+ of <span class="v">foo</span> checks the guard and then invokes the submitted version of 
+ <span class="v">foo</span> (see <a href="ACL2____EVALUATION.html">evaluation</a>).  The submitted version calls the 
+ executable-counterpart on the recursive call.  When the guard check fails we 
+ get a violation.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____TRACE_42.html">trace$</a> foo)
+ ((FOO))
+ACL2 !&gt;(foo '(2 3 4 5) '(6 7))
+1&gt; (ACL2_*1*_ACL2::FOO (2 3 4 5) (6 7))
+  2&gt; (FOO (2 3 4 5) (6 7))
+    3&gt; (ACL2_*1*_ACL2::FOO (3 4 5) (7))
+      4&gt; (FOO (3 4 5) (7))
+        5&gt; (ACL2_*1*_ACL2::FOO (4 5) NIL)
+
+ACL2 Error in TOP-LEVEL:  The guard for the function call (FOO X Y),
+which is (<a href="COMMON-LISP____CONSP.html">CONSP</a> Y), is violated by the arguments in the call
+(FOO '(4 5) NIL).  To debug see :DOC print-gv, see :DOC trace, and
+see :DOC wet.  See :DOC set-guard-checking for information about suppressing
+this check with (<a href="ACL2____SET-GUARD-CHECKING.html">set-guard-checking</a> :none), as recommended for new
+users.
+
+ACL2 !&gt;</pre> 
+ 
+ <p>If we turn off guard errors then we can see the trace as above, but where 
+ we avoid calling the raw Lisp function when the guard fails to hold.</p> 
+ 
+ <pre class="code">ACL2 !&gt;:set-guard-checking nil
+
+Masking guard violations but still checking guards except for self-
+recursive calls.  To avoid guard checking entirely, :SET-GUARD-CHECKING
+:NONE.  See :DOC set-guard-checking.
+
+ACL2 &gt;(foo '(2 3 4 5) '(6 7))
+1&gt; (ACL2_*1*_ACL2::FOO (2 3 4 5) (6 7))
+  2&gt; (FOO (2 3 4 5) (6 7))
+    3&gt; (ACL2_*1*_ACL2::FOO (3 4 5) (7))
+      4&gt; (FOO (3 4 5) (7))
+        5&gt; (ACL2_*1*_ACL2::FOO (4 5) NIL)
+          6&gt; (ACL2_*1*_ACL2::FOO (5) NIL)
+            7&gt; (ACL2_*1*_ACL2::FOO NIL NIL)
+            &lt;7 (ACL2_*1*_ACL2::FOO NIL)
+          &lt;6 (ACL2_*1*_ACL2::FOO (5))
+        &lt;5 (ACL2_*1*_ACL2::FOO (4 5))
+      &lt;4 (FOO (3 4 5))
+    &lt;3 (ACL2_*1*_ACL2::FOO (3 4 5))
+  &lt;2 (FOO (2 3 4 5))
+&lt;1 (ACL2_*1*_ACL2::FOO (2 3 4 5))
+(2 3 4 5)
+ACL2 &gt;</pre> 
+ 
+ <p>Final note: although in general, the form <span class="v">(<a href="ACL2____EC-CALL.html">ec-call</a> (fn term1
+ ... termk))</span> is only legal if <span class="v">fn</span> is a function symbol, such a form is 
+ also legal if <span class="v">fn</span> is introduced with <span class="tt"><a href="ACL2____DEFUN-INLINE.html">defun-inline</a></span>, or with <span class="tt"><a href="ACL2____DEFINE.html">define</a></span> using keyword argument <span class="v">:inline t</span>.  In those cases, <span class="v">fn</span> is a 
+ macro whose calls expand to corresponding calls of <span class="v">fn$INLINE</span>, the symbol 
+ in the same package as <span class="v">fn</span> but with the string <span class="v">"$INLINE"</span> added as a 
+ suffix to the <span class="tt"><a href="COMMON-LISP____SYMBOL-NAME.html">symbol-name</a></span> of <span class="v">fn</span>.  We do not however extend this 
+ exception to macros in general, even when <span class="tt"><a href="ACL2____ADD-MACRO-FN.html">add-macro-fn</a></span> has been 
+ invoked.  Consider the following example.</p> 
+ 
+ <pre class="code">(<a href="ACL2____ENCAPSULATE.html">encapsulate</a>
+ ()
+ (<a href="COMMON-LISP____DEFUN.html">defun</a> foo () nil)
+ (<a href="COMMON-LISP____DEFUN.html">defun</a> bar () t)
+ (<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> mac () nil)
+ (<a href="ACL2____ADD-MACRO-ALIAS.html">add-macro-alias</a> mac foo)
+ (<a href="ACL2____LOCAL.html">local</a> (<a href="ACL2____ADD-MACRO-ALIAS.html">add-macro-alias</a> mac bar))
+ (<a href="COMMON-LISP____DEFUN.html">defun</a> h () (<a href="ACL2____EC-CALL.html">ec-call</a> (mac)))
+ (<a href="ACL2____DEFTHM.html">defthm</a> bad (h)))</pre> 
+ 
+ <p>Consider what would happen if this were legal, where <span class="v">(<a href="ACL2____EC-CALL.html">ec-call</a> (mac))</span> 
+ used the macro-alias, <span class="v">foo</span>, for <span class="v">mac</span>.  Then in the first pass of the 
+ <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span> form above, the final <span class="tt"><a href="ACL2____DEFTHM.html">defthm</a></span> event would prove, 
+ since (ec-call (mac)) is treated as (ec-call (bar)).  But on the second pass, 
+ ACL2 would store <span class="v">bad</span> as a theorem even though <span class="v">(h)</span> would evaluate to 
+ <span class="v">nil</span>, since the macro-alias of <span class="v">mac</span> is <span class="v">foo</span> on the second 
+ pass.</p>
+</body>
+</html>

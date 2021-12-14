@@ -1,0 +1,86 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Trans-eval-and-locally-bound-stobjs</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____TRANS-EVAL-AND-LOCALLY-BOUND-STOBJS">Click for Trans-eval-and-locally-bound-stobjs in the Full Manual</a></h3>
+
+<p><span class="tt"><a href="ACL2____TRANS-EVAL.html">Trans-eval</a></span> deals in global <a href="ACL2____STOBJ.html">stobj</a>s.</p><p>This topic assumes familiarity with the relatively advanced 
+ utility, <span class="tt"><a href="ACL2____TRANS-EVAL.html">trans-eval</a></span>.  In particular, see <a href="ACL2____TRANS-EVAL-AND-STOBJS.html">trans-eval-and-stobjs</a> 
+ for relevant background.  It may also be helpful to see <a href="ACL2____USER-STOBJS-MODIFIED-WARNINGS.html">user-stobjs-modified-warnings</a>.</p> 
+ 
+ <p>A stobj may be locally bound by <span class="tt"><a href="ACL2____STOBJ-LET.html">stobj-let</a></span> or <span class="tt"><a href="ACL2____WITH-LOCAL-STOBJ.html">with-local-stobj</a></span>.  But <span class="tt"><a href="ACL2____TRANS-EVAL.html">trans-eval</a></span> ignores such local bindings!  The 
+ following example illustrates this point.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFSTOBJ.html">defstobj</a> st fld)
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> f (x state)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs state :mode :program))
+  (<a href="ACL2____WITH-LOCAL-STOBJ.html">with-local-stobj</a>
+    st
+    (<a href="ACL2____MV-LET.html">mv-let</a> (<a href="ACL2____STATE.html">state</a> local-fld st)
+      (<a href="ACL2____MV-LET.html">mv-let</a> (erp val state)
+        (<a href="ACL2____TRANS-EVAL.html">trans-eval</a> `(update-fld ',x st) 'f state nil)
+        (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORE.html">ignore</a> erp val))
+        (<a href="ACL2____MV.html">mv</a> state (fld st) st))
+      (<a href="ACL2____MV.html">mv</a> state local-fld))))
+
+; The following returns (&lt;state&gt; NIL).  Thus, the return value of local-fld
+; indicated above, which is the value of the fld of the locally-bound st, is
+; nil: trans-eval did not update the locally-bound stobj!
+(f 3 state)
+
+; On the other hand the global stobj, st, was indeed updated by the call of f
+; just above.
+(<a href="ACL2____ASSERT-EVENT.html">assert-event</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (fld st) 3))</pre> 
+ 
+ <p>Here is another such example, this time using <a href="ACL2____NESTED-STOBJS.html">nested-stobjs</a> instead 
+ of <span class="tt"><a href="ACL2____WITH-LOCAL-STOBJ.html">with-local-stobj</a></span>.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFSTOBJ.html">defstobj</a> sub1 sub1-fld1)
+(<a href="ACL2____DEFSTOBJ.html">defstobj</a> top1 (top1-fld :type sub1))
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> g (x top1 state)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (top1 state) :mode :program))
+  (<a href="ACL2____STOBJ-LET.html">stobj-let</a>
+   ((sub1 (top1-fld top1))) ; bindings
+   (sub1 state)             ; producer variables
+   (<a href="ACL2____MV-LET.html">mv-let</a> (erp val state)  ; producer
+
+; NOTE: The reference to sub1 inside the following trans-eval call is actually
+; a reference to the global sub1 from the user-stobj-alist, not to the sub1
+; bound by stobj-let above.  Thus, this trans-eval call updates the global
+; stobj, sub1, not the locally bound sub1 that is a field of top1.
+
+           (<a href="ACL2____TRANS-EVAL.html">trans-eval</a> `(update-sub1-fld1 ',x sub1) 'g state t)
+           (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORE.html">ignore</a> erp val))
+           (<a href="ACL2____MV.html">mv</a> sub1 state))
+   (<a href="ACL2____MV.html">mv</a> top1 state)          ; consumer
+  ))
+
+(<a href="ACL2____G.html">g</a> 7 top1 state)
+; The global stobj, sub1, has been updated by the call of g just above.
+(<a href="ACL2____ASSERT-EVENT.html">assert-event</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (sub1-fld1 sub1) 7))
+
+(<a href="ACL2____G.html">g</a> 8 top1 state)
+; The global stobj, sub1, has been updated by the call of g just above.
+(<a href="ACL2____ASSERT-EVENT.html">assert-event</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (sub1-fld1 sub1) 8))
+
+; Obtain the sub1 field of top1.
+(<a href="COMMON-LISP____DEFUN.html">defun</a> get-sub1-of-top1 (top1)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs top1 :mode :program))
+  (<a href="ACL2____STOBJ-LET.html">stobj-let</a>
+   ((sub1 (top1-fld top1)))  ; bindings
+   (val)                     ; producer variable
+   (sub1-fld1 sub1)          ; producer
+   val                       ; consumer
+  ))
+
+; The calls of g above did not update the locally bound sub1.
+; That is, they did not update the sub1 field of top1.
+(<a href="ACL2____ASSERT-EVENT.html">assert-event</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (get-sub1-of-top1 top1) nil))</pre>
+</body>
+</html>

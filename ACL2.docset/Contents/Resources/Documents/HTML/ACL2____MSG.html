@@ -1,0 +1,126 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Msg</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____MSG">Click for Msg in the Full Manual</a></h3>
+
+<p>Construct a ``message'' suitable for the <span class="v">~@</span> directive of <span class="tt"><a href="ACL2____FMT.html">fmt</a></span></p><p>See <a href="ACL2____FMT.html">fmt</a> for background on formatted printing with ACL2.</p> 
+ 
+ <p>In short: for a call <span class="v">(<a href="ACL2____MSG.html">msg</a> s arg0 arg1 arg2 ...</span>), <span class="v">s</span> should be a 
+ string suitable as an argument to <span class="tt"><a href="ACL2____FMT.html">fmt</a></span> and <span class="v">(arg0 arg1 arg2 ...)</span> 
+ should be the bindings of <span class="v">#\0</span>, <span class="v">#\1</span>, <span class="v">#\2</span>, and so on.  See 
+ <a href="ACL2____MSGP.html">msgp</a> for a weak recognizer of objects returned by <span class="v">msg</span>.  Now, for a 
+ more careful explanation:</p> 
+ 
+ <p>We document <span class="v">msg</span> precisely below, but first, we give an informal 
+ introduction and illustrate with an example.  Suppose you are writing a 
+ program that is to do some printing.  Typically, you will either pass the ACL2 
+ state around (see <a href="ACL2____PROGRAMMING-WITH-STATE.html">programming-with-state</a>) and use formatted printing 
+ functions that take the state as an argument (see <a href="ACL2____FMT.html">fmt</a>)), or else you 
+ might avoid using state by calling the utility, <span class="tt"><a href="ACL2____CW.html">cw</a></span>, to do your 
+ printing.  Alternatively, you might print error messages upon encountering 
+ illegal situations; see <a href="ACL2____ER.html">er</a>.  But there are times where instead of 
+ printing immediately, you may prefer to pass messages around, for example to 
+ accumulate them before printing a final message.  In such cases, it may be 
+ desirable to construct ``message'' objects to pass around.</p> 
+ 
+ <p>For example, consider the following pair of little programs.  The first 
+ either performs a computation or prints an error, and the second calls the 
+ first on two inputs.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> invert1 (x)
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x)
+      (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CDR.html">cdr</a> x) (<a href="COMMON-LISP____CAR.html">car</a> x))
+    (<a href="ACL2____PROG2_42.html">prog2$</a> (<a href="ACL2____CW.html">cw</a> "ERROR: ~x0 expected a cons, but was given ~x1.~|"
+                'invert1 x)
+            nil)))
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> invert2 (x1 x2)
+  (<a href="COMMON-LISP____LIST.html">list</a> (invert1 x1) (invert1 x2)))</pre> 
+ 
+ <p>For example:</p> 
+ 
+ <pre class="code">ACL2 !&gt;(invert1 '(3 . 4))
+(4 . 3)
+ACL2 !&gt;(invert1 'a)
+ERROR: INVERT1 expected a cons, but was given A.
+NIL
+ACL2 !&gt;(invert2 '(3 . 4) '(5 . 6))
+((4 . 3) (6 . 5))
+ACL2 !&gt;(invert2 'a 'b)
+ERROR: INVERT1 expected a cons, but was given A.
+ERROR: INVERT1 expected a cons, but was given B.
+(NIL NIL)
+ACL2 !&gt;</pre> 
+ 
+ <p>Notice that when there are errors, there is no attempt to explain that 
+ these are due to a call of <span class="v">invert2</span>.  That could be fixed, of course, by 
+ arranging for <span class="v">invert2</span> to print its own error; but for complicated 
+ programs it can be awkward to coordinate printing from many sources.  So let's 
+ try a different approach.  This time, the first function returns two results. 
+ The first result is an ``error indicator'' — either a message object or 
+ <span class="v">nil</span> — while the second is the computed value (only of interest when 
+ the first result is <span class="v">nil</span>).  Then the higher-level function can print a 
+ single error message that includes the error message(s) from the lower-level 
+ function, as shown below.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> invert1a (x)
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x)
+      (<a href="ACL2____MV.html">mv</a> nil
+          (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CDR.html">cdr</a> x) (<a href="COMMON-LISP____CAR.html">car</a> x)))
+    (<a href="ACL2____MV.html">mv</a> (<a href="ACL2____MSG.html">msg</a> "ERROR: ~x0 expected a cons, but was given ~x1.~|"
+             'invert1a x)
+        nil)))
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> invert2a (x1 x2)
+  (<a href="ACL2____MV-LET.html">mv-let</a> (erp1 y1)
+          (invert1a x1)
+          (<a href="ACL2____MV-LET.html">mv-let</a> (erp2 y2)
+                  (invert1a x2)
+                  (<a href="COMMON-LISP____IF.html">if</a> erp1
+                      (<a href="COMMON-LISP____IF.html">if</a> erp2
+                          (<a href="ACL2____CW.html">cw</a> "~x0 failed with two errors:~|  ~@1  ~@2"
+                              'invert2a erp1 erp2)
+                        (<a href="ACL2____CW.html">cw</a> "~x0 failed with one error:~|  ~@1"
+                            'invert2a erp1))
+                    (<a href="COMMON-LISP____IF.html">if</a> erp2
+                        (<a href="ACL2____CW.html">cw</a> "~x0 failed with one error:~|  ~@1"
+                            'invert2a erp2)
+                      (<a href="COMMON-LISP____LIST.html">list</a> y1 y2))))))</pre> 
+ 
+ <p>For example:</p> 
+ 
+ <pre class="code">ACL2 !&gt;(invert2a '(3 . 4) '(5 . 6))
+((4 . 3) (6 . 5))
+ACL2 !&gt;(invert2a '(3 . 4) 'b)
+INVERT2A failed with one error:
+  ERROR: INVERT1A expected a cons, but was given B.
+NIL
+ACL2 !&gt;(invert2a 'a 'b)
+INVERT2A failed with two errors:
+  ERROR: INVERT1A expected a cons, but was given A.
+  ERROR: INVERT1A expected a cons, but was given B.
+NIL
+ACL2 !&gt;</pre> 
+ 
+ <p>If you study the example above, you might well understand <span class="v">msg</span>.  But we 
+ conclude with precise documentation.</p> 
+ 
+ <pre class="code">General Form:
+(<a href="ACL2____MSG.html">msg</a> str arg1 ... argk)</pre> 
+ 
+ <p>where <span class="v">str</span> is a string and <span class="v">k</span> is at most 9.</p> 
+ 
+ <p>This macro returns a pair suitable for giving to the <span class="v">fmt</span> directive 
+ <span class="v">~@</span>.  Thus, suppose that <span class="v">#\c</span> is bound to the value of <span class="v">(<a href="ACL2____MSG.html">msg</a> str
+ arg1 ... argk)</span>, where <span class="v">c</span> is a character and <span class="v">k</span> is at most 9.  Then 
+ the <span class="v">fmt</span> directive <span class="v">~@c</span> will print out the string, <span class="v">str</span>, in the 
+ context of the alist in which the successive <span class="v">fmt</span> variables <span class="v">#\0</span>, 
+ <span class="v">#\1</span>, ..., <span class="v">#\k</span> are bound to the successive elements of <span class="v">(arg1
+ ... argk)</span>.</p>
+</body>
+</html>

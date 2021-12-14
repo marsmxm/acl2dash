@@ -1,0 +1,90 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>With-local-stobj</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____WITH-LOCAL-STOBJ">Click for With-local-stobj in the Full Manual</a></h3>
+
+<p>Locally bind a single-threaded object</p><p>See <a href="ACL2____STOBJ.html">stobj</a> for an introduction to single-threaded 
+  objects.  Also see <a href="ACL2____DEFSTOBJ.html">defstobj</a> for additional background.</p> 
+ 
+ <pre class="code">Example Form:
+(<a href="ACL2____WITH-LOCAL-STOBJ.html">with-local-stobj</a>
+ st
+ (<a href="ACL2____MV-LET.html">mv-let</a> (result st)
+         (compute-with-st x st)
+         result))</pre> 
+ 
+ <p><span class="v">With-local-stobj</span> can be thought of as a macro, where the example form 
+ above expands as follows.</p> 
+ 
+ <pre class="code">(<a href="ACL2____MV-LET.html">mv-let</a> (result st)
+        (<a href="COMMON-LISP____LET.html">let</a> ((st (create-st)))
+          (compute-with-st x st))
+        (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORE.html">ignore</a> st))
+        result)</pre> 
+ 
+ <p>However, ACL2 expects you to use <span class="v">with-local-stobj</span>, not its expansion. 
+ More precisely, stobj creator functions are only allowed via 
+ <span class="v">with-local-stobj</span> or in logic-only situations (like theorems and hints). 
+ Moreover, neither <span class="v">with-local-stobj</span> nor its expansions are legal when 
+ typed directly at the top-level loop.  See <a href="ACL2____TOP-LEVEL.html">top-level</a> for a way to use 
+ <span class="v">with-local-stobj</span> in the top-level loop.</p> 
+ 
+ <pre class="code">General Forms:
+(<a href="ACL2____WITH-LOCAL-STOBJ.html">with-local-stobj</a> stobj-name mv-let-form)
+(<a href="ACL2____WITH-LOCAL-STOBJ.html">with-local-stobj</a> stobj-name mv-let-form creator-name)</pre> 
+ 
+ <p>where <span class="v">stobj-name</span> is the name of a <a href="ACL2____STOBJ.html">stobj</a>, <span class="v">mv-let-form</span> is a 
+ call of <span class="tt"><a href="ACL2____MV-LET.html">mv-let</a></span> that binds <span class="v">stobj-name</span> but does not return 
+ <span class="v">stobj-name</span> — in fact, if <span class="v">mv-let-form</span> is <span class="v">(<a href="ACL2____MV-LET.html">mv-let</a> (...)
+ ... body)</span>, then <span class="v">body</span> does not even reference <span class="v">stobj-name</span> — 
+ and if <span class="v">creator-name</span> is supplied then it should be the name of the creator 
+ function for <span class="v">stobj-name</span>.  For the example form above, its expansion would 
+ use <span class="v">creator-name</span>, if supplied, in place of <span class="v">create-st</span>.  Note that 
+ <span class="v">stobj-name</span> must not be <span class="tt"><a href="ACL2____STATE.html">state</a></span> (the ACL2 state), except in special 
+ situations probably of interest only to system developers; see <a href="ACL2____WITH-LOCAL-STATE.html">with-local-state</a>.</p> 
+ 
+ <p>Note that if a stobj <span class="v">ST</span> is bound upon beginning evaluation of a form 
+ <span class="v">(<a href="ACL2____WITH-LOCAL-STOBJ.html">with-local-stobj</a> ST ...)</span>, then the value of <span class="v">ST</span> is the same 
+ immediately before evaluating that form as it is immediately after that 
+ evaluation.  In other words, only a local version of <span class="v">ST</span> is modified 
+ inside that <span class="v">with-local-stobj</span> form.</p> 
+ 
+ <p><span class="v">With-local-stobj</span> can be useful when a stobj is used to memoize 
+ intermediate results during a computation, yet it is desired not to make the 
+ <span class="v">stobj</span> a formal parameter for the function and its callers.</p> 
+ 
+ <p>ACL2 can reason about these ``local stobjs,'' and in particular about stobj 
+ creator functions.  For technical reasons, ACL2 will not allow you to enable 
+ the <span class="v">:EXECUTABLE-COUNTERPART</span> <a href="ACL2____RUNE.html">rune</a> of a stobj creator function.</p> 
+ 
+ <p>Finally, here is a small example concocted in order to illustrate that 
+ <span class="v">with-local-stobj</span> calls can be nested.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFSTOBJ.html">defstobj</a> st fld1)
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> foo ()
+  (<a href="ACL2____WITH-LOCAL-STOBJ.html">with-local-stobj</a>
+   st ; Let us call this the ``outer binding of st''.
+   (<a href="ACL2____MV-LET.html">mv-let</a> (val10 val20 st)
+     (<a href="COMMON-LISP____LET.html">let</a> ((st (update-fld1 10 st)))
+       ;; At this point the outer binding of st has fld1 = 10.
+       (<a href="COMMON-LISP____LET.html">let</a> ((result (<a href="ACL2____WITH-LOCAL-STOBJ.html">with-local-stobj</a>
+                      st ; Let us call this the ``inner binding of st''.
+                      (<a href="ACL2____MV-LET.html">mv-let</a> (val st)
+                        (<a href="COMMON-LISP____LET.html">let</a> ((st (update-fld1 20 st)))
+                          ;; Now fld1 = 20 for the inner binding of st.
+                          (<a href="ACL2____MV.html">mv</a> (fld1 st) st))
+                        val))))
+         ;; So result has been bound to 20 above, but here we are once again
+         ;; looking at the outer binding of st, where fld1 is still 10.
+         (<a href="ACL2____MV.html">mv</a> (fld1 st) result st)))
+     (<a href="ACL2____MV.html">mv</a> val10 val20))))
+
+(<a href="ACL2____THM.html">thm</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (foo) (<a href="ACL2____MV.html">mv</a> 10 20))) ; succeeds</pre>
+</body>
+</html>

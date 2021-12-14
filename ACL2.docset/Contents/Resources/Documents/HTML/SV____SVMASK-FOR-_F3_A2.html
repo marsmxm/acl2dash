@@ -1,0 +1,110 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Svmask-for-?*</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=SV____SVMASK-FOR-_F3_A2">Click for Svmask-for-?* in the Full Manual</a></h3>
+
+<p>Implements <a href="SV____SVEX-ARGMASKS.html">svex-argmasks</a> for <span class="v">?*</span>.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(svmask-for-?* mask args) → argmasks</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">mask</span> — Care mask for the full expression.<br>    <font color="#606060">Guard <span class="v">(<a href="SV____4VMASK-P.html">4vmask-p</a> mask)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">args</span> — Arguments to this <span class="v">?*</span> operator.<br>    <font color="#606060">Guard <span class="v">(<a href="SV____SVEXLIST-P.html">svexlist-p</a> args)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">argmasks</span> — The new care masks inferred for the <span class="v">args</span>.<br>    <font color="#606060">Type <span class="v">(<a href="SV____4VMASKLIST-P.html">4vmasklist-p</a> argmasks)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>We are considering a <span class="v">(? test then else)</span> expression and we know 
+that we only care about the bits mentioned in <span class="v">mask</span>.  We need to figure out 
+which bits of <span class="v">test</span>, <span class="v">then</span>, and <span class="v">else</span> we care about.</p> 
+ 
+<p>We will almost always need to care about the entire <span class="v">test</span> expression. 
+The only exceptions to this would be when either:</p> 
+ 
+<ul> 
+ 
+<li>We don't care about any bits at all, i.e., the outer <span class="v">mask</span> is 
+empty.</li> 
+ 
+<li>For all bits we care about, the corresponding bits of <span class="v">then</span> and 
+<span class="v">else</span> branches are known to agree.  For instance, <span class="v">(? test 5 5)</span> is 
+going to be 5 regardless of <span class="v">test</span>.  (This is pretty obscure).</li> 
+ 
+</ul> 
+ 
+<p>More obvious and probably more useful mask improvements:</p> 
+ 
+<ul> 
+<li>When we know that some bit of <span class="v">test</span> is 1, we can completely don't 
+care <span class="v">else</span>;</li> 
+<li>When we know that all bits of <span class="v">test</span> are 0, we can completely don't 
+care <span class="v">then</span>.</li> 
+</ul> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>svmask-for-?*</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ svmask-for-?* (mask args)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="SV____4VMASK-P.html">4vmask-p</a> mask)
+                             (<a href="SV____SVEXLIST-P.html">svexlist-p</a> args))))
+ (<a href="COMMON-LISP____LET.html">let</a>
+   ((__function__ 'svmask-for-?*))
+   (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+   (<a href="ACL2____B_A2.html">b*</a> (((svex-nths test then else) args)
+        (mask (<a href="SV____4VMASK-FIX.html">4vmask-fix</a> mask)))
+       (<a href="ACL2____B_A2.html">b*</a> (((when (<a href="SV____4VMASK-EMPTY.html">4vmask-empty</a> mask))
+             (<a href="COMMON-LISP____LIST.html">list</a> 0 0 0))
+            ((<a href="SV____S4VEC.html">s4vec</a> testval) (<a href="SV____SVEX-S4XEVAL.html">svex-s4xeval</a> test))
+            (test-1s (<a href="BITOPS____SPARSEINT-BITAND.html">sparseint-bitand</a> testval.upper testval.lower))
+            ((unless (<a href="BITOPS____SPARSEINT-EQUAL.html">sparseint-equal</a> test-1s 0))
+             (<a href="COMMON-LISP____LIST.html">list</a> test-1s mask 0))
+            ((when (<a href="COMMON-LISP____AND.html">and</a> (<a href="BITOPS____SPARSEINT-EQUAL.html">sparseint-equal</a> testval.upper 0)
+                        (<a href="BITOPS____SPARSEINT-EQUAL.html">sparseint-equal</a> testval.lower 0)))
+             (<a href="COMMON-LISP____LIST.html">list</a> -1 0 mask)))
+           (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> then else)
+                   (<a href="SV____BRANCHES-SAME-UNDER-MASK-P.html">branches-same-under-mask-p</a> mask then else))
+               (<a href="COMMON-LISP____LIST.html">list</a> 0 mask mask)
+               (<a href="COMMON-LISP____LIST.html">list</a> -1 mask mask))))))</pre> 
+<p><b>Theorem: </b>4vmasklist-p-of-svmask-for-?*</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> 4vmasklist-p-of-svmask-for-?*
+        (<a href="ACL2____B_A2.html">b*</a> ((argmasks (<a href="SV____SVMASK-FOR-_F3_A2.html">svmask-for-?*</a> mask args)))
+            (<a href="SV____4VMASKLIST-P.html">4vmasklist-p</a> argmasks))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>svmask-for-?*-of-4vmask-fix-mask</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> svmask-for-?*-of-4vmask-fix-mask
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SV____SVMASK-FOR-_F3_A2.html">svmask-for-?*</a> (<a href="SV____4VMASK-FIX.html">4vmask-fix</a> mask) args)
+               (<a href="SV____SVMASK-FOR-_F3_A2.html">svmask-for-?*</a> mask args)))</pre> 
+<p><b>Theorem: </b>svmask-for-?*-4vmask-equiv-congruence-on-mask</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> svmask-for-?*-4vmask-equiv-congruence-on-mask
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="SV____4VMASK-EQUIV.html">4vmask-equiv</a> mask mask-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SV____SVMASK-FOR-_F3_A2.html">svmask-for-?*</a> mask args)
+                        (<a href="SV____SVMASK-FOR-_F3_A2.html">svmask-for-?*</a> mask-equiv args)))
+        :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>svmask-for-?*-of-svexlist-fix-args</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> svmask-for-?*-of-svexlist-fix-args
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SV____SVMASK-FOR-_F3_A2.html">svmask-for-?*</a> mask (<a href="SV____SVEXLIST-FIX.html">svexlist-fix</a> args))
+               (<a href="SV____SVMASK-FOR-_F3_A2.html">svmask-for-?*</a> mask args)))</pre> 
+<p><b>Theorem: </b>svmask-for-?*-svexlist-equiv-congruence-on-args</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> svmask-for-?*-svexlist-equiv-congruence-on-args
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="SV____SVEXLIST-EQUIV.html">svexlist-equiv</a> args args-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SV____SVMASK-FOR-_F3_A2.html">svmask-for-?*</a> mask args)
+                        (<a href="SV____SVMASK-FOR-_F3_A2.html">svmask-for-?*</a> mask args-equiv)))
+        :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>svmask-for-?*-correct</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ svmask-for-?*-correct
+ (<a href="ACL2____IMPLIES.html">implies</a>
+    (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SV____4VECLIST-MASK.html">4veclist-mask</a> (<a href="SV____SVMASK-FOR-_F3_A2.html">svmask-for-?*</a> mask args)
+                               (<a href="SV____SVEXLIST-EVAL.html">svexlist-eval</a> args env))
+                (<a href="SV____4VECLIST-MASK.html">4veclist-mask</a> (<a href="SV____SVMASK-FOR-_F3_A2.html">svmask-for-?*</a> mask args)
+                               args1))
+         (<a href="ACL2____SYNTAXP.html">syntaxp</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> args1
+                              (<a href="COMMON-LISP____CONS.html">cons</a> 'svexlist-eval
+                                    (<a href="COMMON-LISP____CONS.html">cons</a> args (<a href="COMMON-LISP____CONS.html">cons</a> env 'nil)))))))
+    (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SV____4VEC-MASK.html">4vec-mask</a> mask (<a href="SV____SVEX-APPLY.html">svex-apply</a> '?* args1))
+           (<a href="SV____4VEC-MASK.html">4vec-mask</a> mask
+                      (<a href="SV____SVEX-APPLY.html">svex-apply</a> '?*
+                                  (<a href="SV____SVEXLIST-EVAL.html">svexlist-eval</a> args env))))))</pre> 
+
+</body>
+</html>

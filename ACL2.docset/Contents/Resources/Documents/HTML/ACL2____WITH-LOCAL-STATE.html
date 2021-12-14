@@ -1,0 +1,95 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>With-local-state</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____WITH-LOCAL-STATE">Click for With-local-state in the Full Manual</a></h3>
+
+<p>Locally bind state</p><p>This is an advanced topic, probably of interest only to system 
+ developers.</p> 
+ 
+ <p>Consider the following example form:</p> 
+ 
+ <pre class="code">(<a href="ACL2____WITH-LOCAL-STATE.html">with-local-state</a>
+ (<a href="ACL2____MV-LET.html">mv-let</a> (result state)
+         (compute-with-state x state)
+         result))</pre> 
+ 
+ <p>This is equivalent to the following form.</p> 
+ 
+ <pre class="code">(<a href="ACL2____WITH-LOCAL-STOBJ.html">with-local-stobj</a>
+ state
+ (<a href="ACL2____MV-LET.html">mv-let</a> (result state)
+         (compute-with-state x state)
+         result))</pre> 
+ 
+ <p>By default, this form is illegal, because ACL2 does not have a way to 
+ unwind all changes to the ACL2 <a href="ACL2____STATE.html">state</a>; we say more on this issue below. 
+ There may however be situations where you are willing to manage or overlook 
+ this issue.  In that case you may execute the following form to enable the use 
+ of <span class="v">with-local-state</span>, by enabling the use of <span class="tt"><a href="ACL2____WITH-LOCAL-STOBJ.html">with-local-stobj</a></span> on 
+ <span class="v">state</span>; but note that it requires an active trust tag (see <a href="ACL2____DEFTTAG.html">defttag</a>).</p> 
+ 
+ <pre class="code">(<a href="ACL2____REMOVE-UNTOUCHABLE.html">remove-untouchable</a> create-state t)</pre> 
+ 
+ <p>Please be aware that no local <a href="ACL2____STATE.html">state</a> is actually created, however! 
+ In particular, users of <span class="v">with-local-state</span> need either to ensure that 
+ channels are closed and state global variables are returned to their original 
+ values, or else be willing to live with changes made to state that are not 
+ justified by the code that has been evaluated.  You are welcome to look in the 
+ the ACL2 source code at the definition of macro <span class="v">channel-to-string</span>, which 
+ employs <span class="v">with-local-state</span> to create a local <a href="ACL2____STATE.html">state</a> for the purpose 
+ of creating a string.</p> 
+ 
+ <p>Here is an example use of <span class="v">with-local-state</span>.  Notice the use of <span class="tt"><a href="ACL2____DEFTTAG.html">defttag</a></span> — and indeed, please understand that we are just hacking here, 
+ and in general it takes significant effort to be sure that one is using 
+ <span class="v">with-local-state</span> correctly!</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTTAG.html">defttag</a> t)
+
+(<a href="ACL2____REMOVE-UNTOUCHABLE.html">remove-untouchable</a> create-state t)
+
+(<a href="ACL2____SET-STATE-OK.html">set-state-ok</a> t)
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> foo (<a href="ACL2____STATE.html">state</a>)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :mode :program))
+  (<a href="ACL2____MV-LET.html">mv-let</a>
+   (channel state)
+   (<a href="ACL2____OPEN-INPUT-CHANNEL.html">open-input-channel</a> "my-file" :object state)
+   (<a href="ACL2____MV-LET.html">mv-let</a> (eofp obj state)
+           (<a href="ACL2____READ-OBJECT.html">read-object</a> channel state)
+           (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORE.html">ignore</a> eofp))
+           (<a href="COMMON-LISP____LET.html">let</a> ((<a href="ACL2____STATE.html">state</a> (<a href="ACL2____CLOSE-INPUT-CHANNEL.html">close-input-channel</a> channel state)))
+             (<a href="ACL2____MV.html">mv</a> obj state)))))
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> bar ()
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :mode :program))
+  (<a href="ACL2____WITH-LOCAL-STATE.html">with-local-state</a> (<a href="ACL2____MV-LET.html">mv-let</a> (result state)
+                            (foo state)
+                            result)))
+
+; Multiple-value return version:
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> foo2 (<a href="ACL2____STATE.html">state</a>)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :mode :program))
+  (<a href="ACL2____MV-LET.html">mv-let</a>
+   (channel state)
+   (<a href="ACL2____OPEN-INPUT-CHANNEL.html">open-input-channel</a> "my-file" :object state)
+   (<a href="ACL2____MV-LET.html">mv-let</a> (eofp obj state)
+           (<a href="ACL2____READ-OBJECT.html">read-object</a> channel state)
+           (<a href="COMMON-LISP____LET.html">let</a> ((<a href="ACL2____STATE.html">state</a> (<a href="ACL2____CLOSE-INPUT-CHANNEL.html">close-input-channel</a> channel state)))
+             (<a href="ACL2____MV.html">mv</a> eofp obj state)))))
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> bar2 ()
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :mode :program))
+  (<a href="ACL2____WITH-LOCAL-STATE.html">with-local-state</a> (<a href="ACL2____MV-LET.html">mv-let</a> (eofp result state)
+                            (foo2 state)
+                            (<a href="ACL2____MV.html">mv</a> eofp result))))</pre> 
+ 
+ <p>Note for ACL2(p) users: When <a href="ACL2____PARALLEL-EXECUTION.html">parallel-execution</a> is enabled, 
+ invocations of <span class="v">with-local-state</span> are surrounded by a lock.</p>
+</body>
+</html>

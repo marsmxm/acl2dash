@@ -1,0 +1,139 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Using-computed-hints-4</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____USING-COMPUTED-HINTS-4">Click for Using-computed-hints-4 in the Full Manual</a></h3>
+
+<p>Computing the Hints</p><p>So far we have used computed hints only to compute when a fixed set 
+ of keys and values are to be used as a hint.  But computed hints can, of 
+ course, compute the set of keys and values.  You might, for example, write a 
+ hint that recognizes when a clause ``ought'' to be provable by a <span class="v">:BDD</span> 
+ hint and generate the appropriate hint.  You might build in a set of useful 
+ lemmas and check to see if the clause is provable <span class="v">:BY</span> one of them.  You 
+ can keep all function symbols disabled and use computed hints to compute which 
+ ones you want to <span class="v">:EXPAND</span>.  In general, you can write a theorem prover for 
+ use in your hints, provided you can get it to do its job by directing our 
+ theorem prover.</p> 
+ 
+ <p>Suppose for example we wish to find every occurrence of an instance of 
+ <span class="v">(SWAP x)</span> and provide the corresponding instance of 
+ <span class="v">ALL-SWAPS-HAVE-THE-PROPERTY</span>.  Obviously, we must explore the clause 
+ looking for instances of <span class="v">(SWAP x)</span> and build the appropriate instances of 
+ the lemma.  We could do this in many different ways, but below we show a 
+ general purpose set of utilities for doing it.  The functions are not defined 
+ in ACL2 but could be defined as shown.</p> 
+ 
+ <p>Our plan is: (1) Find all instances of a given pattern (term) in a clause, 
+ obtaining a set of substitutions.  (2) Build a set of <span class="v">:instance</span> 
+ expressions for a given lemma name and set of substitutions.  (3) Generate a 
+ <span class="v">:use</span> hint for those instances when instances are found.</p> 
+ 
+ <p>The pair of functions below find all instances of a given pattern term in 
+ either a term or a list of terms.  The functions each return a list of 
+ substitutions, each substitution accounting for one of the matches of pat to a 
+ subterm.  At this level in ACL2 substitutions are lists of pairs of the form 
+ <span class="v">(var . term)</span>.  All terms mentioned here are presumed to be in translated 
+ form.</p> 
+ 
+ <p>The functions take as their third argument a list of substitutions 
+ accumulated to date and add to it the substitutions produced by matching pat 
+ to the subterms of the term.  We intend this accumulator to be nil initially. 
+ If the returned value is nil, then no instances of pat occurred.</p> 
+ 
+ <pre class="code">(<a href="ACL2____MUTUAL-RECURSION.html">mutual-recursion</a>
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> find-all-instances (pat term alists)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :mode :program))
+ (<a href="ACL2____MV-LET.html">mv-let</a>
+  (instancep alist)
+  (one-way-unify pat term)
+  (<a href="COMMON-LISP____LET.html">let</a> ((<a href="ACL2____ALISTS.html">alists</a> (<a href="COMMON-LISP____IF.html">if</a> instancep (<a href="ACL2____ADD-TO-SET-EQUAL.html">add-to-set-equal</a> alist alists) alists)))
+    (<a href="COMMON-LISP____COND.html">cond</a>
+     ((<a href="ACL2____VARIABLEP.html">variablep</a> term) alists)
+     ((<a href="ACL2____FQUOTEP.html">fquotep</a> term) alists)
+     (t (find-all-instances-list pat (<a href="ACL2____FARGS.html">fargs</a> term) alists))))))
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> find-all-instances-list (pat list-of-terms alists)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :mode :program))
+ (<a href="COMMON-LISP____COND.html">cond</a>
+  ((<a href="COMMON-LISP____NULL.html">null</a> list-of-terms) alists)
+  (t (find-all-instances pat
+                         (<a href="COMMON-LISP____CAR.html">car</a> list-of-terms)
+                         (find-all-instances-list pat
+                                                  (<a href="COMMON-LISP____CDR.html">cdr</a> list-of-terms)
+                                                  alists))))))</pre> 
+ 
+ <p>Caveat: The following aside has nothing to do with computed hints.  Does an 
+ instance of <span class="v">(<a href="COMMON-LISP____CAR.html">CAR</a> (<a href="COMMON-LISP____CDR.html">CDR</a> x))</span> occur in <span class="v">((<a href="COMMON-LISP____LAMBDA.html">LAMBDA</a> (V) (<a href="COMMON-LISP____CAR.html">CAR</a> V)) (<a href="COMMON-LISP____CDR.html">CDR</a> A))</span>? 
+ It does if one beta-reduces the lambda-expression to <span class="v">(<a href="COMMON-LISP____CAR.html">CAR</a> (<a href="COMMON-LISP____CDR.html">CDR</a> A))</span>; the 
+ appropriate substitution is to replace <span class="v">x</span> by <span class="v">A</span>.  But the definition 
+ of <span class="v">find-all-instances</span> above does <i>not</i> find this instance because it 
+ does not do beta-reduction.</p> 
+ 
+ <p>We now turn our attention to converting a list of substitutions into a list 
+ of lemma instances, each of the form</p> 
+ 
+ <pre class="code">(:INSTANCE name (var1 term1) ... (vark termk))</pre> 
+ 
+ <p>as written in <span class="v">:use</span> hints.  In the code shown above, substitutions are 
+ lists of pairs of the form <span class="v">(var . term)</span>, but in lemma instances we must 
+ write ``doublets.''  So here we show how to convert from one to the other:</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> pairs-to-doublets (alist)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :mode :program))
+  (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____NULL.html">null</a> alist) nil)
+        (t (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____LIST.html">list</a> (<a href="COMMON-LISP____CAAR.html">caar</a> alist) (<a href="COMMON-LISP____CDAR.html">cdar</a> alist))
+                 (pairs-to-doublets (<a href="COMMON-LISP____CDR.html">cdr</a> alist))))))</pre> 
+ 
+ <p>Now we can make a list of lemma instances:</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> make-lemma-instances (<a href="ACL2____NAME.html">name</a> alists)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :mode :program))
+  (<a href="COMMON-LISP____COND.html">cond</a>
+   ((<a href="COMMON-LISP____NULL.html">null</a> alists) nil)
+   (t (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____LIST_A2.html">list*</a> :instance name (pairs-to-doublets (<a href="COMMON-LISP____CAR.html">car</a> alists)))
+            (make-lemma-instances name (<a href="COMMON-LISP____CDR.html">cdr</a> alists))))))</pre> 
+ 
+ <p>Finally, we can package it all together into a hint function.  The function 
+ takes a pattern, <span class="v">pat</span>, which must be a translated term, the name of a 
+ lemma, <span class="v">name</span>, and a clause.  If some instances of <span class="v">pat</span> occur in 
+ <span class="v">clause</span>, then the corresponding instances of <span class="v">name</span> are <span class="v">:USE</span>d in 
+ the computed hint.  Otherwise, the hint does not apply.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> add-corresponding-instances (pat name clause)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :mode :program))
+  (<a href="COMMON-LISP____LET.html">let</a> ((<a href="ACL2____ALISTS.html">alists</a> (find-all-instances-list pat clause nil)))
+    (<a href="COMMON-LISP____COND.html">cond</a>
+     ((<a href="COMMON-LISP____NULL.html">null</a> alists) nil)
+     (t (<a href="COMMON-LISP____LIST.html">list</a> :use (make-lemma-instances name alists))))))</pre> 
+ 
+ <p>The design of this particular hint function makes it important that the 
+ variables of the pattern be the variables of the named lemma and that all of 
+ the variables we wish to instantiate occur in the pattern.  We could, of 
+ course, redesign it to allow ``free variables'' or some sort of renaming.</p> 
+ 
+ <p>We could now use this hint as shown below:</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> ... ...
+  :hints ((add-corresponding-instances
+           '(SWAP x)
+           'ALL-SWAPS-HAVE-THE-PROPERTY
+           clause)))</pre> 
+ 
+ <p>The effect of the hint above is that any time a clause arises in which any 
+ instance of <span class="v">(SWAP x)</span> appears, we add the corresponding instance of 
+ <span class="v">ALL-SWAPS-HAVE-THE-PROPERTY</span>.  So for example, if Subgoal *1/3.5 contains 
+ the subterm <span class="v">(SWAP (SWAP A))</span> then this hint fires and makes the system 
+ behave as though the hint:</p> 
+ 
+ <pre class="code">("Subgoal *1/3.5"
+ :USE ((:INSTANCE ALL-SWAPS-HAVE-THE-PROPERTY (X A))
+       (:INSTANCE ALL-SWAPS-HAVE-THE-PROPERTY (X (SWAP A)))))</pre> 
+ 
+ <p>had been present.</p>
+</body>
+</html>

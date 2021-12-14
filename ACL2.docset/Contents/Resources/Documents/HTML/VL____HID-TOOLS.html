@@ -1,0 +1,102 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Hid-tools</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL____HID-TOOLS">Click for Hid-tools in the Full Manual</a></h3>
+
+<p>Functions for working with hierarchical identifiers.</p><p>Perhaps the most fundamental operation for a hierarchical 
+identifier is figure out what it refers to.  This turns out to be a 
+surprisingly challenging and nuanced process.</p> 
+ 
+<p>Our top-level routine for following hierarchical identifiers is <a href="VL____VL-FOLLOW-HIDEXPR.html">vl-follow-hidexpr</a>.  It is meant to make looking up hierarchical identifiers 
+convenient despite these complications.</p> 
+ 
+<p>We now describe some of these challenges and how <a href="VL____VL-FOLLOW-HIDEXPR.html">vl-follow-hidexpr</a> 
+deals with them.</p> 
+ 
+<dl> 
+ 
+<dt>Datatypes versus Scopes</dt> 
+ 
+<dd>Challenge: The same syntax is used to refer to both data structure members 
+like <span class="v">myinst.opcode</span> and also to scopes like <span class="v">mysubmod.mywire</span>.  However, 
+structures and scopes are very different and need to be traversed in different 
+ways.</dd> 
+ 
+<dd>Our Approach: <a href="VL____VL-FOLLOW-HIDEXPR.html">vl-follow-hidexpr</a> follows only the scope-based part of 
+the HID.  However, as one of our return values, we provide the tail of the 
+hierarchical index that leads into this variable.  For instance, in a case like 
+<span class="v">foo.bar.myinst.opcode</span> where <span class="v">myinst</span> is an <span class="v">instruction_t</span> structure 
+variable, we will follow only until the declaration of <span class="v">myinst</span> and then we 
+will return <span class="v">myinst.opcode</span> as the tail.</dd> 
+ 
+ 
+<dt>Unclear Destination</dt> 
+ 
+<dd>Challenge: Depending on the kind of analysis being done, we might want to 
+continue or stop resolving at certain points.  For instance, if we are trying 
+to size a hierarchical identifier like <span class="v">myinterface.ready</span>, we probably want 
+to follow through the interface all the way to the <span class="v">ready</span> signal.  However, 
+for light-weight variable use analysis, we may want to stop as soon as we hit 
+an interface.</dd> 
+ 
+<dd>Our Approach: <a href="VL____VL-FOLLOW-HIDEXPR.html">vl-follow-hidexpr</a> follows the HID as far as possible, 
+but returns a <a href="VL____VL-HIDTRACE-P.html">vl-hidtrace-p</a> that includes not only the final declaration 
+we arrive at, but also all intermediate points along the way.  If you only care 
+about the final destination (e.g., the <span class="v">ready</span> signal for sizing or similar) 
+then you can get this final destination from the first <a href="VL____VL-HIDSTEP-P.html">vl-hidstep-p</a> in 
+the trace.  But if you also want to know, e.g., that <span class="v">myinterface</span> has been 
+used, this information can easily be extracted from the rest of the trace.</dd> 
+ 
+ 
+<dt>Unresolved Parameters</dt> 
+ 
+<dd>Challenge: Because of parameters, we may not be able to tell whether the 
+indices in a hierarchical identifier are valid.  For instance, if there is an 
+array of module instances like <span class="v">mymod myarr [width-1:0] (...)</span> and we are 
+trying to follow a hierarchical reference like <span class="v">foo.bar.myarr[7].baz</span>, then 
+we will not know whether this is valid until we have resolved <span class="v">width</span>.</dd> 
+ 
+<dd>In some applications, e.g., for <a href="VL____VL-LINT.html">vl-lint</a>, it may be best to allow 
+these potentially invalid indices.  After all, we "know" that this reference 
+is either invalid or is a reference to <span class="v">baz</span> within <span class="v">mymod</span>.  In that 
+case, we may well wish to assume that the index will be valid and just go on 
+and find <span class="v">baz</span>.</dd> 
+ 
+<dd>However, some other applications have more stringent soundness constraints. 
+If we are writing transforms that are meant to build conservative, safe, formal 
+models of the Verilog code, we may instead want to insist that all of the 
+indices have been resolved and cause an error if this is not the case.</dd> 
+ 
+<dd>Our Approach: <a href="VL____VL-FOLLOW-HIDEXPR.html">vl-follow-hidexpr</a> always tries to check that indices 
+are in bounds and to cause errors when indices are clearly out of bounds.  If 
+we encounter indices that are potentially out of bounds, then we can do one of 
+two things: 
+ 
+<ul> 
+<li>By default, we are permissive and assume the index will be in bounds.</li> 
+<li>However, if <span class="v">:strictp</span> is enabled, we will cause an error.</li> 
+</ul>
+</dd> 
+ 
+<dd>As a special note: we always require generate array indices to be resolved. 
+See <a href="VL____VL-FOLLOW-HIDEXPR.html">vl-follow-hidexpr</a> for additional discussion.</dd> 
+ 
+<dt>Error reporting</dt> 
+ 
+<dd>Challenge: A HID may be invalid in many different ways.  Any part of the 
+HID may try to refer to a name that does not exist, and any index along the HID 
+might be invalid.  If an error occurs, we should provide enough detail to 
+understand the problem.</dd> 
+ 
+<dd>Our Approach: In the case of any error, <a href="VL____VL-FOLLOW-HIDEXPR.html">vl-follow-hidexpr</a> returns a 
+message.  Callers should put this message in the appropriate context so 
+that the end-user can understand the nature and location of the problem.</dd> 
+ 
+</dl>
+</body>
+</html>

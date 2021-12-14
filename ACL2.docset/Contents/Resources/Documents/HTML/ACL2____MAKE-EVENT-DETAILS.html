@@ -1,0 +1,266 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Make-event-details</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____MAKE-EVENT-DETAILS">Click for Make-event-details in the Full Manual</a></h3>
+
+<p>Details on <span class="tt"><a href="ACL2____MAKE-EVENT.html">make-event</a></span> expansion</p><p>The normal user of <span class="v">make-event</span> can probably ignore this 
+ section, but we include it for completeness.  We assume that the reader has 
+ read and understood the basic documentation for <span class="v">make-event</span> (see <a href="ACL2____MAKE-EVENT.html">make-event</a>), but we begin below with a summary of expansion.</p> 
+ 
+ <h3>Introduction</h3> 
+ 
+ <p>Here is a summary of how we handle expansion involving <span class="v">make-event</span> 
+ forms.</p> 
+ 
+ <p><span class="v">(<a href="ACL2____MAKE-EVENT.html">make-event</a> form :check-expansion nil)</span></p> 
+ 
+ <p>This shows the <span class="v">:check-expansion</span> default of <span class="v">nil</span>, and is typical 
+ user input.  We compute the expansion <span class="v">exp</span> of <span class="v">form</span>, which is the 
+ expansion of the original <span class="v">make-event</span> expression and is evaluated in place 
+ of that expression.</p> 
+ 
+ <p><span class="v">(<a href="ACL2____MAKE-EVENT.html">make-event</a> form :check-expansion t)</span></p> 
+ 
+ <p>The user presumably wants it checked that the expansion doesn't change in 
+ the future, in particular during <span class="tt"><a href="ACL2____INCLUDE-BOOK.html">include-book</a></span>.  If the expansion of 
+ <span class="v">form</span> is <span class="v">exp</span>, then we will evaluate <span class="v">exp</span> to obtain the value as 
+ before, but this time we record that the expansion of the original 
+ <span class="v">make-event</span> expression is <span class="v">(<a href="ACL2____MAKE-EVENT.html">make-event</a> form :check-expansion exp)</span> 
+ rather than simply <span class="v">exp</span>.</p> 
+ 
+ <p><span class="v">(<a href="ACL2____MAKE-EVENT.html">make-event</a> form :check-expansion exp) ; exp a cons</span></p> 
+ 
+ <p>This is generated for the case that <span class="v">:check-expansion</span> is <span class="v">t</span>, as 
+ explained above.  Evaluation is handled as described in that above case, 
+ except here we check that the expansion result is the given <span class="v">exp</span>. 
+ (Actually, the user is also allowed supply such a form.)  The original 
+ <span class="v">make-event</span> expression does not undergo any expansion (intuitively, it 
+ expands to itself).</p> 
+ 
+ <p>Now let us take a brief look at how we expand <span class="tt"><a href="COMMON-LISP____PROGN.html">progn</a></span> and <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span> forms.  More details are found further below (see ``Detailed 
+ semantics'').</p> 
+ 
+ <p><span class="v">(<a href="COMMON-LISP____PROGN.html">progn</a> ... (<a href="ACL2____MAKE-EVENT.html">make-event</a> form ...) ...)</span></p> 
+ 
+ <p>The expansion is obtained, roughly speaking, by replacing the 
+ <span class="v">make-event</span> form by its expansion, <span class="v">exp</span>, except that if 
+ <span class="v">:check-expansion exp</span> is supplied explicitly, then no such replacement 
+ takes place.</p> 
+ 
+ <p>Expansion for <span class="v">(<a href="ACL2____ENCAPSULATE.html">encapsulate</a> ... (<a href="ACL2____MAKE-EVENT.html">make-event</a> form ...) ...)</span> is similar 
+ to the case for <span class="v">progn</span>, except that for if the expansion of <span class="v">form</span> is 
+ <span class="v">exp</span>, then what is stored is <span class="v">(record-expansion (<a href="ACL2____MAKE-EVENT.html">make-event</a> form ...)
+ exp)</span>.  Also as for <span class="v">progn</span>, the exception is that when 
+ <span class="v">:check-expansion exp</span> is supplied explicitly, no such replacement takes 
+ place.  Here, <span class="v">record-expansion</span> is a macro that simply returns its second 
+ argument, but is used for checking redundancy of <span class="v">encapsulate</span> forms (see 
+ <a href="ACL2____REDUNDANT-ENCAPSULATE.html">redundant-encapsulate</a>).</p> 
+ 
+ <h3>Detailed semantics</h3> 
+ 
+ <p>In our explanation of the semantics of <span class="v">make-event</span>, we assume 
+ familiarity with the notion of ``embedded event form'' (see <a href="ACL2____EMBEDDED-EVENT-FORM.html">embedded-event-form</a>).</p> 
+ 
+ <p>Let's say that the ``actual embedded event form'' corresponding to a given 
+ form is the underlying call of an ACL2 event: that is, <span class="tt"><a href="ACL2____LOCAL.html">local</a></span>s are 
+ dropped when <span class="v">ld-skip-proofsp</span> is <span class="v">'include-book</span>, and macros are 
+ expanded away, thus leaving us with a <span class="tt"><a href="COMMON-LISP____PROGN.html">progn</a></span>, a <span class="tt"><a href="ACL2____MAKE-EVENT.html">make-event</a></span>, or 
+ an event form (possibly <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span>), any of which might have 
+ surrounding <span class="tt"><a href="ACL2____LOCAL.html">local</a></span>, <span class="tt"><a href="ACL2____SKIP-PROOFS.html">skip-proofs</a></span>, or <span class="tt"><a href="ACL2____WITH-OUTPUT.html">with-output</a></span> 
+ calls.</p> 
+ 
+ <p>Thus, such an actual embedded event form can be viewed as having the form 
+ <span class="v">(rebuild-expansion wrappers base-form)</span> where <span class="v">base-form</span> is a 
+ <span class="v">progn</span>, a <span class="v">make-event</span>, or an event form (possibly <span class="v">encapsulate</span>), 
+ and <span class="v">wrappers</span> are (as in ACL2 source function <span class="v">destructure-expansion</span>) 
+ the result of successively removing the event form from the result of 
+ macroexpansion, leaving a sequence of <span class="v">(<a href="ACL2____LOCAL.html">local</a>)</span>, <span class="v">(<a href="ACL2____SKIP-PROOFS.html">skip-proofs</a>)</span>, and 
+ <span class="v">(<a href="ACL2____WITH-OUTPUT.html">with-output</a> ...)</span> forms.  In this case we say that the form 
+ ``destructures into'' the indicated <span class="v">wrappers</span> and <span class="v">base-form</span>, and that 
+ it can be ``rebuilt from'' those <span class="v">wrappers</span> and <span class="v">base-form</span>.</p> 
+ 
+ <p>Elsewhere we define the notion of the ``expansion result'' from an 
+ evaluation (see <a href="ACL2____MAKE-EVENT.html">make-event</a>), and we mention that when expansion 
+ concludes, the ACL2 logical <a href="ACL2____WORLD.html">world</a> and most of the <span class="v">state</span> are 
+ restored to their pre-expansion values.  Specifically, after evaluation of the 
+ argument of <span class="v">make-event</span> (even if it is aborted), the ACL2 logical world is 
+ restored to its pre-evaluation value, as are all state global variables in the 
+ list <span class="v">*protected-system-state-globals*</span>.  Thus, assignments to user-defined 
+ state globals (see <a href="ACL2____ASSIGN.html">assign</a>) do persist after expansion, since they are 
+ not in that list.</p> 
+ 
+ <p>We recursively define the combination of evaluation and expansion of an 
+ embedded event form, as follows.  We also simultaneously define the notion of 
+ ``expansion takes place,'' which is assumed to propagate upward (in a sense 
+ that will be obvious), such that if no expansion takes place, then the 
+ expansion of the given form is considered to be itself.  It is useful to keep 
+ in mind a goal that we will consider later: Every <span class="v">make-event</span> subterm of 
+ an expansion result has a <span class="v">:check-expansion</span> field that is a <span class="tt"><a href="COMMON-LISP____CONSP.html">consp</a></span>, 
+ where for this purpose <span class="v">make-event</span> is viewed as a macro that returns its 
+ <span class="v">:check-expansion</span> field.  (Implementation note: The latest expansion of a 
+ <span class="tt"><a href="ACL2____MAKE-EVENT.html">make-event</a></span>, <span class="tt"><a href="COMMON-LISP____PROGN.html">progn</a></span>, <span class="tt"><a href="ACL2____PROGN_12.html">progn!</a></span>, or <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span> is 
+ stored in state global <span class="v">'last-make-event-expansion</span>, except that if no 
+ expansion has taken place for that form then <span class="v">'last-make-event-expansion</span> 
+ has value <span class="v">nil</span>.)</p> 
+ 
+ <blockquote> 
+ 
+ <p>If the given form is not an embedded event form, then simply cause a soft 
+ error, <span class="v">(<a href="ACL2____MV.html">mv</a> erp val state)</span> where <span class="v">erp</span> is not <span class="v">nil</span>.  Otherwise:</p> 
+ 
+ <p>If the evaluation of the given form does not take place (presumably because 
+ <span class="tt"><a href="ACL2____LOCAL.html">local</a></span> events are being skipped), then no expansion takes place. 
+ Otherwise:</p> 
+ 
+ <p>Let <span class="v">x</span> be the actual embedded event form corresponding to the given 
+ form, which destructures into wrappers <span class="v">W</span> and base-form <span class="v">B</span>.  Then the 
+ original form is evaluated by evaluating <span class="v">x</span>, and its expansion is as 
+ follows.</p> 
+ 
+ <p>If <span class="v">B</span> is <span class="v">(<a href="ACL2____MAKE-EVENT.html">make-event</a> form :check-expansion val)</span>, then expansion 
+ takes place if and only if <span class="v">val</span> is not a <span class="v">consp</span> and no error occurs, 
+ as now described.  Let <span class="v">R</span> be the expansion result from protected 
+ evaluation of <span class="v">form</span>, if there is no error.  <span class="v">R</span> must be an embedded 
+ event form, or it is an error.  Then evaluate/expand <span class="v">R</span>, where if <span class="v">val</span> 
+ is not <span class="v">nil</span> then state global <span class="v">'ld-skip-proofsp</span> is initialized to 
+ <span class="v">nil</span>.  (This initialization is important so that subsequent expansions are 
+ checked in a corresponding environment, i.e., where proofs are turned on in 
+ both the original and subsequent environments.)  It is an error if this 
+ evaluation causes an error.  Otherwise, the evaluation yields a value, which 
+ is the result of evaluation of the original <span class="v">make-event</span> expression, as 
+ well as an expansion, <span class="v">E_R</span>.  Let <span class="v">E</span> be rebuilt from <span class="v">W</span> and 
+ <span class="v">E_R</span>.  The expansion of the original form is <span class="v">E</span> if <span class="v">val</span> is 
+ <span class="v">nil</span>, and otherwise is the result of replacing the original form's 
+ <span class="v">:check-expansion</span> field with <span class="v">E</span>, with the added requirement that if 
+ <span class="v">val</span> is not <span class="v">t</span> (thus, a <span class="v">consp</span>) then <span class="v">E</span> must equal <span class="v">val</span> or 
+ else we cause an error.</p> 
+ 
+ <p>If <span class="v">B</span> is <span class="v">(<a href="COMMON-LISP____PROGN.html">progn</a> form1 form2 ...)</span> (and similarly for <span class="tt"><a href="ACL2____PROGN_12.html">progn!</a></span>), and at least one <span class="v">formi</span> has an expansion, then the expansion of 
+ the original form is obtained by replacing each <span class="v">formi</span> by its expansion 
+ and then rebuilding the entire <span class="v">progn</span> call from <span class="v">B</span>.</p> 
+ 
+ <p>If <span class="v">B</span> is <span class="v">(<a href="ACL2____ENCAPSULATE.html">encapsulate</a> sigs form1 form2 ...)</span>, then after evaluating 
+ <span class="v">B</span>, the expansion of the original form is the result of rebuilding from 
+ <span class="v">B</span>, with wrappers <span class="v">W</span>, after replacing each <span class="v">formi</span> in <span class="v">B</span> for 
+ which expansion takes place by <span class="tt">(record-expansion formi formi')</span>, where 
+ <span class="v">formi'</span> is the expansion of <span class="v">formi</span>.  Note that these expansions are 
+ determined as the <span class="v">formi</span> are evaluated in sequence (where in the case of 
+ <span class="v">encapsulate</span>, this determination occurs only during the first pass). 
+ Except, if no expansion takes place for any <span class="v">formi</span>, then the expansion of 
+ the original form is itself.</p> 
+ 
+ <p>Otherwise, the expansion of the original form is itself.</p> 
+ 
+ </blockquote> 
+ 
+ <p>Similarly to the <span class="tt"><a href="COMMON-LISP____PROGN.html">progn</a></span> and <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span> cases above, book 
+ certification causes a book to be replaced by its so-called ``book 
+ expansion,'' where each event <span class="v">ev</span> for which expansion took place during 
+ the proof pass of certification is replaced by its expansion, but with certain 
+ <span class="tt"><a href="ACL2____LOCAL.html">local</a></span> events elided.</p> 
+ 
+ <p>Implementation Note.  The book expansion is actually implemented by way of 
+ the <span class="v">:expansion-alist</span> field of its <a href="ACL2____CERTIFICATE.html">certificate</a>, which associates 
+ 0-based positions of top-level forms in the book (not including the initial 
+ <span class="tt"><a href="COMMON-LISP____IN-PACKAGE.html">in-package</a></span> form) with their expansions.  Thus, the book's source file 
+ is not overwritten; rather, the certificate's expansion-alist is applied when 
+ the book is included or compiled.  End of Implementation Note.</p> 
+ 
+ <p>It is straightforward by computational induction to see that for any 
+ expansion of an embedded event form, every <span class="v">make-event</span> sub-event has a 
+ <span class="tt"><a href="COMMON-LISP____CONSP.html">consp</a></span> <span class="v">:check-expansion</span> field.  Here, by ``sub-event'' we mean to 
+ expand macros; and we also mean to traverse <span class="v">progn</span> and <span class="v">encapsulate</span> 
+ forms as well as <span class="v">:check-expansion</span> fields of <span class="v">make-event</span> forms.  Thus, 
+ we will only see <span class="v">make-event</span> forms with <span class="v">consp</span> <span class="v">:check-expansion</span> 
+ fields in the course of <span class="v">include-book</span> forms, the second pass of 
+ <span class="v">encapsulate</span> forms, and raw Lisp.  This fact guarantees that an event form 
+ will always be treated as its original expansion.</p> 
+ 
+ <h3>Notes on ttags</h3> 
+ 
+ <p>See <a href="ACL2____DEFTTAG.html">defttag</a> for documentation of the notion of ``trust tag'' 
+ (``ttag'').  We note here that even if an event <span class="v">(<a href="ACL2____DEFTTAG.html">defttag</a> tag-name)</span> for 
+ non-<span class="v">nil</span> <span class="v">tag-name</span> is admitted only during the expansion phase of a 
+ <span class="tt"><a href="ACL2____MAKE-EVENT.html">make-event</a></span> form, then such expansion will nevertheless still cause 
+ <span class="v">tag-name</span> to be recorded in the logical <a href="ACL2____WORLD.html">world</a> (assuming that the 
+ <span class="v">make-event</span> form is admitted).  So in order to certify such a book, a 
+ suitable <span class="v">:ttags</span> argument must be supplied; see <a href="ACL2____CERTIFY-BOOK.html">certify-book</a>.</p> 
+ 
+ <p>ACL2 does provide a way to avoid the need for <span class="v">:ttags</span> arguments in such 
+ cases.  The idea is to certify a book twice, where the results of 
+ <span class="v">make-event</span> expansion are saved from the first call of <span class="tt"><a href="ACL2____CERTIFY-BOOK.html">certify-book</a></span> and provided to the second call.  See <a href="ACL2____SET-WRITE-ACL2X.html">set-write-ACL2x</a>.</p> 
+ 
+ <p>Finally, we discuss a very unusual case where certification does not 
+ involve trust tags but a subsequent <span class="tt"><a href="ACL2____INCLUDE-BOOK.html">include-book</a></span> does involve trust 
+ tags: a <span class="v">make-event</span> call specifying <span class="v">:check-expansion t</span>, whose 
+ expansion generates a <span class="tt"><a href="ACL2____DEFTTAG.html">defttag</a></span> event during <span class="tt"><a href="ACL2____INCLUDE-BOOK.html">include-book</a></span> but 
+ not <span class="tt"><a href="ACL2____CERTIFY-BOOK.html">certify-book</a></span>.  Consider the following book.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____IN-PACKAGE.html">in-package</a> "ACL2")
+(<a href="ACL2____MAKE-EVENT.html">make-event</a>
+ (<a href="ACL2____ER-PROGN.html">er-progn</a>
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2_____04.html">@</a> skip-notify-on-defttag) ; non-nil when including a certified book
+      (<a href="ACL2____PPROGN.html">pprogn</a>
+       (<a href="ACL2____FMS.html">fms</a> "Value of (<a href="ACL2_____04.html">@</a> skip-notify-on-defttag): ~x0~|"
+            (<a href="COMMON-LISP____LIST.html">list</a> (<a href="COMMON-LISP____CONS.html">cons</a> #0 (<a href="ACL2_____04.html">@</a> skip-notify-on-defttag)))
+            *standard-co* state nil)
+       (<a href="ACL2____ENCAPSULATE.html">encapsulate</a>
+        ()
+        (<a href="ACL2____DEFTTAG.html">defttag</a> :foo)
+        (<a href="ACL2____VALUE-TRIPLE.html">value-triple</a> "Imagine something bad here!")))
+    (<a href="ACL2____VALUE.html">value</a> nil))
+  (<a href="ACL2____VALUE.html">value</a> '(<a href="ACL2____VALUE-TRIPLE.html">value-triple</a> :some-value)))
+ :check-expansion t)</pre> 
+ 
+ <p>This book certifies successfully without the need for a <span class="v">:ttags</span> 
+ argument for <span class="tt"><a href="ACL2____CERTIFY-BOOK.html">certify-book</a></span>.  Indeed, the above book's <a href="ACL2____CERTIFICATE.html">certificate</a> does not specify <span class="v">:foo</span> as a trust tag associated with the 
+ book, because no <span class="v">defttag</span> event was executed during book certification. 
+ Unfortunately, if we try to include this book without specifying a value of 
+ <span class="v">:ttags</span> that allows <span class="v">:foo</span>, book inclusion will cause executing of the 
+ above <span class="tt"><a href="ACL2____DEFTTAG.html">defttag</a></span>.  If that inclusion happens in the context of certifying 
+ some superior book and the appropriate <span class="v">:ttags</span> arguments have not been 
+ provided, that certification will fail.</p> 
+ 
+ <h3>Expansion errors and the <span class="v">:ON-BEHALF-OF</span> keyword</h3> 
+ 
+ <p>Consider the case that expansion returns an <a href="ACL2____ERROR-TRIPLE.html">error-triple</a> <span class="v">(<a href="ACL2____MV.html">mv</a> erp
+ val state)</span>, where <span class="v">erp</span> is not <span class="v">nil</span>.  Then <span class="v">make-event</span> may 
+ conclude with an error message, as follows.</p> 
+ 
+ <ul> 
+ 
+ <li>If keyword <span class="v">:ON-BEHALF-OF</span> has value <span class="v">:quiet!</span> then there is no such 
+ concluding error message.</li> 
+ 
+ <li>Otherwise, if <span class="v">erp</span> is a string, then the concluding error message is 
+ produced by printing <span class="v">erp</span> with the call <span class="v">(<a href="ACL2____ER.html">er</a> soft ctx erp)</span>, where 
+ <span class="v">ctx</span> is the context (see <a href="ACL2____CTX.html">ctx</a>).</li> 
+ 
+ <li>Otherwise, if <span class="v">erp</span> is a message (see <a href="ACL2____MSG.html">msg</a>), then the concluding 
+ error message is produced by the call <span class="v">(<a href="ACL2____ER.html">er</a> soft ctx "~@0" erp)</span>, where 
+ <span class="v">ctx</span> is the context (see <a href="ACL2____CTX.html">ctx</a>).</li> 
+ 
+ <li>Otherwise, if keyword <span class="v">:ON-BEHALF-OF</span> has value <span class="v">:quiet</span> then there 
+ is no concluding error message.</li> 
+ 
+ <li>Otherwise, if keyword <span class="v">:ON-BEHALF-OF</span> is not supplied or has value 
+ <span class="v">nil</span> — so we are now in the typical case — then the concluding 
+ error message is ``Error in MAKE-EVENT from expansion of:'' followed by the 
+ form.</li> 
+ 
+ <li>Otherwise, keyword <span class="v">:ON-BEHALF-OF</span> has a value <span class="v">x</span> other than 
+ <span class="v">:quiet!</span>, <span class="v">:quiet</span>, or <span class="v">nil</span>, in which case the concluding error 
+ message is as just above, except that after ``Error in MAKE-EVENT'' is 
+ stated ``on behalf of'' followed by <span class="v">x</span>.</li> 
+ 
+ </ul> 
+ 
+ <p>Note that errors generated during expansion are not affected by the cases 
+ above; those only control the concluding error message, if any.</p>
+</body>
+</html>

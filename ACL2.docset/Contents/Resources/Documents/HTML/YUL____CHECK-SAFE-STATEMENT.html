@@ -1,0 +1,115 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Check-safe-statement</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=YUL____CHECK-SAFE-STATEMENT">Click for Check-safe-statement in the Full Manual</a></h3>
+
+<p>Check if a statement is safe.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(check-safe-statement stmt vartab funtab) → vartab-modes</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">stmt</span> — <font color="#606060">Guard <span class="v">(<a href="YUL____STATEMENTP.html">statementp</a> stmt)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">vartab</span> — <font color="#606060">Guard <span class="v">(<a href="YUL____VARTABLEP.html">vartablep</a> vartab)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">funtab</span> — <font color="#606060">Guard <span class="v">(<a href="YUL____FUNTABLEP.html">funtablep</a> funtab)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">vartab-modes</span> — <font color="#606060">Type <span class="v">(<a href="YUL____VARTABLE-MODES-RESULTP.html">vartable-modes-resultp</a> vartab-modes)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>If checking is successful, we return an updated variable table 
+       and a set of possible termination modes.</p><p>The variable table is updated only via variable declarations, 
+       while the other kinds of statements leave the table unchanged. 
+       The table may be changed in blocks nested in the statement, 
+       but those changes do not surface outside those blocks.</p><p>A block is checked via a separate ACL2 function, 
+       which returns a set of modes. 
+       These are joined with the starting variable table, 
+       which is unchanged as expained above.</p><p>We use separate ACL2 functions to check declarations and assignments, 
+       as their checking does not involve the mutual recursion. 
+       Declarations and assignments always terminate in regular mode.</p><p>For a function call used as a statement, 
+       we check the function call and ensure it returns no results. 
+       A function call always terminates in regular mode.</p><p>For an <span class="v">if</span> statement, 
+       we check the test, which must return one result, 
+       and we check the body block. 
+       An <span class="v">if</span> statement may terminate in regular mode 
+       (when the test is false) 
+       or in any of the modes in which the block may terminate 
+       (when the test is true).</p><p>For a <span class="v">for</span> statement, we treat the initialization block specially, 
+       because the scope of the initialization block 
+       extends to the whole statement, as explained 
+       in [Yul: Specification of Yul: Scoping Rules]. 
+       We extract the statements from the block 
+       and we process them as if they preceded the rest of the <span class="v">for</span>: 
+       we collect the function definitions in the statements, 
+       and then we check the statements, 
+       updating the variable table and obtaining the possible termination modes. 
+       We ensure that no termination in <span class="v">break</span> or <span class="v">continue</span> is possible, 
+       because that is not allowed, 
+       even if the <span class="v">for</span> is in the body of an outer <span class="v">for</span>: 
+       the current, innermost <span class="v">for</span> is the one 
+       that could be broken or continued, 
+       but that can only be done in the body; 
+       thus, the initialization block may only terminate 
+       in regular or <span class="v">leave</span> mode. 
+       We use the updated variable and function tables 
+       to check the other components of the <span class="v">for</span>, 
+       i.e. test, update block, and body block. 
+       We ensure that the update block cannot terminate 
+       in <span class="v">break</span> or <span class="v">continue</span> mode, 
+       for the same reason explained above for the initialization block, 
+       which therefore leaves regular and <span class="v">leave</span> mode 
+       as the only termination possibilities for the update block. 
+       The body is allowed to terminate in any mode. 
+       The possible termination modes of the <span class="v">for</span> loop 
+       are determined as follows: 
+       regular mode is always possible, 
+       which happens when the test is false or if the loop breaks; 
+       <span class="v">leave</span> mode is possible when it is possible for any of the 
+       initialization, update, or body block; 
+       <span class="v">break</span> and <span class="v">continue</span> modes are not possible, 
+       because those could only occur in the body, 
+       which causes regular loop termination of the loop for <span class="v">break</span> 
+       or continuation of the loop for <span class="v">continue</span>.</p><p>For a <span class="v">switch</span> statement, 
+       we check the expression, ensuring it returns a single result. 
+       We ensure that there is at least one (literal or default) case 
+       [Yul: Specification of Yul: Restrictions on the Grammar]. 
+       The documentation also requires that the default case be absent 
+       when the literal cases are exhaustive; 
+       but that requires knowledge of the type of the target expression, 
+       which for now we do not have, so we leave out that check for now. 
+       We also need to check that all the literals are distinct, 
+       which could be taken to mean as 
+       either syntactically or semantically distinct: 
+       for instance, the literals <span class="v">1</span> and <span class="v">0x1</span> are 
+       syntactically different but semantically equal. 
+       The Yul team has clarified that it should be semantic difference. 
+       For now we check syntactic difference for simplicity, 
+       but we plan to tighten that to check semantic difference. 
+       Every (literal or default) block is then checked, 
+       along with the literals. 
+       The possible termination modes are those of the cases 
+       and those of the default block.</p><p>The treatment of <span class="v">leave</span>, <span class="v">break</span>, and <span class="v">continue</span> 
+       is straightforward: they terminate with the corresponding mode, 
+       and the variable table is unchanged.</p><p>For a function definition, the function table is not updated: 
+       as explained in <span class="tt"><a href="YUL____ADD-FUNTYPES.html">add-funtypes</a></span>, 
+       the function definitions in a block are collected, 
+       and used to extend the function table, 
+       before processing the statements in a block. 
+       The function definition is checked by a separate ACL2 function, 
+       which returns nothing in case of success, 
+       so here we return the outside variable table unchanged: 
+       a function definition does not modify the variable table. 
+       At run time, a function definition is essentially a no-op, 
+       so the termination mode is always regular.</p> 
+ 
+
+</body>
+</html>

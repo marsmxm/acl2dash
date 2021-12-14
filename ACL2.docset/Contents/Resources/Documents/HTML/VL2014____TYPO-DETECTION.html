@@ -1,0 +1,157 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Typo-detection</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL2014____TYPO-DETECTION">Click for Typo-detection in the Full Manual</a></h3>
+
+<p>We try to detect possible typos in wire names.</p><p>Verilog implementations allow the use of implicit wires.  Because 
+of this, a typo in a wire name might go undetected.  As part of our <a href="VL2014____USE-SET.html">use-set</a> analysis, we now try to detect wires that might be typos.</p> 
+ 
+<p>How do we know whether a wire name is actually misspelled, and is not simply 
+some implicit wire that a logic designer is using?  It is not clear that there 
+is any hard and fast way to tell.  Our goal, then, is to develop a heuristic 
+method to identify as many typos as possible (and as few non-typos as 
+possible).</p> 
+ 
+<p>Here is our approach at a high level.</p> 
+ 
+<ul> 
+ 
+<li>First, we will only consider wires that are not explicitly defined, since 
+these wires seem to be the obvious starting place to look for typos.  Note that 
+it is quite easy to identify these wires, e.g., see <a href="VL2014____MAKE-IMPLICIT-WIRES.html">make-implicit-wires</a>, 
+which adds declarations to the modules to make these wires explicit.</li> 
+ 
+<li>Next, we will only consider the subset of these wires that are either 
+unused or unset, per our ordinary <a href="VL2014____USE-SET.html">use-set</a> analysis.  The idea behind 
+this restriction is that typos are probably relatively rare, and it is unlikely 
+that someone would misspell the name in both contexts.</li> 
+ 
+<li>The names of the remaining wires are then analyzed and compared with the 
+names of existing, defined wires.  The idea here is that most typos are 
+probably minor things: character transpositions or omissions, incorrect case, 
+improper underscores, etc.  Only if the wire's name is somewhat similar to 
+another wire do we report it as a potential typo.</li> 
+ 
+</ul> 
+ 
+<h3>Analyzing Wire Names</h3> 
+ 
+<p>How can we determine if one wire name is similar to another?  This problem 
+is reminiscent of spell-checking, where approaches such as Soundex are used to 
+determine if say that two words sound the same.</p> 
+ 
+<p>The reason that Soundex codes work well for spell checking prose is that, 
+even though people may not know how to spell the words they want to write, they 
+usually know how to say them.  So, if someone wants to write the word 
+<i>Cholera</i>, they might at least write something like <i>Colara</i> instead. 
+The two "words" are phonetically similar, so by assigning and comparing 
+phonetic codes, we can easily determine which words to suggest.</p> 
+ 
+<p>Soundex codes do not seem particularly appropriate for our task.  Actually, 
+our job seems easier.  First, let us look at some of the wire names used 
+throughout the design.  There are some all-uppercase signals such as:</p> 
+ 
+<ul> 
+ <li>STPCLKB</li> 
+ <li>THERMDC</li> 
+ <li>THERMTRIPB</li> 
+</ul> 
+ 
+<p>And there are some all-lowercase names, such as:</p> 
+ 
+<ul> 
+ <li>in</li> 
+ <li>tclk</li> 
+ <li>vbpa</li> 
+</ul> 
+ 
+<p>But mostly what we find are mixed-case names, often with underscores, such 
+as:</p> 
+ 
+<ul> 
+ <li>mmSnoopDataValid_CX_P</li> 
+ <li>msBusWriteLOCK_C1_T0_P</li> 
+ <li>rrT0McTm1PdgClr_P</li> 
+ <li>orvHi</li> 
+ <li>x1I3_ReadGflags_X</li> 
+ <li>rnRomEnSel_A</li> 
+ <li>matchb39_6b</li> 
+ <li>bcDWCBAEnt_C0_P</li> 
+</ul> 
+ 
+<h5>Wire Name Partitioning</h5> 
+ 
+<p>These names are such nonphonetic garble that ordinary algorithms like 
+Soundex would probably not produce anything meaningful.  On the other hand, 
+these names seem quite easy to split up into pieces.  And, probably, as someone 
+trying to type one of these names, I am at least going to get most of these 
+pieces right.  For instance, if I am trying to write <span class="v">rnRomEnSel_A</span>, I might 
+forget the abbreviations used and type something like <span class="v">rnRomEnableSel_A</span>, or 
+forget the underscore and type <span class="v">rnRomEnSelA</span>, or miscapitalize and type 
+something like <span class="v">rnRomEnsel_A</span>.</p> 
+ 
+<p>So, our first move is to split up the wire names into lists of pieces. 
+Then, we can compare signal names on a piece-by-piece basis.  To carry out this 
+partitioning, we adopt the following strategy:</p> 
+ 
+<ul> 
+<li>Consider numbers as lowercase characters.</li> 
+ 
+<li>We split into pieces upon encountering any underscore or other 
+non-alphanumeric characters, and these special characters are simply dropped. 
+For instance, given a name like <span class="v">rnRomEnSel_A</span>, we will split into 
+<span class="v">rnRomEnSel</span> and <span class="v">A</span>.</li> 
+ 
+<li>We split on every transition from a lowercase character to an uppercase 
+character.  For instance, in <span class="v">rnRomEnSel_A</span>, this rule leads us to split 
+into <span class="v">rn</span>, <span class="v">Rom</span>, <span class="v">En</span>, and <span class="v">Sel_A</span> (which is further split into 
+<span class="v">Sel</span> and <span class="v">A</span> by the previous rule).</li> 
+ 
+<li>If we see two uppercase characters followed by a lowercase character, we 
+split between the uppercase characters.  For instance, in <span class="v">bcDWCBAEnt_C0_P</span>, 
+this rule leads us to split between <span class="v">bcDWCBA</span> and <span class="v">Ent_C0_P</span> (which are 
+further split by the previous rules into <span class="v">bc</span>, <span class="v">DWCBA</span>, <span class="v">Ent</span>, 
+<span class="v">C0</span>, and <span class="v">P</span>.</li> </ul> 
+ 
+ 
+<h5>Comparing Partitioned Names</h5> 
+ 
+<p>Now, suppose we have an implicit wire, <i>a</i>, and an explicit wire 
+<i>b</i>, and we want to decide whether <i>a</i> might be a typo and the 
+designer really meant to write <i>b</i>.  We begin by partitioning both wire 
+names; call the resulting partitionings <i>x</i> and <i>y</i>.</p> 
+ 
+<p>If <i>x</i> and <i>y</i> are equal, then <i>a</i> and <i>b</i> differ only 
+in that one might have underscores where the other does not.  We think this is 
+very likely to be a typo.</p> 
+ 
+<p>Otherwise, we compare the pieces of <i>x</i> and <i>y</i> in order.  If 
+exactly one piece differs, then we may wish to consider whether one to be a 
+typo of the other after some further analysis.  If more than a single piece is 
+different, we think <i>x</i> and <i>y</i> are sufficiently distinct from one 
+another that we will not consider <i>x</i> to be a typo of <i>y</i>.</p> 
+ 
+<p>This further analysis is motivated by looking at examples of matches.</p> 
+ 
+<ul> 
+ 
+<li>First, we require that the two pieces have the same (case insensitive) 
+leading character.  The motivation here is to prevent considering a wire like 
+<span class="v">bcDWCBAEnt_C0_P</span> to be a typo of <span class="v">bcDWCBAEnt_D0_P</span>.</li> 
+ 
+<li>We additionally require that adding a trailing <span class="v">b</span> or <span class="v">B</span> to either 
+name does not cause them to become identical.</li> 
+ 
+<li>Finally, if the pieces have the same length, and are identical except that 
+they end with distinct numbers, we reject the match.  This is intended to 
+prevent matching between signals like <span class="v">bcDWCBAEnt_C0_P</span> and 
+<span class="v">bcDWCBAEnt_C1_P</span>.</li> 
+ 
+</ul>
+</body>
+</html>

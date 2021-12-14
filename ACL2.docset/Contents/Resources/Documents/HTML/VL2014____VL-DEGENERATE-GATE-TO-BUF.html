@@ -1,0 +1,156 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Vl-degenerate-gate-to-buf</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL2014____VL-DEGENERATE-GATE-TO-BUF">Click for Vl-degenerate-gate-to-buf in the Full Manual</a></h3>
+
+<p>Replace a degenerate one-input logic gate with a buffer.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(vl-degenerate-gate-to-buf x warnings) → (mv warnings new-x)</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">x</span> — Gate to coerce.<br>    <font color="#606060">Guard <span class="v">(<a href="VL2014____VL-GATEINST-P.html">vl-gateinst-p</a> x)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">warnings</span> — Ordinary <a href="VL2014____WARNINGS.html">warnings</a> accumulator.<br>    <font color="#606060">Guard <span class="v">(<a href="VL2014____VL-WARNINGLIST-P.html">vl-warninglist-p</a> warnings)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">warnings</span> — <font color="#606060">Type <span class="v">(<a href="VL2014____VL-WARNINGLIST-P.html">vl-warninglist-p</a> warnings)</span>.</font>
+</dd> 
+<dd>
+<span class="tt">new-x</span> — <font color="#606060">Type <span class="v">(<a href="VL2014____VL-GATEINST-P.html">vl-gateinst-p</a> new-x)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>The Verilog grammar doesn't rule out the existence of degenerate, 
+one-input logic gates.  For instance, the following is syntactically legal:</p> 
+ 
+<pre class="code">and mygate (o, a);</pre> 
+ 
+<p>The Verilog-2005 Standard (Section 7.2) and SystemVerilog-2012 
+Standard (Section 28.4) both say <i>Versions of these six logic gates having 
+more than two inputs shall have a natural extension...</i>, but do not explain 
+the behavior in the one-input case.</p> 
+ 
+<p>Testing on Verilog-XL and NCVerilog suggests that these degenerate <span class="v">and</span>, 
+<span class="v">or</span>, and <span class="v">not</span> gates are to become buffers, whereas degenerate 
+<span class="v">nand</span>, <span class="v">nor</span>, and <span class="v">xnor</span> gates are to become inverters.  However, VCS 
+seems to produce truly bizarre answers in this case, e.g.,</p> 
+ 
+<pre class="code">wire o_buf;
+wire o_and;
+reg a;
+buf (o_buf, a);
+and (o_and,  a);
+initial begin
+  $display("1-input AND:");
+  a = 1'b0; #10; $display("%b -&gt; %b (<a href="VL2014____OK.html">ok</a> = %b)", a, o_and, o_and === o_buf);
+  a = 1'b1; #10; $display("%b -&gt; %b (<a href="VL2014____OK.html">ok</a> = %b)", a, o_and, o_and === o_buf);
+  a = 1'bx; #10; $display("%b -&gt; %b (<a href="VL2014____OK.html">ok</a> = %b)", a, o_and, o_and === o_buf);
+  a = 1'bz; #10; $display("%b -&gt; %b (<a href="VL2014____OK.html">ok</a> = %b)", a, o_and, o_and === o_buf);
+end</pre> 
+ 
+<p>Produces, on NCVerilog and Verilog-XL, the reasonably sensible output:</p> 
+ 
+<pre class="code">1-input AND:
+0 -&gt; 0 (<a href="VL2014____OK.html">ok</a> = 1)
+1 -&gt; 1 (<a href="VL2014____OK.html">ok</a> = 1)
+x -&gt; x (<a href="VL2014____OK.html">ok</a> = 1)
+z -&gt; x (<a href="VL2014____OK.html">ok</a> = 1)</pre> 
+ 
+<p>However, on VCS H-2013.06-SP1 it yields something that seems broken:</p> 
+ 
+<pre class="code">1-input AND:
+0 -&gt; 0 (<a href="VL2014____OK.html">ok</a> = 1)
+1 -&gt; 1 (<a href="VL2014____OK.html">ok</a> = x)   // wtf, 1 !== 1 ???
+x -&gt; x (<a href="VL2014____OK.html">ok</a> = z)   // wtf, x !== x ???
+z -&gt; x (<a href="VL2014____OK.html">ok</a> = 1)</pre> 
+ 
+<p>We'll mimic the behavior of Verilog-XL and NCVerilog, but warn that this is 
+a strange construct and some Verilog tools may not support it.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>vl-degenerate-gate-to-buf</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ vl-degenerate-gate-to-buf (x warnings)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="VL2014____VL-GATEINST-P.html">vl-gateinst-p</a> x)
+                             (<a href="VL2014____VL-WARNINGLIST-P.html">vl-warninglist-p</a> warnings))))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a>
+      (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____B_A2.html">b*</a> (((<a href="VL2014____VL-GATEINST.html">vl-gateinst</a> x) x))
+                        (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____MEMBER.html">member</a> x.type
+                                     '(:vl-and :vl-or
+                                               :vl-xor :vl-nand
+                                               :vl-nor :vl-xnor))
+                             (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____LEN.html">len</a> x.args) 2)))))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'vl-degenerate-gate-to-buf))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+   ((x (<a href="VL2014____VL-GATEINST-FIX.html">vl-gateinst-fix</a> x))
+    ((<a href="VL2014____VL-GATEINST.html">vl-gateinst</a> x) x)
+    ((when x.range)
+     (<a href="ACL2____MV.html">mv</a>
+      (<a href="VL2014____FATAL.html">fatal</a>
+       :type :vl-bad-gate
+       :msg
+       "~a0: expected no instance arrays; did you forget to ~
+                         run the replicate-insts transform?"
+       :args (<a href="COMMON-LISP____LIST.html">list</a> x))
+      x))
+    (outexpr (<a href="VL2014____VL-PLAINARG-_E3EXPR.html">vl-plainarg-&gt;expr</a> (<a href="COMMON-LISP____FIRST.html">first</a> x.args)))
+    (inexpr (<a href="VL2014____VL-PLAINARG-_E3EXPR.html">vl-plainarg-&gt;expr</a> (<a href="COMMON-LISP____SECOND.html">second</a> x.args)))
+    ((unless (<a href="COMMON-LISP____AND.html">and</a> outexpr
+                  (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL2014____VL-EXPR-_E3FINALWIDTH.html">vl-expr-&gt;finalwidth</a> outexpr)
+                         1)))
+     (<a href="ACL2____MV.html">mv</a>
+      (<a href="VL2014____FATAL.html">fatal</a>
+       :type :vl-bad-gate
+       :msg
+       "~a0: output terminal has width ~x1 but we only ~
+                         support 1-bit outputs.  The expression for the bad ~
+                         terminal is ~a2."
+       :args (<a href="COMMON-LISP____LIST.html">list</a> x
+                   (<a href="COMMON-LISP____AND.html">and</a> outexpr (<a href="VL2014____VL-EXPR-_E3FINALWIDTH.html">vl-expr-&gt;finalwidth</a> outexpr))
+                   outexpr))
+      x))
+    ((unless (<a href="COMMON-LISP____AND.html">and</a> inexpr
+                  (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL2014____VL-EXPR-_E3FINALWIDTH.html">vl-expr-&gt;finalwidth</a> inexpr) 1)))
+     (<a href="ACL2____MV.html">mv</a>
+      (<a href="VL2014____FATAL.html">fatal</a>
+       :type :vl-bad-gate
+       :msg
+       "~a0: input terminal has width ~x1 but we only ~
+                         support 1-bit inputs.  The expression for the bad ~
+                         terminal is ~a2."
+       :args (<a href="COMMON-LISP____LIST.html">list</a> x
+                   (<a href="COMMON-LISP____AND.html">and</a> inexpr (<a href="VL2014____VL-EXPR-_E3FINALWIDTH.html">vl-expr-&gt;finalwidth</a> inexpr))
+                   inexpr))
+      x))
+    (new-type (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____MEMBER.html">member</a> x.type '(:vl-and :vl-or :vl-xor))
+                  :vl-buf :vl-not))
+    (<a href="VL2014____WARNINGS.html">warnings</a>
+     (<a href="VL2014____WARN.html">warn</a>
+      :type :vl-weird-gate
+      :msg
+      "~a0:  ~s1 gate with a single input.  We treat this as a ~
+                    ~s2 gate, matching NCVerilog and Verilog-XL. However, ~
+                    other Verilog tools (including for instance VCS) have ~
+                    different interpretations.  If this is really what you ~
+                    want to do, it would be safer to use a buf gate instead."
+      :args (<a href="COMMON-LISP____LIST.html">list</a> x x.type new-type)))
+    (new-x (<a href="VL2014____CHANGE-VL-GATEINST.html">change-vl-gateinst</a> x :type new-type)))
+   (<a href="ACL2____MV.html">mv</a> warnings new-x))))</pre> 
+<p><b>Theorem: </b>vl-warninglist-p-of-vl-degenerate-gate-to-buf.warnings</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-warninglist-p-of-vl-degenerate-gate-to-buf.warnings
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?warnings ?new-x)
+              (<a href="VL2014____VL-DEGENERATE-GATE-TO-BUF.html">vl-degenerate-gate-to-buf</a> x warnings)))
+            (<a href="VL2014____VL-WARNINGLIST-P.html">vl-warninglist-p</a> warnings))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>vl-gateinst-p-of-vl-degenerate-gate-to-buf.new-x</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-gateinst-p-of-vl-degenerate-gate-to-buf.new-x
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?warnings ?new-x)
+              (<a href="VL2014____VL-DEGENERATE-GATE-TO-BUF.html">vl-degenerate-gate-to-buf</a> x warnings)))
+            (<a href="VL2014____VL-GATEINST-P.html">vl-gateinst-p</a> new-x))
+        :rule-classes :rewrite)</pre> 
+
+</body>
+</html>

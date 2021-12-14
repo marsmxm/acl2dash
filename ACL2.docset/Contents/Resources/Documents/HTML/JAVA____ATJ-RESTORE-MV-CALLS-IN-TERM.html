@@ -1,0 +1,107 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Atj-restore-mv-calls-in-term</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=JAVA____ATJ-RESTORE-MV-CALLS-IN-TERM">Click for Atj-restore-mv-calls-in-term in the Full Manual</a></h3>
+
+<p>Restore <span class="tt"><a href="ACL2____MV.html">mv</a></span> calls in a translated term.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(atj-restore-mv-calls-in-term term numres wrld) → new-term</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">term</span> — <font color="#606060">Guard <span class="v">(<a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a> term)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">numres</span> — <font color="#606060">Guard <span class="v">(<a href="ACL2____POSP.html">posp</a> numres)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">wrld</span> — <font color="#606060">Guard <span class="v">(<a href="ACL2____PLIST-WORLDP.html">plist-worldp</a> wrld)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">new-term</span> — <font color="#606060">Type <span class="v">(<a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a> new-term)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>We restore not only <span class="tt"><a href="ACL2____MV.html">mv</a></span> calls 
+     returned by multi-result functions, 
+     but also <span class="tt"><a href="ACL2____MV.html">mv</a></span> calls that may happen in an <span class="tt"><a href="ACL2____MV-LET.html">mv-let</a></span> 
+     in a function that may or may not return multiple results.</p><p>At the top level, 
+     this code is called on the body of a function 
+     that must be translated to Java. 
+     In this top-level call, 
+     we pass as second argument the number of result of the function, 
+     which is known: see <span class="tt"><a href="JAVA____ATJ-RESTORE-MV-CALLS-IN-BODY.html">atj-restore-mv-calls-in-body</a></span>. 
+     As we descend into the term, this number may change. 
+     When we try to restore <span class="tt"><a href="ACL2____MV.html">mv</a></span> calls in a term, 
+     we always know the number of results that the term should return, 
+     as the <span class="v">numres</span> parameter.</p><p>When we encounter a variable, 
+     we must be expecting one result, 
+     and in that case we leave the variable unchanged. 
+     This would not be true for the <span class="v">mv</span> variable 
+     that results from a translated <span class="tt"><a href="ACL2____MV-LET.html">mv-let</a></span> 
+     (see <span class="tt"><a href="ACL2____CHECK-MV-LET-CALL.html">check-mv-let-call</a></span>), 
+     but as explained below we process translated <span class="tt"><a href="ACL2____MV-LET.html">mv-let</a></span>s specially: 
+     when we reach a variable, it is never that <span class="v">mv</span> variable, 
+     and so it is always single-valued.</p><p>When we encounter a quoted constant, 
+     we must be expecting one result, 
+     and in that case we leave the quoted constant unchanged.</p><p>Before processing a call, 
+     we use <span class="tt"><a href="ACL2____CHECK-MV-LET-CALL.html">check-mv-let-call</a></span> to see if 
+     the term may be a translated <span class="tt"><a href="ACL2____MV-LET.html">mv-let</a></span>. 
+     If the term has that form, it is possible, but unlikely, 
+     that it is not actually a translated <span class="tt"><a href="ACL2____MV-LET.html">mv-let</a></span>. 
+     In order to properly restore <span class="tt"><a href="ACL2____MV.html">mv</a></span> calls in the <span class="v">mv-term</span>, 
+     we need to determine how many results it is expected to return. 
+     Because of the pre-translation step that removes unused variables, 
+     this cannot be determined, in general, from the term, 
+     because some <span class="tt"><a href="ACL2____MV-NTH.html">mv-nth</a></span> calls may have been removed. 
+     Even if they were all present, it is still possible (though unlikely) 
+     that the term does not involve multiple values, 
+     and that it just looks like a translated <span class="tt"><a href="ACL2____MV-LET.html">mv-let</a></span>. 
+     Thus, we use the <span class="tt"><a href="ACL2____TERM-POSSIBLE-NUMBERS-OF-RESULTS.html">term-possible-numbers-of-results</a></span> utility 
+     to calculate the number of results of the <span class="v">mv-term</span>. 
+     Recall that this may return two possibilities, 
+     namely 1 and a number greater than 1: 
+     in this case, we pick the number greater than 1 
+     (but it would be also correct to pick 1). 
+     If instead there is just one possibility, then we obviously use that. 
+     This value is used as <span class="v">numres</span> to recursively process the <span class="v">mv-term</span>, 
+     which in general may restore not only <span class="tt"><a href="ACL2____MV.html">mv</a></span> calls 
+     at the top level of that term, but also in subterms. 
+     We also recursively process the <span class="v">body-term</span>, 
+     this time with the same <span class="v">numres</span> as for the <span class="tt"><a href="ACL2____MV-LET.html">mv-let</a></span> term.</p><p>If the term does not have the form of a translated <span class="tt"><a href="ACL2____MV-LET.html">mv-let</a></span>, 
+     we check whether it is a translated <span class="tt"><a href="COMMON-LISP____LIST.html">list</a></span>, 
+     i.e. a nest of <span class="tt"><a href="COMMON-LISP____CONS.html">cons</a></span>es ending with a quoted <span class="v">nil</span>. 
+     If the expected number of results is 1, we leave this term as is, 
+     i.e. as a single list. 
+     Otherwise, we replace the term with an <span class="tt"><a href="ACL2____MV.html">mv</a></span> call.</p><p>If the term does not have any of the previous forms, 
+     we check whether it is a call of <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span>. 
+     In that case, we recursively process the arguments: 
+     the test must be single-valued, 
+     while the branches have the same <span class="v">numres</span> as the <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span> call.</p><p>We check for <span class="tt"><a href="ACL2____RETURN-LAST.html">return-last</a></span> for robustness, 
+     but those have been all removed by a previous pre-translation step.</p><p>We treat all other calls as follows. 
+     We recursively process the arguments, 
+     each of which must return a single value. 
+     If the function is a lambda expression, 
+     we recursively process its body, 
+     with the same <span class="v">numres</span> as the lambda call.</p> 
+ 
+ 
+ 
+<p><b>Theorem: </b>return-type-of-atj-restore-mv-calls-in-term.new-term</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+   return-type-of-atj-restore-mv-calls-in-term.new-term
+   (<a href="ACL2____B_A2.html">b*</a> ((?new-term (<a href="JAVA____ATJ-RESTORE-MV-CALLS-IN-TERM.html">atj-restore-mv-calls-in-term</a> term numres wrld)))
+       (<a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a> new-term))
+   :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>return-type-of-atj-restore-mv-calls-in-args.new-args</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ return-type-of-atj-restore-mv-calls-in-args.new-args
+ (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____PSEUDO-TERM-LISTP.html">pseudo-term-listp</a> args)
+          (<a href="ACL2____B_A2.html">b*</a> ((?new-args (<a href="JAVA____ATJ-RESTORE-MV-CALLS-IN-ARGS.html">atj-restore-mv-calls-in-args</a> args wrld)))
+              (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____PSEUDO-TERM-LISTP.html">pseudo-term-listp</a> new-args)
+                   (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____LEN.html">len</a> new-args) (<a href="ACL2____LEN.html">len</a> args)))))
+ :rule-classes :rewrite)</pre> 
+
+</body>
+</html>

@@ -1,0 +1,169 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Defrstobj</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____DEFRSTOBJ">Click for Defrstobj in the Full Manual</a></h3>
+
+<p>Record-like <a href="ACL2____STOBJ.html">stobj</a>s combine the run-time efficiency of stobjs 
+with the reasoning efficiency of records.  They are designed for modeling, 
+e.g., the state of a processor or virtual machine.</p><h3>Introduction</h3> 
+ 
+<p>A <b>Record-like <a href="ACL2____STOBJ.html">stobj</a></b> ("rstobj") is a way to model a 
+processor's state that allows for both good execution efficiency and good 
+reasoning efficiency.</p> 
+ 
+<p>The state is implemented as a stobj so that it can be accessed efficiently 
+and updated destructively, without, e.g., lots of consing just to build the new 
+state object.  This is good since it's useful for processor models to execute 
+efficiently.</p> 
+ 
+<p>The state is reasoned about as if it were a "record," in the sense of the 
+<span class="v">misc/records</span> book.  The top-level field accessors and updators of the 
+stobj are (logically) defined as <span class="v">g</span> and <span class="v">s</span>.  This style of reasoning 
+seems good.  It has been used in the compositional cutpoint techniques 
+developed by John Matthews, J Moore, Sandip Ray, and Daron Vroon, the 
+"wormhole abstraction" of Dave Greve at Rockwell Collins, the work of Eric 
+Smith for automated cutpoint-based proofs, etc.  There are probably other 
+people who are also using records, e.g., Rob Sumners.</p> 
+ 
+ 
+<h3>Using <span class="v">defrstobj</span>
+</h3> 
+ 
+<p>The syntax of <span class="v">defrstobj</span> is nearly that of defstobj, except that:</p> 
+ 
+<ul> 
+ 
+<li>Simply typed (non-array) fields require an additional <span class="v">:fix</span> argument 
+that says how to coerce "bad" objects into an object of the appropriate type. 
+This should be a term mentioning <span class="v">acl2::x</span>.</li> 
+ 
+<li>Array fields require an additional <span class="v">:typed-record</span> argument that names 
+recognizer function for a typed record; see <a href="ACL2____DEF-TYPED-RECORD.html">def-typed-record</a>.</li> 
+ 
+<li>Optionally, you can have <span class="v">defrstobj</span> define a universal 
+accessor and a universal updater function using keywords 
+<span class="v">:accessor</span> and <span class="v">:updater</span> respectively.  These functions can 
+come in handy when using 
+<span class="v">[books]/std/stobjs/updater-independence</span>.</li> 
+ 
+</ul> 
+ 
+<p>Example:</p> 
+ 
+<pre class="code">(<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "centaur/defrstobj/defrstobj" :dir :system)
+
+(<a href="ACL2____DEFRSTOBJ.html">defrstobj</a> st
+
+  (regs :type (<a href="COMMON-LISP____ARRAY.html">array</a> (unsigned-byte 64) (32))
+        :initially 0
+        :typed-record u32-tr-p)
+
+  (<a href="ACL2____PC.html">pc</a>   :type (unsigned-byte 64)
+        :initially 0
+        :fix (<a href="ACL2____UNSIGNED-BYTE-FIX.html">unsigned-byte-fix</a> 64 x))
+
+  (mem  :type (<a href="COMMON-LISP____ARRAY.html">array</a> (unsigned-byte 8) (*mem-size*))
+        :initially 0
+        :typed-record u8-tr-p)
+
+  :inline t
+  ;; [Optional] Universal accessor and updater functions
+  :accessor sr
+  :updater sw)</pre> 
+ 
+<p>See also <span class="v">centaur/defrstobj/basic-tests.lisp</span> for several more examples, 
+including examples of how to use <span class="v">def-typed-record</span>.</p> 
+ 
+<h4>Working with Universal Accessor and Updater Functions</h4> 
+ 
+<p>The universal accessor and updater functions have the following 
+signature:</p> 
+ 
+<pre class="code">(sr field index stobj)       -&gt; value 
+(sw field index value stobj) -&gt; new-stobj 
+</pre> 
+ 
+<p>where <span class="v">field</span> is a keyword corresponding to a stobj field (e.g., 
+<span class="v">:mem</span> in the above example).  Their definition is pretty straightforward 
+--- depending on the <span class="v">field</span>, the appropriate accessor/updater (e.g., 
+<span class="v">get-mem/set-mem</span>) is called.  However, due to the case-split on <span class="v">field</span>, 
+these two functions would be expensive for execution, so we've made them 
+non-executable.</p> 
+ 
+<p>In addition to these two functions, we also provide top-level field 
+accessors and updaters (e.g., <span class="v">@mem/!mem</span> for the <span class="v">mem</span> field above) 
+which have an <a href="ACL2____MBE.html">mbe</a> --- the <span class="v">:logic</span> definition is in terms of 
+the universal accessor or updater, and the <span class="v">:exec</span> definition is the stobj 
+field accessor or updater (e.g., <span class="v">get-mem/set-mem</span>).  These top-level field 
+accessors and updaters are inlined for execution performance.</p> 
+ 
+<p>We recommend the following strategy when working with the universal accessor 
+and updater functions.  You probably want all your theorems to be in terms of 
+the two universal accessor/updater functions.  Keep the top-level field 
+accessors/updaters enabled --- you probably want to use them in functions you 
+define on top of the stobj so that you get the performance of the underlying 
+concrete stobj while you reason about the universal accessor/updater 
+functions.</p> 
+ 
+<p>In addition to facilitating use with 
+<span class="v">stobjs::stobj-updater-independence</span>, a benefit of this strategy is 
+that it can reduce the term size during reasoning.  E.g., writing 
+<span class="v">v</span> to the <span class="v">i</span>th location of the <span class="v">mem</span> field using 
+<span class="v">set-mem</span> (which is enabled by default) would look like the 
+following:</p> 
+ 
+<pre class="code">(s :mem (u8-tr-set i v (g :mem st)) st) 
+</pre> 
+ 
+<p>When using the universal accessor/updater functions, it'll look like the 
+following:</p> 
+ 
+<pre class="code">(sw :mem i v st) 
+</pre> 
+ 
+<h3>Notes</h3> 
+ 
+<p>Record-like stobjs are now based on abstract stobjs.  This offers various 
+benefits over a <a href="ACL2____LEGACY-DEFRSTOBJ.html">previous version</a> of 
+rstobjs that didn't use abstract stobjs.  For instance, you no longer need any 
+kind of good-stobj predicate, and the top-level logical story is now just in 
+terms of <span class="v">g</span> and <span class="v">s</span> instead of stobj-specific functions.</p> 
+ 
+<p>A subtlety of treating the state as a record is that you (logically) 
+"lose" any type information about the top-level fields.  For instance, you 
+would expect to know that the <span class="v">pc</span> field above is a 64-bit natural.</p> 
+ 
+<p>With rstobjs, the state is logically just a record, so logically there is no 
+restriction on the <span class="v">pc</span>.  However, the executable accessor for the <span class="v">pc</span> 
+will logically be defined as, e.g.,</p> 
+ 
+<pre class="code">(<a href="ACL2____UNSIGNED-BYTE-FIX.html">unsigned-byte-fix</a> 64 (<a href="ACL2____G.html">g</a> :pc st))</pre> 
+ 
+<p>Note that this fixing is free in the execution; the abstract stobj invariant 
+allows us to assume that <span class="v">pc</span> is well-formed so we don't need to do any 
+fixing.</p> 
+ 
+<p>Arrays complicate things.  If a stobj only has non-array fields, then 
+viewing it as a record is pretty straightforward—we basically have a key 
+corresponding to each field.  But how do we handle array fields, which have 
+their own collections of elements?</p> 
+ 
+<p>One approach might be to try to keep viewing the stobj as a flat record. 
+For instance, we might try to have the story be something like <i>arr[3] 
+corresponds to the field (:ARR . 3)</i> or similar.  This is probably possible, 
+but something I didn't like about it was that it means we would also lose the 
+type information on the array elements.</p> 
+ 
+<p>Instead, I set things up so that the whole array looks like just one field 
+in the stobj.  The array itself is represented as a typed record, with its own 
+get/set functions that satisfy the theorems of Greve and Wilding's typed 
+records book.  See <a href="ACL2____DEF-TYPED-RECORD.html">def-typed-record</a>.</p> 
+ 
+
+</body>
+</html>

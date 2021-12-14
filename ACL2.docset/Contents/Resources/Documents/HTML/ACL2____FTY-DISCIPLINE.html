@@ -1,0 +1,136 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Fty-discipline</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____FTY-DISCIPLINE">Click for Fty-discipline in the Full Manual</a></h3>
+
+<p>The fixtype approach to type-safe programming in ACL2.</p><p>The <a href="ACL2____FTY.html">fty</a> library is based on a systematic discipline for 
+using types in ACL2 definitions.  This discipline is easy on the prover and 
+provides good execution performance.</p> 
+ 
+<h3>The FTY Discipline</h3> 
+ 
+<p>The FTY discipline consists of five conditions on data types and the 
+functions that use those types:</p> 
+ 
+<ol> 
+ 
+<li>A ``type'' <font color="#900090">foo</font> corresponds to a 
+<b>recognizer</b>, say <span class="v">foo-p</span>, which is a predicate that returns true when 
+its argument is a valid <font color="#900090">foo</font> object.</li> 
+ 
+<li>Each type <font color="#900090">foo</font> has an associated <b>fixing 
+function</b>, say <span class="v">foo-fix</span>.  This function must be the identity on <font color="#900090">foo</font> objects, and must coerce any other ACL2 object to 
+some valid <font color="#900090">foo</font>.  That is, <span class="v">foo-fix</span> must 
+satisfy: 
+ 
+<pre class="code">(foo-p (foo-fix x)),
+
+(<a href="ACL2____IMPLIES.html">implies</a> (foo-p x)
+         (<a href="COMMON-LISP____EQUAL.html">equal</a> (foo-fix x) x))</pre>
+</li> 
+ 
+<li>Each type <font color="#900090">foo</font> has an associated <b> 
+equivalence relation</b>, say <span class="v">foo-equiv</span>.  This must be an ordinary ACL2 
+<a href="ACL2____EQUIVALENCE.html">equivalence</a> relation that is essentially defined by the fixing 
+function.  That is, <span class="v">foo-equiv</span> must satisfy: 
+ 
+<pre class="code">(<a href="COMMON-LISP____EQUAL.html">equal</a> (foo-equiv x y)
+       (<a href="COMMON-LISP____EQUAL.html">equal</a> (foo-fix x) (foo-fix y)))</pre>
+</li> 
+ 
+<li>Every function that takes an argument of the <font color="#900090">foo</font> type should have an equality <a href="ACL2____CONGRUENCE.html">congruence</a> 
+with <span class="v">foo-equiv</span> on that argument.  For instance, if <span class="v">use-foo</span> takes a 
+single <font color="#900090">foo</font> argument, then it should satisfy: 
+ 
+<pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (foo-equiv x y)
+         (<a href="COMMON-LISP____EQUAL.html">equal</a> (use-foo x) (use-foo y)))</pre>
+</li> 
+ 
+<li>Every function that returns a value of the <font color="#900090">foo</font> 
+type should do so unconditionally.  For instance, if <span class="v">update-foo</span> returns a 
+<font color="#900090">foo</font>, then it should satisfy: 
+ 
+<pre class="code">(foo-p (update-foo x))</pre>
+</li> 
+ 
+</ol> 
+ 
+<h3>How does the FTY Library Help?</h3> 
+ 
+<p>To support items 1-3, the FTY library provides macros to automate the 
+introduction of many common kinds of types, their associated fixing functions, 
+and their corresponding equivalence relations.  It also keeps track of the 
+associations for all ``known types'' that obey this discipline (see <a href="FTY____DEFFIXTYPE.html">deffixtype</a>).</p> 
+ 
+<p>To support items 4-5 requires some care when writing your functions.  But 
+this is usually not too bad.  If your types already have associated fixing 
+functions and equivalence relations, then 4-5 are easy to engineer:</p> 
+ 
+<ul> 
+ 
+<li>If you build on existing functions that already satisfy these requirements, 
+they are likely to follow naturally.</li> 
+ 
+<li>Otherwise, you can simply fix each of the inputs to a function to their 
+appropriate types for free, using <span class="tt"><a href="ACL2____MBE.html">mbe</a></span>.</li> 
+ 
+</ul> 
+ 
+<p>For instance, here is a function that obeys the FTY discipline for natural 
+numbers by simply fixing its argument before operating on it.  Observe that 
+thanks to the <span class="v">mbe</span>, execution efficiency is unaffected by the additional 
+step of fixing <span class="v">n</span>.</p> 
+ 
+<pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> nat-add-5 (n)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____NATP.html">natp</a> n)))
+  (<a href="COMMON-LISP____LET.html">let</a> ((n (<a href="ACL2____MBE.html">mbe</a> :logic (<a href="ACL2____NFIX.html">nfix</a> n) :exec n)))
+    (<a href="COMMON-LISP_____B2.html">+</a> n 5)))</pre> 
+ 
+<p>However, writing these <span class="v">mbe</span> forms at the beginning of all of your 
+functions can be unwieldy.  A more convenient approach is to put the <span class="v">mbe</span> 
+inside the fixing function itself and inline the fixing function.  This enables 
+you to call the fixing function anywhere without any execution penalty, though 
+it does add a guard obligation.</p> 
+ 
+<pre class="code">(<a href="ACL2____DEFINE.html">define</a> foo-fix ((x foo-p))
+  :inline t
+  (<a href="ACL2____MBE.html">mbe</a> :logic ...
+       :exec x))
+
+(<a href="ACL2____DEFINE.html">define</a> munge-foo ((x foo-p))
+  (<a href="ACL2____B_A2.html">b*</a> ((x (foo-fix x)))
+    (bar (baz x) (xyzzy x))))</pre> 
+ 
+<p>There are versions of the ACL2 built-in fixing functions <span class="tt"><a href="ACL2____NFIX.html">nfix</a></span> and 
+<span class="tt"><a href="ACL2____IFIX.html">ifix</a></span> which follow the above discipline, called <span class="tt"><a href="ACL2____LNFIX.html">lnfix</a></span> and <span class="tt"><a href="ACL2____LIFIX.html">lifix</a></span>:</p> 
+ 
+<pre class="code">(<a href="ACL2____DEFINE.html">define</a> nat-add-5 ((n natp))
+  (<a href="ACL2____B_A2.html">b*</a> ((n (<a href="ACL2____LNFIX.html">lnfix</a> n)))
+    (<a href="COMMON-LISP_____B2.html">+</a> n 5)))</pre> 
+ 
+<p>FTY provides macro support for automatically proving the congruence rules 
+mentioned in item 4; see <a href="FTY____DEFFIXEQUIV.html">deffixequiv</a> and <a href="FTY____DEFFIXEQUIV-MUTUAL.html">deffixequiv-mutual</a>. 
+Meanwhile, for a convenient way to prove the unconditional return-value 
+theorems mentioned in item 5, see the <a href="STD____RETURNS-SPECIFIERS.html">std::returns-specifiers</a> feature of 
+<a href="ACL2____DEFINE.html">define</a>.</p> 
+ 
+<p>Having unconditional return types and congruences is beneficial in and of 
+itself.  But the main advantage of using the fixtype discipline is that in 
+complex programs, program reasoning can be done while largely avoiding 
+extensive <a href="ACL2____BACKCHAINING.html">backchaining</a> involving 
+proofs about type information.</p> 
+ 
+<p>Because each function's inputs are fixed to the appropriate type before 
+being used, theorems about the function do not typically need hypotheses 
+stating that the inputs are of that type.  And when a FTY-disciplined 
+function's result is passed into some other function, the unconditional returns 
+theorem for the first function allows us to instantly discharge any 
+type-related goals that arise in guard theorems or other theorems about the 
+second function.</p>
+</body>
+</html>

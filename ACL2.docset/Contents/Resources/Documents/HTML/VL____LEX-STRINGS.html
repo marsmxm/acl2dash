@@ -1,0 +1,166 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Lex-strings</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL____LEX-STRINGS">Click for Lex-strings in the Full Manual</a></h3>
+
+<p>Handling of string literals.</p><p>String literals are sequences of ASCII characters that are 
+enclosed in "double quotes."</p> 
+ 
+<p>Verilog-2005 and SystemVerilog-2012 have some differences here, and Verilog 
+implementations like Verilog-XL, NCVerilog, and VCS generally don't seem to 
+follow the standard.  We discuss some of the nuances here.</p> 
+ 
+ 
+<h5>Line Continuations</h5> 
+ 
+<p>The Verilog-2005 standard says that strings are contained on a single line, 
+but SystemVerilog-2012 adds a line continuation sequence, <span class="v">\&lt;newline&gt;</span>, 
+which doesn't become part of the string.  That is,</p> 
+ 
+<pre class="code">$display("Hello \
+World");</pre> 
+ 
+<p>Is invalid in Verilog-2005, but prints <span class="v">"Hello World"</span> in 
+SystemVerilog-2012.  While Verilog-XL doesn't appear to implement this new 
+syntax, but NCVerilog and VCS both do.</p> 
+ 
+<p>What counts as a newline?  Let <span class="v">NL</span> denote the newline character and 
+<span class="v">CR</span> denote carriage return.  Both NCVerilog and VCS appear to accept only 
+exactly <span class="v">\ NL</span>:</p> 
+ 
+<ul> 
+ 
+<li>They report syntax errors complaining about multi-line strings when given 
+string literals that include <span class="v">\ CR NL</span>; presumably they are translating 
+<span class="v">\ CR</span> into a plain <span class="v">CR</span> and then hitting the <span class="v">NL</span>, thinking it is 
+not escaped.</li> 
+ 
+<li>They accept <span class="v">\ CR</span>, but leave a <span class="v">CR</span> character in the output, so it 
+seems they are treating this as just an escaped CR character instead of a line 
+continuation.</li> 
+ 
+<li>They accept <span class="v">\ NL CR</span>, but leave a <span class="v">CR</span> character in the output. 
+So, it seems they just matching the <span class="v">\ NL</span> part as the line continuation, 
+and then treating the CR as an ordinary character.</li> 
+ 
+</ul> 
+ 
+<p>We will allow or prohibit line continuations based on the <a href="VL____VL-EDITION-P.html">vl-edition-p</a> being used.  When it is allowed, we will accept only exactly 
+<span class="v">\ NL</span>, like VCS and NCVerilog.</p> 
+ 
+ 
+<h5>Basic Escapes</h5> 
+ 
+<p>Verilog-2005 (Section 3.6.3) <i>could</i> be interpreted as prohibiting raw 
+tab characters, but experimentation with tools like Verilog-XL, NCVerilog, and 
+VCS suggest that tab characters should be accepted in strings, so we allow 
+them.</p> 
+ 
+<p>Strings in both Verilog-2005 and SystemVerilog-2012 can make use of the 
+following, basic escape sequences:</p> 
+ 
+<table class="xtable"> 
+<tr> <td> <span class="v"> \n </span>   </td> <td> Newline           </td> </tr> 
+<tr> <td> <span class="v"> \t </span>   </td> <td> Tab               </td> </tr> 
+<tr> <td> <span class="v"> \\ </span>  </td> <td> <span class="v">\</span> character </td> </tr> 
+<tr> <td> <span class="v"> \" </span>  </td> <td> <span class="v">"</span> character </td> </tr> 
+</table> 
+ 
+<p>These sequences seem to work on Verilog-XL, NCVerilog, and VCS without any 
+issues.</p> 
+ 
+ 
+<h5>Octal Escapes</h5> 
+ 
+<p>Verilog-2005 also allows for the encoding of arbitrary ASCII characters 
+using an octal escape sequences.</p> 
+ 
+ 
+<table class="xtable"> 
+<tr> <td> <span class="v"> \ddd </span> </td> 
+     <td> Character by octal code of 1-3 digits <span class="v">(0 &lt;= d &lt;= 7)</span>
+</td> 
+</tr> 
+</table> 
+ 
+<p>Note that 377 in octal is 255 in decimal, so a sequence such as <span class="v">\378</span> 
+is not really a valid character code.  The Verilog standard says that 
+implementations may issue an error in such cases.  In practice, none of 
+Verilog-XL, NCVerilog, or VCS complain about <span class="v">\378</span>.  Even so, it seems 
+reasonable for us to notice and fail with errors in this case.</p> 
+ 
+<p>The Verilog-2005 standard explains the handling of <span class="v">\ddd</span> nicely. 
+Unfortunately, SystemVerilog-2012 has made quite a muddle of it.</p> 
+ 
+<p>In the SystemVerilog standard, they have replaced the informal description 
+of octal digits with the more precise <span class="v">octal_digit</span> production.  This leads 
+to a mess because <span class="v">octal_digit</span>, used in numbers, can include X and Z 
+digits.  To work around this stupid new problem they've just caused, the 
+standard goes on to restrict these octal_digits not to be x_digits or z_digits. 
+They further say that an <span class="v">x_digit</span> or <span class="v">z_digit</span> cannot follow a 
+<span class="v">\ddd</span> sequence with fewer than 3 characters.</p> 
+ 
+<p>This means that certain sequences like <span class="v">\40x</span> or <span class="v">\40?</span>, which were 
+perfectly valid in Verilog 2005, are no longer valid in SystemVerilog 2012.</p> 
+ 
+<p>In practice, none of Verilog-XL, NCVerilog, or VCS implements this 
+restriction.  However, since these are probably a very rare and esoteric thing 
+to write in the first place, it seems reasonable for VL to prohibit these 
+sequences.</p> 
+ 
+ 
+<h5>Additional SystemVerilog-2012 Escapes</h5> 
+ 
+<p>The SystemVerilog-2012 standard introduces some new, simple escape 
+sequences:</p> 
+ 
+<table class="xtable"> 
+<tr> <td> <span class="v"> \v </span>   </td> <td> Vertical Tab      </td> </tr> 
+<tr> <td> <span class="v"> \f </span>   </td> <td> Form Feed         </td> </tr> 
+<tr> <td> <span class="v"> \a </span>   </td> <td> Bell              </td> </tr> 
+</table> 
+ 
+<p>None of these sequences seem to be implemented on Verilog-XL, NCVerilog, or 
+VCS.  Instead, when these tools encounter sequences like <span class="v">\v</span>, they seem to 
+simply produce <span class="v">v</span>, and for <span class="v">\x00</span>, they simply produce <span class="v">x00</span>.</p> 
+ 
+<p>We nevertheless try to follow the standard, and properly implement these 
+escape sequences for suitable <a href="VL____VL-EDITION-P.html">vl-edition-p</a>s.</p> 
+ 
+<p>SystemVerilog 2012 also adds some ambiguous language (Section 5.9) that 
+<i>Nonprinting and other special characters are preceded with a backslash</i>. 
+It's not clear whether this is just an informal description of what the escape 
+tables mean, or if we're supposed to allow any non-printable character to be 
+included in a string literal by preceding it with a backslash.  But it appears 
+(cosims/str) that other tools allow most characters to be preceded by a 
+backslash in which case they expand to themselves.  We try to be compatible 
+where we think this seems safe.</p> 
+ 
+ 
+ 
+<h5>Hex escapes</h5> 
+ 
+<p>SystemVerilog-2012 also adds a way to specify characters by hexadecimal 
+character codes:</p> 
+ 
+<table class="xtable"> 
+<tr> <td> <span class="v"> \xdd </span> </td> <td> Character by one or two hex digits</td> </tr> 
+</table> 
+ 
+<p>As with octal digits, the definition is muddled by the use of 
+<span class="v">hex_digit</span>, which leads to the possibility of x and z characters that then 
+have to be ruled out separately.</p> 
+ 
+<p>None of Verilog-XL, SystemVerilog, or VCS seems to implement hex escapes 
+yet.  Instead, sequences like <span class="v">\x0</span> simply get displayed as <span class="v">x0</span>, as if 
+the <span class="v">\x</span> is being converted into an <span class="v">x</span>.  VL implements the 
+standard.</p> 
+ 
+
+</body>
+</html>

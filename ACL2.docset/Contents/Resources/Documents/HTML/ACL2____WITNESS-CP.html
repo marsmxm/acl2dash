@@ -1,0 +1,236 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Witness-cp</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____WITNESS-CP">Click for Witness-cp in the Full Manual</a></h3>
+
+<p>Clause processor for quantifier-based reasoning.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(witness-cp clause hint state) → (mv err new-clause)</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">clause</span> — <font color="#606060">Guard <span class="v">(<a href="ACL2____PSEUDO-TERM-LISTP.html">pseudo-term-listp</a> clause)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">new-clause</span> — <font color="#606060">Type <span class="v">(pseudo-term-list-listp new-clause)</span>, given <span class="v">(<a href="ACL2____PSEUDO-TERM-LISTP.html">pseudo-term-listp</a> clause)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<h3>Introduction</h3> 
+ 
+<p><b>Witness-cp</b> is an extensible <a href="ACL2____CLAUSE-PROCESSOR.html">clause-processor</a> that can apply 
+user-supplied rules to carry out <i>witnessing transformations</i> on 
+quantifier-like terms in ACL2 proof goals.</p> 
+ 
+<p>Witness-cp is a general purpose tool that you can configure to work with any 
+kinds of quantifiers.  As a familiar example, consider set reasoning.  If we 
+encounter some proof goal with a hypothesis of the form:</p> 
+ 
+<pre class="code">(<a href="ACL2____SUBSETP-EQUAL.html">subsetp-equal</a> x y)</pre> 
+ 
+<p>then we may want to use this hypothesis to draw specific conclusions, such 
+as:</p> 
+ 
+<pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> k x)
+         (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> k y))</pre> 
+ 
+<p>for various <span class="v">k</span>.  Similarly if we have a hypothesis of the form:</p> 
+ 
+<pre class="code">(<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____SUBSETP-EQUAL.html">subsetp-equal</a> y z))</pre> 
+ 
+<p>then we may wish to conclude facts such as:</p> 
+ 
+<pre class="code">(<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> j y)
+     (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> j z)))</pre> 
+ 
+<p>for various <span class="v">j</span>.  Many theorems in set theory can be proven by choosing 
+suitable <span class="v">j</span> and <span class="v">k</span> and then carrying out membership reasoning.  The 
+<span class="v">witness-cp</span> clause processor can be configured to automatically try such 
+<span class="v">j</span> and <span class="v">k</span> in reasonably smart ways.</p> 
+ 
+<p>More broadly, <span class="v">witness-cp</span> is a general purpose tool that can configured 
+to reason about arbitrary quantified formulas.  It knows nothing <i>a 
+priori</i> about set theory or any other domain, but it can be told about what 
+predicates are to be taken as universal/existential quantifiers and how they 
+should be instantiated.</p> 
+ 
+ 
+<h3>Usage</h3> 
+ 
+<p>There are two steps to using <span class="v">witness-cp</span>.  First, we must configure it 
+to understand the desired domain, e.g., for set theory, we would need to 
+explain that <span class="v">subsetp-equal</span> is the universal quantification of 
+<span class="v">member-equal</span>.  Once the domain is configured, we can instruct ACL2 to 
+apply the <span class="v">witness-cp</span> clause processor to particular goals that we want to 
+solve; this is typically done with an explicit <a href="ACL2____WITNESS.html">witness</a> hint or via <a href="ACL2____DEFAULT-HINTS.html">default-hints</a>.</p> 
+ 
+<p>At a high level, when <span class="v">witness-cp</span> transforms a proof goal, it carries 
+out the following steps, each of which need to be configured to understand your 
+domain:</p> 
+ 
+<ol> 
+ 
+<li>
+<b>Witnessing</b>.  Introduce witnesses for negative occurrences of 
+universally quantified predicates and positive occurrences of existentially 
+quantified ones.  Then, optionally, for better readability, generalize the 
+newly introduced witness terms into fresh variables.  These steps can be 
+controlled with <a href="ACL2____DEFWITNESS.html">defwitness</a>.</li> 
+ 
+<li>
+<b>Gathering</b>. Find the set of examples with which to instantiate 
+positive universally quantified and negative existentially quantified 
+predicates.  The predicates to target are controlled by <a href="ACL2____DEFINSTANTIATE.html">definstantiate</a>.</li> 
+ 
+<li>
+<b>Instantiation</b>.  Instantiate these predicates with these examples. 
+The examples are set up using <a href="ACL2____DEFEXAMPLE.html">defexample</a>.</li> 
+ 
+</ol> 
+ 
+<p>Note that witness introduction and instantiation may both be lossy, i.e., 
+they may result in a formula that isn't a theorem even if the original formula 
+is one!</p> 
+ 
+ 
+<h3>Extended Example: Set Theory</h3> 
+ 
+<p>We now run through a typical example of setting up <span class="v">witness-cp</span> to 
+understand some functions from set theory.</p> 
+ 
+<h5>Configuring Witnessing</h5> 
+ 
+<p>To set up witnessing for <span class="v">(<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____SUBSETP-EQUAL.html">subsetp-equal</a> a b))</span> hypotheses, we can 
+issue the following <a href="ACL2____DEFWITNESS.html">defwitness</a> event.  We assume here that 
+<span class="v">(subsetp-equal-witness a b)</span> is a suitable ``badguy'' function that finds a 
+member of <span class="v">a</span> that is not in <span class="v">b</span>, if one exists.</p> 
+ 
+<pre class="code">(<a href="ACL2____DEFWITNESS.html">defwitness</a> subsetp-witnessing
+  :predicate (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____SUBSETP-EQUAL.html">subsetp-equal</a> a b))
+  :expr (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> (subsetp-equal-witness a b) a)
+             (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> (subsetp-equal-witness a b) b)))
+  :generalize (((subsetp-equal-witness a b) . ssew))
+  :hints ('(:in-theory '(subsetp-equal-witness-correct))))</pre> 
+ 
+<p>This instructs <span class="v">witness-cp</span>, during the witnessing phase, to search for 
+hypotheses of the form <span class="v">(<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____SUBSETP-EQUAL.html">subsetp-equal</a> a b))</span>.  For any such matches, 
+<span class="v">witness-cp</span> will add the new hypothesis:</p> 
+ 
+<pre class="code">(<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> (subsetp-equal-witness a b) a)
+     (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> (subsetp-equal-witness a b) b)))</pre> 
+ 
+<p>and will then generalize away the term <span class="v">(subsetp-equal-witness a b)</span> to a 
+fresh variable with a name like <span class="v">SSEW0</span>, <span class="v">SSEW1</span>, etc.  After this 
+generalization we are left with two new hyps:</p> 
+ 
+<pre class="code">(<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> ssew0 a)
+(<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> ssew0 b))</pre> 
+ 
+<p>The net result of all of this is that we have replaced an existential 
+assumption with a fresh variable witnessing it.  We wrap <span class="v">(<a href="ACL2____HIDE.html">hide</a> ...)</span> around 
+the original hypothesis to leave a trace of what we've done.  (Otherwise, it 
+would likely be rewritten away, since the two new hyps imply it.)</p> 
+ 
+<p>Why is it sound to add these new hypotheses to our main formula?  To justify 
+this step, the <a href="ACL2____DEFWITNESS.html">defwitness</a> event requires us to prove the following 
+theorem, using the provided hints:</p> 
+ 
+<pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____SUBSETP-EQUAL.html">subsetp-equal</a> a b))
+         (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> (subsetp-equal-witness a b) a)
+              (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> (subsetp-equal-witness a b) b))))</pre> 
+ 
+ 
+<h5>Configuring Gathering</h5> 
+ 
+<p>To set up instantiation of a <span class="v">(<a href="ACL2____SUBSETP-EQUAL.html">subsetp-equal</a> a b)</span> hypotheses, we can 
+issue the following <a href="ACL2____DEFINSTANTIATE.html">definstantiate</a> event.</p> 
+ 
+<pre class="code">(<a href="ACL2____DEFINSTANTIATE.html">definstantiate</a> subsetp-equal-instancing
+  :predicate (<a href="ACL2____SUBSETP-EQUAL.html">subsetp-equal</a> a b)
+  :vars (k)
+  :expr (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> k a)
+                 (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> k b))
+  :hints ('(:in-theory '(subsetp-member))))</pre> 
+ 
+<p>This will mean that, for each <span class="v">(<a href="ACL2____SUBSETP-EQUAL.html">subsetp-equal</a> a b)</span> hypothesis we find, 
+we'll add hypotheses of the form:</p> 
+ 
+<pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> k a)
+         (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> k b))</pre> 
+ 
+<p>for each of (possibly) several <span class="v">k</span>.  The terms we use to instantiate 
+<span class="v">k</span> are determined by <a href="ACL2____DEFEXAMPLE.html">defexample</a>; see below.</p> 
+ 
+<p>To show that it sound to add these hypotheses, the <a href="ACL2____DEFINSTANTIATE.html">definstantiate</a> 
+event requires us to prove:</p> 
+ 
+<pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____SUBSETP-EQUAL.html">subsetp-equal</a> a b)
+         (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> k a)
+                  (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> k b)))</pre> 
+ 
+<p>This is a very easy proof: it is just the quantifier-based definition of 
+<span class="v">subsetp-equal</span>.</p> 
+ 
+ 
+<h5>Configuring Instantiation</h5> 
+ 
+<p>The terms used to instantiate <span class="v">k</span> above are determined by <a href="ACL2____DEFEXAMPLE.html">defexample</a> rules, like the following:</p> 
+ 
+<pre class="code">(<a href="ACL2____DEFEXAMPLE.html">defexample</a> subsetp-member-template
+  :pattern (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> k a)
+  :templates (k)
+  :instance-rulename subsetp-equal-instancing)</pre> 
+ 
+<p>This rule means that, after the gathering phase, we'll look through the 
+clause for expressions <span class="v">(<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> k a)</span> and, whenever we find one, 
+include <span class="v">k</span> in the list of examples to use for instantiating using the 
+<span class="v">subsetp-equal-instance</span> rule.</p> 
+ 
+<p><span class="v">Defexample</span> doesn't require any proof obligation; it's just a heuristic 
+that adds to the set of terms used to instantiate universal quantifiers.</p> 
+ 
+ 
+<h5>Applying the Clause Processor</h5> 
+ 
+<p>To use the scheme we've introduced for reasoning about <span class="v">subsetp-equal</span>, 
+we can introduce a <b>witness ruleset</b>:</p> 
+ 
+<pre class="code">(<a href="ACL2____DEF-WITNESS-RULESET.html">def-witness-ruleset</a> subsetp-witnessing-rules
+  '(subsetp-witnessing
+    subsetp-equal-instancing
+    subsetp-member-template))</pre> 
+ 
+<p>Then when we want to use this reasoning strategy, we can give a hint.  You 
+should not call <span class="v">witness-cp</span> directly, but rather using the <a href="ACL2____WITNESS.html">witness</a> 
+macro as a computed hint.  For example:</p> 
+ 
+<pre class="code">:hints ((<a href="ACL2____WITNESS.html">witness</a> :ruleset subsetp-witnessing-rules))</pre> 
+ 
+<p>This implicitly waits until the formula is <a href="ACL2____STABLE-UNDER-SIMPLIFICATIONP.html">stable-under-simplificationp</a> and then invokes the <span class="v">witness-cp</span> clause 
+processor, allowing it to use the witnessing/instancing/example rules 
+listed.</p> 
+ 
+<p>You may find it useful to define a macro so that you don't have to remember 
+this syntax, for instance:</p> 
+ 
+<pre class="code">(<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> subset-reasoning ()
+  '(<a href="ACL2____WITNESS.html">witness</a> :ruleset subsetp-witnessing-rules))
+
+(<a href="ACL2____DEFTHM.html">defthm</a> foo
+  ...
+  :hints (("goal" ...)
+          (subset-reasoning)))</pre> 
+ 
+ 
+<h3>Further Resources</h3> 
+ 
+<p>Additional documentation is available for <a href="ACL2____DEFWITNESS.html">defwitness</a>, <a href="ACL2____DEFINSTANTIATE.html">definstantiate</a>, and <a href="ACL2____DEFEXAMPLE.html">defexample</a>. Also see <a href="ACL2____DEFQUANTEXPR.html">defquantexpr</a>, which is 
+a shortcut for the common pattern (as above) of doing both a defwitness and 
+definstantiate for a certain term, and <a href="ACL2____DEFQUANT.html">defquant</a>, which defines a 
+quantified function (using <a href="ACL2____DEFUN-SK.html">defun-sk</a>) and sets up 
+defwitness/definstantiate rules for it.</p>
+</body>
+</html>

@@ -1,0 +1,186 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Vl-scopecontext-to-addr</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL____VL-SCOPECONTEXT-TO-ADDR">Click for Vl-scopecontext-to-addr in the Full Manual</a></h3>
+
+<p>Create an svex address from a path, based on which scope the scopecontext 
+          object indicates.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(vl-scopecontext-to-addr x ss path &amp;key (strictp 't)) 
+  → 
+(mv err addr)</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">x</span> — <font color="#606060">Guard <span class="v">(<a href="VL____VL-SCOPECONTEXT-P.html">vl-scopecontext-p</a> x)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">ss</span> — <font color="#606060">Guard <span class="v">(<a href="VL____VL-SCOPESTACK-P.html">vl-scopestack-p</a> ss)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">path</span> — <font color="#606060">Guard <span class="v">(<a href="SV____PATH-P.html">sv::path-p</a> path)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">strictp</span> — <font color="#606060">Guard <span class="v">(<a href="ACL2____BOOLEANP.html">booleanp</a> strictp)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">err</span> — <font color="#606060">Type <span class="v">(<a href="ACL2____IFF.html">iff</a> (<a href="VL____VL-MSG-P.html">vl-msg-p</a> err) err)</span>.</font>
+</dd> 
+<dd>
+<span class="tt">addr</span> — <font color="#606060">Type <span class="v">(<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____NOT.html">not</a> err) (<a href="SV____ADDRESS-P.html">sv::address-p</a> addr))
+     (<a href="ACL2____IMPLIES.html">implies</a> addr (<a href="SV____ADDRESS-P.html">sv::address-p</a> addr)))
+</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>Svex supports three kinds of addresses -- see <a href="SV____ADDRESS.html">sv::address</a> 
+for more.  This function tries to determine the right kind of address to make 
+from a VL hid expression by looking up the basename of the path in the 
+scopestack to see where it was found.</p> 
+ 
+<p>The scopecontext tells us almost what we need to know to make a proper svex 
+address.  Either:</p> 
+ 
+<ul> 
+<li>It's at root scope.  We make a root address.</li> 
+ 
+<li>It's in a package or module scope.  We don't support this yet, but they'll 
+translate to something based at the root scope.</li> 
+ 
+<li>It's at local scope, N levels up.  We make a local address, but we have to 
+translate the number of levels by examining the scopestack. -- see below.</li> 
+ 
+</ul> 
+ 
+<p>There is a subtle disconnect between svex's concept of scopes and VL's.  In 
+VL, if you're inside a generate block in a module, you probably have three 
+scope levels: the block, the module, and the global scope.  In svex, if you're 
+inside the same block, you might be inside several more levels of scope if the 
+module is instantiated deep in the hierarchy, or if the module is the top 
+module, you might just be inside the block within the module (so only two 
+levels deep).  In translating between these we assume that VL scopes basically 
+consist of a single global scope, the single module scope, and some number of 
+nested block scopes.  In translating to svex, we require that the number of 
+levels up only includes these nested block scopes.  We also need to be careful 
+to be consistent with our scoping conventions -- most particularly, a generate 
+array (the elaborated result of a generate loop) has a level of scoping for the 
+array itself, and an additional one for each of the blocks in the array (the 
+replicated loop bodies).  On the other hand, statement scopes are handled by 
+the vl-svstmt transform which eliminates local variables, so subscopes within 
+statements are not related to svex scopes. Vl-upscope-to-svex-upscope accounts 
+for these issues.</p> 
+ 
+<p>For package and module contexts, we produce an error because variables in 
+those scopes aren't yet supported.  We also return an address, however, because 
+we use this for resolving function names, in which case the error can be 
+ignored.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>vl-scopecontext-to-addr-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ vl-scopecontext-to-addr-fn
+ (x ss path strictp)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="VL____VL-SCOPECONTEXT-P.html">vl-scopecontext-p</a> x)
+                             (<a href="VL____VL-SCOPESTACK-P.html">vl-scopestack-p</a> ss)
+                             (<a href="SV____PATH-P.html">sv::path-p</a> path)
+                             (<a href="ACL2____BOOLEANP.html">booleanp</a> strictp))))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'vl-scopecontext-to-addr))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="VL____VL-SCOPECONTEXT-CASE.html">vl-scopecontext-case</a>
+   x
+   :local (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> err levels)
+                (<a href="VL____VL-UPSCOPE-TO-SVEX-UPSCOPE.html">vl-upscope-to-svex-upscope</a> x.levels ss
+                                            :strictp strictp))
+               ((when err) (<a href="ACL2____MV.html">mv</a> err nil)))
+              (<a href="ACL2____MV.html">mv</a> nil
+                  (<a href="SV____MAKE-ADDRESS.html">sv::make-address</a> :path path
+                                    :scope levels)))
+   :root (<a href="ACL2____MV.html">mv</a> nil
+             (<a href="SV____MAKE-ADDRESS.html">sv::make-address</a> :path path
+                               :scope :root))
+   :package
+   (<a href="ACL2____MV.html">mv</a>
+    (<a href="COMMON-LISP____AND.html">and</a> strictp
+         (<a href="VL____VMSG.html">vmsg</a> "Package-scoped variables aren't yet supported"))
+    (<a href="SV____MAKE-ADDRESS.html">sv::make-address</a>
+      :scope :root
+      :path (<a href="SV____MAKE-PATH-SCOPE.html">sv::make-path-scope</a> :namespace (<a href="VL____VL-PACKAGE-_E3NAME.html">vl-package-&gt;name</a> x.pkg)
+                                 :subpath path)))
+   :module
+   (<a href="ACL2____MV.html">mv</a>
+    (<a href="COMMON-LISP____AND.html">and</a> strictp
+         (<a href="VL____VMSG.html">vmsg</a> "Module-scoped variables aren't yet supported"))
+    (<a href="SV____MAKE-ADDRESS.html">sv::make-address</a>
+       :scope :root
+       :path (<a href="SV____MAKE-PATH-SCOPE.html">sv::make-path-scope</a> :namespace (<a href="VL____VL-MODULE-_E3NAME.html">vl-module-&gt;name</a> x.mod)
+                                  :subpath path)))
+   :interface
+   (<a href="ACL2____MV.html">mv</a>
+    (<a href="COMMON-LISP____AND.html">and</a> strictp
+         (<a href="VL____VMSG.html">vmsg</a> "Module-scoped variables aren't yet supported"))
+    (<a href="SV____MAKE-ADDRESS.html">sv::make-address</a>
+        :scope :root
+        :path
+        (<a href="SV____MAKE-PATH-SCOPE.html">sv::make-path-scope</a> :namespace (<a href="VL____VL-INTERFACE-_E3NAME.html">vl-interface-&gt;name</a> x.iface)
+                             :subpath path))))))</pre> 
+<p><b>Theorem: </b>return-type-of-vl-scopecontext-to-addr.err</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> return-type-of-vl-scopecontext-to-addr.err
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?err ?addr)
+              (vl-scopecontext-to-addr-fn x ss path strictp)))
+            (<a href="ACL2____IFF.html">iff</a> (<a href="VL____VL-MSG-P.html">vl-msg-p</a> err) err))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>return-type-of-vl-scopecontext-to-addr.addr</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> return-type-of-vl-scopecontext-to-addr.addr
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?err ?addr)
+              (vl-scopecontext-to-addr-fn x ss path strictp)))
+            (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____NOT.html">not</a> err) (<a href="SV____ADDRESS-P.html">sv::address-p</a> addr))
+                 (<a href="ACL2____IMPLIES.html">implies</a> addr (<a href="SV____ADDRESS-P.html">sv::address-p</a> addr))))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>vl-scopecontext-to-addr-fn-of-vl-scopecontext-fix-x</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-scopecontext-to-addr-fn-of-vl-scopecontext-fix-x
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (vl-scopecontext-to-addr-fn (<a href="VL____VL-SCOPECONTEXT-FIX.html">vl-scopecontext-fix</a> x)
+                                           ss path strictp)
+               (vl-scopecontext-to-addr-fn x ss path strictp)))</pre> 
+<p><b>Theorem: </b>vl-scopecontext-to-addr-fn-vl-scopecontext-equiv-congruence-on-x</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+  vl-scopecontext-to-addr-fn-vl-scopecontext-equiv-congruence-on-x
+  (<a href="ACL2____IMPLIES.html">implies</a>
+       (<a href="VL____VL-SCOPECONTEXT-EQUIV.html">vl-scopecontext-equiv</a> x x-equiv)
+       (<a href="COMMON-LISP____EQUAL.html">equal</a> (vl-scopecontext-to-addr-fn x ss path strictp)
+              (vl-scopecontext-to-addr-fn x-equiv ss path strictp)))
+  :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>vl-scopecontext-to-addr-fn-of-vl-scopestack-fix-ss</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-scopecontext-to-addr-fn-of-vl-scopestack-fix-ss
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (vl-scopecontext-to-addr-fn x (<a href="VL____VL-SCOPESTACK-FIX.html">vl-scopestack-fix</a> ss)
+                                           path strictp)
+               (vl-scopecontext-to-addr-fn x ss path strictp)))</pre> 
+<p><b>Theorem: </b>vl-scopecontext-to-addr-fn-vl-scopestack-equiv-congruence-on-ss</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+  vl-scopecontext-to-addr-fn-vl-scopestack-equiv-congruence-on-ss
+  (<a href="ACL2____IMPLIES.html">implies</a>
+       (<a href="VL____VL-SCOPESTACK-EQUIV.html">vl-scopestack-equiv</a> ss ss-equiv)
+       (<a href="COMMON-LISP____EQUAL.html">equal</a> (vl-scopecontext-to-addr-fn x ss path strictp)
+              (vl-scopecontext-to-addr-fn x ss-equiv path strictp)))
+  :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>vl-scopecontext-to-addr-fn-of-path-fix-path</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-scopecontext-to-addr-fn-of-path-fix-path
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (vl-scopecontext-to-addr-fn x ss (<a href="SV____PATH-FIX.html">sv::path-fix</a> path)
+                                           strictp)
+               (vl-scopecontext-to-addr-fn x ss path strictp)))</pre> 
+<p><b>Theorem: </b>vl-scopecontext-to-addr-fn-path-equiv-congruence-on-path</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+  vl-scopecontext-to-addr-fn-path-equiv-congruence-on-path
+  (<a href="ACL2____IMPLIES.html">implies</a>
+       (<a href="SV____PATH-EQUIV.html">sv::path-equiv</a> path path-equiv)
+       (<a href="COMMON-LISP____EQUAL.html">equal</a> (vl-scopecontext-to-addr-fn x ss path strictp)
+              (vl-scopecontext-to-addr-fn x ss path-equiv strictp)))
+  :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>vl-scopecontext-to-addr-fn-of-bool-fix-strictp</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-scopecontext-to-addr-fn-of-bool-fix-strictp
+ (<a href="COMMON-LISP____EQUAL.html">equal</a>
+     (vl-scopecontext-to-addr-fn x ss path (<a href="ACL2____BOOL-FIX.html">acl2::bool-fix</a> strictp))
+     (vl-scopecontext-to-addr-fn x ss path strictp)))</pre> 
+<p><b>Theorem: </b>vl-scopecontext-to-addr-fn-iff-congruence-on-strictp</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+  vl-scopecontext-to-addr-fn-iff-congruence-on-strictp
+  (<a href="ACL2____IMPLIES.html">implies</a>
+       (<a href="ACL2____IFF.html">iff</a> strictp strictp-equiv)
+       (<a href="COMMON-LISP____EQUAL.html">equal</a> (vl-scopecontext-to-addr-fn x ss path strictp)
+              (vl-scopecontext-to-addr-fn x ss path strictp-equiv)))
+  :rule-classes :congruence)</pre> 
+
+</body>
+</html>

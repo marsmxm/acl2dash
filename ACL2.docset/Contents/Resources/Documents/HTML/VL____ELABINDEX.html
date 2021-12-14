@@ -1,0 +1,137 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Elabindex</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL____ELABINDEX">Click for Elabindex in the Full Manual</a></h3>
+
+<p>A data structure for recording elaboration results, i.e., functions, 
+types, and parameters.</p> 
+<h3>Basic Usage</h3> 
+<ul> 
+<li>
+<a href="VL____VL-ELABINDEX-INIT.html">vl-elabindex-init</a> initializes an empty elabindex at the design scope.</li> 
+<li>
+<a href="VL____VL-ELABINDEX-UPDATE-ITEM-INFO.html">vl-elabindex-update-item-info</a> adds an entry about a parameter, type, or function name to the current scope.</li> 
+<li>
+<a href="VL____VL-ELABINDEX-TRAVERSE.html">vl-elabindex-traverse</a> traverses to the scope represented by the given scopestack.</li> 
+<li>
+<a href="VL____VL-ELABINDEX-PUSH.html">vl-elabindex-push</a> enters the given scope.</li> 
+<li>
+<a href="VL____VL-ELABINDEX-UNDO.html">vl-elabindex-undo</a> undoes the latest traversal/push that hasn't already been undone.</li> 
+<li>
+<a href="VL____VL-ELABINDEX-_E3SS.html">vl-elabindex-&gt;ss</a> accesses the scopestack of the current location</li> 
+<li>
+<a href="VL____VL-ELABINDEX-SYNC-SCOPES.html">vl-elabindex-sync-scopes</a> readies the scopes for 
+read-only/applicative usage by ensuring that the versions of subscopes 
+currently in use are all written back to their parent scopes.</li> 
+<li>
+<a href="VL____VL-ELABINDEX-_E3SCOPES.html">vl-elabindex-&gt;scopes</a> accesses the stack of elabinfo scopes for the 
+current location.(Note: You should use <a href="VL____VL-ELABINDEX-SYNC-SCOPES.html">vl-elabindex-sync-scopes</a> before 
+doing this.)</li> 
+</ul> 
+ 
+<p>An elabindex is most useful when you are going to be adding new elaboration 
+results.  To simply examine elaboration results, you may use a <a href="VL____VL-ELABSCOPES.html">vl-elabscopes</a>.  This is a data structure used in an elabindex, but also 
+has a set of functions appropriate for using it in an applicative manner.</p> 
+ 
+ 
+<h3>Introduction</h3> 
+<p>One of the biggest difficulties in processing SystemVerilog is the 
+complicated dependencies among functions, parameters, and types.  There is no 
+way to unravel these dependencies so that we can (e.g.) resolve parameter 
+values first, then types, then function definitions: in fact, each of these can 
+depend on all the others.  So they must all be processed in one step, so that 
+if a parameter depends on a function definition, we can go and resolve that 
+function definition, which may depend on other parameters and types, before 
+coming back to the original parameter with the function's resolved definition.</p> 
+ 
+<p>The step that resolves all of these is called elaboration.  During 
+elaboration, we unparameterize modules and traverse the design in order to 
+resolve types and replace constant expressions with their values where 
+possible.  Elaboration is complicated by the fact that there is no set order 
+for dependencies; we must be able to go look up an arbitrary 
+parameter/function/type anywhere in the module and resolve it before 
+continuing.</p> 
+ 
+<p>This style of traversal is difficult for our applicative-style data 
+structures; when we go to a different part of the design, resolve something, 
+and come back to another part of the design, it is expensive to record the 
+result that we obtained in the design, especially since it has been 
+processed (e.g.) a scopestack.</p> 
+ 
+<p>An elabindex is our solution to this problem.  It is designed to allow us to 
+efficiently record and look up results while performing both treelike and 
+non-treelike traversals of the design.</p> 
+ 
+<h3>Implementation</h3> 
+ 
+<p>An elabindex contains a scopestack and an elabscopes.  A scopestack 
+contains all the smarts necessary to look up items correctly (which can be 
+nontrivial when you factor in imports, etc.).  The elabscopes contains 
+analogous scopes as the scopestack, but these scopes record elaboration 
+information and are designed to be easily updated, as well as the subscopes 
+contained within.  To make writes to a scope permanent, each time we go up a 
+scope, we pop the scope off of the elabscopes, but write it into the 
+parent scope so that next time we go into that scope, we'll get our most recent 
+updates.</p> 
+ 
+<p>An exception to this: Some scopes are anonymous, e.g., a block statement 
+inside an always block.  Such a scope can't be accessed by name from within the 
+surrounding context -- it can only be reached through a treelike traversal, 
+i.e., processing all the always blocks in a module.  When going up in scope 
+from some such a scope, we don't write it to the parent scope because it 
+doesn't have a name to index it by.</p> 
+ 
+<p>A tricky use case: Suppose we are working in some anonymous scope, e.g., a 
+block statement inside an always. Such a scope can't be accessed by name from 
+within the surrounding context -- it can only be reached through a treelike 
+traversal, i.e., processing all the always blocks in a module.  Then, suppose 
+we need to look up some parameter located in a package.  We need to go into 
+that parameter's context to compute its value, then pop back to our previous 
+context.</p> 
+ 
+<p>How can we accomplish this?  Some ideas and their flaws:</p> 
+ 
+<ul> 
+ 
+<li>Keep a stack of checkpoints, i.e. before going to the package context, save 
+our current elabscopes, and restore it when we're done computing the 
+parameter.  Problem: we need to save the work we did to compute the parameter, 
+so we can't just revert to our previous elabscopes.</li> 
+ 
+<li>Keep a stack of paths that uniquely identify the current location.  When 
+going to a new location, push the current location's path onto the stack, and 
+when we want to come back to it, pop it off and navigate back to it.  Problem: 
+anonymous scopes don't have names.  Also, going back to the top of the design 
+to follow a path from the beginning might be inefficent -- we might even 
+traverse to the same scope we were already in.  Since popping scopes involves 
+writing to a fast alist, we don't want to do this unnecessarily.</li> 
+ 
+</ul> 
+ 
+<p>Our actual implementation:</p> 
+ 
+<p>Keep a stack of traversal instructions that say how to get back to the 
+previous scope from the scope you reached.  Each such traversal is a sequence 
+of instructions, where each instruction is one of:</p> 
+ 
+<ul> 
+<li>Go up a scope</li> 
+<li>Go down into the scope of some name</li> 
+<li>Go down into this anonymous scope (where the scope itself is part of the 
+instruction).</li> 
+</ul> 
+ 
+<p>Distinguishing between named and anonymous scopes in this way allows named 
+scopes to be updated via "random access", i.e. following 
+parameter/function/type dependencies.  Anonymous scopes don't need to be 
+updated this way because parameter/function/type dependencies won't take you 
+back to one.  (An exception, arguably, is a block scope inside a function 
+definition.  But this should only matter if the function calls itself 
+recursively, which we don't support for now anyway.)</p>
+</body>
+</html>

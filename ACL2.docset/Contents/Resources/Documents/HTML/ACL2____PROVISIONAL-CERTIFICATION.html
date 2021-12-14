@@ -1,0 +1,286 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Provisional-certification</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____PROVISIONAL-CERTIFICATION">Click for Provisional-certification in the Full Manual</a></h3>
+
+<p>Certify a book in stages for improved book-level parallelism</p><p>Provisional certification is a process that can increase 
+ parallelism when certifying books in parallel, typically using `make', when 
+ certifying a collection of <a href="ACL2____BOOKS.html">books</a>.  We got this idea from Jared Davis, 
+ who developed rudimentary provisional certification schemes first at Rockwell 
+ Collins and later for his `Milawa' project.  Our design has also benefited 
+ from conversations with Sol Swords.</p> 
+ 
+ <p>Warning: as of November 2014, enabling provision certification via the 
+ <span class="v">ACL2_PCERT</span> flag can not be reliably enabled at the Makefile level (as is 
+ shown below).  See <a href="https://github.com/acl2/acl2/issues/255" target="_blank"><nobr>Github 
+ Issue 255<img src="../Icon_External_Link.png" title="External link to https://github.com/acl2/acl2/issues/255"></nobr></a> for more information.</p> 
+ 
+ <p>To invoke provisional certification, see <a href="ACL2____BOOKS-CERTIFICATION.html">books-certification</a>.  For 
+ example, you could issue the following command.</p> 
+ 
+ <pre class="code">cert.pl --pcert-all -j 4 `find . -name '*.lisp'`</pre> 
+ 
+ <p>Alternatively, see <a href="ACL2____BOOKS-CERTIFICATION-CLASSIC.html">books-certification-classic</a> for a discussion of 
+ classic ACL2 `make'-based certification (which may disappear in a future ACL2 
+ release); here we extend those instructions to show how to use provisional 
+ certification.  (Also, you may wish to look at community books file 
+ <span class="v">books/system/pcert/Makefile</span> for an example.)  We begin by describing a 
+ few ways to do that.  A simple way is to add the line `<span class="v">ACL2_PCERT=t</span>' to a 
+ `make' command that you use for book certification, for example as 
+ follows.</p> 
+ 
+ <pre class="code">make -j 4 ACL2_PCERT=t</pre> 
+ 
+ <p>The following works too, in a bash shell.</p> 
+ 
+ <pre class="code">(export ACL2_PCERT=t ; time make -j 4)</pre> 
+ 
+ <p>Alternatively, add the line</p> 
+ 
+ <pre class="code">ACL2_PCERT ?= t</pre> 
+ 
+ <p>to the <span class="v">Makefile</span> residing in the directory, placed above the line that 
+ specifies the `<span class="v">include</span>' of file <span class="v">Makefile-generic</span>.  A successful 
+ `make' will result in creating the desired <a href="ACL2____CERTIFICATE.html">certificate</a> (<span class="v">.cert</span>) 
+ files.</p> 
+ 
+ <p>Warning: If you put the line ``<span class="v">ACL2_PCERT ?= t</span>'' below the include of 
+ <span class="v">Makefile-generic</span>, it might have no effect.  For example, try editing 
+ community books file <span class="v">books/system/pcert/Makefile</span> by moving the line 
+ ``<span class="v">ACL2_PCERT ?= t</span>'' to the bottom of the file, and watch ``<span class="v">make
+ top.cert</span>'' fail to invoke provisional certification.</p> 
+ 
+ <p>The description above may be sufficient for you to use provisional 
+ certification.  We provide additional documentation below for the reader who 
+ wants to understand more about this process, for example when not using 
+ `make'.  Below we assume prior familiarity with <a href="ACL2____BOOKS.html">books</a>, in particular 
+ <span class="tt"><a href="ACL2____CERTIFY-BOOK.html">certify-book</a></span> and <span class="tt"><a href="ACL2____INCLUDE-BOOK.html">include-book</a></span>.  The remainder of this <a href="COMMON-LISP____DOCUMENTATION.html">documentation</a> topic is divided into sections: Summary, Correctness Claim and 
+ Issues, Combining Pcertify and Convert into Pcertify+, and Further 
+ Information.</p> 
+ 
+ <p><b>Summary</b></p> 
+ 
+ <p>Recall that certification of a book, <span class="v">bk</span>, produces a <a href="ACL2____CERTIFICATE.html">certificate</a> 
+ file <span class="v">bk.cert</span>.  The provisional certification process produces this file 
+ as well, but as the last of the following three steps.  All of these steps are 
+ carried out by calls of <span class="tt"><a href="ACL2____CERTIFY-BOOK.html">certify-book</a></span> using its <span class="v">:pcert</span> keyword 
+ argument.  We typically call these steps ``procedures'', to distinguish them 
+ from the steps of an individual call of <span class="tt"><a href="ACL2____CERTIFY-BOOK.html">certify-book</a></span>.</p> 
+ 
+ <ul> 
+ 
+ <li>The ``Pcertify'' procedure (sometimes called the ``Create'' 
+ procedure) is invoked by calling <span class="tt"><a href="ACL2____CERTIFY-BOOK.html">certify-book</a></span> with keyword argument 
+ <span class="v">:pcert :create</span>.  It produces a file <span class="v">bk.pcert0</span>, sometimes called the 
+ ``<span class="v">.pcert0</span>'' file (pronounced ``dot pee cert zero'').  Proofs are skipped 
+ during this procedure, which can be viewed as an elaborate syntax check, 
+ augmented by compilation if specified (as it is by default).</li> 
+ 
+ <li>The ``Convert'' procedure is invoked by calling <span class="tt"><a href="ACL2____CERTIFY-BOOK.html">certify-book</a></span> with 
+ keyword argument <span class="v">:pcert :convert</span>.  It creates file <span class="v">bk.pcert1</span> from 
+ <span class="v">bk.pcert0</span>, by doing proofs for all events in <span class="v">bk.lisp</span>.  Note that the 
+ third argument (the `<span class="v">compile-flg</span>' argument) is ignored by such a call of 
+ <span class="v">certify-book</span> unless its value is <span class="v">:all</span> (either explicitly or by way 
+ of environment variable <span class="v">ACL2_COMPILE_FLG</span>).  A subtlety is that if there 
+ is a compiled file at least as recent as the corresponding <span class="v">.pcert0</span> file, 
+ then that compiled file's write date will be updated to the current time at 
+ the end of this procedure.  The usual <a href="ACL2____LOCAL-INCOMPATIBILITY.html">local-incompatibility</a> check at 
+ the end of <span class="tt"><a href="ACL2____CERTIFY-BOOK.html">certify-book</a></span> is omitted for the Convert procedure, since it 
+ was performed towards the end of the Create procedure.</li> 
+ 
+ <li>The ``Complete'' procedure is invoked by calling <span class="tt"><a href="ACL2____CERTIFY-BOOK.html">certify-book</a></span> 
+ with keyword argument <span class="v">:pcert :complete</span>.  It checks that every included 
+ book (including every one that is <span class="tt"><a href="ACL2____LOCAL.html">local</a></span>ly included) has a <span class="v">.cert</span> 
+ file that is at least as recent as the corresponding book.  The effect is to 
+ move <span class="v">bk.pcert1</span> to <span class="v">bk.cert</span>.  Note that all arguments of 
+ <span class="v">certify-book</span> other than the <span class="v">:pcert</span> argument are ignored for this 
+ procedure, other than for some trivial argument checking.</li> 
+ 
+ </ul> 
+ 
+ <p>You can combine the Pcertify and Convert procedures into a single 
+ procedure, Pcertify+, which may be useful for books that contain expensive 
+ <span class="tt"><a href="ACL2____INCLUDE-BOOK.html">include-book</a></span> <a href="ACL2____EVENTS.html">events</a> but do few proofs.  We defer discussion of 
+ that feature to the section below, ``Combining Pcertify and Convert into 
+ Pcertify+''.</p> 
+ 
+ <p>The main idea of provisional certification is to break sequential 
+ dependencies caused by <span class="tt"><a href="ACL2____INCLUDE-BOOK.html">include-book</a></span>, that is, so that a book's proofs 
+ are carried out even when it includes books (sometimes called ``sub-books'') 
+ that have not themselves been fully certified.  For example, suppose that a 
+ proof development consists of books <span class="v">A.lisp</span>, <span class="v">B.lisp</span>, and <span class="v">C.lisp</span>, 
+ where file <span class="v">A.lisp</span> contains the form <span class="v">(<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "B")</span> and file 
+ <span class="v">B.lisp</span> contains the form <span class="v">(<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "C")</span>.  Normally one would 
+ first certify <span class="v">C</span>, then <span class="v">B</span>, and finally, <span class="v">A</span>.  However, the 
+ provisional certification process can speed up the process on a multi-core 
+ machine, as follows: the Pcertify (pronounced ``pee certify'') procedure 
+ respects this order but (one hopes) is fast since proofs are skipped; the 
+ Convert procedure essentially completes the certification in parallel by doing 
+ proofs and creating <span class="v">.pcert1</span> files based on <span class="v">.pcert0</span> files; and the 
+ Complete procedure respects book order when quickly renaming <span class="v">.pcert1</span> 
+ files to <span class="v">.cert</span> files.  In our example, the steps would be as follows, but 
+ note that we need not finish all Pcertify steps before starting some Convert 
+ steps, nor need we finish all Convert steps before starting some Complete 
+ steps, as explained further below.</p> 
+ 
+ <ul> 
+ 
+ <li>Pcertify books "C", "B",and then "A", sequentially, 
+ skipping proofs but doing compilation.</li> 
+ 
+ <li>Do proofs in parallel for the books using the Convert procedure, where 
+ each book relies on the existence of its own <span class="v">.pcert0</span> file as well as a 
+ <span class="v">.cert</span>, <span class="v">.pcert0</span>, or <span class="v">.pcert1</span> file for each of its included 
+ sub-books.  Write out a <span class="v">.pcert1</span> file for the book when the proof 
+ succeeds.</li> 
+ 
+ <li>Rename the <span class="v">.pcert1</span> file to a corresponding <span class="v">.cert</span> file when a 
+ <span class="v">.cert</span> file exists and is up-to-date for each included 
+ book.</li> 
+ 
+ </ul> 
+ 
+ <p>The Convert step can begin for <span class="v">bk.lisp</span> any time after <span class="v">bk.pcert0</span> 
+ is built.  The Complete step can begin for this book any time after 
+ <span class="v">bk.pcert1</span> and every <span class="v">sub-bk.cert</span> are built, for <span class="v">sub-bk</span> a 
+ sub-book of <span class="v">bk</span>.</p> 
+ 
+ <p>The new procedures — Pcertify, Convert, and Complete — are 
+ invoked by supplying a value for the keyword argument <span class="v">:pcert</span> of <span class="tt"><a href="ACL2____CERTIFY-BOOK.html">certify-book</a></span>, namely <span class="v">:create</span>, <span class="v">:convert</span>, or <span class="v">:complete</span>, 
+ respectively.  Typically, and by default, the <span class="v">compile-flg</span> argument of 
+ <span class="tt"><a href="ACL2____CERTIFY-BOOK.html">certify-book</a></span> is <span class="v">t</span> for the Pcertify procedure, so that <a href="ACL2____COMPILATION.html">compilation</a> can take full advantage of parallelism.  This argument is treated 
+ as <span class="v">nil</span> for the other procedures except when its value is <span class="v">:all</span> in the 
+ Convert procedure, as mentioned above.</p> 
+ 
+ <p>For those who use <span class="tt"><a href="ACL2____MAKE-EVENT.html">make-event</a></span>, we note that expansion is done in the 
+ Pcertify procedure; the later steps use the expansion resulting from that 
+ procedure.  The reason is that although a call of <span class="tt"><a href="ACL2____MAKE-EVENT.html">make-event</a></span> is 
+ similar to a macro call, a difference is that the expansion of a 
+ <span class="v">make-event</span> form can depend on the <a href="ACL2____STATE.html">state</a>.  Therefore, we insist on 
+ doing such an expansion only once, so that all books involved agree on the 
+ expansion.  We say more about <span class="v">make-event</span> below.</p> 
+ 
+ <p><b>Correctness Claim and Issues</b></p> 
+ 
+ <p>The Basic Claim for certification is the same whether or not the 
+ provisional certification process is employed: all books should be certified 
+ from scratch, with no files written to the directories of the books except by 
+ ACL2.  Moreover, no trust tags should be used (see <a href="ACL2____DEFTTAG.html">defttag</a>), or else it 
+ is the responsibility of the user to investigate every occurrence of ``<span class="v">TTAG
+ NOTE</span>'' that is printed to standard output.</p> 
+ 
+ <p>But common practice is to certify a set of books in stages: certify a few 
+ books, fix some books, re-certify changed books, certify some more books, and 
+ so on.  In practice, we expect this process to be sound even though it does 
+ not meet the preconditions for the Basic Claim above.  In particular, we 
+ expect that the use of <a href="ACL2____BOOK-HASH.html">book-hash</a> values in <a href="ACL2____CERTIFICATE.html">certificate</a>s will 
+ make it exceedingly unlikely that a book is still treated as certified after 
+ any events in the book or any sub-book, or any <a href="ACL2____PORTCULLIS.html">portcullis</a> <a href="ACL2____COMMAND.html">command</a>s of the book or any sub-book, have been modified.</p> 
+ 
+ <p>Provisional certification makes it a bit easier for a determined user to 
+ subvert correctness.  For example, the Complete procedure only checks write 
+ dates to ensure that each sub-book's <span class="v">.cert</span> file is no older than the 
+ corresponding <span class="v">.lisp</span> file, but it does not look inside <span class="v">.cert</span> files of 
+ sub-books; in particular it does not look at their <a href="ACL2____BOOK-HASH.html">book-hash</a> 
+ information.  Of course, the automatic dependency analysis provided by classic 
+ ACL2 `make'-based certification avoids accidental problems of this sort.  And, 
+ book-hash information will indeed be applied at <span class="tt"><a href="ACL2____INCLUDE-BOOK.html">include-book</a></span> time, at 
+ least for sub-books included non-<a href="ACL2____LOCAL.html">local</a>ly.</p> 
+ 
+ <p>In short: while we believe that the provisional certification process can 
+ be trusted, we suggest that for maximum trust, it is best for all books in a 
+ project to be certified from scratch without the provisional certification 
+ process.</p> 
+ 
+ <p><b>Combining Pcertify and Convert into Pcertify+</b></p> 
+ 
+ <p>You can combine the Pcertify and Convert procedure into a single procedure, 
+ Pcertify+, which may be useful for books that contain expensive <span class="tt"><a href="ACL2____INCLUDE-BOOK.html">include-book</a></span> <a href="ACL2____EVENTS.html">events</a> but do few proofs.  If you are using `make' to do 
+ provisional certification as described above, just set `make' variable 
+ <span class="v">ACL2_BOOKS_PCERT_ARG_T</span> to the list of books for which you want the 
+ Pcertify+ procedure performed instead of separate Pcertify and Convert 
+ procedures.  Either of two common methods may be used to set this variable, as 
+ illustrated below for the case that books <span class="v">sub.lisp</span> and <span class="v">mid.lisp</span> are 
+ the ones on which you want Pcertify+ performed.  One method is to add the 
+ following to your directory's Makefile, above the <span class="v">include</span> of 
+ <span class="v">Makefile-generic</span>.</p> 
+ 
+ <pre class="code">ACL2_BOOKS_PCERT_ARG_T = sub mid</pre> 
+ 
+ <p>Alternatively, you can specify the desired books on the command line, for 
+ example as follows.</p> 
+ 
+ <pre class="code">make -j 4 ACL2_BOOKS_PCERT_ARG_T='sub mid'</pre> 
+ 
+ <p>Note that the books are given without their <span class="v">.lisp</span> extensions.</p> 
+ 
+ <p>At the ACL2 level, the Pcertify+ procedure is performed when the value 
+ <span class="v">t</span> is supplied to the <span class="v">:pcert</span> keyword argument of <span class="tt"><a href="ACL2____CERTIFY-BOOK.html">certify-book</a></span>.  Thus, <span class="v">:pcert t</span> can be thought of as a combination of 
+ <span class="v">:pcert :create</span> and <span class="v">:pcert :convert</span>.  However, what ACL2 actually 
+ does is to perform the Pcertify step without skipping proofs, and at the end 
+ of the <span class="v">certify-book</span> run, it writes out both the <span class="v">.pcert0</span> and 
+ <span class="v">.pcert1</span> file, with essentially the same contents.  (We say 
+ ``essentially'' because the implementation writes <span class="v">:PCERT-INFO :PROVED</span> to 
+ the end of the <span class="v">.pcert0</span> file, but not to the <span class="v">.pcert1</span> file.)</p> 
+ 
+ <p><b>Further Information</b></p> 
+ 
+ <p>Some errors during provisional certification cannot be readily solved.  For 
+ example, if there are circular directory dependencies (for example, some book 
+ in directory D1 includes some book in directory D2 and vice-versa), then 
+ classic ACL2 `make'-based certification will quite possibly fail.  For another 
+ example, perhaps your directory's Makefile is awkward to convert to one with 
+ suitable dependencies.  When no fix is at hand, it might be best simply to 
+ avoid provisional certification.  If you are using classic ACL2 `make'-based 
+ certification, you can simply add the following line to your directory's 
+ <span class="v">Makefile</span>, or use ``<span class="v">ACL2_PCERT= </span>'' on the `make' command line, to 
+ avoid provisional certification.</p> 
+ 
+ <pre class="code">override ACL2_PCERT =</pre> 
+ 
+ <p>We invite anyone who has troubleshooting tips to contact the ACL2 
+ developers with suggestions for adding such tips to this section.</p> 
+ 
+ <p>Our next remark is relevant only to users of <span class="tt"><a href="ACL2____MAKE-EVENT.html">make-event</a></span>, and 
+ concerns the interaction of that utility with state global <span class="tt"><a href="ACL2____LD-SKIP-PROOFSP.html">ld-skip-proofsp</a></span>.  Normally, the global value of <span class="tt"><a href="ACL2____LD-SKIP-PROOFSP.html">ld-skip-proofsp</a></span> is 
+ unchanged during <span class="v">make-event</span> expansion, except that it is bound to 
+ <span class="v">nil</span> when the <span class="v">make-event</span> form has a non-<span class="v">nil</span> 
+ <span class="v">:check-expansion</span> argument.  But during the Pcertify procedure (not the 
+ Pcertify+ procedure), <span class="tt"><a href="ACL2____LD-SKIP-PROOFSP.html">ld-skip-proofsp</a></span> is always bound to <span class="v">nil</span> at 
+ the start of <span class="v">make-event</span> expansion.  To see why, consider for example the 
+ community book <span class="v">books/make-event/proof-by-arith.lisp</span>.  This book 
+ introduces a macro, <span class="v">proof-by-arith</span>, that expands to a call of <span class="tt"><a href="ACL2____MAKE-EVENT.html">make-event</a></span>.  This <span class="v">make-event</span> form expands by trying to prove a given 
+ theorem using a succession of included arithmetic books, until the proof 
+ succeeds.  Now proofs are skipped during the Pcertify procedure, and if proofs 
+ were also skipped during <span class="v">make-event</span> expansion within that procedure, the 
+ first arithmetic book's <span class="tt"><a href="ACL2____INCLUDE-BOOK.html">include-book</a></span> form would always be saved 
+ because the theorem's proof ``succeeded'' (as it was skipped!).  Of course, 
+ the theorem's proof could then easily fail during the Convert step.  If you 
+ really want to inhibit proofs during <span class="v">make-event</span> expansion in the Pcertify 
+ step, consider using a form such as the following: <span class="v">(<a href="ACL2____STATE-GLOBAL-LET_A2.html">state-global-let*</a>
+ ((<a href="ACL2____LD-SKIP-PROOFSP.html">ld-skip-proofsp</a> nil)) ...)</span>.</p> 
+ 
+ <p>Finally, we describe what it means for there to be a valid <a href="ACL2____CERTIFICATE.html">certificate</a> file for including a certified book.  Normally, this is a file 
+ with extension <span class="v">.cert</span>.  However, if that <span class="v">.cert</span> file does not exist, 
+ then ACL2 looks for a <span class="v">.pcert0</span> file instead; and if that also does not 
+ exist, it looks for a <span class="v">.pcert1</span> file.  (To see why does the <span class="v">.pcert0</span> 
+ file take priority over the <span class="v">.pcert1</span> file, note that the Convert procedure 
+ copies a <span class="v">.pcert0</span> file to a <span class="v">.pcert1</span> file, so both might exist — 
+ but the <span class="v">.pcert1</span> file might be incomplete if copying is in progress.) 
+ Once the candidate certificate file is thus selected, it must be valid in 
+ order for the book to be considered certified (see <a href="ACL2____CERTIFICATE.html">certificate</a>).  For 
+ the certificate file as chosen above, then in order for a compiled file to be 
+ loaded, it must be at least as recent as that certificate file.</p> 
+ 
+ <p>Again, as discussed above, a <span class="v">.pcert0</span> or <span class="v">.pcert1</span> file may serve as 
+ a valid certificate file when the <span class="v">.cert</span> file is missing.  But when that 
+ happens, a warning may be printed that a ``provisionally certified'' book has 
+ been included.  No such warning occurs if environment variable <span class="v">ACL2_PCERT</span> 
+ has a non-empty value, or if that warning is explicitly inhibited (see <a href="ACL2____SET-INHIBIT-WARNINGS.html">set-inhibit-warnings</a> and see <a href="ACL2____SET-INHIBIT-OUTPUT-LST.html">set-inhibit-output-lst</a>).</p>
+</body>
+</html>

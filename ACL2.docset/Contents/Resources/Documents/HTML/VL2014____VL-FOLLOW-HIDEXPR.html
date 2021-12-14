@@ -1,0 +1,230 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Vl-follow-hidexpr</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL2014____VL-FOLLOW-HIDEXPR">Click for Vl-follow-hidexpr in the Full Manual</a></h3>
+
+<p>Follow a HID to find the associated declaration.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(vl-follow-hidexpr x ss ctx &amp;key strictp) 
+  → 
+(mv err trace tail)</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">x</span> — Hierarchical identifier to follow.<br>    <font color="#606060">Guard <span class="v">(<a href="VL2014____VL-EXPR-P.html">vl-expr-p</a> x)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">ss</span> — Scopestack where the HID originates.<br>    <font color="#606060">Guard <span class="v">(<a href="VL2014____VL-SCOPESTACK-P.html">vl-scopestack-p</a> ss)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">ctx</span> — Context for better error messages.<br>    <font color="#606060">Guard <span class="v">(<a href="ACL2____ANY-P.html">acl2::any-p</a> ctx)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">strictp</span> — Require all array indices and bounds to be resolved?.<br>    <font color="#606060">Guard <span class="v">(<a href="ACL2____BOOLEANP.html">booleanp</a> strictp)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">err</span> — A warning on any error.<br>    <font color="#606060">Type <span class="v">(<a href="ACL2____IFF.html">iff</a> (<a href="VL2014____VL-WARNING-P.html">vl-warning-p</a> err) err)</span>.</font>
+</dd> 
+<dd>
+<span class="tt">trace</span> — On success: a non-empty trace that records all the items we went 
+              through to resolve this HID.  The <a href="COMMON-LISP____CAR.html">car</a> of the trace is the 
+              final declaration for this HID.<br>    <font color="#606060">Type <span class="v">(<a href="VL2014____VL-HIDTRACE-P.html">vl-hidtrace-p</a> trace)</span>.</font>
+</dd> 
+<dd>
+<span class="tt">tail</span> — On success: the remainder of <span class="v">x</span> after arriving at the 
+              declaration.  This may include array indexing or structure 
+              indexing.<br>    <font color="#606060">Type <span class="v">(<a href="VL2014____VL-EXPR-P.html">vl-expr-p</a> tail)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>Prerequisite: see <a href="VL2014____FOLLOWING-HIDS.html">following-hids</a> for considerable discussion 
+about the goals and design of this function.</p> 
+ 
+<p>This is our top-level routine for following hierarchical identifiers.  It 
+understands how to resolve both top-level hierarchical identifiers like 
+<span class="v">topmodule.foo.bar</span> and downward identifiers like 
+<span class="v">submodname.foo.bar</span>.</p> 
+ 
+<p>We try to follow <span class="v">x</span>, which must be a proper <a href="VL2014____VL-HIDEXPR-P.html">vl-hidexpr-p</a>, to 
+whatever <a href="VL2014____VL-SCOPEITEM.html">vl-scopeitem</a> it refers to.  This can fail for many reasons, 
+e.g., any piece of <span class="v">x</span> might refer to a name that doesn't exist, might have 
+inappropriate array indices, etc.  In case of failure, <span class="v">err</span> is a good <a href="VL2014____VL-WARNING-P.html">vl-warning-p</a> and the other results are <b>not sensible</b> and should not be 
+relied on.</p> 
+ 
+<h5>Trace</h5> 
+ 
+<p>We return a <a href="VL2014____VL-HIDTRACE-P.html">vl-hidtrace-p</a> that records, in ``backwards'' order, the 
+steps that we took to resolve <span class="v">x</span>.  That is: if we are resolving 
+<span class="v">foo.bar.baz</span>, then the first step in the trace will be the declaration for 
+<span class="v">baz</span>, and the last step in the trace will be the lookup for <span class="v">foo</span>.  In 
+other words, the first step in the trace corresponds to the ``final'' 
+declaration that <span class="v">x</span> refers to.  Many applications won't care about the rest 
+of the trace beyond its first step.  However, the rest of the trace may be 
+useful if you are trying to deal with, e.g., all of the interfaces along the 
+hierarchical identifier.</p> 
+ 
+<h5>Tail</h5> 
+ 
+<p>The trace we return stops at variable declarations.  This may be confusing 
+because, in Verilog, the same <span class="v">.</span> syntax is used to index through the module 
+hierarchy and to index through structures.  To make this concrete, suppose we 
+have something like:</p> 
+ 
+<pre class="code">typedef struct { logic fastMode; ...; } opcode_t;
+typedef struct { opcode_t opcode; ... } instruction_t;
+
+module bar (...) ;
+  instruction_t instruction1;
+  ...
+endmodule
+
+module foo (...) ;
+  bar mybar(...) ;
+  ...
+endmodule
+
+module main (...) ;
+  foo myfoo(...) ;
+  ...
+  $display("fastMode is %b", myfoo.mybar.instruction1.opcode.fastMode);
+endmodule</pre> 
+ 
+<p>When we follow <span class="v">myfoo.mybar.instruction1.opcode.fastMode</span>, our trace will 
+<b>only go to <span class="v">instruction1</span></b>, because the <span class="v">.opcode.fastMode</span> part is 
+structure indexing, not scope indexing.</p> 
+ 
+<p>To account for this, we return not only the <span class="v">trace</span> but also the 
+<span class="v">tail</span> of the hierarchical identifier that remains where we stop.  For 
+instance, in this case the <span class="v">tail</span> would be 
+<span class="v">instruction1.opcode.fastMode</span>.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>vl-follow-hidexpr-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ vl-follow-hidexpr-fn (x ss ctx strictp)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="VL2014____VL-EXPR-P.html">vl-expr-p</a> x)
+                             (<a href="VL2014____VL-SCOPESTACK-P.html">vl-scopestack-p</a> ss)
+                             (<a href="ACL2____ANY-P.html">acl2::any-p</a> ctx)
+                             (<a href="ACL2____BOOLEANP.html">booleanp</a> strictp))))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-HIDEXPR-P.html">vl-hidexpr-p</a> x)))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'vl-follow-hidexpr))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+   ((x (<a href="VL2014____VL-EXPR-FIX.html">vl-expr-fix</a> x))
+    (idx1 (<a href="VL2014____VL-HIDEXPR-_E3FIRST.html">vl-hidexpr-&gt;first</a> x))
+    (name1 (<a href="VL2014____VL-HIDINDEX-_E3NAME.html">vl-hidindex-&gt;name</a> idx1))
+    (origx x)
+    (<a href="COMMON-LISP____TRACE.html">trace</a> nil)
+    ((<a href="ACL2____MV.html">mv</a> item &amp;)
+     (<a href="VL2014____VL-SCOPESTACK-FIND-ITEM_F2SS.html">vl-scopestack-find-item/ss</a> name1 ss))
+    ((when item)
+     (<a href="VL2014____VL-FOLLOW-HIDEXPR-AUX.html">vl-follow-hidexpr-aux</a> x nil ss
+                            :strictp strictp
+                            :ctx ctx))
+    ((when (<a href="VL2014____VL-HIDEXPR-_E3ENDP.html">vl-hidexpr-&gt;endp</a> x))
+     (<a href="ACL2____MV.html">mv</a> (<a href="VL2014____VL-FOLLOW-HIDEXPR-ERROR.html">vl-follow-hidexpr-error</a> "item not found" ss)
+         trace x))
+    (design (<a href="VL2014____VL-SCOPESTACK-_E3DESIGN.html">vl-scopestack-&gt;design</a> ss))
+    ((unless design)
+     (<a href="ACL2____MV.html">mv</a> (<a href="VL2014____VL-FOLLOW-HIDEXPR-ERROR.html">vl-follow-hidexpr-error</a> "item not found" ss)
+         trace x))
+    (mods (<a href="VL2014____VL-DESIGN-_E3MODS.html">vl-design-&gt;mods</a> design))
+    (toplevel (<a href="VL2014____VL-MODULELIST-TOPLEVEL.html">vl-modulelist-toplevel</a> mods))
+    ((unless (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> name1 toplevel))
+     (<a href="ACL2____MV.html">mv</a> (<a href="VL2014____VL-FOLLOW-HIDEXPR-ERROR.html">vl-follow-hidexpr-error</a> "item not found" ss)
+         trace x))
+    (indices (<a href="VL2014____VL-HIDINDEX-_E3INDICES.html">vl-hidindex-&gt;indices</a> idx1))
+    ((when (<a href="COMMON-LISP____CONSP.html">consp</a> indices))
+     (<a href="ACL2____MV.html">mv</a>
+      (<a href="VL2014____VL-FOLLOW-HIDEXPR-ERROR.html">vl-follow-hidexpr-error</a> "array indices into top level module"
+                               ss)
+      trace x))
+    (<a href="COMMON-LISP____MOD.html">mod</a> (<a href="VL2014____VL-FIND-MODULE.html">vl-find-module</a> name1 mods))
+    (mod-ss (<a href="VL2014____VL-SCOPESTACK-INIT.html">vl-scopestack-init</a> design))
+    (next-ss (<a href="VL2014____VL-SCOPESTACK-PUSH.html">vl-scopestack-push</a> mod mod-ss)))
+   (<a href="VL2014____VL-FOLLOW-HIDEXPR-AUX.html">vl-follow-hidexpr-aux</a> (<a href="VL2014____VL-HIDEXPR-_E3REST.html">vl-hidexpr-&gt;rest</a> x)
+                          trace next-ss
+                          :strictp strictp
+                          :ctx ctx))))</pre> 
+<p><b>Theorem: </b>return-type-of-vl-follow-hidexpr.err</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> return-type-of-vl-follow-hidexpr.err
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?err common-lisp::?trace set::?tail)
+              (vl-follow-hidexpr-fn x ss ctx strictp)))
+            (<a href="ACL2____IFF.html">iff</a> (<a href="VL2014____VL-WARNING-P.html">vl-warning-p</a> err) err))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>vl-hidtrace-p-of-vl-follow-hidexpr.trace</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-hidtrace-p-of-vl-follow-hidexpr.trace
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?err common-lisp::?trace set::?tail)
+              (vl-follow-hidexpr-fn x ss ctx strictp)))
+            (<a href="VL2014____VL-HIDTRACE-P.html">vl-hidtrace-p</a> trace))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>vl-expr-p-of-vl-follow-hidexpr.tail</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-expr-p-of-vl-follow-hidexpr.tail
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?err common-lisp::?trace set::?tail)
+              (vl-follow-hidexpr-fn x ss ctx strictp)))
+            (<a href="VL2014____VL-EXPR-P.html">vl-expr-p</a> tail))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>consp-of-vl-follow-hidexpr.trace</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> consp-of-vl-follow-hidexpr.trace
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?err common-lisp::?trace set::?tail)
+              (vl-follow-hidexpr-fn x ss ctx strictp)))
+            (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____NOT.html">not</a> err) (<a href="COMMON-LISP____CONSP.html">consp</a> trace)))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>vl-hidexpr-p-of-vl-follow-hidexpr.tail</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-hidexpr-p-of-vl-follow-hidexpr.tail
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="VL2014____VL-HIDEXPR-P.html">vl-hidexpr-p</a> x)
+                 (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?err common-lisp::?trace set::?tail)
+                       (vl-follow-hidexpr-fn x ss ctx strictp)))
+                     (<a href="VL2014____VL-HIDEXPR-P.html">vl-hidexpr-p</a> tail)))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>context-irrelevance-of-vl-follow-hidexpr</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> context-irrelevance-of-vl-follow-hidexpr
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____SYNTAXP.html">syntaxp</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> ctx (<a href="COMMON-LISP____LIST.html">list</a> 'quote nil))))
+                 (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> err1 trace1 tail1)
+                       (<a href="VL2014____VL-FOLLOW-HIDEXPR.html">vl-follow-hidexpr</a> x ss ctx
+                                          :strictp strictp))
+                      ((<a href="ACL2____MV.html">mv</a> err2 trace2 tail2)
+                       (<a href="VL2014____VL-FOLLOW-HIDEXPR.html">vl-follow-hidexpr</a> x ss nil
+                                          :strictp strictp)))
+                     (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> trace1 trace2)
+                          (<a href="COMMON-LISP____EQUAL.html">equal</a> tail1 tail2)
+                          (<a href="ACL2____IFF.html">iff</a> err1 err2)))))</pre> 
+<p><b>Theorem: </b>vl-follow-hidexpr-fn-of-vl-expr-fix-x</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-follow-hidexpr-fn-of-vl-expr-fix-x
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (vl-follow-hidexpr-fn (<a href="VL2014____VL-EXPR-FIX.html">vl-expr-fix</a> x)
+                                     ss ctx strictp)
+               (vl-follow-hidexpr-fn x ss ctx strictp)))</pre> 
+<p><b>Theorem: </b>vl-follow-hidexpr-fn-vl-expr-equiv-congruence-on-x</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     vl-follow-hidexpr-fn-vl-expr-equiv-congruence-on-x
+     (<a href="ACL2____IMPLIES.html">implies</a> (<a href="VL2014____VL-EXPR-EQUIV.html">vl-expr-equiv</a> x x-equiv)
+              (<a href="COMMON-LISP____EQUAL.html">equal</a> (vl-follow-hidexpr-fn x ss ctx strictp)
+                     (vl-follow-hidexpr-fn x-equiv ss ctx strictp)))
+     :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>vl-follow-hidexpr-fn-of-vl-scopestack-fix-ss</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-follow-hidexpr-fn-of-vl-scopestack-fix-ss
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (vl-follow-hidexpr-fn x (<a href="VL2014____VL-SCOPESTACK-FIX.html">vl-scopestack-fix</a> ss)
+                                     ctx strictp)
+               (vl-follow-hidexpr-fn x ss ctx strictp)))</pre> 
+<p><b>Theorem: </b>vl-follow-hidexpr-fn-vl-scopestack-equiv-congruence-on-ss</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     vl-follow-hidexpr-fn-vl-scopestack-equiv-congruence-on-ss
+     (<a href="ACL2____IMPLIES.html">implies</a> (<a href="VL2014____VL-SCOPESTACK-EQUIV.html">vl-scopestack-equiv</a> ss ss-equiv)
+              (<a href="COMMON-LISP____EQUAL.html">equal</a> (vl-follow-hidexpr-fn x ss ctx strictp)
+                     (vl-follow-hidexpr-fn x ss-equiv ctx strictp)))
+     :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>vl-follow-hidexpr-fn-of-identity-ctx</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-follow-hidexpr-fn-of-identity-ctx
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (vl-follow-hidexpr-fn x ss (<a href="COMMON-LISP____IDENTITY.html">identity</a> ctx)
+                                     strictp)
+               (vl-follow-hidexpr-fn x ss ctx strictp)))</pre> 
+<p><b>Theorem: </b>vl-follow-hidexpr-fn-equal-congruence-on-ctx</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     vl-follow-hidexpr-fn-equal-congruence-on-ctx
+     (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> ctx ctx-equiv)
+              (<a href="COMMON-LISP____EQUAL.html">equal</a> (vl-follow-hidexpr-fn x ss ctx strictp)
+                     (vl-follow-hidexpr-fn x ss ctx-equiv strictp)))
+     :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>vl-follow-hidexpr-fn-of-bool-fix-strictp</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     vl-follow-hidexpr-fn-of-bool-fix-strictp
+     (<a href="COMMON-LISP____EQUAL.html">equal</a> (vl-follow-hidexpr-fn x ss ctx (<a href="ACL2____BOOL-FIX.html">acl2::bool-fix</a> strictp))
+            (vl-follow-hidexpr-fn x ss ctx strictp)))</pre> 
+<p><b>Theorem: </b>vl-follow-hidexpr-fn-iff-congruence-on-strictp</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     vl-follow-hidexpr-fn-iff-congruence-on-strictp
+     (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____IFF.html">iff</a> strictp strictp-equiv)
+              (<a href="COMMON-LISP____EQUAL.html">equal</a> (vl-follow-hidexpr-fn x ss ctx strictp)
+                     (vl-follow-hidexpr-fn x ss ctx strictp-equiv)))
+     :rule-classes :congruence)</pre> 
+
+</body>
+</html>

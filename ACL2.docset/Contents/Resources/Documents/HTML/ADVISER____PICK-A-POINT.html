@@ -1,0 +1,172 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Pick-a-point</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ADVISER____PICK-A-POINT">Click for Pick-a-point in the Full Manual</a></h3>
+
+<p>Make some :pick-a-point rules</p><pre class="code">Example:
+(<a href="ADVISER____DEFADVICE.html">defadvice</a> subbag-by-multiplicity
+  (<a href="ACL2____IMPLIES.html">implies</a> (bag-hyps)
+           (subbagp (subbag) (superbag))))</pre> 
+ 
+ <p>I described how the pick-a-point method can be useful for proving subsets 
+ in the 2004 ACL2 Workshop Paper: Finite Set Theory based on Fully Ordered 
+ Lists.  Essentially, the idea is to you should be able to prove (subset x y) 
+ by just knowing that forall a, (in a x) implies (in a y).  Since writing that 
+ paper, I have found the pick a point method to be widely useful in other 
+ contexts that involve extending a predicate to some data structure.</p> 
+ 
+ <p>Often we will have some simple predicate, say <span class="v">integerp</span>, which we will 
+ want to extend over some datastructure, say a list.  The result is a new, 
+ recursively defined predicate, say <span class="v">all-integerp</span>.  Of course, it should be 
+ obvious that if every member of the list satisfies <span class="v">integerp</span>, then the 
+ entire list satisfies <span class="v">all-integerp</span>.  But, we can't write a :rewrite rule 
+ such as:</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____EQUAL.html">equal</a> (all-integerp x)
+       (<a href="ACL2____FORALL.html">forall</a> a (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____MEMBER.html">member</a> a x) (<a href="COMMON-LISP____INTEGERP.html">integerp</a> a))))</pre> 
+ 
+ <p>Because all of the variables in our :rewrite rules must be universally 
+ quantified.  The :pick-a-point rules in Adviser are designed to make exactly 
+ this kind of reduction.  As an example, I'll now elaborate on how to set up 
+ such a reduction for <span class="v">all-integerp</span>.  You will find that many other ideas, 
+ such as subsets, subtree, subbag relations, and so forth, are basically just 
+ copies of this idea.</p> 
+ 
+ <p>We begin with our definition of all-integerp.  (We do not use integer-listp 
+ because it requires its argument to be a true-listp.)</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> all-integerp (x)
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x)
+      (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> (<a href="COMMON-LISP____CAR.html">car</a> x))
+           (all-integerp (<a href="COMMON-LISP____CDR.html">cdr</a> x)))
+    t))</pre> 
+ 
+ <p>Our first task is to write our ``forall'' statement as a constraint theorem 
+ about encapsulated functions.  Becuase we are quantifying over all ``a'', it 
+ will be a variable in this constrained theorem.  However, since ``x'' is not 
+ being quantified, we will create a constrained function for it.  For reasons 
+ we will explain later, we will also have one more constrianed function called 
+ ``hyps''.  In all, we come up with the following encapsulate:</p> 
+ 
+ <pre class="code">(<a href="ACL2____ENCAPSULATE.html">encapsulate</a>
+ (((intlist-hyps) =&gt; *)
+  ((intlist-list) =&gt; *))
+ (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> intlist-hyps () nil))
+ (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> intlist-list () nil))
+ (<a href="ACL2____DEFTHM.html">defthm</a> intlist-constraint
+   (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (intlist-hyps)
+		   (<a href="COMMON-LISP____MEMBER.html">member</a> intlist-element (intlist-list)))
+	      (<a href="COMMON-LISP____INTEGERP.html">integerp</a> intlist-element))
+   :rule-classes nil))</pre> 
+ 
+ <p>Our next goal is to prove that, given this constraint, it must be the case 
+ that (integer-listp (intlist-list)) is true.  The proof is not entirely 
+ straightforward, but follows the same script each time.  Basically, we first 
+ set up a ``badguy'' function that will go through and find an element that 
+ violates our constraint if one exists.  We show that the badguy finds such an 
+ element whenever ``all-integerp'' is not satisifed.  Then, we just use the 
+ instance of our constraint to show that all-integerp must be true for 
+ (intlist-list).</p> 
+ 
+ <pre class="code">(<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> badguy (x)
+         (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ENDP.html">endp</a> x)
+             nil
+           (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> (<a href="COMMON-LISP____CAR.html">car</a> x))
+               (badguy (<a href="COMMON-LISP____CDR.html">cdr</a> x))
+             (<a href="COMMON-LISP____CAR.html">car</a> x)))))
+
+(<a href="ACL2____LOCAL.html">local</a> (<a href="ACL2____DEFTHM.html">defthm</a> badguy-works
+         (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____NOT.html">not</a> (all-integerp x))
+                  (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____MEMBER.html">member</a> (badguy x) x)
+                       (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> (badguy x)))))))
+
+(<a href="ACL2____DEFTHM.html">defthm</a> intlist-by-membership-driver
+  (<a href="ACL2____IMPLIES.html">implies</a> (intlist-hyps)
+           (all-integerp (intlist-list)))
+  :rule-classes nil
+  :hints(("Goal"
+          :use (:instance intlist-constraint
+                          (intlist-element (badguy (intlist-list)))))))</pre> 
+ 
+ <p> 
+ 
+ At this point, we have essentially shown ACL2 that ``all-integerp`` can be 
+ shown as long as we can show our constraint is true.  The missing step is for 
+ ACL2 to actually try this approach for us.  But we can't write a rewrite rule 
+ that says ``try to functionally instantiate this theorem whenever you are 
+ trying to prove (all-integerp x).''</p> 
+ 
+ <p>That's where Adviser comes in.  We just give it the following rule:</p> 
+ 
+ <pre class="code">(<a href="ADVISER____DEFADVICE.html">ADVISER::defadvice</a> intlist-by-membership
+  (<a href="ACL2____IMPLIES.html">implies</a> (intlist-hyps)
+           (all-integerp (intlist-list)))
+  :rule-classes (:pick-a-point :driver intlist-by-membership-driver))</pre> 
+ 
+ <p>Because we used defadvice, rather than defthm, this rule is for Adviser to 
+ add to its database.  Adviser will set up a new trigger for all-integerp, and 
+ whenever it sees that trigger as the target that we are trying to prove, it 
+ will functionally instantiate the driver theorem.  We can now conduct 
+ membership based proofs of all-integerp.</p> 
+ 
+ <p>For example, in the following script we can prove that (all-integerp (rev 
+ x)) exactly when (all-integerp x) without inducting over either function, 
+ because we can just consider membership.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> equal-of-booleans-rewrite
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____BOOLEANP.html">booleanp</a> x)
+                (<a href="ACL2____BOOLEANP.html">booleanp</a> y))
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> x y)
+                  (<a href="ACL2____IFF.html">iff</a> x y)))
+  :rule-classes ((:rewrite :backchain-limit-lst 0)))
+
+(<a href="ACL2____DEFTHM.html">defthm</a> member-of-all-integerp-1
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____MEMBER.html">member</a> a x)
+                (all-integerp x))
+           (<a href="COMMON-LISP____INTEGERP.html">integerp</a> a)))
+
+(<a href="ACL2____DEFTHM.html">defthm</a> member-of-all-integerp-2
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (all-integerp x)
+                (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> a)))
+           (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____MEMBER.html">member</a> a x))))
+
+(<a href="ACL2____IN-THEORY.html">in-theory</a> (<a href="ACL2____DISABLE.html">disable</a> all-integerp))
+
+(<a href="ACL2____DEFUND.html">defund</a> rev (x)
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ENDP.html">endp</a> x)
+      x
+    (<a href="COMMON-LISP____APPEND.html">append</a> (rev (<a href="COMMON-LISP____CDR.html">cdr</a> x))
+            (<a href="COMMON-LISP____LIST.html">list</a> (<a href="COMMON-LISP____CAR.html">car</a> x)))))
+
+(<a href="ACL2____DEFTHM.html">defthm</a> member-of-rev
+  (<a href="ACL2____IFF.html">iff</a> (<a href="COMMON-LISP____MEMBER.html">member</a> a (rev x))
+       (<a href="COMMON-LISP____MEMBER.html">member</a> a x))
+  :hints(("Goal" :in-theory (<a href="ACL2____ENABLE.html">enable</a> rev))))
+
+(<a href="ACL2____ENCAPSULATE.html">encapsulate</a>
+ ()
+
+ (<a href="ACL2____LOCAL.html">local</a> (<a href="ACL2____DEFTHM.html">defthm</a> lemma1
+          (<a href="ACL2____IMPLIES.html">implies</a> (all-integerp x)
+                   (all-integerp (rev x)))))
+
+ (<a href="ACL2____LOCAL.html">local</a> (<a href="ACL2____DEFTHM.html">defthm</a> lemma2
+          (<a href="ACL2____IMPLIES.html">implies</a> (all-integerp (rev x))
+                   (all-integerp x))
+          :hints(("Subgoal 1" :use (:instance member-of-all-integerp-1
+                                                (a intlist-element)
+                                                (x (rev x)))))))
+
+ (<a href="ACL2____DEFTHM.html">defthm</a> all-integerp-of-rev
+   (<a href="COMMON-LISP____EQUAL.html">equal</a> (all-integerp (rev x))
+          (all-integerp x)))
+ )</pre> 
+ 
+ 
+</body>
+</html>

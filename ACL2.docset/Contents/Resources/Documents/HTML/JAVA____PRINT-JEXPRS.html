@@ -1,0 +1,159 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Print-jexprs</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=JAVA____PRINT-JEXPRS">Click for Print-jexprs in the Full Manual</a></h3>
+
+<p>Pretty-printing of expressions.</p><p>The tree structure of the abstract syntax of Java expressions 
+     describes the grouping of nested subexpressions. 
+     For instance, the tree</p><pre class="code">(<a href="JAVA____JEXPR-BINARY.html">jexpr-binary</a> (<a href="JAVA____JBINOP-MUL.html">jbinop-mul</a>)
+              (<a href="JAVA____JEXPR-BINARY.html">jexpr-binary</a> (<a href="JAVA____JBINOP-ADD.html">jbinop-add</a>)
+                            (<a href="JAVA____JEXPR-NAME.html">jexpr-name</a> "x")
+                            (<a href="JAVA____JEXPR-NAME.html">jexpr-name</a> "y"))
+              (<a href="JAVA____JEXPR-NAME.html">jexpr-name</a> "z"))</pre><p>represents the expression <span class="v">(x + y) * z</span>. 
+     Note that, when this expression is written in concrete syntax as just done, 
+     parentheses must be added, 
+     because <span class="v">*</span> binds tighter (i.e. has a higher priority) than <span class="v">+</span> 
+     in Java.</p><p>The relative priorities of Java operators are implicitly defined 
+     by the Java grammar of expressions, 
+     which also defines the left vs. right associativity 
+     of binary operators. 
+     For instance, with reference to <a href="JAVA____GRAMMAR.html">the ABNF grammar</a>, the rules tell us that 
+     (i) <span class="v">+</span> binds tighter than <span class="v">*</span> and 
+     (ii) <span class="v">+</span> is left-associative:</p><ul>
+<li>Consider an expression <span class="v">x + y * z</span>. 
+      In order to parse this as a <span class="v">multiplicative-expression</span>, 
+      <span class="v">x + y</span> would have to be a <span class="v">multiplicative-expression</span>, 
+      which is not. 
+      Thus, the original expression can only be parsed 
+      as an <span class="v">additive-expression</span>.</li>
+<li>Consider an expression <span class="v">x * y + z</span>. 
+      In order to parse this as a <span class="v">multiplicative-expression</span>, 
+      <span class="v">y + z</span> would have to be a <span class="v">unary-expression</span>, 
+      which is not. 
+      Thus, the original expression can only be parsed 
+      as an <span class="v">additive-expression</span>.</li>
+<li>Consider an expression <span class="v">x + y + z</span>. 
+      In order to right-associate it (i.e. <span class="v">x + (y + z)</span>), 
+      <span class="v">y + z</span> would have to be a <span class="v">multiplicative-expression</span>, 
+      which is not. 
+      Thus, the original expression can only be left-associated 
+      (i.e. <span class="v">(x + y) + z</span>).</li>
+</ul><p>Our pretty-printer adds parentheses 
+     based on the relative priorities of the Java operators 
+     and the left or right associativity of the Java binary operators, 
+     following the grammar. 
+     The approach is explained in the following paragraphs.</p><p>We define ``ranks'' of expressions 
+     that correspond to certain nonterminals of the Java grammar, 
+     such as a the rank of additive expressions 
+     corresponding to the nonterminal <span class="v">additive-expression</span>. 
+     We define a mapping from the expressions of our abstract syntax 
+     to their ranks, 
+     e.g. <span class="v">(<a href="JAVA____JEXPR-BINARY.html">jexpr-binary</a> (<a href="JAVA____JBINOP-ADD.html">jbinop-add</a>) ... ...)</span> 
+     and <span class="v">(<a href="JAVA____JEXPR-BINARY.html">jexpr-binary</a> (<a href="JAVA____JBINOP-SUB.html">jbinop-sub</a>) ... ...)</span> 
+     are mapped to the rank of additive expressions.</p><p>We define a partial order on expression ranks that is 
+     the reflexive and transitive closure of the binary relation 
+     that consists of the pairs <span class="v">rank1 &lt; rank2</span> such that 
+     there is a grammar (sub)rule <span class="v">nonterm2 = nonterm1</span> 
+     saying that the nonterminal <span class="v">nonterm2</span> corresponding to <span class="v">rank2</span> 
+     may expand to the nonterminal <span class="v">nonterm1</span> corresponding to <span class="v">rank1</span>. 
+     For instance, <span class="v">rank1</span> is the rank of multiplicative expressions 
+     and <span class="v">rank2</span> is the rank of additive expressions, 
+     because there is a (sub)rule 
+     <span class="v">additive-expression = multiplicative-expression</span> in the grammar. 
+     (Here by 'subrule' we mean a rule not necessarily in the grammar 
+     but obtainable by selecting just some of the alternatives in the definiens 
+     that are separated by slashes in ABNF.) 
+     The nonterminal <span class="v">additive-expression</span> also has other alternatives, 
+     but those are not single nonterminals; 
+     here we are only concerned with single nonterminals as rule definientia. 
+     The reason is explained below.</p><p>Besides the abstract syntactic expression to pretty-print, 
+     the pretty-printer for expression has an argument 
+     that is the rank of expression that must be pretty-printed 
+     at that point. 
+     At the top level, this second argument is 
+     the rank of top-level expressions, 
+     i.e. the rank that corresponds to the nonterminal <span class="v">expression</span>. 
+     As the pretty-printer descends into subexpressions, 
+     the second argument is changed according to 
+     the grammar rule corresponding to the super-expressions. 
+     For instance, when pretty-printing the left and right subexpressions 
+     of a super-expression <span class="v">(jbinary-expr (<a href="JAVA____JBINOP-ADD.html">jbinop-add</a>) left right)</span>, 
+     we recursively call the pretty-printer twice, 
+     once on <span class="v">left</span> and once on <span class="v">right</span>. 
+     Because of the grammar rule 
+     <span class="v">additive-expression =
+        additive-expression "+" multiplicative-expression</span> 
+     that corresponds to the super-expression, 
+     the recursive call on <span class="v">left</span> will have as second argument 
+     the rank of <span class="v">additive-expression</span>, 
+     while the recursive call on <span class="v">right</span> will have as second argument 
+     the rank of <span class="v">multiplicative-expression</span>. 
+     The second argument of the pretty-printer is used as follows: 
+     the pretty-printer compares the second argument 
+     (i.e. the expected rank of expression) 
+     with the rank of the expression passed as first argument 
+     (i.e. the actual rank of expression), 
+     according to the partial order on expression ranks described above; 
+     if the actual rank is less than or equal to the expected rank, 
+     the expression is pretty-printed without parentheses, 
+     otherwise parentheses are added. 
+     The reason why no parentheses are needed in the first case is that 
+     the nonterminal for the expected rank can be expanded, 
+     possibly in multiple steps, 
+     into the nonterminal for the actual rank: 
+     or conversely, the actual expression can be parsed 
+     into an expression of the expected rank. 
+     On the other hand, if the actual rank is greater than, or unrelated to, 
+     the expected rank, there is no such possibility; 
+     by adding parentheses, we ``change'' the rank of the actual expression 
+     into the bottom of the partial order, 
+     i.e. the rank corresponding to <span class="v">primary</span>, 
+     which again lets the parenthesized expression be parsed 
+     into an expression of the expected rank.</p><p>For instance, consider the abstract syntax tree for <span class="v">(x + y) * z</span>, 
+     shown earlier as motivating example. 
+     Assume that it is pretty-printed as a top-level expression, 
+     i.e. that the second argument is the rank of <span class="v">expression</span> 
+     (the expected rank). 
+     Since the actual rank of the expression is 
+     the one for <span class="v">multiplicative-expression</span>, 
+     which is less than or equal to the one for <span class="v">expression</span> 
+     (via 
+     <span class="v">assignment-expression</span>, 
+     <span class="v">conditional-expression</span>, 
+     <span class="v">conditional-or-expression</span>, 
+     <span class="v">conditional-and-expression</span>, 
+     <span class="v">inclusive-or-expression</span>, 
+     <span class="v">exclusive-or-expression</span>, 
+     <span class="v">and-expression</span>, 
+     <span class="v">equality-expression</span>, 
+     <span class="v">relational-expression</span>, 
+     <span class="v">shift-expression</span>, and 
+     <span class="v">additive-expression</span>), 
+     no parentheses are printed at the top level. 
+     When pretty-printing the left subexpression <span class="v">x + y</span>, 
+     the expected rank is <span class="v">multiplicative-expression</span>: 
+     since the actual rank of <span class="v">x + y</span> is <span class="v">additive-expression</span>, 
+     which is greater than the expected rank, 
+     parentheses must be added, 
+     as mentioned when the example was first presented. 
+     On the other hand, when pretty-printing the right subexpression <span class="v">z</span>, 
+     the expected rank is <span class="v">unary-expression</span>: 
+     since the actual rank of <span class="v">z</span> is <span class="v">primary</span>, 
+     which is less than the expected rank, 
+     no parentheses are printed.</p><p>The partial order on expression ranks only considers, as mentioned, 
+     (sub)rules of the form <span class="v">nonterm2 = nonterm1</span> 
+     where <span class="v">nonterm1</span> is a single nonterminal. 
+     Rule definientia that are not single terminals 
+     are captured as tree structures in our abstract syntax, 
+     and thus have their own explicit rank. 
+     On the other hand, single-nonterminal definientia 
+     do not correspond to any tree structure, 
+     but rather allow the same expression to have, in effect, 
+     different ranks (a form of subtyping).</p>
+</body>
+</html>

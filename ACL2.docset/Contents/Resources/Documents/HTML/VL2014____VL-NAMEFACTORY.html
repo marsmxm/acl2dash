@@ -1,0 +1,158 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Vl-namefactory</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL2014____VL-NAMEFACTORY">Click for Vl-namefactory in the Full Manual</a></h3>
+
+<p>Produces fresh names for a module.</p><p>This is a product type introduced by <a href="FTY____DEFPROD.html">defprod</a>.</p> 
+<h5>Fields</h5> 
+<dl>
+<dt>mod — <a href="VL2014____VL-MAYBE-MODULE.html">vl-maybe-module</a>
+</dt> 
+ 
+<dt>namedb — <a href="VL2014____VL-NAMEDB.html">vl-namedb</a>
+</dt> 
+ 
+</dl><h5>Additional Requirements</h5><p>The following invariant is enforced on the fields:</p><pre class="code">(vl-namefactory-namedb-okp mod namedb)</pre><p>A <b>name factory</b> allows you to easily and efficiently generate 
+good, fresh names that are not being used elsewhere in a Verilog module.  They 
+combine a name database (which is a general mechanism for generating fresh 
+names; see <a href="VL2014____VL-NAMEDB-P.html">vl-namedb-p</a> for details) with a Verilog module in order to 
+avoid computing the module's namespace until a name is actually needed.  This 
+optimization often saves a lot of consing.</p> 
+ 
+<h3>Using Name Factories</h3> 
+ 
+<p>Typically, given some module <span class="v">mod</span>, the user begins by constructing a 
+name factory using <span class="v">(<a href="VL2014____VL-STARTING-NAMEFACTORY.html">vl-starting-namefactory</a> mod)</span>.  Note that it is quite 
+cheap to construct a name factory in this way; all expense is delayed until the 
+first use of the factory.  It is also possible to create a name factory without 
+a module using <a href="VL2014____VL-EMPTY-NAMEFACTORY.html">vl-empty-namefactory</a>, which is occasionally useful when 
+generating new modules.</p> 
+ 
+<p>Once constructed, name factories must be used in a single-threaded 
+discipline.  That is, the functions for generating names actually return 
+<span class="v">(<a href="ACL2____MV.html">mv</a> fresh-name factory-prime)</span>, and to ensure that a sequence of 
+generated names are unique, one must always use the most recently returned 
+factory to generate subsequent names.</p> 
+ 
+<p>Two functions are provided for generating names:</p> 
+ 
+<p><span class="v">(<a href="VL2014____VL-NAMEFACTORY-INDEXED-NAME.html">vl-namefactory-indexed-name</a> prefix nf)</span> produces a name that looks like 
+<span class="v">prefix_n</span>, where <span class="v">n</span> is the smallest positive natural number <span class="v">n</span> such 
+that the name <span class="v">prefix_n</span> is not in use.</p> 
+ 
+<p><span class="v">(<a href="VL2014____VL-NAMEFACTORY-PLAIN-NAME.html">vl-namefactory-plain-name</a> name nf)</span> attempts to return <span class="v">name</span> 
+verbatim.  When this is not possible, a name of the form <span class="v">name_n</span>, a note 
+will be printed to standard output and instead we will produce a name with 
+<span class="v">vl-namefactory-indexed-name</span>.</p> 
+ 
+<p>We use these functions for different purposes.  We think that <a href="VL2014____VL-NAMEFACTORY-INDEXED-NAME.html">vl-namefactory-indexed-name</a> should be used for "throwaway" names that don't 
+need to be reliable or understandable, such as the names of temporary wires to 
+be generated for split-up expressions.  Meanwhile, <a href="VL2014____VL-NAMEFACTORY-PLAIN-NAME.html">vl-namefactory-plain-name</a> should be used for splitting up instance names or in 
+any other cases where a reliable name is desired.</p> 
+ 
+<p>Because name factories make use of fast alists, they should be destroyed 
+with <span class="v">(<a href="VL2014____VL-FREE-NAMEFACTORY.html">vl-free-namefactory</a> nf)</span> when you are done using them.</p> 
+ 
+ 
+<h3>Freshness Guarantee</h3> 
+ 
+<p>To establish that name factories generate only fresh names, we introduce the 
+function <span class="v">(<a href="VL2014____VL-NAMEFACTORY-ALLNAMES.html">vl-namefactory-allnames</a> nf)</span>.  This function returns a list of 
+all names that the name factory currently considers to be in use.  We 
+prove:</p> 
+ 
+<ul> 
+ 
+<li>The <span class="v">allnames</span> of the empty name factory is empty.</li> 
+ 
+<li>Every name in the <a href="VL2014____VL-MODULE-_E3MODNAMESPACE.html">vl-module-&gt;modnamespace</a> of <span class="v">mod</span> is among the 
+<span class="v">allnames</span> of the initial name factory produced by 
+<span class="v">(<a href="VL2014____VL-STARTING-NAMEFACTORY.html">vl-starting-namefactory</a> mod).</span>
+</li> 
+ 
+<li>The <span class="v">fresh-name</span>s returned by <a href="VL2014____VL-NAMEFACTORY-INDEXED-NAME.html">vl-namefactory-indexed-name</a> or 
+<a href="VL2014____VL-NAMEFACTORY-PLAIN-NAME.html">vl-namefactory-plain-name</a> are not members of the <span class="v">allnames</span> of the 
+input factory.</li> 
+ 
+<li>The <span class="v">allnames</span> of the resulting <span class="v">factory-prime</span> include exactly the 
+<span class="v">allnames</span> of the input <span class="v">factory</span>, along with the generated 
+<span class="v">fresh-name</span>.</li> 
+ 
+</ul> 
+ 
+<p>Together, these theorems ensure that, when properly used, the name factory 
+will only give you fresh names.</p> 
+ 
+ 
+<h3>Motivation and History</h3> 
+ 
+<p>Name generation is a surprisingly important and difficult problem.  It needs 
+to be very efficient: we have sometimes found that tens of thousands of fresh 
+names are needed, e.g., in <a href="VL2014____SPLIT.html">split</a>.  Toward this goal, our original 
+approach was as follows:</p> 
+ 
+<ul> 
+ 
+<li>Our generated names always looked like <span class="v">_gen_1</span>, <span class="v">_gen_2</span>, etc.</li> 
+ 
+<li>When the first name was needed, a transform would examine the module's 
+namespace for the largest <span class="v">n</span> such that <span class="v">_gen_n</span> was already in use.  The 
+name <span class="v">_gen_{n+1}</span> would then be used as the first new name.</li> 
+ 
+<li>Subsequently, any number of fresh names could then be generated by simply 
+increasing the index.  That is, the second name fresh name would be 
+<span class="v">_gen_{n+2}</span>, the third <span class="v">_gen_{n+3}</span>, and so on.</li> 
+ 
+</ul> 
+ 
+<p>This scheme was highly efficient because the module's namespace only needed 
+to be consulted when generating the first wire's name.  This meant that for 
+large modules, generating thousands of names was not very expensive.  It also 
+meant that if no fresh names were needed, then the module's namespace was never 
+even computed.</p> 
+ 
+<p>But a problem with this scheme is that the generated names are not very good 
+or predictable.  This was particularly problematic when instance arrays 
+like:</p> 
+ 
+<pre class="code">basic_flop data [(width - 1):0] (q, ph1, d);</pre> 
+ 
+<p>would be transformed into something like:</p> 
+ 
+<pre class="code">basic_flop _gen_19 (q[0], ph1, d[0]);
+basic_flop _gen_18 (q[1], ph1, d[1]);
+basic_flop _gen_17 (q[2], ph1, d[2]);</pre> 
+ 
+<p>that is, here the instance name <span class="v">data</span> has been entirely lost and 
+replaced with a bunch of unrelated, stupid names that might easily change when 
+the module is translated in the future.</p> 
+ 
+<p>Name factories basically extend this scheme to allow much better names to be 
+generated, while still being quite efficient.</p> 
+ 
+ 
+<h3>Implementation</h3> 
+ 
+<p>A name factory has two fields:</p> 
+ 
+<ul> 
+ 
+<li>
+<span class="v">mod</span>, the module that we are generating names for, or <span class="v">nil</span> if there 
+is no such module (e.g., for empty name factories).</li> 
+ 
+<li>
+<span class="v">namedb</span> is an ordinary <a href="VL2014____VL-NAMEDB-P.html">vl-namedb-p</a> that we use to generate fresh 
+names.</li> 
+ 
+</ul> 
+ 
+<p>The invariant we maintain is that either the namedb is empty, or every name 
+in the <a href="VL2014____VL-MODULE-_E3MODNAMESPACE.html">vl-module-&gt;modnamespace</a> of <span class="v">mod</span> must be bound in it.</p>
+</body>
+</html>

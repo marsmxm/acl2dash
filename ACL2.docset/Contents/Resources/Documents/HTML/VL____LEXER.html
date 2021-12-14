@@ -1,0 +1,73 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Lexer</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL____LEXER">Click for Lexer in the Full Manual</a></h3>
+
+<p>A lexer for Verilog and SystemVerilog.</p><p>Our lexer is intended to correctly support the full syntax for 
+Verilog-2005 and SystemVerilog-2012.  There are some significant differences 
+between these languages, e.g., Verilog has only a subset of SystemVerilog's 
+keywords and operators.  You can configure which edition of the standard is 
+being used; see <a href="VL____VL-LOADCONFIG-P.html">vl-loadconfig-p</a>.</p> 
+ 
+<p>Note: our support for SystemVerilog is preliminary and may be buggy.  Our 
+parser does not yet support much of SystemVerilog, and some lexer details may 
+change as we work to extend the parser.</p> 
+ 
+ 
+<h3>Interface</h3> 
+ 
+<p>This lexer is a small part of VL's <a href="VL____LOADER.html">loader</a>.  The input to the lexer 
+should already be <a href="VL____PREPROCESSOR.html">preprocessed</a>, i.e., 
+there should not be any grave characters (<span class="v">`</span>) in the input.</p> 
+ 
+<p>Conventional lexers are often implemented as a <span class="v">get-token</span> routine, the 
+idea being that, at the parser's request, the lexer should read just enough 
+from the input stream to provide the next token.</p> 
+ 
+<p>In contrast, our top-level lexer function, <a href="VL____VL-LEX.html">vl-lex</a>, processes the 
+whole list of input characters that are produced by the <a href="VL____PREPROCESSOR.html">preprocessor</a>, 
+and generates a whole list of <a href="VL____TOKENS.html">tokens</a> as output.  (It also generates a 
+list of <a href="VL____WARNINGS.html">warnings</a>, e.g., when integer constants are truncated.)</p> 
+ 
+<p>This is obviously inefficient.  On the other hand, memory is abundant and 
+lexing is almost intrinsically <span class="v">O(n)</span>.  Meanwhile, our approach allows our 
+parser to be state-free, with arbitrary lookahead, and also gives us the 
+convenience of list-based (rather than file-based) debugging and unit testing 
+throughout the whole process; see for instance <a href="VL____MAKE-TEST-TOKENS.html">make-test-tokens</a>.</p> 
+ 
+<p>A basic correctness result for our lexer is:</p> 
+ 
+<p><b>Theorem: </b>vl-tokenlist-&gt;etext-of-vl-lex</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-tokenlist-&gt;etext-of-vl-lex
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> okp tokens ?warnings)
+              (<a href="VL____VL-LEX.html">vl-lex</a> echars
+                      :warnings warnings
+                      :config config)))
+            (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> okp (<a href="ACL2____FORCE.html">force</a> (<a href="VL____VL-ECHARLIST-P.html">vl-echarlist-p</a> echars))
+                          (<a href="ACL2____FORCE.html">force</a> (<a href="ACL2____TRUE-LISTP.html">true-listp</a> echars)))
+                     (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL____VL-TOKENLIST-_E3ETEXT.html">vl-tokenlist-&gt;etext</a> tokens)
+                            echars))))</pre> 
+ 
+<p>That is, whenever the lexer successfully tokenizes its input <span class="v">echars</span>, 
+you could flatten the resulting tokens to recover exactly the input text.</p> 
+ 
+<p>This theorem is not entirely satisfying.  It doesn't say anything about 
+whether we've tokenized the input correctly, i.e., in the sense of the Verilog 
+standard.  We can't really think of a reasonable way to formalize that.  But it 
+does mean that we at least accounted for every character of input, and that's 
+probably worth something.</p> 
+ 
+<p>To make this theorem possible, our lexer produces tokens even for whitespace 
+and comments.  These tokens are not suitable as input for the <a href="VL____PARSER.html">parser</a>, 
+and should be removed using <a href="VL____VL-KILL-WHITESPACE-AND-COMMENTS.html">vl-kill-whitespace-and-comments</a> before 
+parsing begins.</p> 
+ 
+<p>Since we often want to use VL to transform or simplify Verilog source code, 
+we don't throw away comments—instead, we collect them up into a <a href="VL____VL-COMMENTMAP-P.html">vl-commentmap-p</a>.  We that later use comment maps to re-attach the comments to 
+the right parts of the tree; see for instance <a href="VL____VL-PPC-MODULE.html">vl-ppc-module</a>.</p>
+</body>
+</html>

@@ -1,0 +1,71 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Smt-prove</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=SMT____SMT-PROVE">Click for Smt-prove in the Full Manual</a></h3>
+
+<p>SMT-prove is the main functions for transliteration into SMT languages and calling the external SMT solver.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>make-fname</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ make-fname (dir fname)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____STRINGP.html">stringp</a> dir) (<a href="COMMON-LISP____STRINGP.html">stringp</a> fname))))
+ (<a href="COMMON-LISP____LET.html">let</a>
+     ((acl2::__function__ 'make-fname))
+     (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> acl2::__function__))
+     (<a href="ACL2____B_A2.html">b*</a> ((dir (<a href="ACL2____STR-FIX.html">str-fix</a> dir))
+          (fname (<a href="ACL2____STR-FIX.html">str-fix</a> fname))
+          (dir (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> dir "") "/tmp/py_file" dir))
+          ((unless (<a href="COMMON-LISP____EQUAL.html">equal</a> fname ""))
+           (<a href="COMMON-LISP____CONCATENATE.html">concatenate</a> 'string dir "/" fname))
+          (cmd (<a href="COMMON-LISP____CONCATENATE.html">concatenate</a> 'string
+                            "mkdir -p " dir
+                            " &amp;&amp; " "mktemp " dir "/smtlink.XXXXX")))
+         (<a href="ACL2____MV-LET.html">mv-let</a> (exit-status lines)
+                 (<a href="ACL2____TIME_42.html">time$</a> (<a href="ACL2____TSHELL-CALL.html">tshell-call</a> cmd :print nil :save t)
+                        :msg ""
+                        :args (<a href="COMMON-LISP____LIST.html">list</a> cmd))
+                 (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> exit-status 0)
+                          (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> lines nil)))
+                     (<a href="COMMON-LISP____CAR.html">car</a> lines)
+                     (<a href="ACL2____PROG2_42.html">prog2$</a> (<a href="ACL2____ER.html">er</a> hard? 'smt-prove=&gt;make-fname
+                                 "Error: Generate file error.")
+                             ""))))))</pre> 
+<p><b>Theorem: </b>stringp-of-make-fname</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> stringp-of-make-fname
+        (<a href="ACL2____B_A2.html">b*</a> ((full-fname (make-fname dir fname)))
+            (<a href="COMMON-LISP____STRINGP.html">stringp</a> full-fname))
+        :rule-classes :rewrite)</pre> 
+<p><b>Function: </b>smt-prove</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ smt-prove (term smtlink-hint state)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (<a href="ACL2____STATE.html">state</a>)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a> term)
+                             (<a href="SMT____SMTLINK-HINT-P.html">smtlink-hint-p</a> smtlink-hint))))
+ (<a href="COMMON-LISP____LET.html">let</a>
+   ((acl2::__function__ 'smt-prove))
+   (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> acl2::__function__))
+   (<a href="ACL2____B_A2.html">b*</a> ((term (pseudo-term-fix term))
+        (<a href="SMT____SMTLINK-HINT.html">smtlink-hint</a> (<a href="SMT____SMTLINK-HINT-FIX.html">smtlink-hint-fix</a> smtlink-hint))
+        (flextypes-table (<a href="ACL2____TABLE-ALIST.html">table-alist</a> 'fty::flextypes-table
+                                      (<a href="ACL2____W.html">w</a> state)))
+        ((unless (<a href="ACL2____ALISTP.html">alistp</a> flextypes-table))
+         (<a href="ACL2____MV.html">mv</a> nil nil state))
+        (smtlink-hint1
+             (generate-fty-info-alist smtlink-hint flextypes-table))
+        (smtlink-hint2
+             (generate-fty-types-top smtlink-hint1 flextypes-table))
+        ((<a href="SMT____SMTLINK-HINT.html">smtlink-hint</a> h) smtlink-hint2)
+        (c h.smt-cnf)
+        (smt-file (make-fname h.smt-dir h.smt-fname))
+        ((<a href="ACL2____MV.html">mv</a> smt-term smt-precond)
+         (smt-translation term h state))
+        ((<a href="ACL2____MV.html">mv</a> head import) (smt-head c))
+        (<a href="ACL2____STATE.html">state</a> (smt-write-file smt-file head import smt-term state))
+        ((<a href="ACL2____MV.html">mv</a> result state)
+         (smt-interpret smt-file h.rm-file c state)))
+       (<a href="ACL2____MV.html">mv</a> result smt-precond state))))</pre> 
+
+</body>
+</html>

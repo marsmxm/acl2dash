@@ -1,0 +1,894 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Hints</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____HINTS">Click for Hints in the Full Manual</a></h3>
+
+<p>Advice to the theorem proving process</p><pre class="code">Examples: 
+The following :hints value is nonsensical.  Nevertheless, it 
+illustrates all of the available hint keywords except the 
+``custom keywords'' (see <a href="ACL2____CUSTOM-KEYWORD-HINTS.html">custom-keyword-hints</a>) definable 
+by the user. 
+ 
+:hints (("Goal" 
+         :do-not-induct t 
+         :do-not '(generalize fertilize) 
+         :expand ((assoc x a) 
+                  :lambdas 
+                  (:free (y) (:with member (member y z)))) 
+         :restrict ((&lt;-trans ((x x) (y (foo x))))) 
+         :hands-off (length binary-append) 
+         :in-theory (set-difference-theories 
+                      (current-theory :here) 
+                      '(assoc)) 
+         :induct (and (nth n a) (nth n b)) 
+         :use ((:instance assoc-of-append 
+                          (x a) (y b) (z c)) 
+               (:functional-instance 
+                 (:instance p-f (x a) (y b)) 
+                 (p consp) 
+                 (f assoc))) 
+         :bdd (:vars (c a0 b0 a1 b1) :prove nil :bdd-constructors (cons)) 
+         :clause-processor (:function cl-proc :hint (my-hint clause)) 
+         :instructions (:x :prove) 
+         :cases ((true-listp a) (consp a)) 
+         :by (:instance rev-rev (x (cdr z))) 
+         :nonlinearp t 
+         :backchain-limit-rw 3 
+         :reorder (4 7 2) 
+         :case-split-limitations (20 10) 
+         :no-op t 
+         :no-thanks t 
+         :error ("Bad value ~x0." 123) 
+         :or (hint-kwd-alist-1 ... hint-kwd-alist-k) 
+         :rw-cache-state nil 
+         :backtrack (my-computed-hint clause processor clause-list))) 
+</pre> 
+ 
+ <p>Many of these hints affect the how the prover operates not only on the goal 
+ to which they are applied but also on its subgoals (and its subgoals' 
+ subgoals, etc.; for a deeper explanation see <a href="ACL2____HINTS-AND-THE-WATERFALL.html">hints-and-the-waterfall</a>). 
+ The following hints, however, have a specific effect only on the goal to which 
+ they are applied: <span class="v">:bdd</span>, <span class="v">:by</span>, <span class="v">:cases</span>, <span class="v">:clause-processor</span>, 
+ <span class="v">:error</span>, <span class="v">:induct</span>, <span class="v">:or</span>, and <span class="v">:use</span>.  For example, suppose that 
+ you specify both a <span class="v">:cases</span> hint and an <span class="v">:expand</span> hint for 
+ <span class="v">"Goal"</span>.  Then the <span class="v">:cases</span> hint will immediately result in subgoals, 
+ without calling the ACL2 rewriter; the <span class="v">:expand</span> hint will be used by the 
+ rewriter in subsequent goals.</p> 
+ 
+ <p>A very common hint is the <span class="v">:use</span> hint, which in general takes as its 
+ value a list of ``lemma instances'' (see <a href="ACL2____LEMMA-INSTANCE.html">lemma-instance</a>) but which 
+ allows a single lemma name as a special case.  In each case, a goal <span class="v">G</span> is 
+ replaced by a new goal <span class="v">(<a href="ACL2____IMPLIES.html">IMPLIES</a> P G)</span>, where <span class="v">P</span> is the theorem 
+ specified by the (conjunction of the) lemma instances provided.  Here are 
+ some examples.</p> 
+ 
+ <pre class="code">; Attach :use hint to the top-level goal G, which is named "Goal",
+; replacing it by (<a href="ACL2____IMPLIES.html">implies</a> P G) where P is the statement of lemma23:
+:hints (("Goal" :use lemma23))
+
+; Equivalent to the above, using the trivial instance (i.e., with the empty
+; substitution) of lemma23:
+:hints (("Goal" :use ((:instance lemma23))))
+
+; Attach :use hint to the named subgoal, where the indicated lemma is used
+; with the substitution that maps x to 17 and y to (foo z):
+:hints (("[1]Subgoal *1/1.2'" :use ((:instance lemma23
+                                                 (x 17)
+                                                 (y (foo z))))))
+
+; Equivalent to the above: ACL2 allows you to omit the outer parentheses if
+; there is only one lemma used.
+:hints (("[1]Subgoal *1/1.2'" :use (:instance lemma23
+                                                (x 17)
+                                                (y (foo z)))))</pre> 
+ 
+ <p>ACL2 also provides ``custom keyword'' hints (see <a href="ACL2____CUSTOM-KEYWORD-HINTS.html">custom-keyword-hints</a>) and even more general ``computed hints'' for the 
+ advanced user (see <a href="ACL2____COMPUTED-HINTS.html">computed-hints</a>).  Not documented in this topic are 
+ such hints implemented in books; for an example of so-called <span class="v">:consider</span> 
+ hints, see <a href="ACL2____CONSIDERATION.html">consideration</a>.</p> 
+ 
+ <p>Only the first hint applicable to a goal, as specified in the user-supplied 
+ list of <span class="v">:hints</span> followed by the default hints (see <a href="ACL2____DEFAULT-HINTS-TABLE.html">default-hints-table</a>), will be applied to that goal.  For an advanced 
+ exception, see <a href="ACL2____OVERRIDE-HINTS.html">override-hints</a>.  For a detailed discussion of how hints 
+ fit into the ACL2 waterfall, see <a href="ACL2____HINTS-AND-THE-WATERFALL.html">hints-and-the-waterfall</a>.  For examples 
+ of the sophisticated use of hints, primarily for experts, see community book 
+ <span class="v">books/hints/basic-tests.lisp</span>.</p> 
+ 
+ <p>Background: <span class="v">Hints</span> are allowed in all <a href="ACL2____EVENTS.html">events</a> that use the 
+ theorem prover.  During <span class="tt"><a href="COMMON-LISP____DEFUN.html">defun</a></span> <a href="ACL2____EVENTS.html">events</a> there are two different 
+ uses of the theorem prover: one to prove termination and another to verify the 
+ <a href="ACL2____GUARD.html">guard</a>s.  To pass a hint to the theorem prover during termination 
+ proofs, use the <span class="v">:hints</span> keyword in the <span class="tt"><a href="COMMON-LISP____DEFUN.html">defun</a></span>'s <span class="tt"><a href="ACL2____XARGS.html">xargs</a></span> 
+ declaration.  To pass a hint to the theorem prover during the <a href="ACL2____GUARD.html">guard</a> 
+ verification portion of admitting a <span class="tt"><a href="COMMON-LISP____DEFUN.html">defun</a></span>, use the <span class="v">:guard-hints</span> 
+ keyword in the <span class="tt"><a href="COMMON-LISP____DEFUN.html">defun</a></span>'s <span class="tt"><a href="ACL2____XARGS.html">xargs</a></span> declaration.  The <span class="tt"><a href="ACL2____VERIFY-GUARDS.html">verify-guards</a></span> event and the <span class="tt"><a href="ACL2____DEFTHM.html">defthm</a></span> event also use the theorem prover. 
+ To pass hints to them, use the <span class="v">:hints</span> keyword argument to the event.</p> 
+ 
+ <pre class="code">General Form of Common :hints:
+  ((<a href="ACL2____GOAL-SPEC.html">goal-spec</a> :key1 val1 ... :keyn valn)
+   ...
+   (<a href="ACL2____GOAL-SPEC.html">goal-spec</a> :key1 val1 ... :keyn valn))</pre> 
+ 
+ <p>where <span class="tt"><a href="ACL2____GOAL-SPEC.html">goal-spec</a></span> is as described elsewhere (see <a href="ACL2____GOAL-SPEC.html">goal-spec</a>) 
+ and the keys and their respective values are shown below with their 
+ interpretations.  We also provide ``computed hints'' but discuss them 
+ separately; see <a href="ACL2____COMPUTED-HINTS.html">computed-hints</a>.  The hint keywords below are considered 
+ in alphabetical order.</p> 
+ 
+ <dl> 
+ 
+ <dt><span class="v">:backchain-limit-rw</span></dt>
+<p></p> 
+ 
+ <dd><p><span class="v">Value</span> is a natural number or <span class="v">nil</span>, indicating the level of 
+ backchaining for <a href="ACL2____REWRITE.html">rewrite</a>, <a href="ACL2____META.html">meta</a>, and <a href="ACL2____LINEAR.html">linear</a> rules.  This 
+ overrides, for the current goal and (as with <span class="v">:</span><span class="tt"><a href="ACL2____IN-THEORY.html">in-theory</a></span> hints) 
+ descendant goals, the default <a href="ACL2____BACKCHAIN-LIMIT.html">backchain-limit</a> 
+ (see <a href="ACL2____SET-BACKCHAIN-LIMIT.html">set-backchain-limit</a>).</p></dd> 
+ 
+ <dt><span class="v">:backtrack</span></dt>
+<p></p> 
+ 
+ <dd>
+<p>This is an advanced hint.  You can probably accomplish its effect by 
+ the use of ordinary computed hints; see <a href="ACL2____COMPUTED-HINTS.html">computed-hints</a>.  But if you are 
+ an expert, read on.  (See <a href="ACL2____HINTS-AND-THE-WATERFALL.html">hints-and-the-waterfall</a> for some relevant 
+ background.)</p> 
+ 
+ <p><span class="v">Value</span> is a computed hint, which is an expression that evaluates either 
+ to <span class="v">nil</span> — indicating that the <span class="v">:backtrack</span> hint is to have no 
+ effect — or to a non-empty alternating list of <span class="v">:keyi vali</span> pairs, 
+ as expected for a hint.  However, unlike ordinary computed hints, 
+ <span class="v">:backtrack</span> hints are evaluated <b>after</b> a goal has been processed to 
+ yield zero or more subgoals, not before.  Moreover, variables <span class="v">PROCESSOR</span> 
+ and <span class="v">CLAUSE-LIST</span> are allowed, but variable 
+ <span class="v">STABLE-UNDER-SIMPLIFICATIONP</span> is not.  We explain in more detail below, 
+ but first consider the following simple example.  First we define a standard 
+ list reversal function:</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> rev (x)
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x)
+      (<a href="COMMON-LISP____APPEND.html">append</a> (<a href="ACL2____REV.html">rev</a> (<a href="COMMON-LISP____CDR.html">cdr</a> x)) (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CAR.html">car</a> x) nil))
+    nil))</pre> 
+ 
+ <p>Now we prove:</p> 
+ 
+ <pre class="code">(<a href="ACL2____THM.html">thm</a> (<a href="ACL2____TRUE-LISTP.html">true-listp</a> (<a href="ACL2____REV.html">rev</a> x)))</pre> 
+ 
+ <p>The successful proof includes the following output.</p> 
+ 
+ <pre class="code">Subgoal *1/1'
+(<a href="ACL2____IMPLIES.html">IMPLIES</a>
+  (<a href="COMMON-LISP____AND.html">AND</a> (<a href="COMMON-LISP____CONSP.html">CONSP</a> X)
+       (<a href="ACL2____TRUE-LISTP.html">TRUE-LISTP</a> (<a href="ACL2____REV.html">REV</a> (<a href="COMMON-LISP____CDR.html">CDR</a> X))))
+  (<a href="ACL2____TRUE-LISTP.html">TRUE-LISTP</a> (<a href="COMMON-LISP____APPEND.html">APPEND</a> (<a href="ACL2____REV.html">REV</a> (<a href="COMMON-LISP____CDR.html">CDR</a> X)) (<a href="COMMON-LISP____LIST.html">LIST</a> (<a href="COMMON-LISP____CAR.html">CAR</a> X))))).
+
+The destructor terms (<a href="COMMON-LISP____CAR.html">CAR</a> X) and (<a href="COMMON-LISP____CDR.html">CDR</a> X) can be
+eliminated by using CAR-CDR-ELIM to replace X
+by (<a href="COMMON-LISP____CONS.html">CONS</a> X1 X2), (<a href="COMMON-LISP____CAR.html">CAR</a> X) by X1 and (<a href="COMMON-LISP____CDR.html">CDR</a> X) by
+X2.  This produces the following goal.
+
+Subgoal *1/1''
+(<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____AND.html">AND</a> (<a href="COMMON-LISP____CONSP.html">CONSP</a> (<a href="COMMON-LISP____CONS.html">CONS</a> X1 X2))
+              (<a href="ACL2____TRUE-LISTP.html">TRUE-LISTP</a> (<a href="ACL2____REV.html">REV</a> X2)))
+         (<a href="ACL2____TRUE-LISTP.html">TRUE-LISTP</a> (<a href="COMMON-LISP____APPEND.html">APPEND</a> (<a href="ACL2____REV.html">REV</a> X2) (<a href="COMMON-LISP____LIST.html">LIST</a> X1)))).</pre> 
+ 
+ <p>But suppose that we attach a <span class="v">:backtrack</span> hint to the goal above at 
+ which destructor elimination was applied:</p> 
+ 
+ <pre class="code">(<a href="ACL2____THM.html">thm</a> (<a href="ACL2____TRUE-LISTP.html">true-listp</a> (<a href="ACL2____REV.html">rev</a> x))
+     :hints (("Subgoal *1/1'"
+              :backtrack
+              (<a href="COMMON-LISP____QUOTE.html">quote</a> (:do-not '(eliminate-destructors))))))</pre> 
+ 
+ <p>Then when ACL2 applies destructor elimination as displayed above, this time 
+ the <span class="v">:backtrack</span> hint applies, evaluating to <span class="v">(:do-not
+ '(eliminate-destructors))</span>.  Since this list is not <span class="v">nil</span>, the prover 
+ decides not to keep the new subgoal, and instead supplies this <span class="v">:do-not</span> 
+ hint before attacking the goal again.  In this example, ACL2 happens to use a 
+ technique later in its ``waterfall'' arsenal than destructor elimination, 
+ namely, generalization:</p> 
+ 
+ <pre class="code">Subgoal *1/1'
+(<a href="ACL2____IMPLIES.html">IMPLIES</a>
+  (<a href="COMMON-LISP____AND.html">AND</a> (<a href="COMMON-LISP____CONSP.html">CONSP</a> X)
+       (<a href="ACL2____TRUE-LISTP.html">TRUE-LISTP</a> (<a href="ACL2____REV.html">REV</a> (<a href="COMMON-LISP____CDR.html">CDR</a> X))))
+  (<a href="ACL2____TRUE-LISTP.html">TRUE-LISTP</a> (<a href="COMMON-LISP____APPEND.html">APPEND</a> (<a href="ACL2____REV.html">REV</a> (<a href="COMMON-LISP____CDR.html">CDR</a> X)) (<a href="COMMON-LISP____LIST.html">LIST</a> (<a href="COMMON-LISP____CAR.html">CAR</a> X))))).
+
+[Note:  A hint was supplied for our processing
+of the goal above, because of a :backtrack hint
+that is preventing destructor elimination.
+Thanks!]
+
+We generalize this conjecture, replacing
+(<a href="ACL2____REV.html">REV</a> (<a href="COMMON-LISP____CDR.html">CDR</a> X)) by RV.  This produces
+
+Subgoal *1/1''
+(<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____AND.html">AND</a> (<a href="COMMON-LISP____CONSP.html">CONSP</a> X) (<a href="ACL2____TRUE-LISTP.html">TRUE-LISTP</a> RV))
+         (<a href="ACL2____TRUE-LISTP.html">TRUE-LISTP</a> (<a href="COMMON-LISP____APPEND.html">APPEND</a> RV (<a href="COMMON-LISP____LIST.html">LIST</a> (<a href="COMMON-LISP____CAR.html">CAR</a> X))))).</pre> 
+ 
+ <p>We now provide a careful explanation of how <span class="v">:backtrack</span> hints work, but 
+ we suggest that you keep the example above in mind.  If ``<span class="v">:backtrack
+ form</span>'' is part of the hint that has been selected for a goal, then <span class="v">form</span> 
+ is evaluated when one of ACL2's clause processors successfully applies to the 
+ current goal to produce a list of subgoals.  This evaluation takes place in an 
+ environment just like that for any computed hint (see <a href="ACL2____COMPUTED-HINTS.html">computed-hints</a>), 
+ with the following exceptions.  First, the variable 
+ <span class="v">STABLE-UNDER-SIMPLIFICATIONP</span> is not allowed to occur free in <span class="v">form</span>, 
+ but instead the following new variables are allowed to occur free and are 
+ bound for this evaluation as follows: <span class="v">PROCESSOR</span> is bound to the processor 
+ in the list <span class="v">*preprocess-clause-ledge*</span> that has applied to the goal, and 
+ <span class="v">CLAUSE-LIST</span> is bound to the list of clauses (each a list of literals that 
+ is implicitly disjoined) returned by that clause processor.  Second, the 
+ variables <span class="v">HIST</span> and <span class="v">PSPV</span> are bound to the history and pspv returned 
+ by the clause processor, <b>not</b> the ones that were passed to the clause 
+ processor.  If this evaluation returns an error, then the proof aborts, as for 
+ any computed hint whose evaluation returns an error.  If this evaluation 
+ returns <span class="v">nil</span>, then the <span class="v">:backtrack</span> hint has no effect, and the goal is 
+ replaced by the list of goals (the value of <span class="v">CLAUSE-LIST</span> described above), 
+ as usual.  Otherwise, the clause processor is deemed to have failed, and the 
+ goal clause is tried again starting at the top of the waterfall after 
+ selecting the hint returned by the above evaluation.  That hint will normally 
+ be an alternating list of hint keywords and their values, but if it is a 
+ custom keyword hint (see <a href="ACL2____CUSTOM-KEYWORD-HINTS.html">custom-keyword-hints</a>), then it will be handled 
+ in the usual manner but with the first three variables above bound to the 
+ symbol <span class="v">:OMITTED</span>.  Of course, if the new hint includes a value for 
+ <span class="v">:BACKTRACK</span> then this process can loop; care should be taken to keep that 
+ from happening.</p> 
+ 
+ <p>A final note about <span class="v">:BACKTRACK</span> hints: since these are a form of 
+ computed hints, <a href="ACL2____OVERRIDE-HINTS.html">override-hints</a> (if any) are applied to their evaluation 
+ result just as with any computed hint.  That is, the backtrack hint is 
+ successively modified with each override-hint, to produce a final hint that is 
+ actually used (or, ignored if that final hint is <span class="v">nil</span>).  See <a href="ACL2____OVERRIDE-HINTS.html">override-hints</a>.</p>
+</dd> 
+ 
+ <dt>
+<span class="v">:</span><span class="tt"><a href="ACL2____BDD.html">bdd</a></span>
+</dt>
+<p></p> 
+ 
+ <dd>
+<p>This hint indicates that ACL2's built-in ordered binary decision 
+ diagrams (BDDs) with rewriting are to be used to prove or simplify the goal. 
+ See <a href="ACL2____BDD.html">bdd</a> for an introduction to the ACL2 BDD algorithm.</p> 
+ 
+ <p><span class="v">Value</span> is a list of even length, such that every other element, 
+ starting with the first, is one of the keywords <span class="v">:vars</span>, 
+ <span class="v">:bdd-constructors</span>, <span class="v">:prove</span>, or <span class="v">:literal</span>.  Each keyword that is 
+ supplied should be followed by a value of the appropriate form, as shown 
+ below; for others, a default is used.  Although <span class="v">:vars</span> must always be 
+ supplied, we expect that most users will be content with the defaults used for 
+ the other values.</p> 
+ 
+ <blockquote> 
+ 
+ <p><span class="v">:vars</span> — A list of ACL2 variables, which are to be treated as 
+ Boolean variables.  The prover must be able to check, using trivial reasoning 
+ (see <a href="ACL2____TYPE-SET.html">type-set</a>), that each of these variables is Boolean in the context 
+ of the current goal.  Note that the prover will use very simple heuristics to 
+ order any variables that do not occur in <span class="v">:vars</span> (so that they are 
+ ``greater than'' the variables that do occur in <span class="v">:vars</span>), and these 
+ heuristics are often far from optimal.  In addition, any variables not listed 
+ may fail to be assumed Boolean by the prover, which is likely to seriously 
+ impede the effectiveness of ACL2's BDD algorithm.  Thus, users are encouraged 
+ <i>not</i> to rely on the default order, but to supply a list of variables 
+ instead.  Finally, it is allowed to use a value of <span class="v">t</span> for <span class="v">vars</span>.  This 
+ means the same as a <span class="v">nil</span> value, except that the BDD algorithm is directed 
+ to fail unless it can guarantee that all variables in the input term are known 
+ to be Boolean (in a sense discussed elsewhere; see <a href="ACL2____BDD-ALGORITHM.html">bdd-algorithm</a>).</p> 
+ 
+ <p><span class="v">:literal</span> — An indication of which part of the current goal 
+ should receive BDD processing.  Possible values are:</p> 
+ 
+ <pre class="code">:all     treat entire goal as a single literal (<a href="COMMON-LISP____THE.html">the</a> default)
+:conc    process the conclusion
+n        process the hypothesis with index n (1, 2, ...)</pre> 
+ 
+ <p><span class="v">:bdd-constructors</span> — When supplied, this value should be a list 
+ of function symbols in the current ACL2 <a href="ACL2____WORLD.html">world</a>; it is <span class="v">(<a href="COMMON-LISP____CONS.html">cons</a>)</span> by 
+ default, unless <span class="v">:bdd-constructors</span> has a value in the <span class="tt"><a href="ACL2____ACL2-DEFAULTS-TABLE.html">ACL2-defaults-table</a></span> by default, in which case that value is the default.  We 
+ expect that most users will be content with the default.  See <a href="ACL2____BDD-ALGORITHM.html">bdd-algorithm</a> for information about how this value is used.</p> 
+ 
+ <p><span class="v">:prove</span> — When supplied, this value should be <span class="v">t</span> or <span class="v">nil</span>; 
+ it is <span class="v">t</span> by default.  When the goal is not proved and this value is 
+ <span class="v">t</span>, the entire proof will abort.  Use the value <span class="v">nil</span> if you are happy 
+ to the proof to go on with the simplified term.</p> 
+ 
+ </blockquote>
+</dd> 
+ 
+ <dt><span class="v">:by</span></dt>
+<p></p> 
+ 
+ <dd>
+<p><span class="v">Value</span> is a <a href="ACL2____LEMMA-INSTANCE.html">lemma-instance</a>, <span class="v">nil</span>, or a new event 
+ name. If the value is a <a href="ACL2____LEMMA-INSTANCE.html">lemma-instance</a> (see <a href="ACL2____LEMMA-INSTANCE.html">lemma-instance</a>), 
+ then it indicates that the goal (when viewed as a clause) is either equal to 
+ the proposition denoted by the instance, or is subsumed by that proposition 
+ when both are viewed as clauses.  To view a formula as a clause, union 
+ together the negations of the hypotheses and add the conclusion.  For 
+ example,</p> 
+ 
+ <pre class="code">(<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____AND.html">AND</a> (h1 t1) (h2 t2)) (c t1))</pre> 
+ 
+ <p>may be viewed as the clause</p> 
+ 
+ <pre class="code">{~(h1 t1) ~(h2 t2) (c t1)}.</pre> 
+ 
+ <p>Clause <span class="v">c1</span> is ``subsumed'' by clause <span class="v">c2</span> iff some instance of 
+ <span class="v">c2</span> is a subset of <span class="v">c1</span>.  For example, the clause above is subsumed by 
+ <span class="v">{~(h1 x) (c x)}</span>, which when viewed as a formula is <span class="v">(<a href="ACL2____IMPLIES.html">implies</a> (h1 x) (c
+ x))</span>.</p> 
+ 
+ <p>Note that if the value is the name of a function symbol introduced by 
+ <span class="tt"><a href="COMMON-LISP____DEFUN.html">defun</a></span>, then the original form of the body of that definition is used. 
+ This behavior differs from that provided by a <span class="v">:use</span> hint, which uses the 
+ normalized (simplified) body; see <a href="ACL2____NORMALIZE.html">normalize</a>.</p> 
+ 
+ <p>If the value is <span class="v">nil</span> or a new name, the prover does not even attempt to 
+ prove the goal to which this hint is attached.  Instead the goal is given a 
+ ``bye'', i.e., it is skipped and the proof attempt continues as though the 
+ goal had been proved.  If the prover terminates without error then it reports 
+ that the proof would have succeeded had the indicated goals been proved and it 
+ prints an appropriate <a href="ACL2____DEFTHM.html">defthm</a> form to define each of the <span class="v">:by</span> names. 
+ The ``name'' <span class="v">nil</span> means ``make up a name.''  Here is an example 
+ (admittedly contrived for illustration purposes).</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____THM.html">thm</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____APPEND.html">append</a> (<a href="COMMON-LISP____APPEND.html">append</a> x y) z)
+                   (<a href="COMMON-LISP____APPEND.html">append</a> x y z))
+            :hints (("Subgoal *1/2'" :by nil)))
+
+Name the formula above *1.
+
+[[... output omitted here ...]]
+
+[Note:  A hint was supplied for our processing of the goal below.
+Thanks!]
+
+Subgoal *1/2'
+(<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____AND.html">AND</a> (<a href="COMMON-LISP____CONSP.html">CONSP</a> X)
+              (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (<a href="COMMON-LISP____APPEND.html">APPEND</a> (<a href="COMMON-LISP____APPEND.html">APPEND</a> (<a href="COMMON-LISP____CDR.html">CDR</a> X) Y) Z)
+                     (<a href="COMMON-LISP____APPEND.html">APPEND</a> (<a href="COMMON-LISP____CDR.html">CDR</a> X) Y Z)))
+         (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (<a href="COMMON-LISP____APPEND.html">APPEND</a> (<a href="COMMON-LISP____APPEND.html">APPEND</a> X Y) Z)
+                (<a href="COMMON-LISP____APPEND.html">APPEND</a> X Y Z))).
+
+But we have been asked to pretend that this goal is subsumed by the
+yet-to-be-proved |THM Subgoal *1/2'|.
+
+Subgoal *1/1
+[[... proof goes on; further output omitted here ...]]</pre> 
+ 
+ <p>The system does not attempt to check the uniqueness of the <span class="v">:by</span> names 
+ (supplied or made up), since by the time those goals are proved the namespace 
+ will be cluttered still further.  Therefore, the final list of ``appropriate'' 
+ <span class="tt"><a href="ACL2____DEFTHM.html">defthm</a></span> forms may be impossible to admit without some renaming by the 
+ user.  If you must invent new names, remember to substitute the new ones for 
+ the old ones in the <span class="v">:by</span> hints themselves.</p>
+</dd> 
+ 
+ <dt>
+<span class="v">:</span><span class="tt"><a href="ACL2____CASE-SPLIT-LIMITATIONS.html">case-split-limitations</a></span>
+</dt>
+<p></p> 
+ 
+ <dd><p><span class="v">Value</span> is the same as for <span class="tt"><a href="ACL2____SET-CASE-SPLIT-LIMITATIONS.html">set-case-split-limitations</a></span>.  The 
+ simplifier will behave as though the value had instead been supplied to 
+ <span class="v">set-case-split-limitations</span>; see <a href="ACL2____SET-CASE-SPLIT-LIMITATIONS.html">set-case-split-limitations</a>.  This 
+ behavior will persist through subgoals unless overridden by another 
+ <span class="v">:CASE-SPLIT-LIMITATIONS</span> hint.</p></dd> 
+ 
+ <dt><span class="v">:cases</span></dt>
+<p></p> 
+ 
+ <dd><p><span class="v">Value</span> is a non-empty list of terms.  For each term in the list, a 
+ new goal is created from the current goal by assuming that term; and also, in 
+ essence, one additional new goal is created by assuming all the terms in the 
+ list false.  We say ``in essence'' because if the disjunction of the terms 
+ supplied is a tautology, then that final goal will be a tautology and hence 
+ will in fact never actually be created.</p></dd> 
+ 
+ <dt>
+<span class="v">:</span><span class="tt"><a href="ACL2____CLAUSE-PROCESSOR.html">clause-processor</a></span>
+</dt>
+<p></p> 
+ 
+ <dd>
+<p><span class="v">Value</span> specifies the application of a user-defined simplifier to 
+ the current goal.  See <a href="ACL2____CLAUSE-PROCESSOR.html">clause-processor</a>, which provides necessary 
+ background and hint syntax.  Also see <a href="ACL2____DEFINE-TRUSTED-CLAUSE-PROCESSOR.html">define-trusted-clause-processor</a> 
+ for a discussion of ``trusted clause-processors'': goal-level simplifiers that 
+ may be external to ACL2 and do not need to be proved correct in ACL2.</p> 
+ 
+ <p>You can see all current <span class="v">:clause-processor</span> rules by issuing the command 
+ <span class="v">(print-clause-processor-rules)</span>, and you can see the names of all trusted 
+ clause-processors by issuing the command <span class="v">(<a href="ACL2____TABLE.html">table</a>
+ trusted-cl-proc-table)</span>.</p>
+</dd> 
+ 
+ <dt><span class="v">:do-not</span></dt>
+<p></p> 
+ 
+ <dd>
+<p><span class="v">Value</span> is a term having at most the single free variable <span class="tt"><a href="ACL2____WORLD.html">world</a></span>, which when evaluated (with <span class="tt"><a href="ACL2____WORLD.html">world</a></span> bound to the current ACL2 
+ logical <a href="ACL2____WORLD.html">world</a>) produces a list of symbols that is a subset of the 
+ list</p> 
+ 
+ <pre class="code">(preprocess ;propositional logic, simple rules
+ simplify   ;as above plus rewriting, linear arithmetic
+ eliminate-destructors
+ fertilize  ;use of equalities
+ generalize
+ eliminate-irrelevance).</pre> 
+ 
+ <p>The hint indicates that the ``processes'' named should not be used at or 
+ below the goal in question.  Thus, to prevent generalization and 
+ fertilization, say, include the hint</p> 
+ 
+ <pre class="code">:do-not '(<a href="ACL2____GENERALIZE.html">generalize</a> fertilize)</pre> 
+ 
+ <p>If <span class="v">value</span> is a single symbol, as in</p> 
+ 
+ <pre class="code">:do-not generalize,</pre> 
+ 
+ <p>it is taken to be <span class="v">'(<a href="ACL2____VALUE.html">value</a>)</span>.</p> 
+ 
+ <p>See also <a href="ACL2____DO-NOT-HINT.html">do-not-hint</a> for a way to automatically provide 
+ <span class="v">:do-not</span> hints across several theorems.</p>
+</dd> 
+ 
+ <dt><span class="v">:do-not-induct</span></dt>
+<p></p> 
+ 
+ <dd>
+<p><span class="v">Value</span> indicates whether <a href="ACL2____INDUCTION.html">induction</a> is permitted under the 
+ specified goal.  The legal values are <span class="v">t</span>, <span class="v">:otf-flg-override</span>, 
+ <span class="v">:otf</span>, <span class="v">nil</span>, or a non-keyword symbol other than <span class="v">t</span> or <span class="v">nil</span>. 
+ The default is <span class="v">nil</span>, meaning that induction is permitted as usual.  A 
+ non-<span class="v">nil</span> value prohibits the use of induction to prove the indicated goal 
+ or any of its subgoals, as described below.</p> 
+ 
+ <p>If <span class="v">value</span> is <span class="v">t</span> or <span class="v">:otf-flg-override</span>, then the attempt to 
+ apply <a href="ACL2____INDUCTION.html">induction</a> to the indicated goal or any subgoal under the 
+ indicated goal will immediately cause the theorem prover to report <a href="ACL2____FAILURE.html">failure</a>, except that if <span class="v">:otf-flg t</span> is specified (see <a href="ACL2____OTF-FLG.html">otf-flg</a>) and 
+ <span class="v">value</span> is <span class="v">t</span>, then the proof will continue until the time at which the 
+ goal pushed for induction is finally encountered and causes failure.  The 
+ latter behavior is also what occurs if <span class="v">value</span> is <span class="v">:otf</span>.  See however 
+ the <span class="v">:induct</span> hint below.  If <span class="v">value</span> is a non-keyword symbol other than 
+ <span class="v">t</span> or <span class="v">nil</span>, the theorem prover will skip every subgoal under the 
+ indicated goal (giving it a ``bye'', as with a ``<span class="v">:by</span>'' hint) that would 
+ otherwise be attacked with induction.  This will cause the theorem prover to 
+ fail eventually, printing every subgoal thus skipped in the form of an event 
+ to prove, each with a name based on the value of the <span class="v">:do-not-induct</span> hint 
+ that caused that subgoal to be skipped.</p> 
+ 
+ <p><b>Remarks.</b></p> 
+ 
+ <p>(1) An <span class="v">:induct</span> hint is applied to a goal even if a <span class="v">:do-not-induct</span> 
+ hint is in effect for that goal.  Consider the following examples.</p> 
+ 
+ <pre class="code">(<a href="ACL2____THM.html">thm</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____APPEND.html">append</a> (<a href="COMMON-LISP____APPEND.html">append</a> x y) z) (<a href="COMMON-LISP____APPEND.html">append</a> x y z))
+     :hints (("Goal" :induct t :do-not-induct t)))
+
+(<a href="ACL2____THM.html">thm</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____APPEND.html">append</a> (<a href="COMMON-LISP____APPEND.html">append</a> x y) z) (<a href="COMMON-LISP____APPEND.html">append</a> x y z))
+          (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____APPEND.html">append</a> (<a href="COMMON-LISP____APPEND.html">append</a> u v) w) (<a href="COMMON-LISP____APPEND.html">append</a> u v w)))
+     :hints (("Goal" :do-not-induct t)
+             ("Subgoal 2" :induct t)))</pre> 
+ 
+ <p>In the first of these, the <span class="v">:do-not-induct</span> hint has no effect on the 
+ proof; instead, the <span class="v">:induct</span> hint forces an induction that allows the 
+ proof to succeed (without any sub-inductions).  The second of these 
+ illustrates that even though <span class="v">:do-not-induct</span> can stop sub-inductions, its 
+ effect is overridden by <span class="v">:induct</span>.  For the proof of that second example, 
+ ACL2 immediately splits into two subgoals.  Then in spite of the top-level 
+ <span class="v">:do-not-induct</span> hint, the proof is allowed to proceed past Subgoal 2, 
+ which requires induction, because of the hint <span class="v">:induct t</span>.  However, the 
+ proof halts after Subgoal 1 because of the <span class="v">:do-not-induct</span> hint that has 
+ been established ``above'' it, at <span class="v">"Goal"</span>.  (For more about the way 
+ hints are processed, see <a href="ACL2____HINTS-AND-THE-WATERFALL.html">hints-and-the-waterfall</a>.)</p> 
+ 
+ <p>(2) For an advanced example of the use of value <span class="v">:otf</span> for 
+ <span class="v">:do-not-induct</span> combined with <a href="ACL2____OVERRIDE-HINTS.html">override-hints</a>, see community book 
+ <span class="v">books/hints/basic-tests.lisp</span>.</p>
+</dd> 
+ 
+ <dt><span class="v">:error</span></dt>
+<p></p> 
+ 
+ <dd>
+<p><span class="v">Value</span> is typically a ``fmt message'' to be printed by the <span class="tt"><a href="ACL2____FMT.html">fmt</a></span> tilde-directive ~@ but may be any object.  The effect of this hint is to 
+ cause an error when the hint is translated.  There is no reason to include an 
+ <span class="v">:ERROR</span> hint in any user-typein, since it will only cause an error when 
+ the form is evaluated.  <span class="v">:ERROR</span> hints are useful in the definition of 
+ functions that generate custom keyword hints (see <a href="ACL2____CUSTOM-KEYWORD-HINTS.html">custom-keyword-hints</a>) 
+ and computed hints (see <a href="ACL2____COMPUTED-HINTS.html">computed-hints</a>).  For example, if you wish to 
+ define a custom keyword hint <span class="v">:my-hint val</span> and you wish the hint to signal 
+ an error if there is something inappropriate about <span class="v">val</span> in the context of 
+ the hint, use the following code to generate the hint</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____LIST.html">list</a> :ERROR (<a href="COMMON-LISP____CONS.html">cons</a> "Your specified value, ~x0, is inappropriate"
+                   (<a href="COMMON-LISP____LIST.html">list</a> (<a href="COMMON-LISP____CONS.html">cons</a> #0 val))))</pre> 
+ 
+ <p>which is equivalent to</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____LIST.html">list</a> :ERROR (<a href="ACL2____MSG.html">msg</a> "Your specified value, ~x0, is inappropriate"
+                  val))</pre> 
+ 
+ <p>which, if <span class="v">val</span> has the value <span class="v">123</span>, would evaluate to the hint</p> 
+ 
+ <pre class="code">(:ERROR ("Your specified value, ~x0, is inappropriate" (#0 . 123))).</pre> 
+ 
+ <p>Note that any time an <span class="v">:ERROR</span> keyword is produced during hint 
+ processing, including iterations of the expansions of custom keyword hints or 
+ of <a href="ACL2____OVERRIDE-HINTS.html">override-hints</a>, an error will occur.</p>
+</dd> 
+ 
+ <dt><span class="v">:expand</span></dt>
+<p></p> 
+ 
+ <dd><p><span class="v">Value</span> is a true list of terms, each of which is of one of the 
+ forms <span class="v">(<a href="COMMON-LISP____LET.html">let</a> ((v1 t1)...) b)</span> or <span class="v">(fn t1 ... tn)</span>, where <span class="v">fn</span> is a 
+ defined function symbol with formals <span class="v">v1, ..., vn,</span> and <span class="v">body</span> <span class="v">b</span>. 
+ Such a term is said to be ``expandable:'' it can be replaced by the result of 
+ substituting the <span class="v">ti</span>'s for the <span class="v">vi</span>'s in <span class="v">b</span>.  The terms listed in 
+ the <span class="v">:expand</span> hint are expanded when they are encountered by the simplifier 
+ while working on the specified goal or any of its subgoals.  (There is no 
+ separate ``expand'' process.)  We permit <span class="v">value</span> to be a single such term 
+ instead of a singleton list.  <b>Remarks</b>: (0) Note that in the event that 
+ a <span class="v">:definition</span> rule has been admitted for <span class="v">fn</span>, then by default, the 
+ body <span class="v">b</span> is determined by the (most recently admitted such) rule rather 
+ than the original definition of <span class="v">fn</span>; see <a href="ACL2____DEFINITION.html">definition</a>.  (1) Allowed 
+ are ``terms'' of the form <span class="v">(:free (var1 var2 ...  varn) pattern)</span> where the 
+ indicated variables are distinct and <span class="v">pattern</span> is a term.  Such ``terms'' 
+ indicate that we consider the indicated variables to be instantiatable, in the 
+ following sense: whenever the simplifier encounters a term that can be 
+ obtained from <span class="v">pattern</span> by instantiating the variables <span class="v">(var1 var2 ...
+ varn)</span>, then it expands that term.  (2) Also allowed are ``terms'' of the 
+ form <span class="v">(:with name term)</span>, where <span class="v">name</span> is a function symbol, a macro 
+ name that denotes a function symbol (see <a href="ACL2____MACRO-ALIASES-TABLE.html">macro-aliases-table</a>), or a 
+ <a href="ACL2____RUNE.html">rune</a>.  The corresponding rule of class <span class="v">:rewrite</span>, which is often a 
+ <a href="ACL2____DEFINITION.html">definition</a> rule but need not be, is then used in place of the current 
+ body for the function symbol of <span class="v">term</span>; see <a href="ACL2____SHOW-BODIES.html">show-bodies</a> and see 
+ <a href="ACL2____SET-BODY.html">set-body</a>.  If the rule is of the form <span class="v">(<a href="ACL2____IMPLIES.html">implies</a> hyp (equiv lhs
+ rhs))</span>, then after matching <span class="v">lhs</span> to the current term in a context that is 
+ maintaining equivalence relation <span class="v">equiv</span>, ACL2 will replace the current 
+ term with <span class="v">(<a href="COMMON-LISP____IF.html">if</a> hyp rhs (<a href="ACL2____HIDE.html">hide</a> term))</span>, or just <span class="v">rhs</span> if the rule is just 
+ <span class="v">(<a href="COMMON-LISP____EQUAL.html">equal</a> lhs rhs)</span>.  (3) A combination of both <span class="v">:free</span> and <span class="v">:with</span>, as 
+ described above, is legal.  (4) The term <span class="v">:LAMBDAS</span> is treated specially. 
+ It denotes the list of all lambda applications (i.e., <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span> expressions) 
+ encountered during the proof.  Conceptually, this use of <span class="v">:LAMBDAS</span> tells 
+ ACL2 to treat lambda applications as a notation for substitutions, rather than 
+ as function calls whose opening is subject to the ACL2 rewriter's 
+ heuristics (specifically, not allowing lambda applications to open when they 
+ introduce ``too many'' if terms).</p></dd> 
+ 
+ <dt><span class="v">:hands-off</span></dt>
+<p></p> 
+ 
+ <dd><p><span class="v">Value</span> is a true list of function symbols or lambda expressions, 
+ indicating that under the specified goal applications of these functions are 
+ not to be rewritten.  Note however that subterms will still be rewritten; see 
+ <a href="ACL2____HIDE.html">hide</a> if that is not what is intended.  (The community book 
+ <span class="v">books/clause-processors/autohide.lisp</span> from Jared Davis may also be 
+ helpful in that case.) <span class="v">Value</span> may also be a single function symbol or 
+ lambda expression instead of a list.</p></dd> 
+ 
+ <dt>
+<span class="v">:</span><span class="tt"><a href="ACL2____IN-THEORY.html">in-theory</a></span>
+</dt>
+<p></p> 
+ 
+ <dd>
+<p><span class="v">Value</span> is a ``theory expression,'' i.e., a term having at most the 
+ single free variable <span class="tt"><a href="ACL2____WORLD.html">world</a></span> which when evaluated (with <span class="tt"><a href="ACL2____WORLD.html">world</a></span> 
+ bound to the current ACL2 logical world (see <a href="ACL2____WORLD.html">world</a>)) will produce a 
+ theory to use as the current theory for the goal specified.  See <a href="ACL2____THEORIES.html">theories</a>.</p> 
+ 
+ <p>Note that an <span class="v">:</span><span class="tt"><a href="ACL2____IN-THEORY.html">in-theory</a></span> hint will always be evaluated relative 
+ to the current ACL2 logical <a href="ACL2____WORLD.html">world</a>, not relative to the theory of a 
+ previous goal.  Consider the following example.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> prop
+  (p (f (<a href="ACL2____G.html">g</a> x)))
+  :hints (("Goal"      :in-theory (<a href="ACL2____DISABLE.html">disable</a> f))
+          ("Subgoal 3" :in-theory (<a href="ACL2____ENABLE.html">enable</a>  g))))</pre> 
+ 
+ <p>Consider in particular the theory in effect at <span class="v">Subgoal 3</span>.  This call 
+ of the <span class="tt"><a href="ACL2____ENABLE.html">enable</a></span> macro enables <span class="v">g</span> relative to the <span class="tt"><a href="ACL2____CURRENT-THEORY.html">current-theory</a></span> of the current logical <a href="ACL2____WORLD.html">world</a>, <i>not</i> relative to 
+ the theory produced by the hint at <span class="v">Goal</span>.  Thus, the <span class="tt"><a href="ACL2____DISABLE.html">disable</a></span> of 
+ <span class="v">f</span> on behalf of the hint at <span class="v">Goal</span> will be lost at <span class="v">Subgoal 3</span>, and 
+ <span class="v">f</span> will be enabled at <span class="v">Subgoal 3</span> if was enabled globally when 
+ <span class="v">prop</span> was submitted.</p>
+</dd> 
+ 
+ <dt><span class="v">:induct</span></dt>
+<p></p> 
+ 
+ <dd>
+<p><span class="v">Value</span> is either <span class="v">t</span> or a term containing at least one 
+ recursively defined function symbol; if <span class="v">t</span>, this hint indicates that the 
+ system should proceed to apply its induction heuristic to the specified goal 
+ produced (without trying simplification, etc.); if <span class="v">value</span> is a term other 
+ than <span class="v">t</span>, then not only should the system apply induction immediately, but 
+ it should analyze <span class="v">value</span> rather than the goal to generate its <a href="ACL2____INDUCTION.html">induction</a> scheme.  Merging and the other <a href="ACL2____INDUCTION.html">induction</a> heuristics are 
+ applied.  Thus, if <span class="v">value</span> contains several mergeable <a href="ACL2____INDUCTION.html">induction</a>s, 
+ the ``best'' will be created and chosen.  E.g., the <span class="v">:induct</span> hint</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____NTH.html">nth</a> i a) (<a href="COMMON-LISP____NTH.html">nth</a> j a))</pre> 
+ 
+ <p>suggests simultaneous <a href="ACL2____INDUCTION.html">induction</a> on <span class="v">i</span>, <span class="v">j</span>, and <span class="v">a</span>.</p> 
+ 
+ <p>If both an <span class="v">:induct</span> and a <span class="v">:do-not-induct</span> hint are supplied for a 
+ given goal then the indicated <a href="ACL2____INDUCTION.html">induction</a> is applied to the goal and the 
+ <span class="v">:do-not-induct</span> hint is inherited by all subgoals generated.</p>
+</dd> 
+ 
+ <dt>
+<span class="v">:</span><span class="tt"><a href="ACL2____INSTRUCTIONS.html">instructions</a></span>
+</dt>
+<p></p> 
+ 
+ <dd><p><span class="v">Value</span> is a list of interactive <a href="ACL2____PROOF-BUILDER.html">proof-builder</a> instructions; 
+ see <a href="ACL2____INSTRUCTIONS.html">instructions</a>.  Unlike other hint keywords described here, this one 
+ is actually a custom keyword hint (see <a href="ACL2____CUSTOM-KEYWORD-HINTS.html">custom-keyword-hints</a>) that 
+ generates a suitable <span class="v">:</span><span class="tt"><a href="ACL2____CLAUSE-PROCESSOR.html">clause-processor</a></span> hint.</p></dd> 
+ 
+ <dt><span class="v">:no-op</span></dt>
+<p></p> 
+ 
+ <dd><p><span class="v">Value</span> is any object and is irrelevant.  This hint does nothing. 
+ But empty hints, such as <span class="v">("Goal")</span>, are illegal and there are occasions, 
+ especially when writing custom keyword hints 
+ (see <a href="ACL2____CUSTOM-KEYWORD-HINTS.html">custom-keyword-hints</a>) and computed hints (see <a href="ACL2____COMPUTED-HINTS.html">computed-hints</a>) where it is convenient to be able to generate a non-empty 
+ no-op hint.  The standard idiom is <span class="v">("Goal" :NO-OP T)</span> but the <span class="v">T</span> is 
+ completely ignored.  Unlike other hint keywords, multiple occurrences of the 
+ keyword <span class="v">:NO-OP</span> are tolerated.</p></dd> 
+ 
+ <dt><span class="v">:no-thanks</span></dt>
+<p></p> 
+ 
+ <dd><p><span class="v">Value</span> is any object.  This hint does nothing, except that if 
+ <span class="v">value</span> is non-<span class="v">nil</span> then the usual ``[Note: A hint was 
+ supplied... Thanks!]'' is not printed.</p></dd> 
+ 
+ <dt><span class="v">:nonlinearp</span></dt>
+<p></p> 
+ 
+ <dd><p><span class="v">Value</span> is <span class="v">t</span> or <span class="v">nil</span>, indicating whether <a href="ACL2____NON-LINEAR-ARITHMETIC.html">non-linear-arithmetic</a> is active.  The default value is <span class="v">nil</span>.  See <a href="ACL2____NON-LINEAR-ARITHMETIC.html">non-linear-arithmetic</a>.</p></dd> 
+ 
+ <dt><span class="v">:or</span></dt>
+<p></p> 
+ 
+ <dd>
+<p><span class="v">Value</span> is a list <span class="v">(kwd-val-listp-1 ... kwd-val-listp-k)</span>, where 
+ each <span class="v">kwd-val-listp-i</span> is a list satisfying <span class="tt"><a href="ACL2____KEYWORD-VALUE-LISTP.html">keyword-value-listp</a></span>, 
+ i.e., an alternating list of keywords and values.  This hint causes an attempt 
+ to prove the specified goal using hints <span class="v">kwd-val-listp-i</span> in 
+ sequence (first <span class="v">kwd-val-listp-1</span>, then <span class="v">kwd-val-listp-2</span>, and so on), 
+ until the first of these succeeds.  If none succeeds, then the prover proceeds 
+ after heuristically choosing the ``best'' result, taking into account the 
+ goals pushed in each case for proof by induction.</p> 
+ 
+ <p>The following (contrived but illustrative example illustrates how <span class="v">:or</span> 
+ hints work.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____THM.html">thm</a> (f x)
+            :hints
+            (("Goal"
+              :expand ((<a href="COMMON-LISP____NTH.html">nth</a> x 3))
+              :or ((:in-theory (<a href="ACL2____DISABLE.html">disable</a> car-cons))
+                   (:use cdr-cons :in-theory (<a href="ACL2____ENABLE.html">enable</a> append)))
+              :do-not '(<a href="ACL2____GENERALIZE.html">generalize</a>))))
+
+[Note:  A hint was supplied for our processing of the goal above.
+Thanks!]
+
+The :OR hint for Goal gives rise to two disjunctive branches.  Proving
+any one of these branches would suffice to prove Goal.  We explore
+them in turn, describing their derivations as we go.
+
+---
+Subgoal D2
+( same formula as Goal ).
+
+The first disjunctive branch (of 2) for Goal can be created by applying
+the hint:
+("Subgoal D2" :EXPAND ((<a href="COMMON-LISP____NTH.html">NTH</a> X 3))
+              :IN-THEORY (<a href="ACL2____DISABLE.html">DISABLE</a> CAR-CONS)
+              :DO-NOT '(<a href="ACL2____GENERALIZE.html">GENERALIZE</a>)).
+
+[Note:  A hint was supplied for our processing of the goal above.
+Thanks!]
+
+Normally we would attempt to prove this formula by induction.  However,
+we prefer in this instance to focus on the original input conjecture
+rather than this simplified special case.  We therefore abandon our
+previous work on this conjecture and reassign the name *1 to the original
+conjecture.  (See :DOC otf-flg.)  [Note:  Thanks again for the hint.]
+
+---
+Subgoal D1
+( same formula as Goal ).
+
+The second disjunctive branch (of 2) for Goal can be created by applying
+the hint:
+("Subgoal D1" :EXPAND ((<a href="COMMON-LISP____NTH.html">NTH</a> X 3))
+              :USE CDR-CONS
+              :IN-THEORY (<a href="ACL2____ENABLE.html">ENABLE</a> APPEND)
+              :DO-NOT '(<a href="ACL2____GENERALIZE.html">GENERALIZE</a>)).
+
+[Note:  A hint was supplied for our processing of the goal above.
+Thanks!]
+
+ACL2 Warning [Use] in ( THM ...):  It is unusual to :USE the formula
+of an enabled :REWRITE or :DEFINITION rule, so you may want to consider
+disabling (:REWRITE CDR-CONS) in the hint provided for Subgoal D1.
+See :DOC using-enabled-rules.
+
+We augment the goal with the hypothesis provided by the :USE hint.
+The hypothesis can be obtained from CDR-CONS.  We are left with the
+following subgoal.
+
+Subgoal D1'
+(<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (<a href="COMMON-LISP____CDR.html">CDR</a> (<a href="COMMON-LISP____CONS.html">CONS</a> X Y)) Y)
+         (F X)).
+
+By the simple :rewrite rule CDR-CONS we reduce the conjecture to
+
+Subgoal D1''
+(F X).</pre> 
+ 
+ <p>... and so on.  This example illustrates how ACL2 processes <span class="v">:or</span> hints 
+ in general.  For each <span class="v">i</span> from 1 to <span class="v">k</span>, a so-called ``disjunctive'' 
+ subgoal is created by splicing <span class="v">kwd-val-listp-i</span> into the other hint values 
+ (if any) supplied for the given goal, in order.  A corresponding subgoal is 
+ created for each <span class="v">i</span>, numbered in the usual manner (hence, counting down) 
+ except that the ``<span class="v">D</span>'' is prefixed to each resulting goal.</p>
+</dd> 
+ 
+ <dt><span class="v">:reorder</span></dt>
+<p></p> 
+ 
+ <dd><p><span class="v">Value</span> is a list of positive integers without duplicates, 
+ corresponding to the numbering of subgoals generated for the <a href="ACL2____GOAL-SPEC.html">goal-spec</a> 
+ <span class="v">"G"</span>, say <span class="v">"G.k"</span> down to <span class="v">"G.1"</span>.  Those subgoals are 
+ reordered so that if <span class="v">value</span> is <span class="v">(n1 n2 ... nk)</span>, then the goal now 
+ numbered <span class="v">"G.k"</span> will be the goal originally numbered <span class="v">"G.n1"</span>; the 
+ goal now numbered <span class="v">"G.k-1"</span> will be the goal formerly numbered 
+ <span class="v">"G.n2"</span>; and so on, down the list of <span class="v">ni</span>, after which the goals not 
+ yet printed are printed in their original order.  Note that reordering for 
+ subgoals of a goal to be proved by induction, such as <span class="v">*1</span>, is not 
+ supported.</p></dd> 
+ 
+ <dt><span class="v">:restrict</span></dt>
+<p></p> 
+ 
+ <dd>
+<p>This hint, originally suggested by Bishop Brock, sometimes allows rules 
+ with free variables (see <a href="ACL2____FREE-VARIABLES.html">free-variables</a>) to be applied successfully by 
+ the rewriter, thus avoiding the clutter, case-splitting, and theory management 
+ (disabling) that can occur with <span class="v">:use</span> hints.</p> 
+ 
+ <p>Warning: This is a sophisticated hint that may be most appropriate for 
+ experienced ACL2 users.  In particular, <span class="v">:restrict</span> hints are ignored by 
+ the preprocessor, so you might find it useful to give the hint <span class="v">:do-not
+ '(preprocess)</span> when using any <span class="v">:restrict</span> hints, at least if the rules in 
+ question are abbreviations (see <a href="ACL2____SIMPLE.html">simple</a>).</p> 
+ 
+ <p><span class="v">Value</span> is an association list.  Its members are of the form <span class="v">(x
+ subst1 subst2 ...)</span>, where: <span class="v">x</span> is either (1) a <a href="ACL2____RUNE.html">rune</a> whose <span class="tt"><a href="COMMON-LISP____CAR.html">car</a></span> is <span class="v">:</span><span class="tt"><a href="ACL2____REWRITE.html">rewrite</a></span> or <span class="v">:</span><span class="tt"><a href="ACL2____DEFINITION.html">definition</a></span> or (2) an event name 
+ corresponding to one or more such <a href="ACL2____RUNE.html">rune</a>s; and <span class="v">(subst1 subst2 ...)</span> 
+ is a non-empty list of substitutions, i.e., of association lists pairing 
+ variables with terms.  First consider the case that <span class="v">x</span> is a <span class="v">:</span><span class="tt"><a href="ACL2____REWRITE.html">rewrite</a></span> or <span class="v">:</span><span class="tt"><a href="ACL2____DEFINITION.html">definition</a></span> <a href="ACL2____RUNE.html">rune</a>.  Recall that without this 
+ hint, the rule named <span class="v">x</span> is used by matching its left-hand side (call it 
+ <span class="v">lhs</span>) against the term currently being considered by the rewriter, that 
+ is, by attempting to find a substitution <span class="v">s</span> such that the instantiation of 
+ <span class="v">lhs</span> using <span class="v">s</span> is equal to that term.  If however the <span class="v">:restrict</span> 
+ hint contains <span class="v">(x subst1 subst2 ...)</span>, then this behavior will be modified 
+ by restricting <span class="v">s</span> so that it must extend <span class="v">subst1</span>; and if there is no 
+ such <span class="v">s</span>, then <span class="v">s</span> is restricted so that it must extend <span class="v">subst2</span>; and 
+ so on, until the list of substitutions is exhausted.  If no such <span class="v">s</span> is 
+ found, then the rewrite or definition rule named <span class="v">x</span> is not applied to that 
+ term.  Finally, if <span class="v">x</span> is an event name corresponding to one or more 
+ <span class="v">:</span><span class="tt"><a href="ACL2____REWRITE.html">rewrite</a></span> or <span class="v">:</span><span class="tt"><a href="ACL2____DEFINITION.html">definition</a></span> <a href="ACL2____RUNE.html">rune</a>s (that is, 
+ <span class="v">x</span> is the ``base symbol'' of such <a href="ACL2____RUNE.html">rune</a>s; see <a href="ACL2____RUNE.html">rune</a>), say 
+ <a href="ACL2____RUNE.html">rune</a>s <span class="v">r1</span>, ... <span class="v">rn</span>, then the meaning is the same except that 
+ <span class="v">(x subst1 subst2 ...)</span> is replaced by <span class="v">(ri subst1 subst2 ...)</span> for each 
+ <span class="v">i</span>.  Once this replacement is complete, the hint may not contain two 
+ members whose <span class="tt"><a href="COMMON-LISP____CAR.html">car</a></span> is the same <a href="ACL2____RUNE.html">rune</a>.</p> 
+ 
+ <p>Note that the substitutions in <span class="v">:restrict</span> hints refer to the variables 
+ actually appearing in the goals, not to the variables appearing in the rule 
+ being restricted.</p> 
+ 
+ <p>The following example, supplied by Mihir Mehta, illustrates the use of 
+ <span class="v">:restrict</span> to handle free variables (in this case, a single free variable 
+ <span class="v">y</span>).  The call of <span class="tt"><a href="ACL2____THM.html">thm</a></span> below fails without the indicated 
+ <span class="v">:restrict</span> hint.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> subsetp-trans
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____SUBSETP.html">subsetp</a> x y) (<a href="COMMON-LISP____SUBSETP.html">subsetp</a> y z)) (<a href="COMMON-LISP____SUBSETP.html">subsetp</a> x z)))
+(<a href="ACL2____DEFTHM.html">defthm</a> subsetp-evens (<a href="ACL2____SUBSETP-EQUAL.html">subsetp-equal</a> (<a href="ACL2____EVENS.html">evens</a> l) l))
+(<a href="ACL2____THM.html">thm</a> (<a href="COMMON-LISP____SUBSETP.html">subsetp</a> (<a href="ACL2____EVENS.html">evens</a> (<a href="ACL2____EVENS.html">evens</a> l)) l)
+     :hints (("Goal" :restrict ((subsetp-trans ((y (<a href="ACL2____EVENS.html">evens</a> l))))))))</pre> 
+ 
+ <p>Here is another example, this one supplied by Bishop Brock.  Suppose that 
+ the database includes the following rewrite rule, which is probably kept <a href="ACL2____DISABLE.html">disable</a>d.  (We ignore the question of how to prove this rule.)</p> 
+ 
+ <pre class="code">cancel-&lt;-*$free:
+(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____RATIONALP.html">rationalp</a> x)
+              (<a href="COMMON-LISP____RATIONALP.html">rationalp</a> y)
+              (<a href="COMMON-LISP____RATIONALP.html">rationalp</a> z))
+         (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP_____C3.html">&lt;</a> y z)
+                (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP_____C3.html">&lt;</a> x 0)
+                    (<a href="COMMON-LISP_____E3.html">&gt;</a> (<a href="COMMON-LISP_____A2.html">*</a> x y) (<a href="COMMON-LISP_____A2.html">*</a> x z))
+                  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP_____E3.html">&gt;</a> x 0)
+                      (<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="COMMON-LISP_____A2.html">*</a> x y) (<a href="COMMON-LISP_____A2.html">*</a> x z))
+                    (<a href="ACL2____HIDE.html">hide</a> (<a href="COMMON-LISP_____C3.html">&lt;</a> y z))))))</pre> 
+ 
+ <p>Then ACL2 can prove the following theorem (unless other rules get in the 
+ way), essentially by multiplying both sides by <span class="v">x</span>.</p> 
+ 
+ <pre class="code">(<a href="ACL2____THM.html">thm</a>
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____RATIONALP.html">rationalp</a> x)
+                (<a href="COMMON-LISP_____C3.html">&lt;</a> 1 x))
+           (<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="COMMON-LISP_____F2.html">/</a> x) 1))
+  :hints
+  (("Goal"
+    :in-theory (<a href="ACL2____ENABLE.html">enable</a> cancel-&lt;-*$free)
+    :restrict ((cancel-&lt;-*$free ((x x) (y (<a href="COMMON-LISP_____F2.html">/</a> x)) (z 1)))))))</pre> 
+ 
+ <p>The <span class="v">:restrict</span> hint above says that the variables <span class="v">x</span>, <span class="v">y</span>, and 
+ <span class="v">z</span> in the rewrite rule <span class="v">cancel-&lt;-*$free</span> above should be instantiated 
+ respectively by <span class="v">x</span>, <span class="v">(<a href="COMMON-LISP_____F2.html">/</a> x)</span>, and <span class="v">1</span>.  Thus <span class="v">(<a href="COMMON-LISP_____C3.html">&lt;</a> y z)</span> becomes 
+ <span class="v">(<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="COMMON-LISP_____F2.html">/</a> x) 1)</span>, and this inequality is replaced by the corresponding 
+ instance of the right-hand-side of <span class="v">cancel-&lt;-*$free</span>.  Since the current 
+ conjecture assumes <span class="v">(<a href="COMMON-LISP_____C3.html">&lt;</a> 1 x)</span>, that instance of the right-hand side 
+ simplifies to</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="COMMON-LISP_____A2.html">*</a> x (<a href="COMMON-LISP_____F2.html">/</a> x)) (<a href="COMMON-LISP_____A2.html">*</a> x 1))</pre> 
+ 
+ <p>which in turn simplifies to <span class="v">(<a href="COMMON-LISP_____C3.html">&lt;</a> 1 x)</span>, a hypothesis in the present 
+ theorem.</p>
+</dd> 
+ 
+ <dt><span class="v">:rw-cache-state</span></dt>
+<p></p> 
+ 
+ <dd><p><span class="v">Value</span> is an element of the list constant 
+ <span class="v">*legal-rw-cache-states*</span>: <span class="v">:atom</span> (the default), <span class="v">nil</span>, <span class="v">t</span>, or 
+ <span class="v">:disabled</span>.  This hint applies to the indicated goal and all its 
+ descendants, to set the so-called ``rw-cache-state'' to the indicated value; 
+ see <a href="ACL2____SET-RW-CACHE-STATE.html">set-rw-cache-state</a>.</p></dd> 
+ 
+ <dt><span class="v">:use</span></dt>
+<p></p> 
+ 
+ <dd>
+<p>Examples of <span class="v">:USE</span> hints are shown near the top of this 
+ documentation topic.</p> 
+ 
+ <p><span class="v">Value</span> is a <a href="ACL2____LEMMA-INSTANCE.html">lemma-instance</a> or a true list of <a href="ACL2____LEMMA-INSTANCE.html">lemma-instance</a>s, indicating that the propositions denoted by the instances be 
+ added as hypotheses to the specified goal: that is, the <span class="v">:use</span> hint 
+ replaces a goal, <span class="v">G</span>, by the new goal, <span class="v">(<a href="ACL2____IMPLIES.html">IMPLIES</a> P G)</span>, where <span class="v">P</span> is 
+ the theorem specified by the (conjunction of the) lemma instances provided. 
+ The <span class="v">:instance</span> form of a <a href="ACL2____LEMMA-INSTANCE.html">lemma-instance</a> permits you to instantiate 
+ the free variables of previously proved theorems any way you wish, even 
+ allowing for differences in <a href="ACL2____PACKAGES.html">packages</a>; see <a href="ACL2____LEMMA-INSTANCE.html">lemma-instance</a> for 
+ details.  These new hypotheses participate fully in all subsequent rewriting, 
+ etc.  If the goal in question is in fact an instance of a previously proved 
+ theorem, you may wish to use <span class="v">:by</span> (documented above).  Sometimes <a href="ACL2____THEORIES.html">theories</a> are helpful when employing <span class="v">:use</span> hints; see <a href="ACL2____MINIMAL-THEORY.html">minimal-theory</a>.</p> 
+ 
+ <p>If the value is the name of a function symbol introduced by <span class="tt"><a href="COMMON-LISP____DEFUN.html">defun</a></span>, 
+ then the normalized (simplified) body of that definition is used; see <a href="ACL2____NORMALIZE.html">normalize</a>.  This behavior differs from that provided by a <span class="v">:by</span> hint, 
+ where the original body of the definition is used.</p>
+</dd> 
+ 
+ </dl>
+</body>
+</html>

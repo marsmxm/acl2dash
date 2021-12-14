@@ -1,0 +1,232 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Comment</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____COMMENT">Click for Comment in the Full Manual</a></h3>
+
+<p>Variant of <span class="tt"><a href="ACL2____PROG2_42.html">prog2$</a></span> to help debug evaluation failures during 
+ proofs</p><p>Semantically, <span class="v">(<a href="ACL2____COMMENT.html">comment</a> x y)</span> equals <span class="v">y</span>; the value of <span class="v">x</span> 
+ is ignored.  Thus <span class="v">comment</span> is much like <span class="tt"><a href="ACL2____PROG2_42.html">prog2$</a></span>.  However, when you 
+ see a call of <span class="v">comment</span> in ACL2 proof output, it will likely be under a 
+ call of <span class="tt"><a href="ACL2____HIDE.html">hide</a></span>, with information that may be helpful in understanding 
+ why the call of <span class="v">hide</span> was inserted.  Below we illustrate the various ways 
+ in which ACL2 may replace a term <span class="v">tm</span> by <span class="v">(<a href="ACL2____HIDE.html">hide</a> (<a href="ACL2____COMMENT.html">comment</a> "..."
+ tm))</span>.  (On occasion you will simply see <span class="v">(<a href="ACL2____HIDE.html">hide</a> tm)</span>; such cases are not 
+ discussed here.)</p> 
+ 
+ <p>Also see <a href="ACL2____HIDE.html">hide</a> for further discussion of how to avoid such proof 
+ failures, and for how to keep the prover from inserting a <span class="v">comment</span> call 
+ under a call of <span class="tt"><a href="ACL2____HIDE.html">hide</a></span>.</p> 
+ 
+ <h3>Evaluation during proofs</h3> 
+ 
+ <p>Forms:</p> 
+ 
+ <pre class="code">(<a href="ACL2____HIDE.html">HIDE</a> (<a href="ACL2____COMMENT.html">COMMENT</a> "Failed attempt to call constrained function &lt;fn&gt;" &lt;term&gt;))
+(<a href="ACL2____HIDE.html">HIDE</a> (<a href="ACL2____COMMENT.html">COMMENT</a> "Failed attempt to call non-executable function &lt;fn&gt;" &lt;term&gt;))</pre> 
+ 
+ <p>Consider the following example.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFSTUB.html">defstub</a> f (x) t)
+(<a href="COMMON-LISP____DEFUN.html">defun</a> g (x) (<a href="COMMON-LISP____CONS.html">cons</a> (f x) x))
+(<a href="COMMON-LISP____DEFUN.html">defun</a> h (x) (<a href="COMMON-LISP____CONS.html">cons</a> x (<a href="COMMON-LISP____CDR.html">cdr</a> (<a href="ACL2____G.html">g</a> x))))
+(<a href="ACL2____THM.html">thm</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (h 3) '(3 . 3)))</pre> 
+ 
+ <p>The proof attempt fails for the <span class="tt"><a href="ACL2____THM.html">thm</a></span> call, indicating the checkpoint 
+ shown below.</p> 
+ 
+ <pre class="code">*** Key checkpoint at the top level: ***
+
+Goal'
+(<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (<a href="ACL2____HIDE.html">HIDE</a> (<a href="ACL2____COMMENT.html">COMMENT</a> "Failed attempt to call constrained function F"
+                      (H 3)))
+       '(3 . 3))</pre> 
+ 
+ <p>The first argument of <span class="v">equal</span> is logically just <span class="v">(h 3)</span>.  But the 
+ <span class="v">comment</span> and <span class="v">hide</span> wrappers are telling us that evaluation of <span class="v">(h
+ 3)</span> failed because it led to a call of the constrained function <span class="v">f</span>.  It 
+ is easy to see why in this case, by looking at the definitions, where <span class="v">h</span> 
+ calls <span class="v">g</span>, which calls <span class="v">f</span>.  But more complicated such failures may be 
+ difficult to understand without such information.  In very complicated cases, 
+ one might even want to use the Lisp debugger after designating a <span class="tt"><a href="ACL2____BREAK_42.html">break$</a></span> call using <span class="tt"><a href="ACL2____TRACE_42.html">trace$</a></span>, like this (here, shown using host Lisp 
+ CCL).</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____TRACE_42.html">trace$</a> (f :entry (<a href="ACL2____BREAK_42.html">break$</a>)))
+ ((F :ENTRY (<a href="ACL2____BREAK_42.html">BREAK$</a>)))
+ACL2 !&gt;(<a href="ACL2____THM.html">thm</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (h 3) '(3 . 3)))
+
+&gt; Break: Break
+&gt; While executing: BREAK$, in process listener(1).
+&gt; Type :GO to continue, :POP to abort, :R for a list of available restarts.
+&gt; If continued: Return from BREAK.
+&gt; Type :? for other options.
+1 &gt; :b ; user input to get backtrace
+ (262932A0) : 0 (<a href="ACL2____BREAK_42.html">BREAK$</a>) 157
+ (262932F0) : 1 (F 3) 141
+ (26293338) : 2 (FUNCALL #'#&lt;(:INTERNAL ACL2_*1*_ACL2::G ACL2_*1*_ACL2::G)&gt; 3) 37
+ (26293350) : 3 (FUNCALL #'#&lt;(:INTERNAL ACL2_*1*_ACL2::H ACL2_*1*_ACL2::H)&gt; 3) 37
+ (26293368) : 4 (RAW-EV-FNCALL H (3) NIL NIL [[.. output elided ..]]</pre> 
+ 
+ <p>This output from Lisp is quite low-level, but reading from the bottom up 
+ provides the following sequence of events.</p> 
+ 
+ <ul> 
+ 
+ <li>4. Call <span class="v">h</span> with argument list <span class="v">(3)</span>.</li> 
+ 
+ <li>3. Call the <a href="ACL2____EXECUTABLE-COUNTERPART.html">executable-counterpart</a> of <span class="v">h</span>.</li> 
+ 
+ <li>2. Call the <a href="ACL2____EXECUTABLE-COUNTERPART.html">executable-counterpart</a> of <span class="v">g</span>.</li> 
+ 
+ <li>1. Attempt to call the constrained function, <span class="v">f</span>.</li> 
+ 
+ </ul> 
+ 
+ <p>An easy way to avoid this proof failure is to avoid execution of calls of 
+ <span class="v">h</span> and <span class="v">g</span>, as follows.</p> 
+ 
+ <pre class="code">(<a href="ACL2____THM.html">thm</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (h 3) '(3 . 3))
+     :hints (("Goal" :in-theory (<a href="ACL2____DISABLE.html">disable</a> (:e g) (:e h)))))</pre> 
+ 
+ <p>(It actually suffices to disable only <span class="v">(:e h)</span>, but the workings of the 
+ ACL2 rewriter are out of scope here.)</p> 
+ 
+ <p>Note that if the offending function is <a href="ACL2____NON-EXECUTABLE.html">non-executable</a> rather than 
+ constrained, in particular if that function is defined using <span class="tt"><a href="ACL2____DEFUN-NX.html">defun-nx</a></span>, 
+ then in the first argument of comment you will see ``non-executable'' instead 
+ of ``constrained''.</p> 
+ 
+ <h3>Evaluation during building a term</h3> 
+ 
+ <p>Form:</p> 
+ 
+ <pre class="code">(<a href="ACL2____HIDE.html">HIDE</a>
+ (<a href="ACL2____COMMENT.html">COMMENT</a>
+  "Failed attempt (when building a term) to call constrained function &lt;fn&gt;"
+  &lt;term&gt;))</pre> 
+ 
+ <p>Consider how ACL2 approaches the proof of the non-theorem below.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFSTUB.html">defstub</a> foo (x) t)
+(<a href="ACL2____DEFUND.html">defund</a> bar (x) (foo x))
+(<a href="ACL2____THM.html">thm</a> (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> x 3) (<a href="COMMON-LISP____EQUAL.html">equal</a> (bar x) yyy)))</pre> 
+ 
+ <p>The prover attacks the <span class="tt"><a href="ACL2____THM.html">thm</a></span> event by substituting the constant 
+ <span class="v">'3</span> for <span class="v">x</span>.  But the prover attempts to evaluate <span class="v">(bar 3)</span> when 
+ doing that substitution, and the evaluation fails because <span class="v">bar</span> calls the 
+ undefined function <span class="v">foo</span>.  The checkpoint is as follows.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____EQUAL.html">EQUAL</a>
+ (<a href="ACL2____HIDE.html">HIDE</a>
+  (<a href="ACL2____COMMENT.html">COMMENT</a>
+     "Failed attempt (when building a term) to call constrained function FOO"
+     (BAR 3)))
+ YYY)</pre> 
+ 
+ <h3>Failure to expand using a rule</h3> 
+ 
+ <p>Form:</p> 
+ 
+ <pre class="code">(<a href="ACL2____HIDE.html">HIDE</a> (<a href="ACL2____COMMENT.html">COMMENT</a> "Unable to expand using the rule &lt;name&gt;"
+               &lt;term&gt;))</pre> 
+ 
+ <p>Consider how ACL2 approaches the proof for the second event below.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> nth-open (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x) (<a href="ACL2____POSP.html">posp</a> n))
+                          (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____NTH.html">nth</a> n x) (<a href="COMMON-LISP____NTH.html">nth</a> (<a href="COMMON-LISP____1-.html">1-</a> n) (<a href="COMMON-LISP____CDR.html">cdr</a> x))))
+  :rule-classes ((:definition :controller-alist ((<a href="COMMON-LISP____NTH.html">nth</a> t t)) :install-body t)))
+(<a href="ACL2____THM.html">thm</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____NTH.html">nth</a> i y) zzz)
+     :hints (("Goal" :expand (<a href="COMMON-LISP____NTH.html">nth</a> i y) :do-not-induct t)))</pre> 
+ 
+ <p>The checkpoint is as follows.  What happened is that the rule <span class="v">nth-open</span> 
+ had a hypothesis that was false when the rule was attempted for the term 
+ <span class="v">(<a href="COMMON-LISP____NTH.html">nth</a> i y)</span>.</p> 
+ 
+ <pre class="code">(<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____NOT.html">NOT</a> (<a href="COMMON-LISP____CONSP.html">CONSP</a> Y))
+         (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (<a href="ACL2____HIDE.html">HIDE</a> (<a href="ACL2____COMMENT.html">COMMENT</a> "Unable to expand using the rule NTH-OPEN"
+                               (<a href="COMMON-LISP____NTH.html">NTH</a> I Y)))
+                ZZZ))</pre> 
+ 
+ <h3>Failure due to disabled or missing warrants</h3> 
+ 
+ <p>Forms:</p> 
+ 
+ <pre class="code">(<a href="ACL2____HIDE.html">HIDE</a> (<a href="ACL2____COMMENT.html">COMMENT</a> "Call failed because the rule apply$-&lt;fn&gt; is disabled"
+      &lt;term&gt;))
+(<a href="ACL2____HIDE.html">HIDE</a> (<a href="ACL2____COMMENT.html">COMMENT</a> "Call failed because the warrant for &lt;fn&gt; is not known to be true"
+      &lt;term&gt;))</pre> 
+ 
+ <p>The first of these forms may appear when an attempt to evaluate a call of 
+ <span class="tt"><a href="ACL2____APPLY_42.html">apply$</a></span> fails because a necessary <a href="ACL2____WARRANT.html">warrant</a> is disable)d.  The 
+ second form may appear when the warrant is not known to be true in the present 
+ context, either because it is known to be false or because it cannot be 
+ assumed true because forcing is <a href="ACL2____DISABLE.html">disable</a>d.  In the following example, 
+ the attempt to simplify the call of <span class="v">apply$</span> in the theorem ultimately 
+ leads to an attempt to evaluate a call of <span class="tt"><a href="ACL2____EV_42.html">ev$</a></span>, which ultimately fails 
+ because it leads to a call to evaluate <span class="v">(<a href="ACL2____APPLY_42.html">apply$</a> 'bar '(3))</span> <span class="v">bar</span>.  That 
+ call causes an error because the warrant is unavailable, because the rule 
+ <span class="v">apply$-bar</span> is disabled, hence cannot rewrite a term <span class="v">(<a href="ACL2____APPLY_42.html">apply$</a> 'bar
+ args)</span> to <span class="v">(bar (<a href="COMMON-LISP____CAR.html">car</a> args))</span>.</p> 
+ 
+ <pre class="code">(<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "projects/apply/top" :dir :system)
+(<a href="ACL2____DEFUN_42.html">defun$</a> bar (x) x)
+(<a href="ACL2____THM.html">thm</a> (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____WARRANT.html">warrant</a> bar)
+              (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____APPLY_42.html">apply$</a> '(<a href="COMMON-LISP____LAMBDA.html">lambda</a> (y) (bar y)) '(3)) 3))
+     :hints (("Goal" :in-theory (<a href="ACL2____DISABLE.html">disable</a> apply$-bar ev$))))</pre> 
+ 
+ <p>The checkpoint in the proof for the <span class="v">thm</span> just above is as follows.</p> 
+ 
+ <pre class="code">(<a href="ACL2____IMPLIES.html">IMPLIES</a>
+  (APPLY$-WARRANT-BAR)
+  (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (<a href="ACL2____HIDE.html">HIDE</a> (<a href="ACL2____COMMENT.html">COMMENT</a> "Call failed because the rule APPLY$-BAR is disabled"
+                        (<a href="ACL2____EV_42.html">EV$</a> '(BAR Y) '((Y . 3)))))
+         3))</pre> 
+ 
+ <p>Similarly, if we instead submit the following event, we see the other such 
+ message, in this case about a false warrant.</p> 
+ 
+ <pre class="code">(<a href="ACL2____THM.html">thm</a> (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____WARRANT.html">warrant</a> bar))
+              (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____APPLY_42.html">apply$</a> '(<a href="COMMON-LISP____LAMBDA.html">lambda</a> (y) (bar y)) '(3)) 3))
+     :hints (("Goal" :in-theory (<a href="ACL2____DISABLE.html">disable</a> ev$))))</pre> 
+ 
+ <p>Here is the resulting checkpoint.</p> 
+ 
+ <pre class="code">(<a href="ACL2____IMPLIES.html">IMPLIES</a>
+ (<a href="COMMON-LISP____NOT.html">NOT</a> (APPLY$-WARRANT-BAR))
+ (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (<a href="ACL2____HIDE.html">HIDE</a> (<a href="ACL2____COMMENT.html">COMMENT</a> "Call failed because the warrant for BAR is not known to be true"
+                       (<a href="ACL2____EV_42.html">EV$</a> '(BAR Y) '((Y . 3)))))
+        3))</pre> 
+ 
+ <p>Our final example illustrates a failure due to forcing being disabled.  The 
+ use of <span class="tt"><a href="ACL2____LOOP_42.html">loop$</a></span> in the definition of <span class="v">bar</span> expands to create a call of 
+ <span class="tt"><a href="ACL2____EV_42.html">ev$</a></span>, which cannot be simplified during the proof of the <span class="tt"><a href="ACL2____THM.html">thm</a></span> 
+ below because the necessary warrant hypothesis is missing and cannot be 
+ forced, since forcing is disabled (see also <a href="ACL2____DISABLE-FORCING.html">disable-forcing</a>).</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFUN_42.html">defun$</a> hello (x)
+   (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t))
+   (<a href="COMMON-LISP____LIST.html">list</a> 'hi x))
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> bar (lst)
+   (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____TRUE-LISTP.html">true-listp</a> lst)))
+   (<a href="ACL2____LOOP_42.html">loop$</a> for name in lst collect (hello name))))
+
+(<a href="ACL2____THM.html">thm</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (bar '(john))
+            '((hi john)))
+     :hints (("Goal" :in-theory (<a href="ACL2____DISABLE.html">disable</a> (:e force)))))</pre> 
+ 
+ <p>Here is the resulting checkpoint.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____EQUAL.html">EQUAL</a>
+ (<a href="ACL2____HIDE.html">HIDE</a>
+     (<a href="ACL2____COMMENT.html">COMMENT</a>
+          "Call failed because the warrant for HELLO is not known to be true"
+          (<a href="ACL2____EV_42.html">EV$</a> '(HELLO LOOP$-IVAR)
+               '((LOOP$-IVAR . JOHN)))))
+ '(HI JOHN))</pre>
+</body>
+</html>

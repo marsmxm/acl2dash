@@ -1,0 +1,95 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Stv-expand-name</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____STV-EXPAND-NAME">Click for Stv-expand-name in the Full Manual</a></h3>
+
+<p>Expand a name from a symbolic test vector's line into explicit lists 
+of E bits.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(stv-expand-name x type mod) → lsb-bits</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">x</span> — The name that the user put at the start of some STV line.</dd> 
+  <dd>
+<span class="tt">type</span> — Either <span class="v">:i</span> or <span class="v">:o</span> and says whether this should be the name 
+          of an input or output.<br>    <font color="#606060">Guard <span class="v">(<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____EQ.html">eq</a> type :i) (<a href="COMMON-LISP____EQ.html">eq</a> type :o))</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">mod</span> — The <a href="ACL2____ESIM.html">esim</a> module we are working in, so we can look up names.</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">lsb-bits</span> — An LSB-first list of E bits for a non-hierarchical valid 
+                      STV signal name, e.g., <span class="v">(|foo[0]| |foo[1]| ...)</span>.</dd> 
+ 
+</dl></div> 
+<p>Recall from <a href="ACL2____SYMBOLIC-TEST-VECTOR-FORMAT.html">symbolic-test-vector-format</a> that signal 
+names for :input and :output lines can be either:</p> 
+ 
+<ul> 
+<li>A string that names a particular input bus,</li> 
+<li>A string that is a Veriog-style bit- or part-select from a particular input 
+bus, or</li> 
+<li>An explicit list of E bits (in LSB-first order).</li> 
+</ul> 
+ 
+<p>Here, our goal is to convert any such name, <span class="v">x</span>, into the explicit bit 
+list form.  If <span class="v">x</span> is already a list of bits then this is trivial. 
+Otherwise, we have to look it up in the module.  We do basic error checking to 
+make sure that the name refers to valid input or output bits.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>stv-expand-name</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ stv-expand-name (x type mod)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____EQ.html">eq</a> type :i) (<a href="COMMON-LISP____EQ.html">eq</a> type :o))))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'stv-expand-name))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+   ((pat (gpl type mod))
+    (modname (gpl :n mod))
+    ((when (<a href="COMMON-LISP____STRINGP.html">stringp</a> x))
+     (<a href="ACL2____B_A2.html">b*</a>
+      (((<a href="ACL2____MV.html">mv</a> ?err basename msb lsb)
+        (<a href="ACL2____STV-WIRENAME-PARSE.html">stv-wirename-parse</a> x))
+       ((when err) (<a href="ACL2____RAISE.html">raise</a> "~s0" err))
+       (basename-bits (<a href="VL2014____ESIM-VL-FIND-IO.html">vl2014::esim-vl-find-io</a> basename pat))
+       ((unless basename-bits)
+        (<a href="ACL2____RAISE.html">raise</a>
+         "Trying to expand ~s0, but there is no ~s1 named ~s2 in ~
+                      ~x3."
+         x (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQ.html">eq</a> type :i) "input" "output")
+         basename modname))
+       ((unless (<a href="COMMON-LISP____AND.html">and</a> msb lsb)) basename-bits)
+       (expect-bits
+            (<a href="VL2014____VL-EMODWIRES-FROM-MSB-TO-LSB.html">vl2014::vl-emodwires-from-msb-to-lsb</a> basename lsb msb))
+       ((unless (ordered-subsetp expect-bits basename-bits))
+        (<a href="ACL2____RAISE.html">raise</a>
+         "Trying to expand ~s0, but the bits being asked for ~s1.~% ~
+                      - Found wires: ~x2 through ~x3~% ~
+                      - Want wires:  ~x4 through ~x5."
+         x
+         (<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2____SUBSETP-EQUAL.html">subsetp-equal</a> expect-bits basename-bits)
+             "are not in the right order"
+             "are not found")
+         (<a href="COMMON-LISP____CAR.html">car</a> basename-bits)
+         (<a href="COMMON-LISP____CAR.html">car</a> (<a href="COMMON-LISP____LAST.html">last</a> basename-bits))
+         (<a href="COMMON-LISP____CAR.html">car</a> expect-bits)
+         (<a href="COMMON-LISP____CAR.html">car</a> (<a href="COMMON-LISP____LAST.html">last</a> expect-bits)))))
+      expect-bits))
+    ((unless (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> x))
+     (<a href="ACL2____RAISE.html">raise</a>
+      "Invalid input name (expected string or a list of e bits), but ~
+                found ~x0."
+      x))
+    (flat-pat (<a href="ACL2____PAT-FLATTEN1.html">pat-flatten1</a> pat))
+    ((unless (<a href="ACL2____SUBSETP-EQUAL.html">subsetp-equal</a> x flat-pat))
+     (<a href="ACL2____RAISE.html">raise</a>
+         "Trying to provide bindings for ~s0 that don't exist: ~x1."
+         (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQ.html">eq</a> type :i) "inputs" "outputs")
+         (<a href="ACL2____SET-DIFFERENCE-EQUAL.html">set-difference-equal</a> flat-pat x))))
+   x)))</pre> 
+
+</body>
+</html>

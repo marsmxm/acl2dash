@@ -1,0 +1,93 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Toposort-aux</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=DEPGRAPH____TOPOSORT-AUX">Click for Toposort-aux in the Full Manual</a></h3>
+
+<p>Main depth-first topological sorting routine.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(toposort-aux queue seen graph) → (mv successp seen)</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">queue</span> — All the nodes we have left to explore.  Initially this is 
+           just <span class="v">(<a href="ACL2____ALIST-KEYS.html">alist-keys</a> graph</span>.</dd> 
+  <dd>
+<span class="tt">seen</span> — Fast alist that binds nodes to their <i>status</i> (see below).</dd> 
+  <dd>
+<span class="tt">graph</span> — Fast alist that binds nodes to the lists of their dependents. 
+           Remains constant as we recur.</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">successp</span> — We return successfully only if we're able to explore all of the 
+                 nodes in the queue without finding a loop.</dd> 
+<dd>
+<span class="tt">seen</span> — Final <span class="v">seen</span> fast alist, from which we can extract the 
+                 topological order or a loop.</dd> 
+ 
+</dl></div> 
+<p>The <i>status</i> of each node is either:</p> 
+ 
+<ul> 
+<li>unbound, if we haven't started it yet, or bound to</li> 
+<li>
+<span class="v">:started</span> if we are currently exploring its dependents, or</li> 
+<li>
+<span class="v">:finished</span> if we are done exploring it.</li> 
+</ul> 
+ 
+<p>On success, a topologically sorted list of nodes can be extracted from 
+<span class="v">seen</span> by looking at the <span class="v">:finished</span> nodes using <a href="DEPGRAPH____EXTRACT-TOPOLOGICAL-ORDER.html">extract-topological-order</a>.  On failure, the loop we found can be extracted 
+from <span class="v">seen</span> by looking at the <span class="v">:started</span> nodes with <a href="DEPGRAPH____EXTRACT-TOPOLOGICAL-LOOP.html">extract-topological-loop</a>.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>toposort-aux</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ toposort-aux (queue seen graph)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'toposort-aux))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+   (((when (<a href="COMMON-LISP____ATOM.html">atom</a> queue)) (<a href="ACL2____MV.html">mv</a> t seen))
+    (orig-seen-al seen)
+    (node (<a href="COMMON-LISP____CAR.html">car</a> queue))
+    (status (<a href="ACL2____HONS-GET.html">hons-get</a> node seen))
+    ((when (<a href="COMMON-LISP____EQ.html">eq</a> (<a href="COMMON-LISP____CDR.html">cdr</a> status) :finished))
+     (<a href="DEPGRAPH____TOPOSORT-AUX.html">toposort-aux</a> (<a href="COMMON-LISP____CDR.html">cdr</a> queue) seen graph))
+    ((when status)
+     (<a href="ACL2____MV.html">mv</a> nil (<a href="ACL2____HONS-ACONS.html">hons-acons</a> node :started seen)))
+    (deps-look (<a href="ACL2____HONS-GET.html">hons-get</a> node graph))
+    ((unless deps-look)
+     (<a href="ACL2____ER.html">er</a> hard? 'toposort-aux
+         "No binding for ~x0." node)
+     (<a href="DEPGRAPH____TOPOSORT-AUX.html">toposort-aux</a> (<a href="COMMON-LISP____CDR.html">cdr</a> queue) seen graph))
+    (seen (<a href="ACL2____HONS-ACONS.html">hons-acons</a> node :started seen))
+    (deps (<a href="COMMON-LISP____CDR.html">cdr</a> deps-look))
+    ((<a href="ACL2____MV.html">mv</a> deps-okp seen)
+     (<a href="DEPGRAPH____TOPOSORT-AUX.html">toposort-aux</a> deps seen graph))
+    ((unless deps-okp) (<a href="ACL2____MV.html">mv</a> nil seen))
+    (seen (<a href="ACL2____HONS-ACONS.html">hons-acons</a> node :finished seen))
+    ((unless (<a href="ACL2____MBT.html">mbt</a> (<a href="ACL2____O_C3.html">o&lt;</a> (toposort-measure (<a href="COMMON-LISP____CDR.html">cdr</a> queue)
+                                        seen graph)
+                      (toposort-measure queue orig-seen-al graph))))
+     (<a href="ACL2____MV.html">mv</a> nil seen)))
+   (<a href="DEPGRAPH____TOPOSORT-AUX.html">toposort-aux</a> (<a href="COMMON-LISP____CDR.html">cdr</a> queue) seen graph))))</pre> 
+<p><b>Theorem: </b>cons-listp-of-toposort-aux</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+  cons-listp-of-toposort-aux
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____CONS-LISTP.html">cons-listp</a> seen)
+           (<a href="ACL2____CONS-LISTP.html">cons-listp</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 1 (<a href="DEPGRAPH____TOPOSORT-AUX.html">toposort-aux</a> queue seen graph)))))</pre> 
+<p><b>Theorem: </b>subsetp-equal-of-alist-keys-of-toposort-aux</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+   subsetp-equal-of-alist-keys-of-toposort-aux
+   (<a href="ACL2____IMPLIES.html">implies</a>
+        (<a href="ACL2____SUBSETP-EQUAL.html">subsetp-equal</a> (<a href="ACL2____ALIST-KEYS.html">alist-keys</a> seen)
+                       (<a href="ACL2____ALIST-KEYS.html">alist-keys</a> graph))
+        (<a href="ACL2____SUBSETP-EQUAL.html">subsetp-equal</a>
+             (<a href="ACL2____ALIST-KEYS.html">alist-keys</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 1 (<a href="DEPGRAPH____TOPOSORT-AUX.html">toposort-aux</a> queue seen graph)))
+             (<a href="ACL2____ALIST-KEYS.html">alist-keys</a> graph))))</pre> 
+<p><b>Theorem: </b>toposort-aux-consp-on-failure</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     toposort-aux-consp-on-failure
+     (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 0 (<a href="DEPGRAPH____TOPOSORT-AUX.html">toposort-aux</a> queue seen graph)))
+              (<a href="COMMON-LISP____CONSP.html">consp</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 1 (<a href="DEPGRAPH____TOPOSORT-AUX.html">toposort-aux</a> queue seen graph)))))</pre> 
+
+</body>
+</html>

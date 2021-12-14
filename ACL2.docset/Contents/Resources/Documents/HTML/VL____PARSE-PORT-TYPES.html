@@ -1,0 +1,150 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Parse-port-types</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL____PARSE-PORT-TYPES">Click for Parse-port-types in the Full Manual</a></h3>
+
+<p>Handling of SystemVerilog-2012 port types.</p><h3>Background</h3> 
+ 
+<p>Here are a few key grammar rules within SystemVerilog ports:</p> 
+ 
+<pre class="code">net_port_type ::= [ net_type ] data_type_or_implicit
+                | identifier
+                | 'interconnect' implicit_data_type
+
+variable_port_type ::= var_data_type
+
+var_data_type ::= data_type
+                | 'var' data_type_or_implicit
+
+data_type_or_implicit ::= data_type | implicit_data_type
+
+implicit_data_type ::= [ signing ] { packed_dimension }</pre> 
+ 
+<p>These are used in two places.  The first is in non-ANSI style SystemVerilog 
+port declarations, where we have:</p> 
+ 
+<pre class="code">inout_declaration  ::= 'inout' net_port_type      list_of_port_identifiers
+
+input_declaration  ::= 'input' net_port_type      list_of_port_identifiers
+                     | 'input' variable_port_type list_of_variable_identifiers
+
+output_declaration ::= 'output' net_port_type      list_of_port_identifiers
+                     | 'output' variable_port_type list_of_variable_port_identifiers
+
+ref_declaration    ::= 'ref'    variable_port_type list_of_variable_identifiers</pre> 
+ 
+<p>The other is in ANSI-style SystemVerilog port declarations, where we 
+have some trivial wrappers:</p> 
+ 
+<pre class="code">net_port_header       ::= [port_direction] net_port_type
+
+variable_port_header  ::= [port_direction] variable_port_type
+
+interface_port_header ::= identifier [ '.' identifier ]
+                        | 'interface' [ '.' identifier ]</pre> 
+ 
+<p>And then the main port declaration syntax:</p> 
+ 
+<pre class="code">ansi_port_declaration ::=
+    [ net_port_header | interface_port_header ] identifier {unpacked_dimension} [ '=' expression ]
+  | [ variable_port_header ]                    identifier {variable_dimension} [ '=' expression ]
+  | [ port_direction ] '.' identifier '(' [expression] ')'</pre> 
+ 
+<h3>Parsing Port Types</h3> 
+ 
+<p>Determining the type of a port is tricky.  Consider the above rules and 
+suppose we're past any port direction stuff.  Then,</p> 
+ 
+<ul> 
+ 
+<li>In the non-ANSI case, we need to be able to recognize whether we have a 
+<span class="v">net_port_type</span> or <span class="v">variable_port_type</span>.</li> 
+ 
+<li>In the ANSI case, we need to recognize whether we have a 
+<span class="v">net_port_type</span>, <span class="v">variable_port_type</span>, or 
+<span class="v">interface_port_header</span>.</li> 
+ 
+</ul> 
+ 
+<p>In either case, the port type is followed by an identifier (the port name), 
+which may have then be followed by unpacked/variable dimensions.  So to handle 
+the trickier ANSI case, we basically want to parse:</p> 
+ 
+<pre class="code">my_port_type ::= net_port_type
+               | variable_port_type
+               | interface_port_type
+
+net_port_type ::= [net_type] data_type
+                | [net_type] [signing] {packed_dimension}
+                | identifier
+                | 'interconnect' [signing] {packed_dimension}
+
+variable_port_type ::= data_type
+                     | 'var' data_type
+                     | 'var' [signing] {packed_dimension}
+
+interface_port_header ::= identifier [ '.' identifier ]
+                        | 'interface' [ '.' identifier ]</pre> 
+ 
+<p>Where <span class="v">my_port_type</span> is followed by an identifier and perhaps dimensions. 
+Much of this is easy to handle: it's easy to identify the <span class="v">net_type</span> 
+keywords, the <span class="v">signing</span> keywords, the <span class="v">var</span> and <span class="v">interface</span> 
+keywords.</p> 
+ 
+<p>The tricky case is what to do if we find an identifier.  A leading 
+identifier might be:</p> 
+ 
+<ol> 
+ 
+<li>Port name.  This can happen in the <span class="v">net_port_type</span> case, where there is 
+no net_type, signing, or dimensions.  In this case, the identifier might be 
+followed by its unpacked dimensions.</li> 
+ 
+<li>Data type name.  In the <span class="v">variable_port_type</span> or <span class="v">net_port_type</span> 
+cases, we can have just a plain data type, which could be the name of a 
+user-defined type like <span class="v">foo_t</span>.  In this case, the type name could be 
+followed by packed dimensions that are part of the data type, but which come 
+before the port name.</li> 
+ 
+<li>Interface name.  In the <span class="v">interface_port_header</span> case, we can have just a 
+plain identifier that names an interface.  Such an identifier must be followed 
+by the port name or a period for modports.</li> 
+ 
+</ol> 
+ 
+<p>Both NCVerilog and VCS appear to require uses of data type names to come 
+earlier in the parse order.  However, they allow interface names to be used 
+even before the interface is defined.</p> 
+ 
+<h3>Ruling out Interfaces</h3> 
+ 
+<p>I believe it is the case that, whenever we see <span class="v">identifier . identifier</span>, 
+we can assume we are in the interface case.  This is difficult to be sure of, 
+but I've at least run some experiments on NCV/VCS to try to do things like:</p> 
+ 
+<pre class="code">module tricky;
+  typedef logic [2:0] foo_t;
+endmodule
+
+module m (tricky.foo_t a);
+  ...
+endmodule</pre> 
+ 
+<p>See in particular the <span class="v">ifport*</span> files in the <span class="v">vl/failtest</span> directory. 
+Fortunately, both VCS and NCV appear to reject these sorts of attempts.  At any 
+rate, if this is correct, then when we are parsing a port and see <span class="v">identifier
+. identifier</span>, we can be sure it is an interface.</p> 
+ 
+<p>The other tricky possibility is that we have a port such as <span class="v">foo_t foo</span>. 
+In this case, <span class="v">foo_t</span> might be an interface or a data type.  We do basic 
+parsing in <a href="VL____VL-PARSE-PORT-DECLARATION-HEAD-2012.html">vl-parse-port-declaration-head-2012</a> and then resolve whether 
+we got a datatype or interface after parsing, in <a href="VL____PORT-RESOLVE.html">port-resolve</a>.</p> 
+ 
+
+</body>
+</html>

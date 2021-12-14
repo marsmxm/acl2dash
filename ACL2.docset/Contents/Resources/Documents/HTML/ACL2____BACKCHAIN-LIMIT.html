@@ -1,0 +1,143 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Backchain-limit</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____BACKCHAIN-LIMIT">Click for Backchain-limit in the Full Manual</a></h3>
+
+<p>Limiting the effort expended on relieving hypotheses</p><p>Before ACL2 can apply a rule with hypotheses, it must establish 
+ that the hypotheses are true.  (We ignore the relaxing of this requirement 
+ afforded by <span class="tt"><a href="ACL2____CASE-SPLIT.html">case-split</a></span>s and <span class="tt"><a href="ACL2____FORCE.html">force</a></span>d hypotheses.)  ACL2 
+ typically establishes each hypothesis by backchaining — instantiating 
+ the hypothesis and then rewriting it recursively.  Here we describe how ACL2 
+ allows the user to limit backchaining.  At the end, below, we describe the 
+ function <span class="tt"><a href="ACL2____BACKCHAIN-LIMIT.html">backchain-limit</a></span>.</p> 
+ 
+ <p>Each hypothesis of a <span class="tt"><a href="ACL2____REWRITE.html">rewrite</a></span>, <span class="tt"><a href="ACL2____META.html">meta</a></span>, <span class="tt"><a href="ACL2____LINEAR.html">linear</a></span>, or 
+ <span class="tt"><a href="ACL2____TYPE-PRESCRIPTION.html">type-prescription</a></span> rule is assigned a backchain-limit when the rule is 
+ stored.  By default, this limit is <span class="v">nil</span>, denoting infinity (no limit). 
+ However, the value used for the default may be set to a non-negative integer 
+ (or to <span class="v">nil</span>) by the user; see <a href="ACL2____SET-DEFAULT-BACKCHAIN-LIMIT.html">set-default-backchain-limit</a>.  The 
+ default is overridden when a <span class="v">:backchain-limit-lst</span> is supplied explicitly 
+ with the rule; see <a href="ACL2____RULE-CLASSES.html">rule-classes</a>.  The number of recursive applications 
+ of backchaining starting with the hypothesis of a rule is limited to the 
+ backchain-limit associated with that hypothesis.</p> 
+ 
+ <p>Moreover, the user may set global backchain-limits that limit the total 
+ backchaining depth.  See <a href="ACL2____SET-BACKCHAIN-LIMIT.html">set-backchain-limit</a>.  One limit is for the use 
+ of <span class="tt"><a href="ACL2____REWRITE.html">rewrite</a></span>, <span class="tt"><a href="ACL2____META.html">meta</a></span>, and <span class="tt"><a href="ACL2____LINEAR.html">linear</a></span> rules, while the other 
+ limit is for so-called ``<a href="ACL2____TYPE-SET.html">type-set</a> reasoning'', which uses rules of 
+ class <span class="tt"><a href="ACL2____TYPE-PRESCRIPTION.html">type-prescription</a></span> rules.  The two limits operate independently. 
+ Below, we discuss the first kind of backchain limits, i.e., for other than 
+ <span class="tt"><a href="ACL2____TYPE-PRESCRIPTION.html">type-prescription</a></span> rules, except as otherwise indicated; but the 
+ mechanism for those rules is similar.</p> 
+ 
+ <p>Below we lay out the precise sense in which a global backchain-limit 
+ interacts with the backchain-limits of individual rules in order to limit 
+ backchaining.  But first we note that when further backchaining is disallowed, 
+ ACL2 can still prove a hypothesis in a given context by using that contextual 
+ information.  In fact, <a href="ACL2____TYPE-SET.html">type-set</a> reasoning may be used (except that a 
+ weaker version of it is used in the second case above, i.e., where we are 
+ already doing type-set reasoning).  Thus, the relieving of hypotheses may be 
+ limited to the use of contextual information (without backchaining, i.e., 
+ without recursively rewriting hypotheses) by executing <span class="v">:set-backchain-limit
+ 0</span>.</p> 
+ 
+ <p>Recall that there are two sorts of backchain limits: those applied to 
+ hypotheses of individual rules, as assigned by their <span class="v">:</span><span class="tt"><a href="ACL2____RULE-CLASSES.html">rule-classes</a></span> or else taken from the default (see <a href="ACL2____SET-DEFAULT-BACKCHAIN-LIMIT.html">set-default-backchain-limit</a>); and the global limit, initially <span class="v">nil</span> (no 
+ limit) but settable with <span class="v">:</span><span class="tt"><a href="ACL2____SET-BACKCHAIN-LIMIT.html">set-backchain-limit</a></span>.  Here is how these 
+ two types of limits interact to limit backchaining, i.e., recursive rewriting 
+ of hypotheses.  ACL2 maintains a current backchain limit, which is the limit 
+ on the depth of recursive calls to the rewriter, as well as a current 
+ backchain depth, which is initially 0 and is incremented each time ACL2 
+ backchains (and is decremented when a backchain completes).  When ACL2 begins 
+ to rewrite a literal (crudely, one of the ``top-level'' terms of the goal 
+ currently being worked on), it sets the current backchain-limit to the global 
+ value, which is initially <span class="v">nil</span> but can be set using <span class="v">:</span><span class="tt"><a href="ACL2____SET-BACKCHAIN-LIMIT.html">set-backchain-limit</a></span>.  When ACL2 is preparing to relieve a hypothesis by 
+ backchaining (hence, after it has already tried type-set reasoning), it first 
+ makes sure that the current backchain limit is greater than the current 
+ backchain depth.  If not, then it refuses to relieve that hypothesis. 
+ Otherwise, it increments the current backchain depth and calculates a new 
+ current backchain-limit by taking the minimum of two values: the existing 
+ current backchain-limit, and the sum of the current backchain depth and the 
+ backchain-limit associated with the hypothesis.  Thus, ACL2 only modifies the 
+ current backchain-limit if it is necessary to decrease that limit in order to 
+ respect the backchain limit associated with the hypothesis.</p> 
+ 
+ <p>We illustrate with the following examples.</p> 
+ 
+ <pre class="code">; We stub out some functions so that we can reason about them.
+
+(<a href="ACL2____DEFSTUB.html">defstub</a> p0 (x) t)
+(<a href="ACL2____DEFSTUB.html">defstub</a> p1 (x) t)
+(<a href="ACL2____DEFSTUB.html">defstub</a> p2 (x) t)
+(<a href="ACL2____DEFSTUB.html">defstub</a> p3 (x) t)
+
+; Initially, the default-backchain-limit is nil, or infinite.
+
+(<a href="ACL2____DEFAXIOM.html">defaxiom</a> p2-implies-p1-limitless
+  (<a href="ACL2____IMPLIES.html">implies</a> (p2 x)
+           (p1 x)))
+
+; The following rule will have a backchain-limit of 0.
+
+(<a href="ACL2____DEFAXIOM.html">defaxiom</a> p1-implies-p0-limit-0
+  (<a href="ACL2____IMPLIES.html">implies</a> (p1 x)
+           (p0 x))
+  :rule-classes ((:rewrite :backchain-limit-lst 0)))
+
+; We have (p2 x) ==&gt; (p1 x) ==&gt; (p0 x).  We wish to establish that
+; (p2 x) ==&gt; (p0 x).  Normally, this would be no problem, but here
+; we fail because ACL2 cannot establish (p0 x) by type-set reasoning
+; alone.
+
+(<a href="ACL2____THM.html">thm</a>
+  (<a href="ACL2____IMPLIES.html">implies</a> (p2 x)
+           (p0 x)))
+
+; We set the default-backchain-limit (for rewriting) to 1.
+
+:set-default-backchain-limit 1
+
+; The following is more powerful than p1-implies-p0-limit-0
+; because it can use rewrite rules to establish (p1 x).
+
+(<a href="ACL2____DEFAXIOM.html">defaxiom</a> p1-implies-p0-limit-1
+  (<a href="ACL2____IMPLIES.html">implies</a> (p1 x)
+           (p0 x)))
+
+; This theorem will succeed:
+
+(<a href="ACL2____THM.html">thm</a>
+  (<a href="ACL2____IMPLIES.html">implies</a> (p2 x)
+           (p0 x)))
+
+; We return the default-backchain-limit to its initial value.
+
+:set-default-backchain-limit nil
+
+; Here is our last axiom.
+
+(<a href="ACL2____DEFAXIOM.html">defaxiom</a> p3-implies-p2-limitless
+  (<a href="ACL2____IMPLIES.html">implies</a> (p3 x)
+           (p2 x)))
+
+; We now have (p3 x) ==&gt; (p2 x) ==&gt; (p1 x) ==&gt; (p0 x).  However the
+; rule p1-implies-p0-limit-1 has a backchain-limit of 1; hence we
+; are not allowed to backchain far enough back to use
+; p3-implies-p2-limitless.  We therefore lose.
+
+(<a href="ACL2____DEFTHM.html">defthm</a> will-fail
+  (<a href="ACL2____IMPLIES.html">implies</a> (p3 x)
+           (p0 x)))</pre> 
+ 
+ <p>Finally, we remark that to see the current global backchain-limits, issue 
+ the following commands.</p> 
+ 
+ <pre class="code">(<a href="ACL2____BACKCHAIN-LIMIT.html">backchain-limit</a> wrld :ts) ; backchain limit for type-set reasoning
+(<a href="ACL2____BACKCHAIN-LIMIT.html">backchain-limit</a> wrld :rewrite) ; backchain limit for rewriting</pre>
+</body>
+</html>

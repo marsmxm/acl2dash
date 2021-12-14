@@ -1,0 +1,874 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Developers-guide-background</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____DEVELOPERS-GUIDE-BACKGROUND">Click for Developers-guide-background in the Full Manual</a></h3>
+
+<p>Some Implementation Background</p><font color="#c00000"> 
+ <p>When background is found to be lacking in this topic, it might be acquired 
+ by querying the acl2-devel mailing list.  In that case it would probably be 
+ good to extend this chapter by adding the background that had been 
+ lacking.</p> 
+ </font> 
+ 
+ <h3>Source files</h3> 
+ 
+ <p>ACL2 has many source files.  <font color="#c00000">The definitive list of 
+ source files is the value of the constant <span class="v">*acl2-files*</span> found in source 
+ file <span class="v">acl2.lisp</span>.</font> This list is consistent with the list associated 
+ with the variable <span class="v">"sources"</span> in <span class="v">GNUmakefile</span>, with the exception of 
+ generated file <span class="v">doc.lisp</span> (which is discussed later in this Guide; see 
+ <a href="ACL2____DEVELOPERS-GUIDE-BUILD.html">developers-guide-build</a>).  Perhaps surprisingly, <span class="v">acl2.lisp</span> is not 
+ in either list!  That's due to a traditional ambiguity in the use of the term 
+ ``source file'' for ACL2.  The files in the list <span class="v">*acl2-files*</span> are all 
+ written in ACL2 (with the exception of relatively little raw Lisp code, as 
+ discussed in the section on ``Readtime Conditionals'' below).  A few other 
+ files support the infrastructure surrounding the ACL2 system.  These may be 
+ found in the definition of variable <span class="v">"sources_extra"</span> in 
+ <span class="v">GNUmakefile</span>; <span class="v">acl2.lisp</span> is one of those files.</p> 
+ 
+ <p>We may talk of ``earlier'' and ``later'' source files.  Here we reference 
+ their order in <span class="v">*acl2-files*</span>, which is essentially the order in which they 
+ are processed via <span class="tt"><a href="ACL2____LD.html">ld</a></span> when building an ACL2 executable.  Note however 
+ that files <span class="v">*-raw.lisp</span> are not intended for processing by <span class="tt"><a href="ACL2____LD.html">ld</a></span> 
+ during the build, but rather, are simply loaded directly into Common Lisp, 
+ perhaps after being compiled.</p> 
+ 
+ <p><font color="#c00000">The names of the source files are somewhat suggestive 
+ of their contents.  However, over time this correspondence has weakened, in 
+ large part because of the requirement that a function must be defined before 
+ it is used.</font> For example, function <span class="v">find-rules-of-rune</span> was moved in 
+ git commit <span class="v">5647bd402e</span> from <span class="v">defthm.lisp</span> to an earlier file, 
+ <span class="v">rewrite.lisp</span>, in support of a new function, 
+ <span class="v">backchain-limit-enforcers</span>, which in turn was introduced in support of an 
+ existing function in <span class="v">rewrite.lisp</span> 
+ (<span class="v">tilde-@-failure-reason-phrase1</span>) that reports failures in the <a href="ACL2____BREAK-REWRITE.html">break-rewrite</a> loop.</p> 
+ 
+ <h3>Source file <span class="tt">axioms.lisp</span>
+</h3> 
+ 
+ <p>The source file <span class="v">axioms.lisp</span> is the place for defining most <a href="ACL2____LOGIC.html">logic</a>-mode functions that form the core of the ACL2 programming language, and 
+ also for some basic axioms and theorems about these functions as well as the 
+ built-in primitives like <a href="COMMON-LISP____CAR.html">car</a> and <a href="ACL2____UNARY-_F2.html">unary-/</a> that have no explicit 
+ definition.  The theorems are stated as <span class="tt"><a href="ACL2____DEFTHM.html">defthm</a></span> <a href="ACL2____EVENTS.html">events</a>, while 
+ the axioms are stated as <span class="tt"><a href="ACL2____DEFAXIOM.html">defaxiom</a></span> events.  The axioms are intended to 
+ completely specify the <a href="ACL2____GROUND-ZERO.html">ground-zero</a> theory.  However, it is less clear 
+ when to include a <span class="v">defthm</span> event into <span class="v">axioms.lisp</span>, rather than simply 
+ putting that theorem into a book.</p> 
+ 
+ <p>The section on ``Build-time proofs'' in the topic, <a href="ACL2____DEVELOPERS-GUIDE-BUILD.html">developers-guide-build</a>, has a discussion of executing ``<span class="v">make proofs</span>'' to 
+ admit events, including those in <span class="v">axioms.lisp</span>.  Some <span class="v">defthm</span> events 
+ are critical for this purpose, for example, for proving termination or 
+ verifying guards.  Others are simply very basic: so useful that it seems a 
+ pity to relegate them to books, rather than to include them in the build. 
+ Moreover, the specific form of some axioms and theorems is chosen to be useful 
+ for reasoning; for example, here is a rather critical <span class="v">:</span><span class="tt"><a href="ACL2____ELIM.html">elim</a></span> rule 
+ in addition to being an important axiom.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFAXIOM.html">defaxiom</a> car-cdr-elim
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x)
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CAR.html">car</a> x) (<a href="COMMON-LISP____CDR.html">cdr</a> x)) x))
+  :rule-classes :elim)</pre> 
+ 
+ <p>It is good to be careful when considering the addition of <span class="v">defthm</span> 
+ events to <span class="v">axioms.lisp</span>.  If <span class="v">defthm</span> events are to be added in order to 
+ support termination or <a href="ACL2____GUARD.html">guard</a> verification when doing ``<span class="v">make
+ proofs</span>'', you can consider making the events <span class="tt"><a href="ACL2____LOCAL.html">local</a></span> so that they 
+ don't make it into the build.  But you might leave some non-local if they seem 
+ to be extremely useful, for example:</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> fold-consts-in-+
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____SYNTAXP.html">syntaxp</a> (<a href="ACL2____QUOTEP.html">quotep</a> x))
+                (<a href="ACL2____SYNTAXP.html">syntaxp</a> (<a href="ACL2____QUOTEP.html">quotep</a> y)))
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP_____B2.html">+</a> x (<a href="COMMON-LISP_____B2.html">+</a> y z))
+                  (<a href="COMMON-LISP_____B2.html">+</a> (<a href="COMMON-LISP_____B2.html">+</a> x y) z))))</pre> 
+ 
+ <p>There is potential controversy here.  One could argue that such theorems 
+ belong in books, not in the source code.  This can be argued either way: 
+ putting in the source code is good because ACL2 can do obviously-expected 
+ things at start-up, and is bad because it's inelegant and narrows user 
+ choices.  These days, we tend to add <span class="v">defthm</span> events to <span class="v">axioms.lisp</span> 
+ only sparingly, without removing any.  One could argue endlessly about this 
+ controversy, but there are probably many more fruitful ways to spend limited 
+ development resources!</p> 
+ 
+ <h3>The ACL2 state and logical world</h3> 
+ 
+ <p><font color="#c00000">The ACL2 state is represented in the implementation as 
+ a symbol, which is the value of constant <span class="v">*the-live-state*</span>.</font> 
+ Sometimes we call this the ``<font color="#c00000">live state</font>'', to 
+ distinguish it from its logical value, which is a list of fields.  See <a href="ACL2____STATE.html">state</a> for relevant background.</p> 
+ 
+ <p><font color="#c00000">It may seem impossible for a fixed symbol to represent 
+ a changeable state.  But let us consider for example what happens when we 
+ update a state global variable (see <a href="ACL2____F-PUT-GLOBAL.html">f-put-global</a>) in raw Lisp.</font> 
+ In the following example (where we elide code for the case of wormholes) there 
+ are two cases.  The interesting case is the first one, in which the state is 
+ the live state.  We see below that there is an associated global (special) 
+ variable, in a package obtained by prefixing the string <span class="v">"ACL2_GLOBAL_"</span> 
+ to the front of the symbol's package-name: <span class="tt"><font color="#c00000">ACL2_GLOBAL_</font>ACL2::XYZ</span>.  The code below updates that 
+ global.</p> 
+ 
+ <pre class="code">? (pprint (macroexpand '(<a href="ACL2____F-PUT-GLOBAL.html">f-put-global</a> 'xyz (<a href="COMMON-LISP_____B2.html">+</a> 3 4) state)))
+
+(<a href="COMMON-LISP____LET.html">LET</a> ((#:G128770 (<a href="COMMON-LISP_____B2.html">+</a> 3 4)) (#:G128771 STATE))
+  (<a href="COMMON-LISP____COND.html">COND</a> ((LIVE-STATE-P #:G128771)
+         (<a href="COMMON-LISP____COND.html">COND</a> (*WORMHOLEP* ...))
+         (<a href="COMMON-LISP____LET.html">LET</a> ()
+           (<a href="COMMON-LISP____DECLARE.html">DECLARE</a> (SPECIAL ACL2_GLOBAL_ACL2::XYZ))
+           (SETQ ACL2_GLOBAL_ACL2::XYZ #:G128770)
+           #:G128771))
+        (T (PUT-GLOBAL 'XYZ #:G128770 #:G128771))))
+?</pre> 
+ 
+ <p>To read a state global from the live state, we simply read its associated 
+ global variable.</p> 
+ 
+ <pre class="code">? (pprint (macroexpand '(<a href="ACL2____F-GET-GLOBAL.html">f-get-global</a> 'xyz state)))
+
+(<a href="COMMON-LISP____LET.html">LET</a> ((#:G128772 STATE))
+  (<a href="COMMON-LISP____DECLARE.html">DECLARE</a> (SPECIAL ACL2_GLOBAL_ACL2::XYZ))
+  (<a href="COMMON-LISP____COND.html">COND</a> ((LIVE-STATE-P #:G128772) ACL2_GLOBAL_ACL2::XYZ)
+        (T (GET-GLOBAL 'XYZ #:G128772))))
+?</pre> 
+ 
+ <p>Note that the ACL2 state can be viewed as a special, built-in case of a 
+ <a href="ACL2____STOBJ.html">stobj</a>.  Indeed, we may also speak of ``<font color="#c00000">live 
+ stobjs</font>'', to distinguish them from their logical, list-based 
+ representations, and a stobj, <span class="v">st</span>, is represented in the implementation as 
+ <span class="v">*the-live-st*</span>.  These ``live'' constants are illustrated below.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____DEFSTOBJ.html">defstobj</a> st fld)
+
+Summary
+Form:  ( DEFSTOBJ ST ...)
+Rules: NIL
+Time:  0.01 seconds (prove: 0.00, print: 0.00, other: 0.01)
+ ST
+ACL2 !&gt;:q
+
+Exiting the ACL2 read-eval-print loop.  To re-enter, execute (<a href="ACL2____LP.html">LP</a>).
+? *the-live-st*
+#&lt;SIMPLE-VECTOR 1&gt;
+? *the-live-state*
+ACL2_INVISIBLE::|The Live State Itself|
+?</pre> 
+ 
+ <p>One of the logical fields of the state is the <i>global-table</i>, which is 
+ an association list mapping symbols, namely state global variables (sometimes 
+ called ``state globals''), to values.  See also <a href="ACL2____PROGRAMMING-WITH-STATE.html">programming-with-state</a>. 
+ One particular state global, the symbol <span class="v">current-acl2-world</span>, is mapped to 
+ the current logical <a href="ACL2____WORLD.html">world</a>, often just called ``the world''.  Here is 
+ the logical definition of the function <span class="v">(<a href="ACL2____W.html">w</a> state)</span> that returns this world; 
+ note that it calls the macro <span class="tt"><a href="ACL2____F-GET-GLOBAL.html">f-get-global</a></span>, which, as explained above, 
+ generates a read of a Lisp global.</p> 
+ 
+ <p><b>Function: </b>w</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> w (<a href="ACL2____STATE.html">state</a>)
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (state-p state)))
+       (<a href="ACL2____F-GET-GLOBAL.html">f-get-global</a> 'current-acl2-world
+                     state))</pre> 
+ 
+ <p>The current logical world, in turn, is a list of triples of the form 
+ <span class="v">(<a href="ACL2____NAME.html">name</a> property . value)</span>.  The function <span class="tt"><a href="ACL2____GETPROP.html">getprop</a></span> may be used to 
+ access the value for a given name and property.  For example, suppose that we 
+ submit the event <span class="v">(<a href="COMMON-LISP____DEFUN.html">defun</a> f (x) (<a href="COMMON-LISP____CONS.html">cons</a> x x))</span>.  This actually pushes several 
+ triples on the world, one of which is the so-called <i>unnormalized body</i> 
+ of <span class="v">f</span>, accessible via <span class="v">getprop</span> as follows.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____GETPROP.html">getprop</a> 'f 'unnormalized-body nil 'current-acl2-world (<a href="ACL2____W.html">w</a> state))
+(<a href="COMMON-LISP____CONS.html">CONS</a> X X)
+ACL2 !&gt;</pre> 
+ 
+ <p>It is extremely common for the last three arguments of <span class="v">getprop</span> to be 
+ as displayed above, so the macro <span class="tt"><a href="ACL2____GETPROPC.html">getpropc</a></span> is often used instead.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____GETPROPC.html">getpropc</a> 'f 'unnormalized-body)
+(<a href="COMMON-LISP____CONS.html">CONS</a> X X)
+ACL2 !&gt;</pre> 
+ 
+ <p>Also see <a href="ACL2____WALKABOUT.html">walkabout</a> for a tool that can be extremely helpful for 
+ examining the world.</p> 
+ 
+ <h3>Terms, translate, and untranslate</h3> 
+ 
+ <p>For relevant background on the notion of <i>term</i> in ACL2, see <a href="ACL2____TERM.html">term</a>.  The ACL2 source code traffics in what that documentation topic calls 
+ ``translated terms''.  In any discussion at the implementation level, 
+ including this guide and source code comments, <font color="#c00000">we just 
+ say ``term'' to refer to a translated term.  The source code traffics almost 
+ entirely in terms,</font> though user input is in the form of what the 
+ documentation for <a href="ACL2____TERM.html">term</a> calls an ``untranslated term''.  <font color="#c00000">The ACL2 functions <span class="tt"><a href="ACL2____TRANSLATE.html">translate</a></span> and <span class="tt"><a href="ACL2____UNTRANSLATE.html">untranslate</a></span> map 
+ from untranslated terms to terms and vice-versa, respectively.</font> These 
+ both take the <a href="ACL2____WORLD.html">world</a> as a formal parameter, because they need to consult 
+ the world: for example, <span class="v">translate</span> consults the world to determine, for a 
+ call <span class="v">(f t1 t2 ...)</span>, whether <span class="v">f</span> is a function symbol, a macro, or (in 
+ the error case) neither of these; and <span class="v">untranslate</span> consults the world for 
+ more subtle reasons such as converting a call of <span class="tt"><a href="ACL2____RETURN-LAST.html">return-last</a></span> to 
+ something more readable.</p> 
+ 
+ <p>The definition of the function <span class="v">untranslate1</span>, which is the workhorse 
+ for <span class="v">untranslate</span>, is instructive for how ACL2 processes terms.  <font color="#c00000">It has the following form.</font></p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> untranslate1 (<a href="ACL2____TERM.html">term</a> iff-flg untrans-tbl preprocess-fn wrld)
+  (<a href="COMMON-LISP____LET.html">let</a> ((<a href="ACL2____TERM.html">term</a> (<a href="COMMON-LISP____IF.html">if</a> preprocess-fn ... term)))
+    (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="ACL2____VARIABLEP.html">variablep</a> term) term)
+          ((<a href="ACL2____FQUOTEP.html">fquotep</a> term)
+           (<a href="COMMON-LISP____COND.html">cond</a> (&lt;basically, not a cons or symbol&gt;
+                  (<a href="COMMON-LISP____CADR.html">cadr</a> term))
+                 (t term)))
+          ((<a href="ACL2____FLAMBDA-APPLICATIONP.html">flambda-applicationp</a> term)
+           &lt;Turn the lambda application into a LET.&gt;)
+          ((<a href="COMMON-LISP____EQ.html">eq</a> (<a href="ACL2____FFN-SYMB.html">ffn-symb</a> term) 'if)
+           &lt;Many special cases, e.g.,
+            (<a href="COMMON-LISP____IF.html">if</a> x1 'nil 't) negates untranslation of x1&gt;
+          ...))))</pre> 
+ 
+ <font color="#c00000"> 
+ 
+ <p>This sort of structure is typical: handle the variable case, then the case 
+ of <span class="v">(<a href="COMMON-LISP____QUOTE.html">quote</a> _)</span>, then the case of a lambda application, and finally one or 
+ more cases for the call of a function symbol.  If you peruse the source code 
+ you will see handy term utilities.  Please strive for consistency by studying 
+ some of those (e.g., search the source code for <span class="v">"variablep"</span> or 
+ <span class="v">"quotep"</span>).  For example, don't build a new term with <span class="v">(<a href="COMMON-LISP____CONS.html">cons</a> fn
+ args)</span>; use <span class="tt">cons-term</span> or <span class="tt">fcons-term</span> instead of 
+ <span class="tt">cons</span>.</p> 
+ 
+ </font> 
+ 
+ <h3>The <span class="tt"><a href="ACL2____DEFREC.html">defrec</a></span> macro</h3> 
+ 
+ <p>We defer to a later chapter (see <a href="ACL2____DEVELOPERS-GUIDE-UTILITIES.html">developers-guide-utilities</a>) a 
+ discussion of macros that are commonly used in the ACL2 implementation, with 
+ one exception: <span class="tt"><a href="ACL2____DEFREC.html">defrec</a></span>.  We cover that macro here because it is so 
+ crucial for understanding some topics covered below.</p> 
+ 
+ <p>See <a href="ACL2____DEFREC.html">defrec</a> for user-level documentation on <span class="v">defrec</span>.  This macro 
+ provides a cheap way to lay out a record structure using <span class="v">cons</span> (since the 
+ Common Lisp macro <span class="v">defstruct</span> is not supported by ACL2, which does not have 
+ structures).  Sometimes it is worthwhile to think a bit about expected reads 
+ and writes of the fields, to help lay them out efficiently.  For example, 
+ consider the definition of an important record for the prover, 
+ <span class="v">prove-spec-var</span> (with comments omitted here):</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFREC.html">defrec</a> prove-spec-var
+  ((rewrite-constant induction-hyp-terms . induction-concl-terms)
+   (<a href="ACL2____TAG-TREE.html">tag-tree</a> hint-settings . tau-completion-alist)
+   (pool . gag-state)
+   user-supplied-term displayed-goal orig-hints . otf-flg)
+  t)</pre> 
+ 
+ <p>Notice above and in the following generated definition that the field, 
+ <span class="v">orig-hints</span>, is buried deep inside this structure.</p> 
+ 
+ <pre class="code">ACL2 !&gt;:trans (<a href="ACL2____ACCESS.html">access</a> prove-spec-var some-pspv :orig-hints)
+
+((<a href="COMMON-LISP____LAMBDA.html">LAMBDA</a> (ORIG-HINTS)
+         (<a href="COMMON-LISP____CAR.html">CAR</a> (<a href="COMMON-LISP____CDR.html">CDR</a> (<a href="COMMON-LISP____CDR.html">CDR</a> (<a href="COMMON-LISP____CDR.html">CDR</a> (<a href="COMMON-LISP____CDR.html">CDR</a> (<a href="COMMON-LISP____CDR.html">CDR</a> ORIG-HINTS)))))))
+ SOME-PSPV)
+
+=&gt; *
+
+ACL2 !&gt;</pre> 
+ 
+ <p>An Emacs <span class="v">tags-search</span> for ``<span class="v">:orig-hints</span>'' shows that this field is 
+ used only during initialization of the prover (excluding ACL2(p)), not within 
+ the waterfall, let alone the rewriter; of course, this is hardly surprising. 
+ So it seems fine to push this field way back in the record definition.  On the 
+ other hand, the <span class="v">rewrite-constant</span> field is more rapidly accessible as the 
+ <span class="tt"><a href="COMMON-LISP____CAAR.html">caar</a></span>, which is reasonable since it is accessed quite frequently within 
+ the waterfall.</p> 
+ 
+ <p>One can often learn about a record by reading its field names, seeing how 
+ they are used in the source code (with a tags-search), or reading code 
+ comments inserted into the <span class="v">defrec</span> form that defines it or near that 
+ definition.  You could try learning more now about the <span class="v">prove-spec-var</span> and 
+ <span class="v">rewrite-constant</span>, which are quite important in the prover code.</p> 
+ 
+ <h3>Commands and events</h3> 
+ 
+ <font color="#800080"> 
+ <p>DEMO: USING WALKABOUT TO EXPLORE THE WORLD</p> 
+ </font> 
+ 
+ <p>Among the triples in the <a href="ACL2____WORLD.html">world</a> are so-called <i>command 
+ landmarks</i> and <i>event landmarks</i>, which are put there at the 
+ conclusion of a <a href="ACL2____COMMAND.html">command</a> or <a href="ACL2____EVENT.html">event</a>, respectively.  What are 
+ commands and events, and what's the difference between them?</p> 
+ 
+ <p>Let's start with commands.  The (user-level) documentation for <a href="ACL2____COMMAND.html">command</a>s says that they are ``forms you type at the top-level, but the word 
+ `command' usually refers to a top-level form whose evaluation produces a new 
+ logical <a href="ACL2____WORLD.html">world</a>.''  At the implementation level, a command is a form read 
+ and evaluated by <a href="ACL2____LD.html">ld</a>.  If you follow the source code starting with 
+ <span class="v">ld</span>, you'll see that it reads and evaluates forms with the function 
+ <span class="v">ld-loop</span>, which in turn calls <span class="v">ld-read-eval-print</span> on each form.  That 
+ function, in turn, calls <span class="v">ld-read-command</span> to read the next form and then 
+ calls a version of <span class="tt"><a href="ACL2____TRANS-EVAL.html">trans-eval</a></span>, <span class="v">trans-eval-default-warning</span>, to 
+ evaluate it.  (See also the section on ``Evaluators'' in the chapter, <a href="ACL2____DEVELOPERS-GUIDE-UTILITIES.html">developers-guide-utilities</a>; also see the chapter, <a href="ACL2____DEVELOPERS-GUIDE-EVALUATION.html">developers-guide-evaluation</a>.)  When there is no error, the function 
+ <span class="v">maybe-add-command-landmark</span> is called.  It checks whether the world has 
+ changed, and if so it pushes a new triple on the new world, a so-called 
+ <i>command landmark</i>, provided the new world doesn't already have a command 
+ landmark as the topmost triple.  Let's use the <span class="tt"><a href="ACL2____WALKABOUT.html">walkabout</a></span> utility to 
+ see what a command landmark might look like.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____WITH-OUTPUT.html">with-output</a> :off :all (<a href="COMMON-LISP____DEFUN.html">defun</a> foo (x) x)) ; avoid noise just below
+ FOO
+ACL2 !&gt;(<a href="ACL2____WALKABOUT.html">walkabout</a> (<a href="ACL2____W.html">w</a> state) state)
+
+Commands:
+0, 1, 2, ..., nx, bk, pp, (pp n), (pp lev len), =, (<a href="COMMON-LISP_____D3.html">=</a> symb), and q.
+
+((COMMAND-LANDMARK GLOBAL-VALUE 7357 ...)
+ (EVENT-LANDMARK GLOBAL-VALUE 8625 ...)
+ (FOO ABSOLUTE-EVENT-NUMBER . 8625)
+ ...)
+:1
+(COMMAND-LANDMARK GLOBAL-VALUE 7357 ...)
+:pp
+(COMMAND-LANDMARK GLOBAL-VALUE 7357
+                  (:LOGIC WITH-OUTPUT :OFF
+                          :ALL (<a href="COMMON-LISP____DEFUN.html">DEFUN</a> FOO (X) X))
+                  "/share/projects/")
+:</pre> 
+ 
+ <p>The triple just above is, as with every triple in the world, of the form 
+ <span class="v">(sym prop . val)</span>.  We thus interpret the triple above to say that the 
+ current <span class="v">command-landmark</span> has a <span class="v">global-value</span> property of the form 
+ <span class="v">(7357 (:logic . &lt;form&gt;) &lt;dir&gt; . nil)</span>.  The definition of the record 
+ structure <span class="v">command-tuple</span> (which is easy to find with the Emacs command, 
+ <span class="v">meta-.</span>) uses the <span class="tt"><a href="ACL2____DEFREC.html">defrec</a></span> macro, discussed above.  For now we 
+ explain the fields in our example as follows; see the Essay on Command Tuples 
+ and ensuing definitions for more information.</p> 
+ 
+ <ul> 
+ 
+ <li>the <i>absolute command number</i> is 7357.</li> 
+ 
+ <li>The <span class="tt"><a href="ACL2____DEFUN-MODE.html">defun-mode</a></span> is <span class="v">:logic</span>.</li> 
+ 
+ <li>The <i>form</i> is <span class="v">(<a href="ACL2____WITH-OUTPUT.html">with-output</a> :off :all (<a href="COMMON-LISP____DEFUN.html">defun</a> foo (x) x))</span>.</li> 
+ 
+ <li>The <span class="tt"><a href="ACL2____CBD.html">cbd</a></span> is <span class="v">"/share/projects/"</span>.</li> 
+ 
+ <li>The <span class="v">last-make-event-expansion</span> field is <span class="v">nil</span>.</li> 
+ 
+ </ul> 
+ 
+ <p><font color="#c00000">We turn now from commands to <a href="ACL2____EVENTS.html">events</a>.</font> 
+ There are primitive events that modify the world such as a call of <span class="tt"><a href="COMMON-LISP____DEFUN.html">defun</a></span>, <span class="tt"><a href="ACL2____DEFTHM.html">defthm</a></span>, and <span class="tt"><a href="ACL2____TABLE.html">table</a></span>.  See <a href="ACL2____EVENTS.html">events</a> and especially 
+ see <a href="ACL2____EMBEDDED-EVENT-FORM.html">embedded-event-form</a>, which explain that events may go in calls of 
+ <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span> and <span class="tt"><a href="COMMON-LISP____PROGN.html">progn</a></span>, which themselves are also (compound) 
+ events, and events may also go in <a href="ACL2____BOOKS.html">books</a>.  Several other utilities are 
+ events in the sense that they are allowed in compound events and books, but 
+ they are really just wrappers of sorts for actual events.  <font color="#c00000">Here is a list of event macros, taken from a comment in the 
+ definition of function <span class="v">chk-embedded-event-form</span>, which is the recognizer 
+ for (embeddable) events.</font></p> 
+ 
+ <ul> 
+ 
+ <li><span class="v">local</span></li> 
+ <li><span class="v">skip-proofs</span></li> 
+ <li><span class="v">with-guard-checking-event</span></li> 
+ <li><span class="v">with-output</span></li> 
+ <li><span class="v">with-prover-step-limit</span></li> 
+ <li><span class="v">with-prover-time-limit</span></li> 
+ <li><span class="v">make-event</span></li> 
+ 
+ </ul> 
+ 
+ <p>Of course, <span class="tt"><a href="ACL2____MAKE-EVENT.html">make-event</a></span> is a complex sort of wrapper, in that it 
+ serves to <i>generate</i> an event, its <i>expansion</i>.</p> 
+ 
+ <p>Continuing the demo of <span class="v">walkabout</span> started above (when explaining 
+ commands), we see an <i>event-landmark</i> immediately below the 
+ command-landmark.</p> 
+ 
+ <pre class="code">:nx
+(EVENT-LANDMARK GLOBAL-VALUE 8625 ...)
+:pp
+(EVENT-LANDMARK GLOBAL-VALUE 8625 ((<a href="COMMON-LISP____DEFUN.html">DEFUN</a>) FOO . :IDEAL)
+                DEFUN FOO (X)
+                X)
+:</pre> 
+ 
+ <p>Let's take this opportunity to explore how to make sense of ACL2 data 
+ structures.  If we use the Emacs command <span class="v">meta-x tags-apropos</span> on 
+ <span class="v">"event-landmark"</span> we find the function <span class="v">add-event-landmark</span>; then 
+ using the <span class="v">meta-.</span> command on <span class="v">add-event-landmark</span>, we find its 
+ definition and we see a call of <span class="v">make-event-tuple</span>.  That function has 
+ comments that explain the fields; perhaps more illuminating, accessors for 
+ event-tuple fields are defined immediately below the definition of 
+ <span class="v">make-event-tuple</span>.  We can apply these accessors to deconstruct the value, 
+ <span class="v">val</span>, in the triple above, <span class="v">(event-landmark global-value . val)</span>.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="COMMON-LISP____LET.html">let</a> ((val (<a href="COMMON-LISP____CDDR.html">cddr</a> '(EVENT-LANDMARK GLOBAL-VALUE 8625 ((<a href="COMMON-LISP____DEFUN.html">DEFUN</a>) FOO . :IDEAL)
+                                         DEFUN FOO (X)
+                                         X))))
+         (<a href="COMMON-LISP____LIST.html">list</a> :number (access-event-tuple-number val)
+               :depth  (access-event-tuple-depth val)
+               :type   (access-event-tuple-type val)
+               :skipp  (access-event-tuple-skipped-proofs-p val)
+               :namex  (access-event-tuple-namex val)
+               :form   (access-event-tuple-form val)
+               :symcls (access-event-tuple-symbol-class val)))
+(:NUMBER 8625
+         :DEPTH 0
+         :TYPE DEFUN
+         :SKIPP NIL
+         :NAMEX FOO
+         :FORM (<a href="COMMON-LISP____DEFUN.html">DEFUN</a> FOO (X) X)
+         :SYMCLS :IDEAL)
+ACL2 !&gt;</pre> 
+ 
+ <font color="#c00000"> 
+ 
+ <p>We conclude our discussion of commands and events with a few 
+ observations.</p> 
+ 
+ <ul> 
+ 
+ <li>Commands can be undone, using <span class="tt"><a href="ACL2____UBT.html">ubt</a></span> and related utilities.  Events 
+ are not undone (except when they are also commands); only commands are 
+ undone.</li> 
+ 
+ <li>
+<span class="v">:</span><span class="tt"><a href="ACL2____PUFF.html">Puff</a></span> is applied to <a href="ACL2____COMMAND-DESCRIPTOR.html">command-descriptor</a>s, so naturally 
+ it expands commands, not events.</li> 
+ 
+ <li>Only events can go into books and calls of <span class="tt"><a href="COMMON-LISP____PROGN.html">progn</a></span> or <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span>, not arbitrary commands.</li> 
+ 
+ </ul> 
+ 
+ </font> 
+ 
+ <h3>Exploring the source code with an example: prover flow</h3> 
+ 
+ <p>An important skill for ACL2 code development and maintenance is the ability 
+ to explore the source code to gain necessary background.  This is really an 
+ art, developed with experience.  There has been a lot of attention to 
+ documenting the source code — as of mid-March 2018, about 30% of the 
+ source file lines (that is, from <span class="v">*.lisp</span> files not including the generated 
+ documentation file <span class="v">doc.lisp</span>) consisted entirely of a comment line, and of 
+ course other lines contained comments as well.  Here we show the raw data.</p> 
+ 
+ <pre class="code">ginger:/projects/acl2/acl2/saved% wc -l *.lisp | grep total
+  373606 total
+ginger:/projects/acl2/acl2/saved% wc -l doc.lisp
+121865 doc.lisp
+ginger:/projects/acl2/acl2/saved% grep '^[ ]*;' *.lisp | wc -l
+76588
+ginger:/projects/acl2/acl2/saved% grep '^[ ]*;' doc.lisp | wc -l
+1545
+ginger:/projects/acl2/acl2/saved%</pre> 
+ 
+ <p>Unfortunately, 30+% comments is not sufficient!  In a perfect world, more 
+ ACL2 functions would have extensive documentation, with clear pointers to 
+ necessary background including high-level algorithm discussion.  This Guide is 
+ intended to help to fill the gap, but can only do so partially.  The missing 
+ additional ingredient to absorbing source code — as practiced for years 
+ by ACL2 developers as of this writing in March 2018 — is the ability to 
+ explore the sources.  Ideally this is a skill that can be learned by 
+ practicing.</p> 
+ 
+ <p>As a simple example, we show how to explore the source code to get a sense 
+ of the flow of the theorem prover.  This is very far from getting a sense of 
+ the ACL2 system in general, which supports much more than the prover (think of 
+ book certification, <span class="tt"><a href="ACL2____MAKE-EVENT.html">make-event</a></span>, <a href="ACL2____INVARIANT-RISK.html">invariant-risk</a>, and on and 
+ on).</p> 
+ 
+ <p>Let's start with <span class="tt"><a href="ACL2____THM.html">thm</a></span>:</p> 
+ 
+ <font color="#800080"> 
+ 
+ <p>DEMO: EXPLORE HOW THM ULTIMATELY CALLS THE REWRITER.  But unlike the 
+ discussion below, I'll go bottom-up.  This may give us some idea of how the 
+ prover is structured.  One result may be found in the documentation section, 
+ <a href="ACL2____DEVELOPERS-GUIDE-BACKGROUND-EXTRA.html">developers-guide-background-extra</a>.</p> 
+ </font> 
+ 
+ <p><b>Macro: </b>thm</p><pre class="code">(<a href="COMMON-LISP____DEFMACRO.html">defmacro</a>
+ thm (<a href="ACL2____TERM.html">term</a> &amp;key hints otf-flg)
+ (<a href="COMMON-LISP____CONS.html">cons</a>
+  'with-output
+  (<a href="COMMON-LISP____CONS.html">cons</a>
+   ':off
+   (<a href="COMMON-LISP____CONS.html">cons</a>
+    'summary
+    (<a href="COMMON-LISP____CONS.html">cons</a>
+     ':stack
+     (<a href="COMMON-LISP____CONS.html">cons</a>
+      ':push
+      (<a href="COMMON-LISP____CONS.html">cons</a>
+       (<a href="COMMON-LISP____CONS.html">cons</a>
+        'make-event
+        (<a href="COMMON-LISP____CONS.html">cons</a>
+         (<a href="COMMON-LISP____CONS.html">cons</a>
+          'er-progn
+          (<a href="COMMON-LISP____CONS.html">cons</a>
+           (<a href="COMMON-LISP____CONS.html">cons</a>
+            'with-output
+            (<a href="COMMON-LISP____CONS.html">cons</a>
+             ':stack
+             (<a href="COMMON-LISP____CONS.html">cons</a>
+              ':pop
+              (<a href="COMMON-LISP____CONS.html">cons</a>
+               (<a href="COMMON-LISP____CONS.html">cons</a>
+                'thm-fn
+                (<a href="COMMON-LISP____CONS.html">cons</a>
+                 (<a href="COMMON-LISP____CONS.html">cons</a> 'quote (<a href="COMMON-LISP____CONS.html">cons</a> term 'nil))
+                 (<a href="COMMON-LISP____CONS.html">cons</a> 'state
+                       (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'quote (<a href="COMMON-LISP____CONS.html">cons</a> hints 'nil))
+                             (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'quote (<a href="COMMON-LISP____CONS.html">cons</a> otf-flg 'nil))
+                                   'nil)))))
+               'nil))))
+           (<a href="COMMON-LISP____CONS.html">cons</a>
+              (<a href="COMMON-LISP____CONS.html">cons</a> 'value
+                    (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'quote
+                                (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'value-triple
+                                            (<a href="COMMON-LISP____CONS.html">cons</a> ':invisible 'nil))
+                                      'nil))
+                          'nil))
+              'nil)))
+         (<a href="COMMON-LISP____CONS.html">cons</a> ':expansion?
+               (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'value-triple
+                           (<a href="COMMON-LISP____CONS.html">cons</a> ':invisible 'nil))
+                     (<a href="COMMON-LISP____CONS.html">cons</a> ':on-behalf-of
+                           (<a href="COMMON-LISP____CONS.html">cons</a> ':quiet! 'nil))))))
+       'nil)))))))</pre> 
+ 
+ <p><span class="v">Thm-fn</span> calls <span class="v">prove</span>, which calls <span class="v">prove-loop</span> and so on, as is 
+ easy to discover using the Emacs command, <span class="v">meta-.</span> .  We thus work our way 
+ to the waterfall.</p> 
+ 
+ <pre class="code">thm-fn
+  prove
+    prove-loop
+      prove-loop0
+        prove-loop1
+          prove-loop2
+            waterfall</pre> 
+ 
+ <p>At this point things get more complicated.  <span class="v">Waterfall</span> calls 
+ <span class="v">waterfall1-lst@par</span>, which should be thought of as <span class="v">waterfall1-lst</span>, as 
+ discussed below where we talk about ACL2(p).  We see that <span class="v">waterfall1-lst</span> 
+ is part of a rather complex <span class="tt"><a href="ACL2____MUTUAL-RECURSION.html">mutual-recursion</a></span>.  But a key function 
+ called in that <span class="v">mutual-recursion</span> is <span class="v">waterfall-step</span>, which is shown as 
+ calls of <span class="v">waterfall-step@par</span>.  Knowing about <span class="v">waterfall-step</span> is one of 
+ those pieces of background knowledge to learn that makes it easier over time 
+ to peruse the ACL2 sources.  In the body of that function is a call of 
+ <span class="v">waterfall-step1</span>, which provides a clue about the main flow of the prover: 
+ the key subroutine of a function <span class="v">foo</span> often has the name <span class="v">foo1</span>, or 
+ perhaps <span class="v">foo-1</span>, <span class="v">foo-aux</span>, or <span class="v">foo-rec</span>, or more generally, 
+ <span class="v">foo&lt;something&gt;</span>.  The function <span class="v">waterfall-step1</span> has a nice structure 
+ showing how it leads to calls of individual waterfall processing functions, in 
+ particular, the simplifier via the function <span class="v">simplify-clause</span>.  We can 
+ explore the definition of <span class="v">simplify-clause</span> in a similar way, finding 
+ <span class="v">simplify-clause1</span>, which has these key subroutines.</p> 
+ 
+ <pre class="code">remove-trivial-equivalences
+forward-chain-top
+setup-simplify-clause-pot-lst
+process-equational-polys
+rewrite-clause</pre> 
+ 
+ <p>The flow suggests that the first four of these functions are called to set 
+ things up for the call to <span class="v">rewrite-clause</span>.  That function can be similarly 
+ explored, in particular to find key subroutines that include the 
+ following.</p> 
+ 
+ <pre class="code">built-in-clausep1
+rewrite-clause-type-alist
+rewrite-atm
+clausify
+rewrite-clause-lst</pre> 
+ 
+ <p>The function <span class="v">rewrite-atm</span> does yet a bit more processing, using 
+ <span class="v">known-whether-nil</span>, before calling <span class="v">rewrite</span>.  Feel free to explore 
+ <span class="v">rewrite</span>, but beware, as it's quite complicated!  Indeed, the usual 
+ activity of an ACL2 maintainer is not to explore for the sake of general 
+ background, as we have been doing above, but rather to explore for the sake of 
+ more specific understanding before making desired modifications or 
+ additions.</p> 
+ 
+ <h3>Build-time checks</h3> 
+ 
+ <p>There are several checks done near the end of an ACL2 build, as performed 
+ by (subfunctions of) the function, <span class="v">check-acl2-initialization</span>.  There is 
+ not much that we need to say here, because if one of those tests fails, then 
+ the error message should make it clear how to proceed.</p> 
+ 
+ <h3>Raw Lisp and readtime conditionals</h3> 
+ 
+ <p>ACL2 is built on top of Common Lisp.  Some knowledge of that programming 
+ language is occasionally necessary.  The definitive reference is the Common 
+ Lisp Hyperspec, which can be found easily with a web search.</p> 
+ 
+ <p>Every ACL2 source file is either loaded directly into Common Lisp as part 
+ of the ACL2 build, or is first compiled into a compiled file before loading 
+ that compiled file.  (Files <span class="v">acl2.lisp</span> and <span class="v">acl2-init.lisp</span> are never 
+ subjected to file compilation, as noted in a comment near the top of each 
+ file.)  Thus, <font color="#c00000">ACL2 macros including <span class="tt"><a href="COMMON-LISP____DEFUN.html">defun</a></span>, <span class="tt"><a href="ACL2____DEFTHM.html">defthm</a></span>, <span class="tt"><a href="ACL2____TABLE.html">table</a></span>, <span class="tt"><a href="ACL2____DEFCONST.html">defconst</a></span>, <span class="tt"><a href="ACL2____LOCAL.html">local</a></span>, and <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span> must be suitable for Common Lisp evaluation.</font> This is 
+ arranged differently for different macros, as illustrated by the following 
+ examples.</p> 
+ 
+ <font color="#800080"> 
+ <p>DEMO: RATHER THAN GO THROUGH WHAT'S BELOW, I'LL JUST EXPLORE DEFUN, 
+ DEFTHM, LOCAL, and QUIT, AND USE THEM TO EXPLAIN *features* AND SPECIFICALLY 
+ acl2-loop-only.</p> 
+ </font> 
+ 
+ <p>First consider <span class="v">defun</span>.  We have only the following definition of 
+ <span class="v">defun</span> in the ACL2 source code.</p> 
+ 
+ <pre class="code">#+acl2-loop-only
+(<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> defun (<a href="COMMON-LISP_____62WHOLE.html">&amp;whole</a> event-form &amp;rest def)
+
+; Warning: See the Important Boot-Strapping Invariants before modifying!
+
+  (<a href="COMMON-LISP____LIST.html">list</a> 'defun-fn
+        (<a href="COMMON-LISP____LIST.html">list</a> 'quote def)
+        'state
+        (<a href="COMMON-LISP____LIST.html">list</a> 'quote event-form)
+        #+:non-standard-analysis ; std-p
+        nil))</pre> 
+ 
+ <p>The notation ``<span class="v">#+acl2-loop-only</span>'' is called a <i>readtime 
+ conditional</i>.  In this case, it says that the definition of <span class="v">defun</span> 
+ immediately following that notion is ignored by the reader unless the symbol 
+ <span class="v">:acl2-loop-only</span> is a member of the Lisp variable, <span class="v">*features*</span>. 
+ Normally, and during loading and (when it occurs) compilation of ACL2 source 
+ files, <span class="v">:acl2-loop-only</span> is not a member of <span class="v">*features*</span>, so the 
+ definition above is ignored — as is appropriate, since <span class="v">defun</span> is 
+ already defined in Common Lisp.  The function <span class="v">initialize-acl2</span> pushes the 
+ symbol <span class="v">:acl2-loop-only</span> onto <span class="v">*features*</span> before beginning to <span class="v">ld</span> 
+ the ACL2 source files; thus, as ACL2 processes its own source files, the 
+ definition above is read (not ignored) and evaluated; you can evaluate <span class="v">:pe
+ defun</span> in the top-level loop to see the definition above.</p> 
+ 
+ <p>Next consider <span class="tt"><a href="ACL2____DEFTHM.html">defthm</a></span>.  This time there are two definitions.  One is 
+ much like the definition above of <span class="v">defun</span>:</p> 
+ 
+ <pre class="code">#+acl2-loop-only
+(<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> defthm (<a href="COMMON-LISP_____62WHOLE.html">&amp;whole</a> event-form
+                  name term
+                       &amp;key (<a href="ACL2____RULE-CLASSES.html">rule-classes</a> '(:REWRITE))
+                       instructions
+                       hints
+                       otf-flg)
+
+; Warning: See the Important Boot-Strapping Invariants before modifying!
+
+  (<a href="COMMON-LISP____LIST.html">list</a> 'defthm-fn
+        (<a href="COMMON-LISP____LIST.html">list</a> 'quote name)
+        (<a href="COMMON-LISP____LIST.html">list</a> 'quote term)
+        'state
+        (<a href="COMMON-LISP____LIST.html">list</a> 'quote rule-classes)
+        (<a href="COMMON-LISP____LIST.html">list</a> 'quote instructions)
+        (<a href="COMMON-LISP____LIST.html">list</a> 'quote hints)
+        (<a href="COMMON-LISP____LIST.html">list</a> 'quote otf-flg)
+        (<a href="COMMON-LISP____LIST.html">list</a> 'quote event-form)
+        #+:non-standard-analysis ; std-p
+        nil))</pre> 
+ 
+ <p>The other definition occurs in a raw Lisp context, as follows.</p> 
+ 
+ <pre class="code">#-acl2-loop-only
+(<a href="COMMON-LISP____PROGN.html">progn</a>
+
+...
+
+(<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> defthm (<a href="COMMON-LISP_____62REST.html">&amp;rest</a> args)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORE.html">ignore</a> args))
+ nil)
+
+...)</pre> 
+ 
+ <p>Thus, the Common Lisp loader or compiler will see this definition of 
+ <span class="v">defthm</span>, but the <span class="v">ld</span> of the ACL2 source files will not.  In summary: 
+ <span class="v">defthm</span> is defined in terms of <span class="v">defthm-fn</span> in the ACL2 loop, but it is 
+ defined simply to return <span class="v">nil</span> in raw Lisp.</p> 
+ 
+ <p>Interesting cases are <span class="tt"><a href="ACL2____LOCAL.html">local</a></span> and <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span>.  These have 
+ rather complex definitions in the ACL2 loop, but let's see 
+ what happens during macroexpansion in raw Lisp.</p> 
+ 
+ <pre class="code">? (pprint
+   (macroexpand '(<a href="ACL2____ENCAPSULATE.html">encapsulate</a> (((f *) =&gt; *))
+                   (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> f (x) x))
+                   (<a href="COMMON-LISP____DEFUN.html">defun</a> g (x) (f x))
+                   (<a href="ACL2____LOCAL.html">local</a> (<a href="ACL2____DEFTHM.html">defthm</a> consp-g
+                            (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x) (<a href="COMMON-LISP____CONSP.html">consp</a> (<a href="ACL2____G.html">g</a> x))))))))
+
+(<a href="COMMON-LISP____PROGN.html">PROGN</a> (<a href="COMMON-LISP____DEFUN.html">DEFUN</a> F (X1) (THROW-OR-ATTACH F (X1)))
+       (<a href="ACL2____LOCAL.html">LOCAL</a> (<a href="COMMON-LISP____DEFUN.html">DEFUN</a> F (X) X))
+       (<a href="COMMON-LISP____DEFUN.html">DEFUN</a> G (X) (F X))
+       (<a href="ACL2____LOCAL.html">LOCAL</a> (<a href="ACL2____DEFTHM.html">DEFTHM</a> CONSP-G (<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____CONSP.html">CONSP</a> X) (<a href="COMMON-LISP____CONSP.html">CONSP</a> (<a href="ACL2____G.html">G</a> X))))))
+? (macroexpand '(<a href="ACL2____LOCAL.html">LOCAL</a> (<a href="COMMON-LISP____DEFUN.html">DEFUN</a> F (X) X)))
+NIL
+T
+? (macroexpand '(<a href="ACL2____LOCAL.html">LOCAL</a> (<a href="ACL2____DEFTHM.html">DEFTHM</a> CONSP-G (<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____CONSP.html">CONSP</a> X) (<a href="COMMON-LISP____CONSP.html">CONSP</a> (<a href="ACL2____G.html">G</a> X))))))
+NIL
+T
+?</pre> 
+ 
+ <p>Evidently, <span class="v">encapsulate</span> defines its signature functions simply to cause 
+ errors, actually like this:</p> 
+ 
+ <pre class="code">ACL2 Error in TOP-LEVEL:  ACL2 cannot ev the call of non-executable
+function F on argument list:
+
+(3)</pre> 
+ 
+ <p>It is also apparent that calls of <span class="v">local</span> in raw Lisp expand simply to 
+ <span class="v">nil</span>.</p> 
+ 
+ <p>To understand such behavior, let's look at the definitions of <span class="v">local</span> 
+ and <span class="v">encapsulate</span>, eliding comments and some code for brevity.  The elided 
+ code in the first definition of <span class="v">encapsulate</span> below, which is for raw Lisp, 
+ defines the functions in the signature to cause errors when called.</p> 
+ 
+ <pre class="code">#-acl2-loop-only
+(<a href="COMMON-LISP____PROGN.html">progn</a>
+
+...
+
+(<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> encapsulate (signatures &amp;rest lst)
+  `(<a href="COMMON-LISP____PROGN.html">progn</a> ,@(mapcar &lt;...elided code...&gt; signatures)
+          ,@lst))
+
+...
+
+(<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> local (x)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORE.html">ignore</a> x))
+  nil)
+
+...)
+
+#+acl2-loop-only
+(<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> local (x)
+  (<a href="COMMON-LISP____LIST.html">list</a> 'if
+        '(<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____LD-SKIP-PROOFSP.html">ld-skip-proofsp</a> state) 'include-book)
+        '(<a href="ACL2____MV.html">mv</a> nil nil state)
+        (<a href="COMMON-LISP____LIST.html">list</a> 'if
+              '(<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____LD-SKIP-PROOFSP.html">ld-skip-proofsp</a> state) 'initialize-acl2)
+              '(<a href="ACL2____MV.html">mv</a> nil nil state)
+              (<a href="COMMON-LISP____LIST.html">list</a> 'state-global-let*
+                    '((in-local-flg t))
+                    (<a href="COMMON-LISP____LIST.html">list</a> 'when-logic "LOCAL" x)))))
+
+#+acl2-loop-only
+(<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> encapsulate (<a href="COMMON-LISP_____62WHOLE.html">&amp;whole</a> event-form signatures &amp;rest cmd-lst)
+  (<a href="COMMON-LISP____LIST.html">list</a> 'encapsulate-fn
+        (<a href="COMMON-LISP____LIST.html">list</a> 'quote signatures)
+        (<a href="COMMON-LISP____LIST.html">list</a> 'quote cmd-lst)
+        'state
+        (<a href="COMMON-LISP____LIST.html">list</a> 'quote event-form)))</pre> 
+ 
+ <p>We see that in raw Lisp, <span class="v">encapsulate</span> generates a suitable <span class="v">progn</span> 
+ and <span class="v">local</span> is a no-op.</p> 
+ 
+ <p>You may find it instructive to look at the <span class="v">#-acl2-loop-only</span> and 
+ <span class="v">#+acl2-loop-only</span> definitions of other event macros.</p> 
+ 
+ <h3>Implementation-specific code</h3> 
+ 
+ <p>As of this writing, six Common Lisp implementations support ACL2: Allegro 
+ Common Lisp (ACL), Clozure CL (CCL), CMU Common Lisp (CMUCL), GNU Common 
+ Lisp (GCL), LispWorks, and Steel Bank Common Lisp (SBCL).  (Note: As of 
+ Sept. 2018 there remains a problem with CMUCL that was reported several months 
+ ago, which the implementor has indicated that he intends to try to fix.)  Some 
+ ACL2 raw-Lisp code is implementation-specific, that is, depends on which of 
+ these six Common Lisp implementations is the host lisp.  See for example the 
+ definitions of <span class="v">exit-lisp</span> and <span class="v">getenv$-raw</span>.  Here is an elided version 
+ of the definition of <span class="v">exit-lisp</span>.  Notice the readtime conditional used for 
+ each of the six supported Lisp implementations and also some that are no 
+ longer supported, like CLISP.  (Note: Normally we see ``<span class="v">gcl</span>'' for GCL but 
+ sometimes, as below, we see the somewhat archaic (but still acceptable) 
+ ``<span class="v">akcl</span>''.)</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> exit-lisp (<a href="COMMON-LISP_____62OPTIONAL.html">&amp;optional</a> (status '0 status-p))
+  &lt;&lt;code elided&gt;&gt;
+  #+clisp
+  (<a href="COMMON-LISP____IF.html">if</a> status-p (user::exit status) (user::exit))
+  #+lispworks ; Version 4.2.0; older versions have used bye
+  (<a href="COMMON-LISP____IF.html">if</a> status-p (lispworks:quit :status status) (lispworks:quit))
+  #+akcl
+  (<a href="COMMON-LISP____IF.html">if</a> status-p (si::bye status) (si::bye))
+  #+lucid
+  (lisp::exit) ; don't know how to handle status, but don't support lucid
+  #+ccl
+  (<a href="COMMON-LISP____IF.html">if</a> status-p (ccl::quit status) (ccl::quit))
+  #+cmu
+  &lt;&lt;code elided&gt;&gt;
+  #+allegro
+  (user::exit status :no-unwind t)
+  #+(<a href="COMMON-LISP____AND.html">and</a> mcl (<a href="COMMON-LISP____NOT.html">not</a> ccl))
+  (cl-user::quit) ; mcl support is deprecated, so we don't worry about status
+  #+sbcl
+  &lt;&lt;code elided&gt;&gt;
+  (<a href="COMMON-LISP____PROGN.html">progn</a> status-p status))</pre> 
+ 
+ <h3>ACL2 ``Experimental Versions''</h3> 
+ 
+ <p>Two dissertations have produced modifications of ACL2.</p> 
+ 
+ <ul> 
+ 
+ <li>ACL2(r), courtesy of Ruben Gamboa, extends the rational number data type 
+ to include irrational numbers.  It is built on a foundation of non-standard 
+ analysis, which is a logical theory (really, more than one) that makes sense 
+ of Leibniz's notion of ``infinitesimal'' in place of foundations based on 
+ limits.</li> 
+ 
+ <li>ACL2(p), courtesy of David Rager, supports both parallel evaluation in 
+ general and parallelization of the ACL2 waterfall.</li> 
+ 
+ </ul> 
+ 
+ <p>Code that is to be read only when building ACL2(r) has the readtime 
+ conditional <span class="v">#+:non-standard-analysis</span>, where the leading colon is actually 
+ optional but is typically used by convention.  Code that is to be read only 
+ when building ACL2(p) has the readtime conditional <span class="v">#+acl2-par</span>.  As of 
+ this writing, the maintenance of these systems has typically been performed by 
+ Kaufmann and Moore when reasonably feasible, but sometimes with assistance 
+ from Gamboa and Rager, especially when there is a major change.</p> 
+ 
+ <p>Note that ACL2(r) changes the logic — for example, the formula 
+ <span class="v">(<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP_____A2.html">*</a> x x) 2))</span> is a theorem of ACL2 but is disprovable in 
+ ACL2(r) — but ACL2(p) does not change the logic.  Another difference is 
+ that ACL2(r) was intended, as a design decision, to be sound; by contrast, 
+ ACL2(p) was intended to be sound in practice but with a small risk that an 
+ unsound result could be obtained.</p> 
+ 
+ <p>There is a somewhat elaborate mechanism for incorporating ACL2(p) source 
+ code into the ACL2 sources.  One part involves the use of feature 
+ <span class="v">:acl2-par</span>: that is, the use of <span class="v">#+acl2-par</span> to prefix code to be read 
+ only when building ACL2(p) and of <span class="v">#-acl2-par</span> to prefix code to be read 
+ only when building ACL2.  But there is also support for function and macro 
+ names with suffix <span class="v">"@PAR"</span>.  When considering ACL2 and not ACL2(p), these 
+ should be read simply by removing that suffix: for example, <span class="v">defun@par</span> is 
+ to be read as <span class="v">defun</span>, <span class="v">er@par</span> is to be read as <span class="v">er</span>, and so on. 
+ For information about how to make sense of the <span class="v">"@PAR"</span> suffix when 
+ reading the sources as ACL2(p) sources, see the Essay on Parallelism, 
+ Parallelism Warts, Parallelism Blemishes, Parallelism No-fixes, Parallelism 
+ Hazards, and #+ACL2-PAR notes.  Several definitions near the end of 
+ <span class="v">axioms.lisp</span>, below mention of that essay, implement the handling of 
+ <span class="v">"@PAR"</span> suffixes.</p> 
+ 
+ <p>At one time, the addition of hash-cons, function memoization, and 
+ fast-alists (see <a href="ACL2____HONS-AND-MEMOIZATION.html">hons-and-memoization</a>) was considered experimental, and 
+ resulted in a system called ACL2(h) with a corresponding readtime conditional 
+ of <span class="v">#+hons</span>.  That system, which was originally built on top of ACL2 by Bob 
+ Boyer and Warren Hunt and was updated by Jared Davis and Sol Swords, with 
+ contributions by Matt Kaufmann and J Moore, was ultimately updated and 
+ incorporated into ACL2 by Kaufmann and Moore after an extensive code review. 
+ Since Kaufmann and Moore now stand behind the resulting system and are 
+ maintaining it, and with assent from its contributors, what was formerly 
+ ACL2(h) is now just ACL2.</p> 
+ 
+ <p>NEXT SECTION: <a href="ACL2____DEVELOPERS-GUIDE-EXTENDING-KNOWLEDGE.html">developers-guide-extending-knowledge</a></p>
+</body>
+</html>

@@ -1,0 +1,377 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Memoize</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____MEMOIZE">Click for Memoize in the Full Manual</a></h3>
+
+<p>Turn on memoization for a specified function</p><p>See <a href="ACL2____HONS-AND-MEMOIZATION.html">hons-and-memoization</a> for a general discussion of the 
+ ``<a href="ACL2____HONS-ENABLED.html">hons-enabled</a>'' features: memoization, hash consing, and applicative 
+ hash tables.</p> 
+ 
+ <pre class="code">Examples:
+(<a href="ACL2____MEMOIZE.html">memoize</a> 'foo)                      ; remember the values of calls
+                                    ;   of foo
+(<a href="ACL2____MEMOIZE.html">memoize</a> 'foo :condition t)         ; same as above
+(<a href="ACL2____MEMOIZE.html">memoize</a> 'foo :condition '(test x)) ; memoize for args satisfying
+                                    ;   the given condition
+(<a href="ACL2____MEMOIZE.html">memoize</a> 'foo :condition-fn 'test)  ; memoize for args satisfying
+                                    ;   a call of the given function
+(<a href="ACL2____MEMOIZE.html">memoize</a> 'foo :recursive nil)       ; don't memoize recursive calls
+(<a href="ACL2____MEMOIZE.html">memoize</a> 'foo :aokp t)              ; attachments OK for stored results
+(<a href="ACL2____MEMOIZE.html">memoize</a> 'foo :stats nil)           ; don't collect info for (<a href="ACL2____MEMSUM.html">memsum</a>)
+(<a href="ACL2____MEMOIZE.html">memoize</a> 'foo :ideal-okp t)         ; memoize for raw Lisp even if foo is
+                                    ;   in :logic but not guard-verified
+
+General Form:
+(<a href="ACL2____MEMOIZE.html">memoize</a> fn                         ; memoizes fn and returns fn
+         :aokp         t/nil        ; optional (<a href="ACL2____DEFAULT.html">default</a> nil)
+         :commutative  t/lemma-name ; optional (<a href="ACL2____DEFAULT.html">default</a> nil)
+         :condition    condition    ; optional (<a href="ACL2____DEFAULT.html">default</a> t (unless :invoke))
+         :condition-fn condition-fn ; optional
+         :forget       t/nil        ; optional (<a href="ACL2____DEFAULT.html">default</a> nil)
+         :hints        hints        ; optional, for verifying the
+                                    ;   guards of condition-fn
+         :ideal-okp    t/:warn/nil  ; optional (<a href="ACL2____DEFAULT.html">default</a> nil)
+         :invoke       nil/fn       ; optional (<a href="ACL2____DEFAULT.html">default</a> nil)
+         :memo-table-init-size size ; optional (<a href="ACL2____DEFAULT.html">default</a> *mht-default-size*)
+         :otf-flg      otf-flg      ; optional, for verifying the
+                                    ;   guards of condition-fn
+         :recursive    t/nil        ; optional (<a href="ACL2____DEFAULT.html">default</a> t)
+         :stats        t/nil        ; optional (<a href="ACL2____DEFAULT.html">default</a> t (unless :invoke))
+         :total        ; see :DOC memoize-partial
+         :verbose      t/nil        ; optional (<a href="ACL2____DEFAULT.html">default</a> t)
+         )</pre> 
+ 
+ <p>where <span class="v">fn</span> evaluates to a user-defined function symbol; <span class="v">condition</span> 
+ is either <span class="v">t</span> (the default), <span class="v">'t</span>, <span class="v">nil</span>, or <span class="v">'nil</span>, or else 
+ evaluates to an expression whose free variables are among the formal 
+ parameters of <span class="v">fn</span>; and <span class="v">condition-fn</span> is either <span class="v">nil</span> (the default) 
+ or else evaluates to a legal function symbol.  Further restrictions and 
+ options are discussed below.  Note that all arguments are evaluated (but for 
+ the special handling of value <span class="v">t</span> for <span class="v">:commutative</span>, the argument must 
+ literally be <span class="v">t</span>; see below).</p> 
+ 
+ <p>Generally <span class="v">fn</span> must evaluate to a defined function symbol.  However, 
+ this value can be the name of a macro that is associated with such a function 
+ symbol; see <a href="ACL2____MACRO-ALIASES-TABLE.html">macro-aliases-table</a>.  That associated function symbol is 
+ the one called ``memoized'' in the discussion below, but we make no more 
+ mention of this subtlety.</p> 
+ 
+ <p>In the most common case, <span class="v">memoize</span> takes a single argument, which 
+ evaluates to a function symbol.  We call this function symbol the ``memoized 
+ function'' because ``memos'' are saved and re-used, in the following sense. 
+ When a call of the memoized function is evaluated, the result is ``memoized'' 
+ by associating the call's arguments with that result, in a suitable table. 
+ But first an attempt is made to avoid such evaluation, by doing a lookup in 
+ that table on the given arguments for the result, as stored for a previous 
+ call on those arguments.  If such a result is found, then it is returned 
+ without further computation.  This paragraph also applies if <span class="v">:condition</span> 
+ is supplied but is <span class="v">t</span> or <span class="v">'t</span>.</p> 
+ 
+ <p>If keyword argument <span class="v">:condition-fn</span> is supplied, but <span class="v">:condition</span> is 
+ not, then the result of evaluating <span class="v">:condition-fn</span> must be a defined 
+ function symbol whose formal parameter list and <span class="tt"><a href="ACL2____GUARD.html">guard</a></span> are the same as 
+ for the function being memoized.  If <span class="v">fn</span> is in <span class="v">:</span><span class="tt"><a href="ACL2____LOGIC.html">logic</a></span> mode, 
+ then <a href="ACL2____GUARD.html">guard</a>s must have been verified for <span class="v">:condition-fn</span>.  Such a 
+ ``condition function'' will be run whenever the memoized function is called, 
+ on the same parameters, and the lookup or table store described above are only 
+ performed if the result from the condition function call is non-<span class="v">nil</span>.</p> 
+ 
+ <p>Suppose however that <span class="v">:condition</span> is supplied.  If the value supplied is 
+ <span class="v">t</span> or <span class="v">'t</span>, then the lookup and table store described above are always 
+ done.  If the value is <span class="v">nil</span> or <span class="v">'nil</span>, then this lookup and table store 
+ are never done, although statistics may be gathered; see <a href="ACL2____PROFILE.html">profile</a>.  Now 
+ consider other values for <span class="v">:condition</span>.  An attempt will be made to define 
+ a condition function whose <a href="ACL2____GUARD.html">guard</a> and formal parameters list are the 
+ same as those of the memoized function, and whose body is the result, <span class="v">r</span>, 
+ of evaluating the given <span class="v">condition</span>.  The name of that condition function 
+ is the result of evaluating <span class="v">:condition-fn</span> if supplied, else is the result 
+ of concatenating the string <span class="v">"-MEMOIZE-CONDITION"</span> to the end of the name 
+ of the memoized function.  The condition function will be defined with <a href="ACL2____GUARD.html">guard</a> verification turned off, but that definition will be followed 
+ immediately by a <span class="tt"><a href="ACL2____VERIFY-GUARDS.html">verify-guards</a></span> event; and this is where the optional 
+ <span class="v">:hints</span> and <span class="v">:otf-flg</span> are attached.  At evaluation time the condition 
+ function is used as described in the preceding paragraph; so in effect, the 
+ condition (<span class="v">r</span>, above) is evaluated, with its variables bound to the 
+ corresponding actuals of the memoized function call, and the memoized function 
+ attempts a lookup or table store if and only if the result of that evaluation 
+ is non-<span class="v">nil</span>.</p> 
+ 
+ <p>Note that <span class="v">fn</span> can be either a <span class="v">:</span><span class="tt"><a href="ACL2____LOGIC.html">logic</a></span> mode function or a 
+ <span class="v">:</span><span class="tt"><a href="ACL2____PROGRAM.html">program</a></span> mode function.  However, only the corresponding raw Lisp 
+ function is actually memoized, so <a href="ACL2____GUARD.html">guard</a> violations can defeat 
+ memoization, and <span class="v">:</span><span class="tt"><a href="ACL2____LOGIC.html">logic</a></span> mode functions without their <a href="ACL2____GUARD.html">guard</a>s verified will only be memoized when called by <span class="v">:</span><span class="tt"><a href="ACL2____PROGRAM.html">program</a></span> 
+ mode functions.  (See <a href="ACL2____GUARDS-AND-EVALUATION.html">guards-and-evaluation</a> for more information about 
+ guards and evaluation in ACL2.)  If <span class="v">fn</span> is a <span class="v">:</span><span class="tt"><a href="ACL2____LOGIC.html">logic</a></span> mode 
+ function and <span class="v">:condition</span> is supplied and not <span class="v">t</span> or <span class="v">nil</span>, then the 
+ condition must be a <a href="ACL2____GUARD.html">guard</a>-verified function.</p> 
+ 
+ <p>Calls of this macro generate events of the form <span class="v">(<a href="ACL2____TABLE.html">table</a> memoize-table fn
+ ((:condition-fn fn) ...))</span>.  When successful, the returned value is of the 
+ form <span class="v">(<a href="ACL2____MV.html">mv</a> nil function-symbol state)</span>.</p> 
+ 
+ <p>Suppose that a function is already memoized.  Then it is illegal to memoize 
+ that function.  Moreover, if the function was memoized with an associated 
+ condition (i.e., was memoized with keyword <span class="v">:condition</span> or 
+ <span class="v">:condition-fn</span> having value other than <span class="v">t</span> or <span class="v">nil</span>), then it is 
+ also illegal to convert the function from <span class="v">:</span><span class="tt"><a href="ACL2____PROGRAM.html">program</a></span> to 
+ <span class="v">:</span><span class="tt"><a href="ACL2____LOGIC.html">logic</a></span> mode (see <a href="ACL2____VERIFY-TERMINATION.html">verify-termination</a>).  To turn off 
+ memoization, see <a href="ACL2____UNMEMOIZE.html">unmemoize</a>.</p> 
+ 
+ <p><span class="v">Memoize</span> is illegal for a function if its arguments include <span class="tt"><a href="ACL2____STATE.html">state</a></span>; if it returns any <a href="ACL2____STOBJ.html">stobj</a>s; if it has been excluded by <span class="tt"><a href="ACL2____NEVER-MEMOIZE.html">never-memoize</a></span>; or if it is excluded because it is ``special'' in the sense 
+ that it is in the <span class="v">"COMMON-LISP"</span> <a href="COMMON-LISP____PACKAGE.html">package</a>, it has no fixed output 
+ signature (i.e., it is in the value of the list constant 
+ <span class="v">(<a href="COMMON-LISP____IF.html">if</a> return-last do$)</span>, <span class="v">(<a href="COMMON-LISP____IF.html">if</a> return-last do$)</span>), it has associated 
+ raw-Lisp code, or it is used in the implementation of <a href="ACL2____HONS-AND-MEMOIZATION.html">hons-and-memoization</a>.  A constrained function (typically, one that is 
+ introduced in the signature of an <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span> event) cannot be 
+ memoized; in that case, one may wish to memoize its caller or attachment (see 
+ <a href="ACL2____DEFATTACH.html">defattach</a>).  A stobj can be an input of a memoized function, but in 
+ that case, the memoization table for that stobj will be cleared every time 
+ that stobj is updated.</p> 
+ 
+ <p>By default, <span class="v">memoize</span> does not store results when any attachments have 
+ been used (see <a href="ACL2____DEFATTACH.html">defattach</a>).  However, such results are stored when 
+ <span class="v">memoize</span> keyword parameter <span class="v">:aokp</span> has value <span class="v">t</span>.  Note that for 
+ purposes of this discussion, the use of a stored value for a subsidiary 
+ function that was memoized with <span class="v">:aokp t</span> is treated as the use of an 
+ attachment, since ACL2 does not know whether or not an attachment was actually 
+ used in that case.</p> 
+ 
+ <p>We conclude with by documenting keyword parameters not discussed above.</p> 
+ 
+ <p>Keyword parameter <span class="v">:invoke</span> is <span class="v">nil</span> by default, but its value can be 
+ a symbol, <span class="v">g</span>.  Examples may be found in <a href="ACL2____COMMUNITY-BOOKS.html">community-books</a> file 
+ <span class="v">demos/memoize-invoke-input.lsp</span>; for a tool built on this capability that 
+ supports evaluation using proved input-output pairs for a function, see <a href="ACL2____ADD-IO-PAIRS.html">add-io-pairs</a>.  The effect of <span class="v">:invoke g</span> is to replace every call of 
+ <span class="v">fn</span> by a call of <span class="v">g</span>.  However, there are some restrictions.  The 
+ function symbol <span class="v">fn</span> must be in <span class="v">:logic</span> mode, and the symbol <span class="v">g</span> 
+ must be a <a href="ACL2____GUARD.html">guard</a>-verified <span class="v">:</span><span class="tt"><a href="ACL2____LOGIC.html">logic</a></span>-mode function symbol with 
+ the same <a href="ACL2____SIGNATURE.html">signature</a> as that of <span class="v">fn</span>.  There is the following proof 
+ obligation: there must be a theorem in the current ACL2 <a href="ACL2____WORLD.html">world</a> stating 
+ the equality of calls of <span class="v">fn</span> and <span class="v">g</span> on a duplicate-free argument list; 
+ for example, if the formals list of <span class="v">fn</span> is <span class="v">(x1 ... xn)</span>, then the 
+ theorem could be <span class="v">(<a href="COMMON-LISP____EQUAL.html">equal</a> (fn x1 .... xn) (<a href="ACL2____G.html">g</a> x1 ... xn))</span>.  If ACL2 finds no 
+ such theorem, it will print a <span class="tt"><a href="ACL2____DEFTHM.html">defthm</a></span> event that you may wish to 
+ submit.  Next we describe a potential second proof obligation, which will 
+ similarly be printed if it is not met.  Let <span class="v">guard-fn</span> be the <a href="ACL2____GUARD.html">guard</a> 
+ for <span class="v">fn</span>, and let <span class="v">guard-g</span> be the result of substituting the formals of 
+ <span class="v">fn</span> for the formals of <span class="v">g</span> in the guard for <span class="v">g</span>.  If <span class="v">guard-fn</span> 
+ tautologically implies <span class="v">guard-g</span> (for example, the two are equal or 
+ <span class="v">guard-g</span> is <span class="v">'T</span>), then there is no further proof obligation. 
+ Otherwise, there must be a theorem in the current ACL2 <a href="ACL2____WORLD.html">world</a> of the 
+ form <span class="v">(<a href="ACL2____IMPLIES.html">implies</a> guard-fn guard-g)</span>.  See <a href="ACL2____VERIFY-GUARD-IMPLICATION.html">verify-guard-implication</a> for 
+ a utility that makes it wasy for you to prove such a theorem.  Finally, 
+ contrary to the usual defaults, the values of keyword <span class="v">:recursive</span>, 
+ <span class="v">:condition</span> and <span class="v">:stats</span> default to <span class="v">nil</span>.  Indeed, it is an error 
+ to specify a non-nil value for <span class="v">:recursive</span>.  The alternate defaults of 
+ <span class="v">nil</span> for <span class="v">:condition</span> and <span class="v">:stats</span> can avoid memoization overhead 
+ when one simply wishes to call <span class="v">g</span> in place of <span class="v">fn</span>; you may override 
+ those defaults if you actually want to save computed values and use 
+ <span class="v">(<a href="ACL2____MEMSUM.html">memsum</a>)</span> to see statistics.</p> 
+ 
+ <p>Keyword parameter <span class="v">:recursive</span> is <span class="v">t</span> by default, which means that 
+ recursive calls of <span class="v">fn</span> will be memoized just as ``top-level'' calls of 
+ <span class="v">fn</span>.  When <span class="v">:recursive</span> is instead set to <span class="v">nil</span>, memoization is only 
+ done at the top level.  Using <span class="v">:recursive nil</span> is similar to writing a 
+ wrapper function that just calls <span class="v">fn</span>, and memoizing the wrapper instead of 
+ <span class="v">fn</span>.</p> 
+ 
+ <p>A non-<span class="v">nil</span> value for <span class="v">:commutative</span> can be supplied if <span class="v">fn</span> is a 
+ binary function in <span class="v">:logic</span> mode.  Suppose that the <span class="v">memoize</span> event is 
+ successful, and consider a subsequent call of <span class="v">fn</span> for which some argument 
+ to <span class="v">fn</span> is either a rational number or, in some host Lisps (currently 
+ either CCL, or GCL Version 2.6.12 or later) a <a href="ACL2____HONS.html">hons</a>.  (Indeed, for such 
+ GCL versions this is true for any cons, not just a hons.)  Then when the 
+ evaluation of <span class="v">fn</span> on those arguments is memoized, the evaluation of 
+ <span class="v">fn</span> on the swap of those arguments is, in essence, also memoized.  If 
+ <span class="v">:commutative</span> is supplied and is not <span class="v">nil</span> or <span class="v">t</span>, then it should be 
+ the name of a previously-proved theorem whose formula states the commutativity 
+ of <span class="v">fn</span>, i.e., is the formula <span class="v">(<a href="COMMON-LISP____EQUAL.html">equal</a> (fn x y) (fn y x))</span> for a pair 
+ <span class="v">{x,y}</span> of distinct variables.  If <span class="v">:commutative</span> is <span class="v">t</span> — but 
+ not merely an expression that evaluates to <span class="v">t</span> — then an attempt to 
+ prove such a lemma will be made on-the-fly.  The name of the lemma is the 
+ symbol in the same package as <span class="v">fn</span>, obtained by adding the suffix 
+ <span class="v">"-COMMUTATIVE"</span> to the <span class="tt"><a href="COMMON-LISP____SYMBOL-NAME.html">symbol-name</a></span> of <span class="v">fn</span>.  If the proof 
+ attempt fails, then you may want first to prove the lemma yourself with 
+ appropriate hints and perhaps supporting lemmas, and then supply the name of 
+ that lemma as the value of <span class="v">:commutative</span>.</p> 
+ 
+ <p>If <span class="v">:commutative</span> is supplied, and a non-commutative condition is 
+ provided by <span class="v">:condition</span> or <span class="v">:condition-fn</span>, then although the results 
+ will be correct, the extra memoization afforded by <span class="v">:commutative</span> is 
+ unspecified.</p> 
+ 
+ <p>If <span class="v">:memo-table-init-size</span> is supplied, then it should be a positive 
+ integer specifying the initial size of an associated hash table.</p> 
+ 
+ <p>Argument <span class="v">:aokp</span> is relevant only when attachments are used; see <a href="ACL2____DEFATTACH.html">defattach</a> for background on attachments.  When <span class="v">:aokp</span> is <span class="v">nil</span>, the 
+ default, computed values are not stored when an attachment was used, or even 
+ when an attachment may have been used because a function was called that had 
+ been memoized using <span class="v">:aokp t</span>.  Otherwise, computed values are always 
+ stored, but saved values are not used except when attachments are allowed.  To 
+ summarize:</p> 
+ 
+ <pre class="code">aokp=nil (<a href="ACL2____DEFAULT.html">default</a>): ``Pure'', i.e., values do not depend on attachments
+- Fetch: always legal
+- Store: only store resulting value when attachments were not used
+
+aokp=t: ``Impure'', i.e., values may depend on attachments
+- Fetch: only legal when attachments are allowed (e.g., not during proofs)
+- Store: always legal</pre> 
+ 
+ <p>Note that for this handling of <span class="v">:aokp</span>, the computation of a value 
+ returned by function <span class="tt"><a href="ACL2____APPLY_42-USERFN.html">apply$-userfn</a></span> or <span class="tt"><a href="ACL2____BADGE-USERFN.html">badge-userfn</a></span> is 
+ considered to have used an attachment.</p> 
+ 
+ <p>The default value for <span class="v">:stats</span> is essentially <span class="v">t</span>.  (Technically, 
+ this can be subverted by using raw Lisp, to change the default by changing the 
+ values of variables <span class="v">*record-xxx*</span> introduced in ACL2 source file 
+ <span class="v">memoize-raw.lisp</span>.)  When <span class="v">:stats</span> has its default value (assuming the 
+ above raw Lisp changes are not made) or value <span class="v">t</span>, calls of memoized 
+ functions will collect information that can be displayed by calling <span class="tt"><a href="ACL2____MEMSUM.html">memsum</a></span>.  But if <span class="v">:stats</span> is <span class="v">nil</span>, this information will not be 
+ collected, possibly resulting in better performance for the memoized 
+ function.  As of this writing, built-in memoized functions use <span class="v">:stats nil</span> 
+ to benefit performance.</p> 
+ 
+ <p>If <span class="v">:ideal-okp</span> is supplied and not <span class="v">nil</span>, then it is permitted to 
+ memoize an ``ideal-mode'' function: one in <span class="v">:</span><span class="tt"><a href="ACL2____LOGIC.html">logic</a></span> mode whose 
+ <a href="ACL2____GUARD.html">guard</a>s have not been verified.  However, this might not have the effect 
+ you desire, because you will be memoizing the submitted version of the 
+ function, not its executable-counterpart that is executed in the ACL2 loop and 
+ on behalf of the prover (see <a href="ACL2____EVALUATION.html">evaluation</a>).  Thus, if you memoize an 
+ ideal-mode function and then call it at the top-level of the ACL2 loop (or, 
+ for example, it is called to evaluate a ground term arising in a proof or in 
+ the evaluation of a <a href="ACL2____META.html">meta</a>function in a proof), the effects of 
+ memoization will not be felt because the raw Lisp code is not run unless 
+ guards are verified.</p> 
+ 
+ <p>There are circumstances in which the raw Lisp code of an ideal-mode function 
+ is called.  For example, if the ideal-mode function is called by a 
+ <span class="v">:</span><span class="tt"><a href="ACL2____PROGRAM.html">program</a></span> mode function, evaluation can transfer to raw Lisp where 
+ the effects of memoization will be felt.</p> 
+ 
+ <p>A trick, described below, with <span class="tt"><a href="ACL2____EC-CALL.html">ec-call</a></span> can provide some of the 
+ benefit of memoizing an ideal-mode function.  The trick exploits the fact that 
+ <span class="v">ec-call</span> allows you to call an ideal-mode function within a <a href="ACL2____GUARD.html">guard</a>-verified (``Common Lisp compliant'') <span class="v">:</span><span class="tt"><a href="ACL2____LOGIC.html">logic</a></span> mode function 
+ without having to verify guards for the ideal-mode function.  The following 
+ edited log illustrates the points above.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="COMMON-LISP____DEFUN.html">defun</a> fib (n)
+         (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____NATP.html">natp</a> n) :verify-guards nil))
+         (<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2____ZP.html">zp</a> n)
+             0
+           (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQL.html">eql</a> n 1)
+               1
+             (<a href="COMMON-LISP_____B2.html">+</a> (fib (<a href="COMMON-LISP____-.html">-</a> n 1)) (fib (<a href="COMMON-LISP____-.html">-</a> n 2))))))
+[[ .. output omitted .. ]]
+ FIB
+ACL2 !&gt;(<a href="ACL2____MEMOIZE.html">memoize</a> 'fib :ideal-okp t)
+[[ .. output omitted .. ]]
+ FIB
+ACL2 !&gt;(<a href="ACL2____TIME_42.html">time$</a> (fib 38)) ; slow: uses only executable-counterpart
+
+ACL2 Warning [Guards] in TOP-LEVEL:  Guard-checking will be inhibited
+on recursive calls of the executable-counterpart (i.e., in the ACL2
+logic) of FIB.  To check guards on all recursive calls:
+  (<a href="ACL2____SET-GUARD-CHECKING.html">set-guard-checking</a> :all)
+To leave behavior unchanged except for inhibiting this message:
+  (<a href="ACL2____SET-GUARD-CHECKING.html">set-guard-checking</a> :nowarn)
+
+; (EV-REC *RETURN-LAST-ARG3* ...) took
+; 3.91 seconds realtime, 3.90 seconds runtime
+; (416 bytes allocated).
+39088169
+ACL2 !&gt;(<a href="ACL2____TIME_42.html">time$</a> (fib 38)) ; still slow; no results were stored before
+
+ACL2 Warning [Guards] in TOP-LEVEL:  Guard-checking will be inhibited
+on recursive calls of the executable-counterpart (i.e., in the ACL2
+logic) of FIB.  To check guards on all recursive calls:
+  (<a href="ACL2____SET-GUARD-CHECKING.html">set-guard-checking</a> :all)
+To leave behavior unchanged except for inhibiting this message:
+  (<a href="ACL2____SET-GUARD-CHECKING.html">set-guard-checking</a> :nowarn)
+
+; (EV-REC *RETURN-LAST-ARG3* ...) took
+; 3.92 seconds realtime, 3.91 seconds runtime
+; (416 bytes allocated).
+39088169
+ACL2 !&gt;(<a href="COMMON-LISP____DEFUN.html">defun</a> fib-logic-wrapper (n) ; guard-verified
+         (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____NATP.html">natp</a> n)))
+         (<a href="ACL2____EC-CALL.html">ec-call</a> (fib n)))
+[[ .. output omitted .. ]]
+ FIB-LOGIC-WRAPPER
+ACL2 !&gt;(<a href="ACL2____MEMOIZE.html">memoize</a> 'fib-logic-wrapper)
+[[ .. output omitted .. ]]
+ FIB-LOGIC-WRAPPER
+ACL2 !&gt;(<a href="ACL2____TIME_42.html">time$</a> (fib-logic-wrapper 38)) ; slow; no fib results are stored
+
+ACL2 Warning [Guards] in TOP-LEVEL:  Guard-checking will be inhibited
+on recursive calls of the executable-counterpart (i.e., in the ACL2
+logic) of FIB.  To check guards on all recursive calls:
+  (<a href="ACL2____SET-GUARD-CHECKING.html">set-guard-checking</a> :all)
+To leave behavior unchanged except for inhibiting this message:
+  (<a href="ACL2____SET-GUARD-CHECKING.html">set-guard-checking</a> :nowarn)
+
+; (EV-REC *RETURN-LAST-ARG3* ...) took
+; 3.92 seconds realtime, 3.91 seconds runtime
+; (2,128 bytes allocated).
+39088169
+ACL2 !&gt;(<a href="ACL2____TIME_42.html">time$</a> (fib-logic-wrapper 38)) ; fast; fib-logic-wrapper result was stored
+; (EV-REC *RETURN-LAST-ARG3* ...) took
+; 0.00 seconds realtime, 0.00 seconds runtime
+; (16 bytes allocated).
+39088169
+ACL2 !&gt;(<a href="ACL2____TIME_42.html">time$</a> (fib-logic-wrapper 37)) ; slow; result only for 38 was stored
+
+ACL2 Warning [Guards] in TOP-LEVEL:  Guard-checking will be inhibited
+on recursive calls of the executable-counterpart (i.e., in the ACL2
+logic) of FIB.  To check guards on all recursive calls:
+  (<a href="ACL2____SET-GUARD-CHECKING.html">set-guard-checking</a> :all)
+To leave behavior unchanged except for inhibiting this message:
+  (<a href="ACL2____SET-GUARD-CHECKING.html">set-guard-checking</a> :nowarn)
+
+; (EV-REC *RETURN-LAST-ARG3* ...) took
+; 2.42 seconds realtime, 2.42 seconds runtime
+; (416 bytes allocated).
+24157817
+ACL2 !&gt;(<a href="COMMON-LISP____DEFUN.html">defun</a> fib-program-wrapper (n) ; program mode function
+         (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____NATP.html">natp</a> n) :mode :program))
+         (fib n))
+
+Summary
+Form:  ( DEFUN FIB-PROGRAM-WRAPPER ...)
+Rules: NIL
+Time:  0.00 seconds (prove: 0.00, print: 0.00, other: 0.00)
+ FIB-PROGRAM-WRAPPER
+ACL2 !&gt;(<a href="ACL2____TIME_42.html">time$</a> (fib-program-wrapper 100)) ; fast because raw-Lisp fib is called
+; (EV-REC *RETURN-LAST-ARG3* ...) took
+; 0.00 seconds realtime, 0.00 seconds runtime
+; (7,600 bytes allocated).
+354224848179261915075
+ACL2 !&gt;</pre> 
+ 
+ <p>Two non-<span class="v">nil</span> values are allowed for keyword parameter <span class="v">:ideal-okp</span>: 
+ <span class="v">:warn</span> and <span class="v">t</span>.  Both of these values allow memoization of ideal-mode 
+ functions, but if <span class="v">:warn</span> is supplied then a warning will take place at 
+ memoization time, specifically for the resulting <a href="ACL2____TABLE.html">table</a> event.  Note 
+ that you may set the key <span class="v">:memoize-ideal-okp</span> of the <span class="tt"><a href="ACL2____ACL2-DEFAULTS-TABLE.html">ACL2-defaults-table</a></span> to value <span class="v">t</span> or <span class="v">:warn</span> to change the default, but 
+ if parameter <span class="v">:ideal-okp</span> is supplied, the <span class="tt"><a href="ACL2____ACL2-DEFAULTS-TABLE.html">ACL2-defaults-table</a></span> 
+ value is ignored.</p> 
+ 
+ <p>If <span class="v">:verbose</span> is supplied, it should either be <span class="v">nil</span>, which will 
+ inhibit proof, event, and <a href="ACL2____SUMMARY.html">summary</a> output (see <a href="ACL2____WITH-OUTPUT.html">with-output</a>), or 
+ else <span class="v">t</span> (the default), which does not inhibit output.  If the output 
+ baffles you, try</p> 
+ 
+ <pre class="code">:trans1 (<a href="ACL2____MEMOIZE.html">memoize</a> ...)</pre> 
+ 
+ <p>to see the single-step macroexpansion of your <span class="v">memoize</span> call.</p> 
+ 
+ <p>The default for <span class="v">:forget</span> is <span class="v">nil</span>.  If <span class="v">:forget</span> is supplied, and 
+ not <span class="v">nil</span>, then it must be <span class="v">t</span>, which causes all memoization done for a 
+ top-level call of <span class="v">fn</span> to be forgotten when that top-level call 
+ exits.</p>
+</body>
+</html>

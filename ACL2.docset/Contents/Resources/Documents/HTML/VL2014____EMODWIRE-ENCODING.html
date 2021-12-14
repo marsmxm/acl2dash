@@ -1,0 +1,189 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Emodwire-encoding</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL2014____EMODWIRE-ENCODING">Click for Emodwire-encoding in the Full Manual</a></h3>
+
+<p>A simple encoding scheme to basenames that are free of certain 
+special characters.</p><p>Usually Verilog wire names do not have special characters in them, 
+but with escaped identifiers it is possible to have names that include 
+brackets, dots, etc.</p> 
+ 
+<p>These special characters could pose certain problems.  The most obvious is 
+in a module such as this:</p> 
+ 
+<pre class="code">wire [7:0] w ;
+wire w[3] ;</pre> 
+ 
+<p>Here, the E wires corresponding to <span class="v">w</span> would be <span class="v">ACL2::|w[7]|</span> on down 
+to <span class="v">ACL2::|w[0]|</span>.  But if we naively translate <span class="v">w[3] </span> into 
+<span class="v">ACL2::|w[3]|</span> then there could be a name clash.</p> 
+ 
+<p>To avoid this kind of problem, we use a simple encoding scheme that ensures 
+there are no brackets in the basename of a <a href="VL2014____VL-EMODWIRE-P.html">vl-emodwire-p</a>.  We originally 
+used the following, trivial encoding scheme:</p> 
+ 
+<ul> 
+<li><span class="v">[ ---&gt; {1</span></li> 
+<li><span class="v">] ---&gt; {2</span></li> 
+<li><span class="v">{ ---&gt; {3</span></li> 
+</ul> 
+ 
+<p>But later we decided to slightly extend this scheme, to ensure that the 
+special characters <span class="v">.</span>, <span class="v">!</span>, and <span class="v">/</span> also do not occur.  Why?  We 
+think having <span class="v">.</span> in a name could be confusing to some tools since it is used 
+as a hierarchical identifier in Verilog.  Meanwhile, <span class="v">!</span> is used as a 
+hierarchical identifier in E (e.g., see <span class="v">mod-state</span>).  And we have 
+occasionally seen other Verilog tools that use <span class="v">/</span> as a hierarchical 
+separator.</p> 
+ 
+<p>To ensure these characters also do not occur, we extend our encoding scheme 
+in a simple way:</p> 
+ 
+<ul> 
+<li><span class="v">. ---&gt; {4</span></li> 
+<li><span class="v">! ---&gt; {5</span></li> 
+<li><span class="v">/ ---&gt; {6</span></li> 
+</ul> 
+ 
+<p>This encoding is done automatically by the <a href="VL2014____VL-EMODWIRE.html">vl-emodwire</a> constructor 
+and the appropriate decoding is done by the <a href="VL2014____VL-EMODWIRE-_E3BASENAME.html">vl-emodwire-&gt;basename</a> 
+accessor.  Usually no encoding is necessary, so these functions are optimized 
+for the case that there are no bracket or { characters.</p> 
+ 
+<p>Note that we actually implement the encoding and decoding functions in 
+raw-lisp for better performance.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>vl-emodwire-encode-chars</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> vl-emodwire-encode-chars (x)
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____CHARACTER-LISTP.html">character-listp</a> x)))
+       (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ATOM.html">atom</a> x)
+           nil
+           (<a href="COMMON-LISP____LET.html">let</a> ((<a href="COMMON-LISP____REST.html">rest</a> (vl-emodwire-encode-chars (<a href="COMMON-LISP____CDR.html">cdr</a> x))))
+                (case (<a href="COMMON-LISP____CAR.html">car</a> x)
+                      (#\[ (<a href="COMMON-LISP____LIST_A2.html">list*</a> #\{ #\1 rest))
+                      (#\] (<a href="COMMON-LISP____LIST_A2.html">list*</a> #\{ #\2 rest))
+                      (#\{ (<a href="COMMON-LISP____LIST_A2.html">list*</a> #\{ #\3 rest))
+                      (#\. (<a href="COMMON-LISP____LIST_A2.html">list*</a> #\{ #\4 rest))
+                      (#\! (<a href="COMMON-LISP____LIST_A2.html">list*</a> #\{ #\5 rest))
+                      (#\/ (<a href="COMMON-LISP____LIST_A2.html">list*</a> #\{ #\6 rest))
+                      (otherwise (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CAR.html">car</a> x) rest))))))</pre> 
+<p><b>Theorem: </b>character-listp-of-vl-emodwire-encode-chars</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> character-listp-of-vl-emodwire-encode-chars
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____FORCE.html">force</a> (<a href="ACL2____CHARACTER-LISTP.html">character-listp</a> x))
+                 (<a href="ACL2____CHARACTER-LISTP.html">character-listp</a> (vl-emodwire-encode-chars x))))</pre> 
+<p><b>Theorem: </b>no-special-chars-in-vl-emodwire-encode-chars</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> no-special-chars-in-vl-emodwire-encode-chars
+        (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> #\[ (vl-emodwire-encode-chars x)))
+             (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> #\] (vl-emodwire-encode-chars x)))
+             (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> #\. (vl-emodwire-encode-chars x)))
+             (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> #\! (vl-emodwire-encode-chars x)))
+             (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> #\/ (vl-emodwire-encode-chars x)))))</pre> 
+<p><b>Theorem: </b>vl-emodwire-encode-chars-identity</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-emodwire-encode-chars-identity
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> #\[ x))
+                      (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> #\] x))
+                      (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> #\{ x))
+                      (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> #\. x))
+                      (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> #\! x))
+                      (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> #\/ x)))
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (vl-emodwire-encode-chars x)
+                        (<a href="ACL2____LIST-FIX.html">list-fix</a> x))))</pre> 
+<p><b>Function: </b>vl-emodwire-encoding-valid-p</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> vl-emodwire-encoding-valid-p (x)
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____CHARACTER-LISTP.html">character-listp</a> x)))
+       (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____ATOM.html">atom</a> x) t)
+             ((<a href="COMMON-LISP____EQL.html">eql</a> (<a href="COMMON-LISP____CAR.html">car</a> x) #\{)
+              (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____CONSP.html">consp</a> (<a href="COMMON-LISP____CDR.html">cdr</a> x))
+                   (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____EQL.html">eql</a> (<a href="COMMON-LISP____CADR.html">cadr</a> x) #\1)
+                       (<a href="COMMON-LISP____EQL.html">eql</a> (<a href="COMMON-LISP____CADR.html">cadr</a> x) #\2)
+                       (<a href="COMMON-LISP____EQL.html">eql</a> (<a href="COMMON-LISP____CADR.html">cadr</a> x) #\3)
+                       (<a href="COMMON-LISP____EQL.html">eql</a> (<a href="COMMON-LISP____CADR.html">cadr</a> x) #\4)
+                       (<a href="COMMON-LISP____EQL.html">eql</a> (<a href="COMMON-LISP____CADR.html">cadr</a> x) #\5)
+                       (<a href="COMMON-LISP____EQL.html">eql</a> (<a href="COMMON-LISP____CADR.html">cadr</a> x) #\6))
+                   (vl-emodwire-encoding-valid-p (<a href="COMMON-LISP____CDDR.html">cddr</a> x))))
+             (t (vl-emodwire-encoding-valid-p (<a href="COMMON-LISP____CDR.html">cdr</a> x)))))</pre> 
+<p><b>Theorem: </b>vl-emodwire-encoding-valid-p-of-vl-emodwire-encode-chars</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-emodwire-encoding-valid-p-of-vl-emodwire-encode-chars
+        (vl-emodwire-encoding-valid-p (vl-emodwire-encode-chars x)))</pre> 
+<p><b>Theorem: </b>vl-emodwire-encoding-valid-p-typical</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-emodwire-encoding-valid-p-typical
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> #\{ x))
+                 (vl-emodwire-encoding-valid-p x)))</pre> 
+<p><b>Theorem: </b>vl-emodwire-encoding-valid-p-of-append</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-emodwire-encoding-valid-p-of-append
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____FORCE.html">force</a> (vl-emodwire-encoding-valid-p x))
+                      (<a href="ACL2____FORCE.html">force</a> (vl-emodwire-encoding-valid-p y)))
+                 (vl-emodwire-encoding-valid-p (<a href="COMMON-LISP____APPEND.html">append</a> x y))))</pre> 
+<p><b>Function: </b>vl-emodwire-decode-chars</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> vl-emodwire-decode-chars (x)
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____CHARACTER-LISTP.html">character-listp</a> x)))
+       (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____ATOM.html">atom</a> x) nil)
+             ((<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQL.html">eql</a> (<a href="COMMON-LISP____CAR.html">car</a> x) #\{) (<a href="COMMON-LISP____CONSP.html">consp</a> (<a href="COMMON-LISP____CDR.html">cdr</a> x)))
+              (<a href="COMMON-LISP____LET.html">let</a> ((<a href="COMMON-LISP____REST.html">rest</a> (vl-emodwire-decode-chars (<a href="COMMON-LISP____CDDR.html">cddr</a> x))))
+                   (case (<a href="COMMON-LISP____CADR.html">cadr</a> x)
+                         (#\1 (<a href="COMMON-LISP____CONS.html">cons</a> #\[ rest))
+                         (#\2 (<a href="COMMON-LISP____CONS.html">cons</a> #\] rest))
+                         (#\3 (<a href="COMMON-LISP____CONS.html">cons</a> #\{ rest))
+                         (#\4 (<a href="COMMON-LISP____CONS.html">cons</a> #\. rest))
+                         (#\5 (<a href="COMMON-LISP____CONS.html">cons</a> #\! rest))
+                         (otherwise (<a href="COMMON-LISP____CONS.html">cons</a> #\/ rest)))))
+             (t (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CAR.html">car</a> x)
+                      (vl-emodwire-decode-chars (<a href="COMMON-LISP____CDR.html">cdr</a> x))))))</pre> 
+<p><b>Theorem: </b>vl-emodwire-decode-chars-under-iff</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-emodwire-decode-chars-under-iff
+        (<a href="ACL2____IFF.html">iff</a> (vl-emodwire-decode-chars x)
+             (<a href="COMMON-LISP____CONSP.html">consp</a> x)))</pre> 
+<p><b>Theorem: </b>character-listp-of-vl-emodwire-decode-chars</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> character-listp-of-vl-emodwire-decode-chars
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____FORCE.html">force</a> (<a href="ACL2____CHARACTER-LISTP.html">character-listp</a> x))
+                 (<a href="ACL2____CHARACTER-LISTP.html">character-listp</a> (vl-emodwire-decode-chars x))))</pre> 
+<p><b>Theorem: </b>vl-emodwire-decode-chars-of-vl-emodwire-encode-chars</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-emodwire-decode-chars-of-vl-emodwire-encode-chars
+ (<a href="ACL2____IMPLIES.html">implies</a>
+      (<a href="ACL2____FORCE.html">force</a> (<a href="ACL2____CHARACTER-LISTP.html">character-listp</a> x))
+      (<a href="COMMON-LISP____EQUAL.html">equal</a> (vl-emodwire-decode-chars (vl-emodwire-encode-chars x))
+             (<a href="ACL2____LIST-FIX.html">list-fix</a> x))))</pre> 
+<p><b>Theorem: </b>vl-emodwire-decode-chars-identity</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-emodwire-decode-chars-identity
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____CASE-SPLIT.html">case-split</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> #\{ x)))
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (vl-emodwire-decode-chars x)
+                        (<a href="ACL2____LIST-FIX.html">list-fix</a> x))))</pre> 
+<p><b>Theorem: </b>equal-of-vl-emodwire-decode-chars</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> equal-of-vl-emodwire-decode-chars
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (vl-emodwire-encoding-valid-p x)
+                      (vl-emodwire-encoding-valid-p y)
+                      (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> #\[ x))
+                      (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> #\] x))
+                      (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> #\. x))
+                      (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> #\! x))
+                      (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> #\/ x))
+                      (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> #\[ y))
+                      (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> #\] y))
+                      (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> #\. y))
+                      (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> #\! y))
+                      (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> #\/ y)))
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (vl-emodwire-decode-chars x)
+                               (vl-emodwire-decode-chars y))
+                        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____LIST-FIX.html">list-fix</a> x) (<a href="ACL2____LIST-FIX.html">list-fix</a> y)))))</pre> 
+<p><b>Function: </b>vl-emodwire-encode-aux</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> vl-emodwire-encode-aux (x)
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____TYPE.html">type</a> string x))
+       (<a href="ACL2____B_A2.html">b*</a> ((chars (<a href="ACL2____EXPLODE.html">explode</a> x))
+            (encoded (vl-emodwire-encode-chars chars)))
+           (<a href="ACL2____IMPLODE.html">implode</a> encoded)))</pre> 
+<p><b>Function: </b>vl-emodwire-decode-aux</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> vl-emodwire-decode-aux (x)
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____TYPE.html">type</a> string x))
+       (<a href="ACL2____B_A2.html">b*</a> ((chars (<a href="ACL2____EXPLODE.html">explode</a> x))
+            (decoded (vl-emodwire-decode-chars chars)))
+           (<a href="ACL2____IMPLODE.html">implode</a> decoded)))</pre> 
+<p><b>Function: </b>vl-emodwire-encode</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> vl-emodwire-encode (x)
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____TYPE.html">type</a> string x))
+       (<a href="ACL2____MBE.html">mbe</a> :logic (vl-emodwire-encode-aux x)
+            :exec (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____POSITION.html">position</a> #\[ (<a href="COMMON-LISP____THE.html">the</a> string x))
+                          (<a href="COMMON-LISP____POSITION.html">position</a> #\] (<a href="COMMON-LISP____THE.html">the</a> string x))
+                          (<a href="COMMON-LISP____POSITION.html">position</a> #\{ (<a href="COMMON-LISP____THE.html">the</a> string x))
+                          (<a href="COMMON-LISP____POSITION.html">position</a> #\. (<a href="COMMON-LISP____THE.html">the</a> string x))
+                          (<a href="COMMON-LISP____POSITION.html">position</a> #\! (<a href="COMMON-LISP____THE.html">the</a> string x))
+                          (<a href="COMMON-LISP____POSITION.html">position</a> #\/ (<a href="COMMON-LISP____THE.html">the</a> string x)))
+                      (vl-emodwire-encode-aux x)
+                      x)))</pre> 
+<p><b>Function: </b>vl-emodwire-decode</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> vl-emodwire-decode (x)
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____TYPE.html">type</a> string x))
+       (<a href="ACL2____MBE.html">mbe</a> :logic (vl-emodwire-decode-aux x)
+            :exec (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____POSITION.html">position</a> #\{ x)
+                      (vl-emodwire-decode-aux x)
+                      x)))</pre> 
+
+</body>
+</html>

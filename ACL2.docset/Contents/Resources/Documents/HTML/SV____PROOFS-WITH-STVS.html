@@ -1,0 +1,150 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Proofs-with-stvs</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=SV____PROOFS-WITH-STVS">Click for Proofs-with-stvs in the Full Manual</a></h3>
+
+<p>How to do proofs about hardware models using STVs and GL.</p> 
+ 
+<p>Part of the <a href="SV____SV-TUTORIAL.html">sv-tutorial</a>. Previous section: <a href="SV____STVS-AND-TESTING.html">stvs-and-testing</a>.</p> 
+ 
+<h4>Simple STV Proofs</h4> 
+ 
+<p>Now that we've set up a symbolic test vector (in the previous section), we 
+can try some proofs about it.  Here is a simple example:</p> 
+ 
+<pre class="code">(<a href="ACL2____DEF-GL-THM.html">acl2::def-gl-thm</a>
+    alu16-adds
+    :hyp (<a href="COMMON-LISP____AND.html">and</a> (alu-test-vector-autohyps)
+              (<a href="COMMON-LISP____EQUAL.html">equal</a> op *op-plus*))
+    :concl (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____CDR.html">cdr</a> (<a href="COMMON-LISP____ASSOC.html">assoc</a> 'res
+                              (<a href="ACL2____SVTV-RUN.html">svtv-run</a> (<a href="SV____ALU-TEST-VECTOR.html">alu-test-vector</a>)
+                                        (alu-test-vector-autoins))))
+                  (<a href="ACL2____LOGHEAD.html">loghead</a> 16 (<a href="COMMON-LISP_____B2.html">+</a> a b)))
+    :g-bindings (alu-test-vector-autobinds))</pre> 
+ 
+<p>In addition to defining the STV <span class="v">(<a href="SV____ALU-TEST-VECTOR.html">alu-test-vector</a>)</span> itself, the <span class="v">defsvtv</span> 
+form from the previous section also defines  the following macros/functions:</p> 
+ 
+<ul> 
+<li>
+<span class="v">(alu-test-vector-autohyps)</span> expands to a function that checks type hypotheses for the input variables -- in this case,</li> 
+<pre class="code">(<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 16 b)
+     (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 16 a)
+     (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 3 op))</pre> 
+<li>
+<span class="v">(alu-test-vector-autoins)</span> expands to a function that takes the input variables as inputs and outputs an alist binding the variable symbols to their corresponding values, i.e.,</li> 
+<pre class="code">(<a href="COMMON-LISP____LIST.html">list</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'A a)
+      (<a href="COMMON-LISP____CONS.html">cons</a> 'B b)
+      (<a href="COMMON-LISP____CONS.html">cons</a> 'OP op))</pre> 
+ 
+<li>
+<span class="v">(alu-test-vector-autobinds)</span> expands to a form that creates a set of 
+appropriate GL bindings for the input variables; in this case,</li> 
+<pre class="code">(<a href="GL____AUTO-BINDINGS.html">gl::auto-bindings</a> (:nat b 16)
+                   (:nat a 16)
+                   (:nat op 3))</pre> 
+ 
+<li>
+<span class="v">(alu-test-vector-alist-autohyps x)</span>, like <span class="v">(alu-test-vector-autohyps)</span>, 
+checks the type of the inputs, but instead of taking the input variables, it 
+takes an alist <span class="v">x</span> that binds the variable symbols to their values.</li> 
+ 
+<li>
+<span class="v">(alu-test-vector-alist-autoins x)</span>, like <span class="v">(alu-test-vector-autoins)</span>, checks 
+the type of the inputs, but instead of taking the input variables, it takes an 
+alist <span class="v">x</span> that binds the variable symbols to their values.  (Why would you 
+want to do this?  It can be useful in decomposition proofs, which we'll get to 
+later in the tutorial.)</li> 
+ 
+</ul> 
+ 
+<p>So the <span class="v">def-gl-thm</span> form above is checking that when the inputs <span class="v">a</span>, 
+<span class="v">b</span> are appropriately-sized integers and <span class="v">op</span> is set to the addition 
+opcode, the <span class="v">res</span> computed by the STV is (the low 16 bits of) the sum of 
+<span class="v">a</span> and <span class="v">b</span>.</p> 
+ 
+<h4>Optimizing BDD Order</h4> 
+ 
+<p>The automatically-generated GL bindings don't always produce a good BDD 
+order (in fact, they don't really try to).  So in order to improve performance 
+when doing BDD-based proofs (which is the default), you may make your own <a href="GL____AUTO-BINDINGS.html">gl::auto-bindings</a> form, or even create a hand-optimized variable ordering. 
+For example, the following version of the same theorem proves more quickly 
+because it uses a good interleaving of the variables of the <span class="v">a</span> and <span class="v">b</span> 
+inputs:</p> 
+ 
+<pre class="code">(<a href="ACL2____DEF-GL-THM.html">acl2::def-gl-thm</a>
+    alu16-adds-opt
+    :hyp (<a href="COMMON-LISP____AND.html">and</a> (alu-test-vector-autohyps)
+              (<a href="COMMON-LISP____EQUAL.html">equal</a> op *op-plus*))
+    :concl (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____CDR.html">cdr</a> (<a href="COMMON-LISP____ASSOC.html">assoc</a> 'res
+                              (<a href="ACL2____SVTV-RUN.html">svtv-run</a> (<a href="SV____ALU-TEST-VECTOR.html">alu-test-vector</a>)
+                                        (alu-test-vector-autoins))))
+                  (<a href="ACL2____LOGHEAD.html">loghead</a> 16 (<a href="COMMON-LISP_____B2.html">+</a> a b)))
+    :g-bindings (<a href="GL____AUTO-BINDINGS.html">gl::auto-bindings</a> (:nat op 3)
+                                   (:mix (:nat a 16) (:nat b 16))))</pre> 
+ 
+<p>In addition to proving properties, it's also important to be able to debug 
+properties that don't prove.  For example, the <span class="v">COUNT</span> opcode has a bug in 
+our design.  Attempting the following proof exposes the bug:</p> 
+ 
+<pre class="code">(<a href="ACL2____DEF-GL-THM.html">acl2::def-gl-thm</a>
+    alu16-counts
+    :hyp (<a href="COMMON-LISP____AND.html">and</a> (alu-test-vector-autohyps)
+              (<a href="COMMON-LISP____EQUAL.html">equal</a> op *op-count*))
+    :concl (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____CDR.html">cdr</a> (<a href="COMMON-LISP____ASSOC.html">assoc</a> 'res
+                              (<a href="ACL2____SVTV-RUN.html">svtv-run</a> (<a href="SV____ALU-TEST-VECTOR.html">alu-test-vector</a>)
+                                        (alu-test-vector-autoins))))
+                  (<a href="COMMON-LISP____LOGCOUNT.html">logcount</a> a))
+    :g-bindings (alu-test-vector-autobinds))</pre> 
+ 
+<p>Instead of completing the proof, this prints out some counterexamples.  It 
+can then be useful to plug one of these into <span class="v">svtv-debug</span> in order to get a 
+waveform:</p> 
+ 
+<pre class="code">(<a href="ACL2____SVTV-DEBUG.html">svtv-debug</a> (<a href="SV____ALU-TEST-VECTOR.html">alu-test-vector</a>)
+            (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'a '47027)
+                  (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'op *op-count*) 'nil))
+            :filename "alu-ctrex.vcd")</pre> 
+ 
+<h4>Using SAT rather than BDDs</h4> 
+ 
+<p>If you have a SAT solver such as Glucose installed and set up in your path, 
+you may set up GL to use AIG/SAT based reasoning rather than BDDs, as 
+follows:</p> 
+<pre class="code">(<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "centaur/gl/bfr-satlink"
+              :dir :system)</pre> 
+<pre class="code">(<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____PROGN.html">progn</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> my-satlink-config
+                     nil (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t))
+                     (<a href="SATLINK____MAKE-CONFIG.html">satlink::make-config</a> :cmdline "glucose -model"
+                                           :verbose t
+                                           :mintime 1))
+              (<a href="ACL2____DEFATTACH.html">defattach</a> gl::gl-satlink-config
+                         my-satlink-config)))</pre> 
+<pre class="code">(<a href="ACL2____LOCAL.html">local</a> (<a href="GL____GL-SATLINK-MODE.html">gl::gl-satlink-mode</a>))</pre> 
+<pre class="code">(<a href="ACL2____VALUE-TRIPLE.html">value-triple</a> (<a href="ACL2____TSHELL-START.html">acl2::tshell-start</a>))</pre> 
+ 
+<p>First, we need to include an additional book to get the SAT machinery. 
+Next, we create a satlink configuration that says how to run our SAT solver of 
+choice -- here, we use Glucose with its "-model" option so that it outputs a 
+satisfying assignment we can use -- and attach the function specifying that 
+configuration to GL's satlink-config stub, <span class="v">gl::gl-satlink-config</span>. 
+<span class="v">Gl-satlink-mode</span> puts GL in a mode that uses AIGs to express Boolean 
+functions and SAT to solve them, and finally we need to start a tshell (see 
+<a href="ACL2____TSHELL.html">ACL2::tshell</a>) to allow the SAT solver to be executed (the 
+<span class="v">value-triple</span> just makes it an event form that can be in a certifiable 
+book).  After this setup, any GL theorem we submit will be attempted using this 
+AIG/SAT strategy.  One advantage to this approach is that BDD ordering doesn't 
+matter, so using the automatically generated GL bindings is generally OK.</p> 
+ 
+<p>To go back to BDD mode, you just need to do:</p> 
+ 
+<pre class="code">(<a href="ACL2____LOCAL.html">local</a> (<a href="ACL2____GL-BDD-MODE.html">acl2::gl-bdd-mode</a>))</pre> 
+ 
+<p>To continue, next see <a href="SV____DECOMPOSITION-PROOFS.html">decomposition-proofs</a>.</p>
+</body>
+</html>

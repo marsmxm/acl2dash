@@ -1,0 +1,106 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Defvisitor-multi</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=FTY____DEFVISITOR-MULTI">Click for Defvisitor-multi in the Full Manual</a></h3>
+
+<p>Put defvisitor, defvisitors, and define forms togeher into a single mutual recursion.</p><p>In a few cases it is useful to have visitors for several types (or 
+perhaps several different kinds of visitors) together in a mutual recursion. 
+Here is an example showing how this can work.</p> 
+ 
+<pre class="code">;; We have sum of product terms.  Each literal in the sum of products is
+;; either a constant or a variable, which refers to another sum of products
+;; term via a lookup table.
+(<a href="FTY____DEFTAGSUM.html">deftagsum</a> literal
+  (:constant ((<a href="ACL2____VALUE.html">value</a> natp)))
+  (:variable ((name symbolp))))
+
+(<a href="FTY____DEFPROD.html">defprod</a> product
+  ((<a href="COMMON-LISP____FIRST.html">first</a>  literal-p)
+   (<a href="COMMON-LISP____SECOND.html">second</a> literal-p)
+   (<a href="COMMON-LISP____THIRD.html">third</a>  literal-p)))
+
+(<a href="FTY____DEFPROD.html">defprod</a> sum
+  ((left  product-p)
+   (right product-p)))
+
+;; Lookup table mapping each variable to a sum-of-products.
+(<a href="FTY____DEFALIST.html">defalist</a> sop-env :key-type symbolp :val-type sum-p)
+
+;; Suppose we have a lookup table and we want to collect all the dependencies
+;; of some expression -- i.e., when we get to a variable we want to collect
+;; it, then look up its formula and collect its dependencies too.  If the
+;; table doesn't have some strict dependency order, then we might not
+;; terminate, so we'll use a recursion limit.
+
+(<a href="FTY____DEFVISITOR-TEMPLATE.html">defvisitor-template</a> collect-deps ((x :object)
+                                   (env sop-env-p)
+                                   (rec-limit natp))
+  :returns (deps (:join (<a href="COMMON-LISP____APPEND.html">append</a> deps1 deps)
+                  :tmp-var deps1 :initial nil)
+                  symbol-listp)
+
+  ;; We'll call the function to apply to variable names
+  ;; collect-and-recur-on-var.  Note that this hasn't been defined yet -- it
+  ;; needs to be mutually recursive with the other functions in the clique.
+  :prod-fns ((variable (name collect-and-recur-on-var)))
+
+  :fnname-template &lt;type&gt;-collect-deps)
+
+;; A defvisitor-multi form binds together some defvisitor and defvisitors
+;; forms into a mutual recursion with some other functions.  Here, we'll just have
+;; the one defvisitors form inside.
+(<a href="FTY____DEFVISITOR-MULTI.html">defvisitor-multi</a> sum-collect-deps
+
+   (<a href="FTY____DEFVISITORS.html">defvisitors</a> :template collect-deps :types (sum)
+     ;; Normally this defvisitors form would create a visitor for a literal,
+     ;; then product, then sum.  Inside a defvisitor-multi, it instead puts
+     ;; all of those definitions into one mutual recursion.
+
+     ;; We have to do something special with the measure.  Defvisitors
+     ;; assigns an order to each of the types so that calling from one
+     ;; visitor to another can generally reduce the measure.  Therefore, we
+     ;; only need to decrease the rec-limit when calling from a lower-level
+     ;; type to a higher-level one -- e.g. when we reach a variable and will
+     ;; recur on a sum.
+     :measure (<a href="ACL2____TWO-NATS-MEASURE.html">two-nats-measure</a> rec-limit :order)
+
+     ;; Since our lowest-level visitor (literal-collect-deps) is going to
+     ;; call an intermediate function (collect-and-recur-on-var) which then
+     ;; calls our highest-level visitor (sum-collect-deps), it's convenient
+     ;; to set the order of the lowest-level to 1 so that
+     ;; collect-and-recur-on-var can use 0 as the order in its measure.
+     :order-base 1)
+
+   ;; This function goes in the mutual recursion with the others.
+   (<a href="ACL2____DEFINE.html">define</a> collect-and-recur-on-var ((x symbolp)
+                                     (env sop-env-p)
+                                     (rec-limit natp))
+      :returns (deps symbol-listp)
+      :measure (<a href="ACL2____TWO-NATS-MEASURE.html">two-nats-measure</a> rec-limit 0)
+      (<a href="ACL2____B_A2.html">b*</a> ((x (<a href="ACL2____MBE.html">mbe</a> :logic (symbol-fix x) :exec x))
+           (lookup (<a href="ACL2____HONS-GET.html">hons-get</a> x (sop-env-fix env)))
+           ((unless lookup) (<a href="COMMON-LISP____LIST.html">list</a> x))
+           ((when (<a href="ACL2____ZP.html">zp</a> rec-limit))
+            (<a href="ACL2____CW.html">cw</a> "Recursion limit ran out on ~x0~%" x)
+            (<a href="COMMON-LISP____LIST.html">list</a> x)))
+        (<a href="COMMON-LISP____CONS.html">cons</a> x (sum-collect-deps (<a href="COMMON-LISP____CDR.html">cdr</a> lookup) env (<a href="COMMON-LISP____-.html">-</a> rec-limit 1))))))</pre> 
+ 
+<p>A <span class="v">defvisitor-multi</span> form's syntax is as follows:</p> 
+<pre class="code">(<a href="FTY____DEFVISITOR-MULTI.html">defvisitor-multi</a> event-name
+   defvisitor-defvisitors-define-forms
+   keyword-args
+   ///
+   post-events)</pre> 
+ 
+<p>The only keyword arguments currently accepted are <span class="v">:defines-args</span> and 
+<span class="v">:fixequivs</span>, which are described in <a href="FTY____DEFVISITOR.html">defvisitor</a>.  All the usual 
+arguments to defvisitor and defvisitors are accepted, except for these two.  An 
+additional difference from non-nested forms is that the nested defvisitor and 
+defvisitors forms may not have an event name as the first argument.</p>
+</body>
+</html>

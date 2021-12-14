@@ -1,0 +1,103 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Delayredux</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL2014____DELAYREDUX">Click for Delayredux in the Full Manual</a></h3>
+
+<p>Convert delays into explicit module instances.</p><p>This transform eliminates simple delays on continuous assignments 
+and gate instances by turning them into explicit instances of delay 
+modules.</p> 
+ 
+<div class="box"><p>Note: <a href="ACL2____ESIM.html">esim</a> has no notion of delays and just implements 
+<span class="v">*vl-1-bit-delay-1*</span> as a simple assignment.  Other backend tools, of 
+course, can treat delays in different ways.</p></div> 
+ 
+<p>The delayredux transform, <a href="VL2014____VL-DESIGN-DELAYREDUX.html">vl-design-delayredux</a>, takes two keyword 
+arguments, <span class="v">:vecp</span> and <span class="v">:state-onlyp</span>, both Boolean values defaulting to 
+<span class="v">NIL</span>, whose meanings are discussed below.</p> 
+ 
+<p>We only target <a href="VL2014____VL-SIMPLEDELAY-P.html">simple delays</a> like 
+<span class="v">#5</span>.  Our delay modules are based on the <a href="VL2014_____A2VL-1-BIT-DELAY-1_A2.html">*vl-1-bit-delay-1*</a> unless 
+the <span class="v">:vecp</span> option is set, in which case they are based on N-bit single-tick 
+delay modules (see <a href="VL2014____VL-MAKE-N-BIT-DELAY-1.html">vl-make-n-bit-delay-1</a>).  We chain these modules in series 
+to generate modules that produce an arbitrary M-tick delay; see <a href="VL2014____VL-MAKE-N-BIT-DELAY-M.html">vl-make-n-bit-delay-m</a>.</p> 
+ 
+<p>If the <span class="v">:state-onlyp</span> option is set, then delay modules are only inserted 
+for assignments and gates annotated with the "VL_STATE_DELAY" attribute; 
+other delays are just deleted, leaving the assignments or gates delay-free. 
+The "VL_STATE_DELAY" attribute comes from always-block processing (see <a href="VL2014____VL-DESIGN-ALWAYS-BACKEND.html">vl-design-always-backend</a>); it is applied to tick delays that are used to 
+implement flop or latch primitives, but not tick delays that merely affect 
+signal timing within a clock phase.  <span class="v">:state-onlyp</span> is therefore useful in 
+frameworks that are not delay-sensitive, but that make use of the definitions 
+of VL latch and flop modules rather than considering them to be primitives.</p> 
+ 
+<p>The following explanation applies in cases where the <span class="v">:state-onlyp</span> 
+option is not set or else the "VL_STATE_DELAY" annotation is present.</p> 
+ 
+<p>For <b>continuous assignments</b>, we basically replace assignments like</p> 
+ 
+<pre class="code">assign #5 lhs = rhs;</pre> 
+ 
+<p>with an explicit delay module instance and a delay-free assignment, 
+e.g.,</p> 
+ 
+<pre class="code">wire [6:0] tmp;                      // same width as rhs
+VL_7_BIT_DELAY_5 mkdel (tmp, rhs);
+assign lhs = tmp;</pre> 
+ 
+<p>Why bother with <span class="v">tmp</span>?  Couldn't we just write:</p> 
+ 
+<pre class="code">VL_7_BIT_DELAY_5 mkdel (lhs, rhs);</pre> 
+ 
+<p>instead?  That would work when <span class="v">lhs</span> and <span class="v">rhs</span> are the same size, but 
+using the temporary wire has the nice property that, by just making <span class="v">tmp</span> 
+the same size as <span class="v">rhs</span>, we can just let the truncation happen in the 
+assignment as before.</p> 
+ 
+<p>For <b>gate instances</b>, we push the delays onto the inputs, e.g.,</p> 
+ 
+<pre class="code">and #3 (o, a, b);</pre> 
+ 
+<p>gets rewritten to something like:</p> 
+ 
+<pre class="code">wire del_a, del_b;
+VL_1_BIT_DELAY_3 mk_del_a (del_a, a);
+VL_1_BIT_DELAY_3 mk_del_b (del_b, b);
+and (o, del_a, del_b);</pre> 
+ 
+<p>We could perhaps instead delay the outputs.  But a nice feature of delaying 
+the inputs is that we can leave the rest of the gate intact.  That is, notice 
+that <span class="v">o</span> above is still being driven directly by the gate, not by some 
+assignment or generated instance.  This means, for instance, that its drive 
+strength will still be the same, in case some backend cares about those sorts 
+of things.</p> 
+ 
+<p>We only remove delays from inout-free gates.  We do now know what it means 
+for a gate with inouts to have a delay.</p> 
+ 
+ 
+<h3>Ordering Notes</h3> 
+ 
+<p>This transform must be run after sizing so that we can introduce delay 
+modules of the appropriate sizes.  It also should be run after the always 
+backend, which can add delays that this transform should process.</p> 
+ 
+<p>We generally want to do this before <a href="VL2014____SPLIT.html">split</a>.  Otherwise, when we see an 
+assignment like:</p> 
+ 
+<pre class="code">assign #1 out = ~in;</pre> 
+ 
+<p>We can end up creating:</p> 
+ 
+<pre class="code">VL_1_BIT_DELAY_1 mkdel (del, ~in) ;</pre> 
+ 
+<p>And the <span class="v">~in</span> argument isn't split up, which can confuse later transforms 
+like <a href="VL2014____OCCFORM.html">occform</a>.</p> 
+ 
+
+</body>
+</html>

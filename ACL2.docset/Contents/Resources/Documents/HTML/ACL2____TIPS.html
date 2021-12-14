@@ -1,0 +1,458 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Tips</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____TIPS">Click for Tips in the Full Manual</a></h3>
+
+<p>Some hints for using the ACL2 prover</p><p>We present here some tips for using ACL2 effectively.  Though this 
+ collection is somewhat <i>ad hoc</i>, we try to provide some organization, 
+ albeit somewhat artificial: for example, the sections overlap, and no 
+ particular order is intended.  This material has been adapted by Bill Young 
+ from a very similar list for Nqthm that appeared in the conclusion of: 
+ ``Interaction with the Boyer-Moore Theorem Prover: A Tutorial Study Using the 
+ Arithmetic-Geometric Mean Theorem,'' by Matt Kaufmann and Paolo Pecchiari, CLI 
+ Technical Report 100, June, 1995.  We also draw from a similar list in Chapter 
+ 13 of ``A Computational Logic Handbook'' by R.S. Boyer and J 
+ S. Moore (Academic Press, 1988).  We'll refer to this as ``ACLH'' below.</p> 
+ 
+ <p>These tips are organized roughly as follows.</p> 
+ 
+ <blockquote>
+<p>A. ACL2 Basics</p> 
+ 
+ <p>B. Strategies for creating events</p> 
+ 
+ <p>C. Dealing with failed proofs</p> 
+ 
+ <p>D. Performance tips</p> 
+ 
+ <p>E. Miscellaneous tips and knowledge</p> 
+ 
+ <p>F. Some things you DON'T need to know</p>
+</blockquote> 
+ 
+ <p><i>ACL2 BASICS</i></p> 
+ 
+ <p><b>A1. The ACL2 logic.</b><br> 
+ 
+ This is a logic of total functions.  For example, if <span class="v">A</span> and <span class="v">B</span> are 
+ less than or equal to each other, then we need to know something more in order 
+ to conclude that they are equal (e.g., that they are numbers).  This kind of 
+ twist is important in writing definitions; for example, if you expect a 
+ function to return a number, you may want to apply the function <span class="tt"><a href="ACL2____FIX.html">fix</a></span> or 
+ some variant (e.g., <span class="tt"><a href="ACL2____NFIX.html">nfix</a></span> or <span class="tt"><a href="ACL2____IFIX.html">ifix</a></span>) in case one of the formals 
+ is to be returned as the value.</p> 
+ 
+ <p>ACL2's notion of ordinals is important on occasion in supplying ``measure 
+ <a href="ACL2____HINTS.html">hints</a>'' for the acceptance of recursive definitions.  Be sure that your 
+ measure is really an ordinal.  Consider the following example, which ACL2 
+ fails to admit (as explained below).</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> cnt (<a href="ACL2____NAME.html">name</a> a i x)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :measure (<a href="COMMON-LISP_____B2.html">+</a> 1 i)))
+  (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="ACL2____ZP.html">zp</a> (<a href="COMMON-LISP_____B2.html">+</a> 1 i))
+         0)
+        ((<a href="COMMON-LISP____EQUAL.html">equal</a> x (<a href="ACL2____AREF1.html">aref1</a> name a i))
+         (<a href="COMMON-LISP____1_B2.html">1+</a> (cnt name a (<a href="COMMON-LISP____1-.html">1-</a> i) x)))
+        (t (cnt name a (<a href="COMMON-LISP____1-.html">1-</a> i) x))))</pre> 
+ 
+ <p>One might think that <span class="v">(<a href="COMMON-LISP_____B2.html">+</a> 1 i)</span> is a reasonable measure, since we know 
+ that <span class="v">(<a href="COMMON-LISP_____B2.html">+</a> 1 i)</span> is a positive integer in any recursive call of <span class="v">cnt</span>, and 
+ positive integers are ACL2 ordinals (see <a href="ACL2____O-P.html">o-p</a>).  However, the ACL2 logic 
+ requires that the measure be an ordinal unconditionally, not just under the 
+ governing assumptions that lead to recursive calls.  An appropriate fix is to 
+ apply <span class="tt"><a href="ACL2____NFIX.html">nfix</a></span> to <span class="v">(<a href="COMMON-LISP_____B2.html">+</a> 1 i)</span>, i.e., to use</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :measure (<a href="ACL2____NFIX.html">nfix</a> (<a href="COMMON-LISP_____B2.html">+</a> 1 i))))</pre> 
+ 
+ <p>in order to guarantee that the measure will always be an ordinal (in fact, 
+ a positive integer).</p> 
+ 
+ <p>For more about admissibility of recursive definitions, see <a href="COMMON-LISP____DEFUN.html">defun</a>, in 
+ particular the discussion of termination.</p> 
+ 
+ <p><b>A2. Simplification.</b><br> 
+ 
+ The ACL2 simplifier is basically a rewriter, with some ``<a href="ACL2____LINEAR.html">linear</a> 
+ arithmetic'' thrown in.  One needs to understand the notion of conditional 
+ rewriting.  See <a href="ACL2____REWRITE.html">rewrite</a>.</p> 
+ 
+ <p><b>A3. Parsing of rewrite rules.</b><br></p> 
+ 
+ <p>ACL2 parses <a href="ACL2____REWRITE.html">rewrite</a> rules roughly as explained in ACLH, 
+ <i>except</i> that it never creates ``unusual'' rule classes.  In ACL2, if you 
+ want a <span class="v">:</span><span class="tt"><a href="ACL2____LINEAR.html">linear</a></span> rule, for example, you must specify <span class="v">:</span><span class="tt"><a href="ACL2____LINEAR.html">linear</a></span> in the <span class="v">:</span><span class="tt"><a href="ACL2____RULE-CLASSES.html">rule-classes</a></span>.  See <a href="ACL2____RULE-CLASSES.html">rule-classes</a>, and also 
+ see <a href="ACL2____REWRITE.html">rewrite</a> and see <a href="ACL2____LINEAR.html">linear</a>.</p> 
+ 
+ <p><b>A4. Linear arithmetic.</b><br> 
+ 
+ On this subject, it should suffice to know that the prover can handle truths 
+ about <span class="tt"><a href="COMMON-LISP_____B2.html">+</a></span> and <span class="tt"><a href="COMMON-LISP____-.html">-</a></span>, and that <a href="ACL2____LINEAR.html">linear</a> rules (see above) are 
+ somehow ``thrown in the pot'' when the prover is doing such reasoning. 
+ Perhaps it's also useful to know that <a href="ACL2____LINEAR.html">linear</a> rules can have hypotheses, 
+ and that conditional rewriting is used to relieve those hypotheses.</p> 
+ 
+ <p><b>A5. Events.</b><br> 
+ 
+ Over time, the expert ACL2 user will know some subtleties of its <a href="ACL2____EVENTS.html">events</a>.  For example, <span class="tt"><a href="ACL2____IN-THEORY.html">in-theory</a></span> <a href="ACL2____EVENTS.html">events</a> and <a href="ACL2____HINTS.html">hints</a> are 
+ important, and they distinguish between a function's definition and its <a href="ACL2____EXECUTABLE-COUNTERPART.html">executable-counterpart</a>.</p> 
+ 
+ <p><i>B. STRATEGIES FOR CREATING EVENTS</i></p> 
+ 
+ <p>In this section, we concentrate on the use of definitions and <a href="ACL2____REWRITE.html">rewrite</a> rules.  There are quite a few kinds of rules allowed in ACL2 besides 
+ <a href="ACL2____REWRITE.html">rewrite</a> rules, though most beginning users probably won't usually need 
+ to be aware of them.  See <a href="ACL2____RULE-CLASSES.html">rule-classes</a> for details.  In particular, 
+ there is support for <a href="ACL2____CONGRUENCE.html">congruence</a> rewriting.  Also see <a href="ACL2____RUNE.html">rune</a> 
+ (``RUle NamE'') for a description of the various kinds of rules in the 
+ system.</p> 
+ 
+ <p><b>B1. Use high-level strategy.</b><br> 
+ 
+ Decompose theorems into ``manageable'' lemmas (admittedly, experience helps 
+ here) that yield the main result ``easily.''  It's important to be able to 
+ outline non-trivial proofs by hand (or in your head).  In particular, avoid 
+ submitting goals to the prover when there's no reason to believe that the goal 
+ will be proved and there's no ``sense'' of how an induction argument would 
+ apply.  It is often a good idea to avoid induction in complicated theorems 
+ unless you have a reason to believe that it is appropriate.</p> 
+ 
+ <p><b>B2. Write elegant definitions.</b><br> 
+ 
+ Try to write definitions in a reasonably modular style, especially recursive 
+ ones.  Think of ACL2 as a <a href="ACL2____PROGRAMMING.html">programming</a> language whose procedures are 
+ definitions and lemmas, hence we are really suggesting that one follow good 
+ <a href="ACL2____PROGRAMMING.html">programming</a> style (in order to avoid duplication of ``code,'' for 
+ example).</p> 
+ 
+ <p>When possible, complex functions are best written as compositions of 
+ simpler functions.  The theorem prover generally performs better on primitive 
+ recursive functions than on more complicated recursions (such as those using 
+ accumulating parameters).</p> 
+ 
+ <p>Avoid large non-recursive definitions which tend to lead to large case 
+ explosions.  If such definitions are necessary, try to prove all relevant 
+ facts about the definitions and then <a href="ACL2____DISABLE.html">disable</a> them.</p> 
+ 
+ <p>Whenever possible, avoid mutual recursion if you care to prove anything 
+ about your functions.  The induction heuristics provide essentially no help 
+ with reasoning about mutually defined functions.  Mutually recursive functions 
+ can usually be combined into a single function with a ``flag'' argument. 
+ (However, see <a href="ACL2____MUTUAL-RECURSION-PROOF-EXAMPLE.html">mutual-recursion-proof-example</a> for a small example of 
+ proof involving mutually recursive functions.)</p> 
+ 
+ <p><b>B3. Look for analogies.</b><br> 
+ 
+ Sometimes you can easily edit sequences of lemmas into sequences of lemmas 
+ about analogous functions.</p> 
+ 
+ <p><b>B4. Write useful rewrite rules.</b><br> 
+ 
+ As explained in A3 above, every <a href="ACL2____REWRITE.html">rewrite</a> rule is a directive to the 
+ theorem prover, usually to replace one <a href="ACL2____TERM.html">term</a> by another.  The directive 
+ generated is determined by the syntax of the <span class="tt"><a href="ACL2____DEFTHM.html">defthm</a></span> submitted.  Never 
+ submit a <a href="ACL2____REWRITE.html">rewrite</a> rule unless you have considered its interpretation as 
+ a proof directive.</p> 
+ 
+ <p><b>B4a.  Rewrite rules should simplify.</b><br> 
+ 
+ Try to write <a href="ACL2____REWRITE.html">rewrite</a> rules whose right-hand sides are in some sense 
+ ``simpler than'' (or at worst, are variants of) the left-hand sides.  This 
+ will help to avoid infinite loops in the rewriter.</p> 
+ 
+ <p><b>B4b.  Avoid needlessly expensive rules.</b><br> 
+ 
+ Consider a rule whose conclusion's left-hand side (or, the entire conclusion) 
+ is a <a href="ACL2____TERM.html">term</a> such as <span class="v">(<a href="COMMON-LISP____CONSP.html">consp</a> x)</span> that matches many <a href="ACL2____TERM.html">term</a>s 
+ encountered by the prover.  If in addition the rule has complicated 
+ hypotheses, this rule could slow down the prover greatly.  Consider switching 
+ the conclusion and a complicated hypothesis (negating each) in that case.</p> 
+ 
+ <p><b>B4c. The ``Knuth-Bendix problem''.</b><br> 
+ 
+ Be aware that left sides of <a href="ACL2____REWRITE.html">rewrite</a> rules should match the ``normalized 
+ forms'', where ``normalization'' (rewriting) is inside out.  Be sure to avoid 
+ the use of nonrecursive function symbols on left sides of <a href="ACL2____REWRITE.html">rewrite</a> 
+ rules, except when those function symbols are <a href="ACL2____DISABLE.html">disable</a>d, because they 
+ tend to be expanded away before the rewriter would encounter an instance of 
+ the left side of the rule.  Also assure that subexpressions on the left hand 
+ side of a rewrite rule are in simplified form; see <a href="ACL2____COMMUNITY-BOOKS.html">community-books</a> 
+ example <span class="v">books/demos/knuth-bendix-problem-1.lisp</span>.</p> 
+ 
+ <p><b>B4d. Avoid proving useless rules.</b><br> 
+ 
+ Sometimes it's tempting to prove a <a href="ACL2____REWRITE.html">rewrite</a> rule even before you see how 
+ it might find application.  If the rule seems clean and important, and not 
+ unduly expensive, that's probably fine, especially if it's not too hard to 
+ prove.  But unless it's either part of the high-level strategy or, on the 
+ other hand, intended to get the prover past a particular unproved goal, it may 
+ simply waste your time to prove the rule, and then clutter the database of 
+ rules if you are successful.</p> 
+ 
+ <p><b>B4e. State rules as strongly as possible, usually.</b><br> 
+ 
+ It's usually a good idea to state a rule in the strongest way possible, both 
+ by eliminating unnecessary hypotheses and by generalizing subexpressions to 
+ variables.</p> 
+ 
+ <p>Advanced users may choose to violate this policy on occasion, for example 
+ in order to avoid slowing down the prover by excessive attempted application 
+ of the rule.  However, it's a good rule of thumb to make the strongest rule 
+ possible, not only because it will then apply more often, but also because the 
+ rule will often be easier to prove (see also B6 below).  New users are 
+ sometimes tempted to put in extra hypotheses that have a ``type restriction'' 
+ appearance, without realizing that the way ACL2 handles (total) functions 
+ generally lets it handle trivial cases easily.</p> 
+ 
+ <p><b>B4f. Avoid circularity.</b><br> 
+ 
+ A stack overflow in a proof attempt almost always results from circular 
+ rewriting.  Use <span class="tt"><a href="ACL2____BRR.html">brr</a></span> to investigate the stack; see <a href="ACL2____BREAK-LEMMA.html">break-lemma</a>. 
+ Because of the complex heuristics, it is not always easy to define just when a 
+ <a href="ACL2____REWRITE.html">rewrite</a> will cause circularity.  See the very good discussion of this 
+ topic in ACLH.</p> 
+ 
+ <p>See <a href="ACL2____BREAK-LEMMA.html">break-lemma</a> for a trick involving use of the forms <span class="v">brr t</span> 
+ and <span class="v">(<a href="ACL2____CW-GSTACK.html">cw-gstack</a>)</span> for inspecting loops in the rewriter.</p> 
+ 
+ <p><b>B4g. Remember restrictions on permutative rules.</b><br> 
+ 
+ Any rule that permutes the variables in its left hand side could cause 
+ circularity.  For example, the following axiom is automatically supplied by 
+ the system:</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFAXIOM.html">defaxiom</a> commutativity-of-+
+          (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP_____B2.html">+</a> x y) (<a href="COMMON-LISP_____B2.html">+</a> y x))).</pre> 
+ 
+ <p>This would obviously lead to dangerous circular rewriting if such 
+ ``permutative'' rules were not governed by a further restriction.  The 
+ restriction is that such rules will not produce a <a href="ACL2____TERM.html">term</a> that is 
+ ``lexicographically larger than'' the original <a href="ACL2____TERM.html">term</a> (see <a href="ACL2____LOOP-STOPPER.html">loop-stopper</a>).  However, this sometimes prevents intended rewrites.  See 
+ Chapter 13 of ACLH for a discussion of this problem.</p> 
+ 
+ <p><b>B5. Conditional vs. unconditional rewrite rules.</b><br> 
+ 
+ It's generally preferable to form unconditional <a href="ACL2____REWRITE.html">rewrite</a> rules unless 
+ there is a danger of case explosion.  That is, rather than pairs of rules such 
+ as</p> 
+ 
+ <pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> p
+         (<a href="COMMON-LISP____EQUAL.html">equal</a> term1 term2))</pre> 
+ 
+ <p>and</p> 
+ 
+ <pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____NOT.html">not</a> p)
+         (<a href="COMMON-LISP____EQUAL.html">equal</a> term1 term3))</pre> 
+ 
+ <p>consider:</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____EQUAL.html">equal</a> term1
+       (<a href="COMMON-LISP____IF.html">if</a> p term2 term3))</pre> 
+ 
+ <p>However, sometimes this strategy can lead to case explosions: <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span> 
+ <a href="ACL2____TERM.html">term</a>s introduce cases in ACL2.  Use your judgment.  (On the subject of 
+ <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span>: <span class="tt"><a href="COMMON-LISP____COND.html">cond</a></span>, <span class="tt"><a href="COMMON-LISP____CASE.html">case</a></span>, <span class="tt"><a href="COMMON-LISP____AND.html">and</a></span>, and <span class="tt"><a href="COMMON-LISP____OR.html">or</a></span> are macros 
+ that abbreviate <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span> forms, and propositional functions such as <span class="tt"><a href="ACL2____IMPLIES.html">implies</a></span> quickly expand into <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span> <a href="ACL2____TERM.html">term</a>s.)</p> 
+ 
+ <p><b>B6. Create elegant theorems.</b><br> 
+ 
+ Try to formulate lemmas that are as simple and general as possible.  For 
+ example, sometimes properties about several functions can be ``factored'' into 
+ lemmas about one function at a time.  Sometimes the elimination of unnecessary 
+ hypotheses makes the theorem easier to prove, as does generalizing first by 
+ hand.</p> 
+ 
+ <p><b>B7. Use</b> <span class="tt"><a href="ACL2____DEFAXIOM.html">defaxiom</a></span>s <b>temporarily to explore 
+ possibilities.</b><br> 
+ 
+ When there is a difficult goal that seems to follow immediately (by a 
+ <span class="v">:use</span> hint or by rewriting) from some other lemmas, you can create those 
+ lemmas as <span class="tt"><a href="ACL2____DEFAXIOM.html">defaxiom</a></span> <a href="ACL2____EVENTS.html">events</a> (or, the application of <span class="tt"><a href="ACL2____SKIP-PROOFS.html">skip-proofs</a></span> to <span class="tt"><a href="ACL2____DEFTHM.html">defthm</a></span> <a href="ACL2____EVENTS.html">events</a>) and then double-check that the 
+ difficult goal really does follow from them.  Then you can go back and try to 
+ turn each <span class="tt"><a href="ACL2____DEFAXIOM.html">defaxiom</a></span> into a <span class="tt"><a href="ACL2____DEFTHM.html">defthm</a></span>.  When you do that, it's 
+ often useful to <a href="ACL2____DISABLE.html">disable</a> any additional <a href="ACL2____REWRITE.html">rewrite</a> rules that you 
+ prove in the process, so that the ``difficult goal'' will still be proved from 
+ its lemmas when the process is complete.</p> 
+ 
+ <p>Better yet, rather than disabling <a href="ACL2____REWRITE.html">rewrite</a> rules, use the <span class="tt"><a href="ACL2____LOCAL.html">local</a></span> mechanism offered by <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span> to make temporary rules 
+ completely <span class="tt"><a href="ACL2____LOCAL.html">local</a></span> to the problem at hand.  See <a href="ACL2____ENCAPSULATE.html">encapsulate</a> and 
+ see <a href="ACL2____LOCAL.html">local</a>.</p> 
+ 
+ <p><b>B9. Use books.</b><br> 
+ 
+ Consider using previously certified <a href="ACL2____BOOKS.html">books</a>, especially for <a href="ACL2____ARITHMETIC.html">arithmetic</a> reasoning.  This cuts down the duplication of effort and starts 
+ your specification and proof effort from a richer foundation.  See <a href="ACL2____COMMUNITY-BOOKS.html">community-books</a>.</p> 
+ 
+ <p><i>C. DEALING WITH FAILED PROOFS</i></p> 
+ 
+ <p><b>C1. Look in proof output for goals that can't be further 
+ simplified.</b><br> 
+ 
+ Use the ``<a href="ACL2____PROOF-TREE.html">proof-tree</a>'' utility to explore the proof space.  However, 
+ you don't need to use that tool to use the ``checkpoint'' strategy.  The idea 
+ is to think of ACL2 as a ``simplifier'' that either proves the theorem or 
+ generates some goal to consider.  That goal is the first ``checkpoint,'' i.e., 
+ the first goal that does not further simplify.  Exception: it's also important 
+ to look at the induction scheme in a proof by induction, and if induction 
+ seems appropriate, then look at the first checkpoint <i>after</i> the 
+ induction has begun.</p> 
+ 
+ <p>Consider whether the goal on which you focus is even a theorem.  Sometimes 
+ you can execute it for particular values to find a counterexample.</p> 
+ 
+ <p>When looking at checkpoints, remember that you are looking for any reason 
+ at all to believe the goal is a theorem.  So for example, sometimes there may 
+ be a contradiction in the hypotheses.</p> 
+ 
+ <p>Don't be afraid to skip the first checkpoint if it doesn't seem very 
+ helpful.  Also, be willing to look a few lines up or down from the checkpoint 
+ if you are stuck, bearing in mind however that this practice can be more 
+ distracting than helpful.</p> 
+ 
+ <p><b>C2. Use the ``break rewrite'' facility.</b><br> 
+ 
+ <span class="tt"><a href="ACL2____BRR.html">Brr</a></span> and related utilities let you inspect the ``rewrite stack.'' 
+ These can be valuable tools in large proof efforts.  See <a href="ACL2____BREAK-LEMMA.html">break-lemma</a> 
+ for an introduction to these tools, and see <a href="ACL2____BREAK-REWRITE.html">break-rewrite</a> for more 
+ complete information.</p> 
+ 
+ <p>The break facility is especially helpful in showing you why a particular 
+ rewrite rule is not being applied.</p> 
+ 
+ <p><b>C3. Use induction hints when necessary.</b> Of course, if you can define 
+ your functions so that they suggest the correct inductions to ACL2, so much 
+ the better!  But for complicated inductions, induction <a href="ACL2____HINTS.html">hints</a> are 
+ crucial.  See <a href="ACL2____HINTS.html">hints</a> for a description of <span class="v">:induct</span> <a href="ACL2____HINTS.html">hints</a>.</p> 
+ 
+ <p><b>C4. Use the interactive ``Proof-Builder'' to explore.</b><br> 
+ 
+ The <span class="tt"><a href="ACL2____VERIFY.html">verify</a></span> command supplied by ACL2 allows one to explore problem 
+ areas ``by hand.''  However, even if you succeed in proving a conjecture with 
+ <span class="tt"><a href="ACL2____VERIFY.html">verify</a></span>, it is useful to prove it without using it, an activity that 
+ will often require the discovery of <a href="ACL2____REWRITE.html">rewrite</a> rules that will be useful 
+ in later proofs as well.</p> 
+ 
+ <p><b>C5. Don't have too much patience.</b><br> 
+ 
+ Interrupt the prover fairly quickly when simplification isn't succeeding.</p> 
+ 
+ <p><b>C6. Simplify rewrite rules.</b><br> 
+ 
+ When it looks difficult to relieve the hypotheses of an existing <a href="ACL2____REWRITE.html">rewrite</a> rule that ``should'' apply in a given setting, ask yourself if you 
+ can eliminate a hypothesis from the existing <a href="ACL2____REWRITE.html">rewrite</a> rule.  If so, it 
+ may be easier to prove the new version from the old version (and some 
+ additional lemmas), rather than to start from scratch.</p> 
+ 
+ <p><b>C7. Deal with base cases first.</b><br> 
+ 
+ Try getting past the base case(s) first in a difficult proof by induction. 
+ Usually they're easier than the inductive step(s), and rules developed in 
+ proving them can be useful in the inductive step(s) too.  Moreover, it's 
+ pretty common that mistakes in the statement of a theorem show up in the base 
+ case(s) of its proof by induction.</p> 
+ 
+ <p><b>C8. Use</b> <span class="v">:expand</span> <b>hints.</b> Consider giving <span class="v">:expand</span> 
+ <a href="ACL2____HINTS.html">hints</a>.  These are especially useful when a proof by induction is 
+ failing.  It's almost always helpful to open up a recursively defined function 
+ that is supplying the induction scheme, but sometimes ACL2 is too timid to do 
+ so; or perhaps the function in question is <a href="ACL2____DISABLE.html">disable</a>d.</p> 
+ 
+ <p><i>D. PERFORMANCE TIPS</i></p> 
+ 
+ <p><b>D1. Disable rules.</b><br> 
+ 
+ There are a number of instances when it is crucial to <a href="ACL2____DISABLE.html">disable</a> rules, 
+ including (often) those named explicitly in <span class="v">:use</span> <a href="ACL2____HINTS.html">hints</a>.  Also, 
+ <a href="ACL2____DISABLE.html">disable</a> recursively defined functions for which you can prove what seem 
+ to be all the relevant properties.  The prover can spend significant time 
+ ``behind the scenes'' trying to open up recursively defined functions, where 
+ the only visible effect is slowness.</p> 
+ 
+ <p><b>D2. Turn off the ``break rewrite'' facility.</b> Remember to execute 
+ <span class="v">:brr nil</span> after you've finished with the ``break rewrite'' utility (see 
+ <a href="ACL2____BREAK-REWRITE.html">break-rewrite</a>), in order to bring the prover back up to full speed.</p> 
+ 
+ <p><i>E. MISCELLANEOUS TIPS AND KNOWLEDGE</i></p> 
+ 
+ <p><b>E1. Order of application of rewrite rules.</b><br> 
+ 
+ Keep in mind that the most recent <a href="ACL2____REWRITE.html">rewrite</a> rules in the <a href="ACL2____HISTORY.html">history</a> 
+ are tried first.</p> 
+ 
+ <p><b>E2. Relieving hypotheses is not full-blown theorem proving.</b><br> 
+ 
+ Relieving hypotheses on <a href="ACL2____REWRITE.html">rewrite</a> rules is done by rewriting and <a href="ACL2____LINEAR.html">linear</a> arithmetic alone, not by case splitting or by other prover processes 
+ ``below'' simplification.</p> 
+ 
+ <p><b>E3. ``Free variables'' in rewrite rules.</b><br> The set of ``free 
+  variables'' of a <a href="ACL2____REWRITE.html">rewrite</a> rule is defined to contain those variables 
+  occurring in the rule that do not occur in the left-hand side of the rule. 
+  It's often a good idea to avoid rules containing free variables because they 
+  are ``weak,'' in the sense that hypotheses containing such variables can 
+  generally only be proved when they are ``obviously'' present in the current 
+  context.  This weakness suggests that it's important to put the most 
+  ``interesting'' (specific) hypotheses about free variables first, so that the 
+  right instances are considered.  For example, suppose you put a very general 
+  hypothesis such as <span class="v">(<a href="COMMON-LISP____CONSP.html">consp</a> x)</span> first.  If the context has several <a href="ACL2____TERM.html">term</a>s around that are known to be <span class="tt"><a href="COMMON-LISP____CONSP.html">consp</a></span>s, then <span class="v">x</span> may be bound 
+  to the wrong one of them.  For much more information on free variables, see 
+  <a href="ACL2____FREE-VARIABLES.html">free-variables</a>.</p> 
+ 
+ <p><b>E4. Obtaining information</b><br> 
+ 
+ Use <span class="v">:</span><span class="tt"><a href="ACL2____PL.html">pl</a></span> <span class="v">foo</span> to inspect <a href="ACL2____REWRITE.html">rewrite</a> rules whose left hand 
+ sides are applications of the function <span class="v">foo</span>.  Another approach to seeing 
+ which <a href="ACL2____REWRITE.html">rewrite</a> rules apply is to enter the interactive <a href="ACL2____PROOF-BUILDER.html">proof-builder</a> with <span class="tt"><a href="ACL2____VERIFY.html">verify</a></span>, and use the <span class="v">show-rewrites</span> or <span class="v">sr</span> 
+ command.</p> 
+ 
+ <p><b>E5. Consider esoteric rules with care.</b><br> 
+ 
+ If you care to see <a href="ACL2____RULE-CLASSES.html">rule-classes</a> and peruse the list of subtopics (which 
+ will be listed right there in most versions of this <a href="COMMON-LISP____DOCUMENTATION.html">documentation</a>), 
+ you'll see that ACL2 supports a wide variety of rules in addition to 
+ <span class="v">:</span><a href="ACL2____REWRITE.html">rewrite</a> rules.  Should you use them?  This is a complex question 
+ that we are not ready to answer with any generality.  Our general advice is to 
+ avoid relying on such rules as long as you doubt their utility.  More 
+ specifically: be careful not to use conditional type prescription rules, as 
+ these have been known to bring ACL2 to its knees, unless you are conscious 
+ that you are doing so and have reason to believe that they are working 
+ well.</p> 
+ 
+ <p><i>F. SOME THINGS YOU DON'T NEED TO KNOW</i></p> 
+ 
+ <p>Most generally: you shouldn't usually need to be able to predict too much 
+ about ACL2's behavior.  You should mainly just need to be able to react to 
+ it.</p> 
+ 
+ <p><b>F1. Induction heuristics.</b><br> 
+ 
+ Although it is often important to read the part of the prover's 
+ output that gives the induction scheme chosen by the prover, it is 
+ not necessary to understand how the prover made that choice. 
+ (Granted, advanced users may occasionally gain minor insight from such 
+ knowledge.  But it's truly minor in many cases.)  What <i>is</i> important is 
+ to be able to tell it an appropriate induction when it doesn't pick the right 
+ one (after noticing that it doesn't).  See C3 above.</p> 
+ 
+ <p><b>F2. Heuristics for expanding calls of recursively defined 
+ functions.</b><br> 
+ 
+ As with the previous topic, the important thing isn't to understand these 
+ heuristics but, rather, to deal with cases where they don't seem to be 
+ working.  That amounts to supplying <span class="v">:expand</span> <a href="ACL2____HINTS.html">hints</a> for those calls 
+ that you want opened up, which aren't.  See also C8 above.</p> 
+ 
+ <p><b>F3. The ``waterfall''.</b><br> 
+ 
+ As discussed many times already, a good strategy for using ACL2 is to look for 
+ checkpoints (goals stable under simplification) when a proof fails, perhaps 
+ using the <a href="ACL2____PROOF-TREE.html">proof-tree</a> facility.  Thus, it is reasonable to ignore almost 
+ all the prover output, and to avoid pondering the meaning of the other 
+ ``processes'' that ACL2 uses besides simplification (such as elimination, 
+ cross-fertilization, generalization, and elimination of irrelevance).  For 
+ example, you don't need to worry about prover output that mentions ``type 
+ reasoning'' or ``abbreviations,'' for example.</p>
+</body>
+</html>

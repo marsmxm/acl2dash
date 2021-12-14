@@ -1,0 +1,160 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Warnings</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL2014____WARNINGS">Click for Warnings in the Full Manual</a></h3>
+
+<p>Support for handling warnings and errors.</p><h3>Introduction</h3> 
+ 
+<p>Many parts of VL can run into situations where we want to issue a warning or 
+cause an error.  For instance:</p> 
+ 
+<ul> 
+ 
+<li>Our <a href="VL2014____LOADER.html">loader</a> could encounter syntax that is simply malformed, or it 
+could run into a construct that is legal but that we don't support yet.  It 
+could also notice valid but strange cases, e.g., <span class="v">4'd16</span> is well-defined but 
+weird because 16 doesn't fit in 4 bits.</li> 
+ 
+<li>Our <a href="VL2014____TRANSFORMS.html">transforms</a> might run into semantically ill-formed constructs, 
+e.g., perhaps a module declares <span class="v">wire [3:0] foo</span> and then later declares 
+<span class="v">integer foo</span>, or perhaps we are trying to instantiate a module that is not 
+defined.</li> 
+ 
+<li>Our <a href="VL2014____LINT.html">lint</a> checks might notice "code smells" where even though the 
+input Verilog is semantically well-formed, it is somehow strange and looks like 
+it could be an error.  For instance, perhaps there are multiple assignments to 
+the same wire, or expressions like <span class="v">a &amp; b</span> where <span class="v">a</span> and <span class="v">b</span> have 
+different sizes.</li> 
+ 
+</ul> 
+ 
+<p>Handling these many kinds of cases is tricky.  In the early days of VL, our 
+approach to warnings and errors was quite ad-hoc.  We sometimes printed warning 
+messages to standard output using the <a href="ACL2____CW.html">cw</a> function.  For more serious 
+conditions, we sometimes caused errors using <a href="ACL2____ER.html">er</a>.  This approach had a 
+number of problems.  In particular,</p> 
+ 
+<ul> 
+ 
+<li>It led us to see many of the same warnings repeatedly because our various 
+well-formedness checks were run many times on the same modules in different 
+stages of the translation.</li> 
+ 
+<li>For some warnings, we did not particularly care about the individual 
+instances of the warning.  For instance, unless we're interested in fixing the 
+"if" statements to be ?: instead, we don't want to be told about each 
+occurrence of an if statement.  We just want a higher-level note that hey, 
+there are 30 if-statements to clean up.</li> 
+ 
+<li>The warnings were not "attached" in any way to the modules that they were 
+actually about.  Practically speaking, this might mean that users might not 
+even see the warnings that had been generated for the modules they are working 
+on.</li> 
+ 
+<li>There is no way to recover form an error created with <a href="ACL2____ER.html">er</a>, so if we 
+ran into some bad problem with a particular module, it could actually prevent 
+us from translating <i>any</i> of the modules.  This was particularly 
+troublesome because Verilog is such a large language that, especially in the 
+beginning, we often ran into constructs that we did not yet support.</li> 
+ 
+</ul> 
+ 
+<p>These sorts of problems quickly led us to want a more coherent, global 
+approach to dealing with warnings and errors.</p> 
+ 
+ 
+<h3>Warning Objects</h3> 
+ 
+<p>Our new approach to warning and error handling centers around explicit <a href="VL2014____VL-WARNING-P.html">vl-warning-p</a> objects.</p> 
+ 
+<p>These objects are in many ways similar to the <a href="https://en.wikipedia.org/wiki/Exception_handling" target="_blank"><nobr>Exception<img src="../Icon_External_Link.png" title="External link to https://en.wikipedia.org/wiki/Exception_handling"></nobr></a> objects 
+found in other programming languages.  Each warning has a <b>type</b> and a 
+<b>message</b> that describes the error.  These messages can conveniently make 
+use of VL's <a href="VL2014____PRINTER.html">printer</a>, so you can directly pretty-print arbitrary Verilog 
+constructs when writing warning messages.</p> 
+ 
+<p>We use <span class="v">vl-warning-p</span> objects universally, for all kinds of warnings and 
+errors.  That is, everything from the most minor of code smells (<span class="v">wire foo</span> 
+is never used for anything), to the most severe problems (the module you're 
+instantiating isn't defined) results in a warning.  Since it is useful to 
+distinguish minor commentary from severe problems, our warning objects include 
+a <b>fatalp</b> field.</p> 
+ 
+<p>As a general philosophy or strategy for using these warning objects:</p> 
+ 
+<ul> 
+ 
+<li>Warnings messages should never be printed to standard output.  Instead, we 
+should create a <a href="VL2014____VL-WARNING-P.html">vl-warning-p</a> object that gives the context, and explains 
+the problem as clearly and concisely as possible.</li> 
+ 
+<li>Errors should not cause sudden, unrecoverable exits.  That is, <a href="ACL2____ER.html">er</a> 
+should never be used for warnings that could plausibly be triggered by 
+malformed Verilog.  (However, it <i>is</i> reasonable to use <span class="v">er</span> in an <a href="https://en.wikipedia.org/wiki/Assertion_(software_development)" target="_blank"><nobr>assert<img src="../Icon_External_Link.png" title="External link to https://en.wikipedia.org/wiki/Assertion_(software_development)"></nobr></a>-like 
+fashion, to rule out programming problems that we believe are impossible.)</li> 
+ 
+<li>Non-fatal warnings should be used for any issues that are purely stylistic, 
+"code smells," etc., such as linter-like checks.</li> 
+ 
+<li>Fatal warnings should be used for any issues that are truly errors.  For 
+instance: malformed syntax, conflicting declarations of some name, references 
+to undefined modules, etc.</li> 
+ 
+<li>Fatal warnings may also be used when a transform encounters constructs that 
+are valid but not supported, e.g., because we have simply not yet spent the 
+time to implement them.</li> 
+ 
+</ul> 
+ 
+ 
+<h3>Accumulating Warnings</h3> 
+ 
+<p>Warning objects are simple enough to understand, but what do we actually 
+<i>do</i> with them?  We adopt another general principle:</p> 
+ 
+<ul> 
+ 
+<li>Every warning object should be associated with the top-level design 
+elements (e.g., module, package, interface, etc.) where it was caused.</li> 
+ 
+</ul> 
+ 
+<p>This approach allows us to easily do many practically useful things with the 
+warnings.  For instance, it lets us easily filter out any modules that have 
+fatal warnings—an important operation for <a href="VL2014____VL-SIMPLIFY.html">vl-simplify</a>.  As another 
+example, we can create reports, e.g., about all of the warnings for some 
+particular module, or all the warnings of some particular type throughout all 
+of the modules, etc.  These capability is used in tools like <a href="VL2014____VL-LINT.html">vl-lint</a>.</p> 
+ 
+<p>Practically implementing this philosophy is slightly tricky.</p> 
+ 
+<p>Deep within some particular transform, we might encounter something that is 
+wrong and decide to issue a warning.  In a typical object-oriented programming 
+language, this would be trivial: our module class might have an 
+<span class="v">add-warning</span> that (destructively) adds a new warning to the module.</p> 
+ 
+<p>But our programming language is truly functional, so we cannot modify 
+existing modules.  Instead, whenever some subsidiary function wants to produce 
+a warning, its caller must take measures to ensure that the warning is 
+eventually added to the appropriate module.</p> 
+ 
+<p>Our usual approach is to add a <b>warnings accumulator</b> as an argument to 
+our functions.  Typically this argument should be named <span class="v">warnings</span>. 
+Functions that take a warnings accumulator return the (possibly extended) 
+accumulator as one of their return values.  Macros like <a href="VL2014____OK.html">ok</a>, <a href="VL2014____WARN.html">warn</a> 
+and <a href="VL2014____FATAL.html">fatal</a> can assist with implementing this convention.</p> 
+ 
+<p>At a high level, then, a function that transforms a top-level design 
+element, e.g., a module, begins by obtaining the current warnings for the 
+module.  Using these warnings as the initial accumulator, it calls its 
+subsidiary helpers to carry out its work.  This work transforms various parts 
+of the module, and meanwhile the warnings are perhaps extended.  Finally, the 
+function returns a new <a href="VL2014____VL-MODULE-P.html">vl-module-p</a> which is updated with the extended 
+list of warnings.</p>
+</body>
+</html>

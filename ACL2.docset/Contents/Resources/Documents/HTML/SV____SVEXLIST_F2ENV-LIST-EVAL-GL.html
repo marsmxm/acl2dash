@@ -1,0 +1,116 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Svexlist/env-list-eval-gl</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=SV____SVEXLIST_F2ENV-LIST-EVAL-GL">Click for Svexlist/env-list-eval-gl in the Full Manual</a></h3>
+
+<p>Equivalent of svexlist/env-list-eval intended to work well under GL symbolic execution.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(svexlist/env-list-eval-gl x envs symbolic-params) → *</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">x</span> — Svex expressions to evaluate.<br>    <font color="#606060">Guard <span class="v">(<a href="SV____SVEXLISTLIST-P.html">svexlistlist-p</a> x)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">envs</span> — Bindings of variables to <a href="SV____4VEC.html">4vec</a> values.<br>    <font color="#606060">Guard <span class="v">(<a href="SV____SVEX-ENVLIST-P.html">svex-envlist-p</a> envs)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">symbolic-params</span> — Alist giving symbolic execution parameters; see below.<br>    <font color="#606060">Guard <span class="v">(<a href="ACL2____ALISTP.html">alistp</a> symbolic-params)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+ 
+ 
+<p>This function is provably equivalent to <span class="v">svexlist/env-list-eval</span>, but is 
+tailored to perform well under symbolic execution.  For symbolic execution, we 
+assume that the inputs to this function other than <span class="v">envs</span> are fully concrete, 
+and that each <span class="v">envs</span> are symbolic only in its values, not its keys or its shape.</p> 
+ 
+<p>It is analogous to <a href="SV____SVEXLIST-EVAL-GL.html">svexlist-eval-gl</a>, but the individual lists of 
+svexes within <span class="v">x</span> are each evaluated with the corresponding element of 
+<span class="v">envs</span>.  Symbolic execution is set up so that the svexes are all rendered 
+into AIGs in a batch with memoization between all the lists.</p> 
+ 
+<p>The <span class="v">symbolic-params</span> input behaves as it does in <a href="SV____SVEXLIST-EVAL-GL.html">svexlist-eval-gl</a>.  However, the <span class="v">:boolmasks</span> and <span class="v">:vars</span> entries must be 
+applicable to all environments in the list.  That is, for each entry in the 
+boolmasks, the corresponding key must be bound in every entry in the envs to a 
+symbolic 4vec value that is (syntactically) Boolean-valued in the masked 
+bits. Similarly, the <span class="v">:vars</span> entry, if given, is unioned with the variables 
+bound in all environments.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>svexlist/env-list-eval-gl</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ svexlist/env-list-eval-gl
+ (x envs symbolic-params)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="SV____SVEXLISTLIST-P.html">svexlistlist-p</a> x)
+                             (<a href="SV____SVEX-ENVLIST-P.html">svex-envlist-p</a> envs)
+                             (<a href="ACL2____ALISTP.html">alistp</a> symbolic-params))))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'svexlist/env-list-eval-gl))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+   ((envs (<a href="ACL2____TAKE.html">take</a> (<a href="ACL2____LEN.html">len</a> x) envs))
+    (x (<a href="SV____SVEXLISTLIST-FIX.html">svexlistlist-fix</a> x))
+    (svexes (append-lists x))
+    (svars (<a href="SV____SVEXLIST_F2ENV-LIST-VARS-FOR-SYMBOLIC-EVAL.html">svexlist/env-list-vars-for-symbolic-eval</a>
+                svexes envs symbolic-params))
+    (svexes (<a href="SV____SVEXLIST-X-OUT-UNUSED-VARS.html">svexlist-x-out-unused-vars</a>
+                 svexes svars
+                 (<a href="SV____SYMBOLIC-PARAMS-X-OUT-COND.html">symbolic-params-x-out-cond</a> symbolic-params)))
+    (svexes (<a href="SV____MAYBE-SVEXLIST-REWRITE-FIXPOINT.html">maybe-svexlist-rewrite-fixpoint</a>
+                 svexes
+                 (<a href="COMMON-LISP____CDR.html">cdr</a> (<a href="COMMON-LISP____ASSOC.html">assoc</a> :simplify symbolic-params))))
+    (boolmasks
+     (<a href="ACL2____MAKE-FAST-ALIST.html">make-fast-alist</a>
+      (<a href="ACL2____HONS-COPY.html">hons-copy</a>
+         (<a href="ACL2____EC-CALL.html">ec-call</a> (<a href="SV____SVAR-BOOLMASKS-FIX.html">svar-boolmasks-fix</a>
+                       (<a href="COMMON-LISP____CDR.html">cdr</a> (<a href="COMMON-LISP____ASSOC.html">assoc</a> :boolmasks symbolic-params)))))))
+    ((unless (<a href="SV____SVEX-ENVLIST-CHECK-BOOLMASKS.html">svex-envlist-check-boolmasks</a> boolmasks envs))
+     (<a href="ACL2____B_A2.html">b*</a>
+      ((?ign
+           (<a href="ACL2____CW.html">cw</a> "ERROR: some bits assumed to be Boolean were not~%"))
+       (?ign (gl::gl-error 'boolcheck-failed)))
+      (gl::gl-hide (svexlist/env-list-eval x envs))))
+    ((<a href="ACL2____MV.html">mv</a> err a4vecs)
+     (<a href="ACL2____TIME_42.html">time$</a> (<a href="SV____SVEXLIST-_E3A4VECS-FOR-VARLIST.html">svexlist-&gt;a4vecs-for-varlist</a> svexes svars boolmasks)
+            :msg "; svex-&gt;aigs: ~st sec, ~sa bytes.~%"))
+    ((when err)
+     (<a href="ACL2____B_A2.html">b*</a> ((?ign (<a href="ACL2____CW.html">cw</a> "ERROR gathering AIG bits for variables: ~@0~%"
+                    err))
+          (?ign (gl::gl-error 'a4env-failed)))
+         (gl::gl-hide (svexlist/env-list-eval x envs))))
+    (a4veclist-list (extract-lists x a4vecs)))
+   (<a href="SV____A4VECLIST_F2SVEX-ENV-LIST-EVAL.html">a4veclist/svex-env-list-eval</a> a4veclist-list
+                                 envs svexes svars boolmasks))))</pre> 
+<p><b>Theorem: </b>svexlist/env-list-eval-gl-correct</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> svexlist/env-list-eval-gl-correct
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SV____SVEXLIST_F2ENV-LIST-EVAL-GL.html">svexlist/env-list-eval-gl</a> x envs symbolic-params)
+               (svexlist/env-list-eval x envs)))</pre> 
+<p><b>Theorem: </b>svexlist/env-list-eval-for-symbolic-redef</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> svexlist/env-list-eval-for-symbolic-redef
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (svexlist/env-list-eval x envs)
+               (<a href="SV____SVEXLIST_F2ENV-LIST-EVAL-GL.html">svexlist/env-list-eval-gl</a> x envs nil)))</pre> 
+<p><b>Theorem: </b>svexlist/env-list-eval-gl-of-svexlistlist-fix-x</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> svexlist/env-list-eval-gl-of-svexlistlist-fix-x
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SV____SVEXLIST_F2ENV-LIST-EVAL-GL.html">svexlist/env-list-eval-gl</a> (<a href="SV____SVEXLISTLIST-FIX.html">svexlistlist-fix</a> x)
+                                          envs symbolic-params)
+               (<a href="SV____SVEXLIST_F2ENV-LIST-EVAL-GL.html">svexlist/env-list-eval-gl</a> x envs symbolic-params)))</pre> 
+<p><b>Theorem: </b>svexlist/env-list-eval-gl-svexlistlist-equiv-congruence-on-x</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ svexlist/env-list-eval-gl-svexlistlist-equiv-congruence-on-x
+ (<a href="ACL2____IMPLIES.html">implies</a>
+   (<a href="SV____SVEXLISTLIST-EQUIV.html">svexlistlist-equiv</a> x x-equiv)
+   (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SV____SVEXLIST_F2ENV-LIST-EVAL-GL.html">svexlist/env-list-eval-gl</a> x envs symbolic-params)
+          (<a href="SV____SVEXLIST_F2ENV-LIST-EVAL-GL.html">svexlist/env-list-eval-gl</a> x-equiv envs symbolic-params)))
+ :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>svexlist/env-list-eval-gl-of-svex-envlist-fix-envs</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> svexlist/env-list-eval-gl-of-svex-envlist-fix-envs
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SV____SVEXLIST_F2ENV-LIST-EVAL-GL.html">svexlist/env-list-eval-gl</a> x (<a href="SV____SVEX-ENVLIST-FIX.html">svex-envlist-fix</a> envs)
+                                          symbolic-params)
+               (<a href="SV____SVEXLIST_F2ENV-LIST-EVAL-GL.html">svexlist/env-list-eval-gl</a> x envs symbolic-params)))</pre> 
+<p><b>Theorem: </b>svexlist/env-list-eval-gl-svex-envlist-equiv-congruence-on-envs</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ svexlist/env-list-eval-gl-svex-envlist-equiv-congruence-on-envs
+ (<a href="ACL2____IMPLIES.html">implies</a>
+   (<a href="SV____SVEX-ENVLIST-EQUIV.html">svex-envlist-equiv</a> envs envs-equiv)
+   (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SV____SVEXLIST_F2ENV-LIST-EVAL-GL.html">svexlist/env-list-eval-gl</a> x envs symbolic-params)
+          (<a href="SV____SVEXLIST_F2ENV-LIST-EVAL-GL.html">svexlist/env-list-eval-gl</a> x envs-equiv symbolic-params)))
+ :rule-classes :congruence)</pre> 
+
+</body>
+</html>

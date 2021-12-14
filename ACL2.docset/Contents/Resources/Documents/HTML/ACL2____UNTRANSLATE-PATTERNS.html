@@ -1,0 +1,180 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Untranslate-patterns</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____UNTRANSLATE-PATTERNS">Click for Untranslate-patterns in the Full Manual</a></h3>
+
+<p>A database used to extend <span class="v">untranslate</span>, ACL2's function for 
+displaying terms during proofs, with pattern-based rules.</p><p>The <span class="v">untranslate-patterns-table</span> is an ACL2 <a href="ACL2____TABLE.html">table</a> that 
+stores patterns and replacements for use at untranslate time.  That is, during 
+proof output, this table is consulted before printing terms, allowing for 
+custom printing of particular terms.</p> 
+ 
+<p>Although this table has nothing to do with soundness, the rules it lists are 
+intended to obey the untranslate contract—that is, the replacements 
+listed for each pattern should macro-expand to their targets.  If this property 
+is violated, proof output might become very confusing!  For example, a rule 
+that displays calls to <a href="COMMON-LISP____MEMBER.html">member</a> as if they were calls to <a href="COMMON-LISP____SUBSETP.html">subsetp</a> 
+would make proof output very difficult to understand.</p> 
+ 
+<p>We do nothing to enforce this contract.  Hence, a sensible user must ensure 
+that their use of this table is disciplined.</p> 
+ 
+ 
+<h3>Example 1: Mutually Recursive even/odd-p</h3> 
+ 
+<p>This function is just an inefficient check for if a natural number is even 
+or odd, using a flag-based mutual recursion scheme.</p> 
+ 
+<pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> even/odd-p (flg x)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____EQ.html">eq</a> flg 'even)
+                                  (<a href="COMMON-LISP____EQ.html">eq</a> flg 'odd))
+                              (<a href="ACL2____NATP.html">natp</a> x))))
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQ.html">eq</a> flg 'even)
+      (<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2____ZP.html">zp</a> x)
+          t
+        (even/odd-p 'odd (<a href="COMMON-LISP____1-.html">1-</a> x)))
+    (<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2____ZP.html">zp</a> x)
+        nil
+      (even/odd-p 'even (<a href="COMMON-LISP____1-.html">1-</a> x)))))</pre> 
+ 
+<p>Something simple you might want to do with this is 'hide' the flag function 
+with macros such as the following:</p> 
+ 
+<pre class="code">(<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> even-p (x)
+  `(even/odd-p 'even ,x))
+
+(<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> odd-p (x)
+  `(even/odd-p 'odd ,x))</pre> 
+ 
+<p>But of course in proofs you will still see the flag functions.  To hide 
+these flags, you can call the macro <span class="v">add-untranslate-pattern</span> as 
+follows:</p> 
+ 
+<pre class="code">(<a href="ACL2____ADD-UNTRANSLATE-PATTERN.html">add-untranslate-pattern</a> (even/odd-p 'even ?x) (even-p ?x))
+(<a href="ACL2____ADD-UNTRANSLATE-PATTERN.html">add-untranslate-pattern</a> (even/odd-p 'odd ?x)  (odd-p ?x))</pre> 
+ 
+<p>The effect of these patterns can be seen by submitting the following 
+commands.  We first disable the type prescription of <span class="v">even/odd-p</span> and its 
+definition, so that ACL2 will generate terms involving <span class="v">even/odd-p</span>.</p> 
+ 
+<pre class="code">(<a href="ACL2____IN-THEORY.html">in-theory</a> (<a href="ACL2____DISABLE.html">disable</a> (:definition even/odd-p)
+                    (:type-prescription even/odd-p)))
+
+(<a href="ACL2____THM.html">thm</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP_____B2.html">+</a> (even-p x) (even-p y))
+            (<a href="COMMON-LISP_____B2.html">+</a> (odd-p y) (odd-p x))))</pre> 
+ 
+<p>Some of the proof output generated is now as follows:</p> 
+ 
+<pre class="code">Subgoal *1/2
+(<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____AND.html">AND</a> (<a href="COMMON-LISP____NOT.html">NOT</a> (<a href="COMMON-LISP____EQ.html">EQ</a> 'ODD 'EVEN))
+              (<a href="COMMON-LISP____NOT.html">NOT</a> (<a href="ACL2____ZP.html">ZP</a> X))
+              (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (<a href="COMMON-LISP_____B2.html">+</a> (EVEN-P (<a href="COMMON-LISP_____B2.html">+</a> -1 X)) (EVEN-P Y))
+                     (<a href="COMMON-LISP_____B2.html">+</a> (ODD-P (<a href="COMMON-LISP_____B2.html">+</a> -1 X)) (ODD-P Y))))
+         (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (<a href="COMMON-LISP_____B2.html">+</a> (EVEN-P X) (EVEN-P Y))
+                (<a href="COMMON-LISP_____B2.html">+</a> (ODD-P X) (ODD-P Y)))).
+
+Subgoal *1/2'
+(<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____AND.html">AND</a> (<a href="COMMON-LISP____NOT.html">NOT</a> (<a href="ACL2____ZP.html">ZP</a> X))
+              (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (<a href="COMMON-LISP_____B2.html">+</a> (EVEN-P (<a href="COMMON-LISP_____B2.html">+</a> -1 X)) (EVEN-P Y))
+                     (<a href="COMMON-LISP_____B2.html">+</a> (ODD-P (<a href="COMMON-LISP_____B2.html">+</a> -1 X)) (ODD-P Y))))
+         (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (<a href="COMMON-LISP_____B2.html">+</a> (EVEN-P X) (EVEN-P Y))
+                (<a href="COMMON-LISP_____B2.html">+</a> (ODD-P X) (ODD-P Y)))).</pre> 
+ 
+<p>As you can see, <span class="v">even/odd-p</span> is now nicely untranslated into these macro 
+calls, as we intended, and the flag argument is hidden.</p> 
+ 
+ 
+<h3>Example 2: Matt's Challenge</h3> 
+ 
+<p>Matt Kaufmann suggested the following challenge problem, inspired by the 
+hand-written untranslation routine for the RTL library.  We begin with the 
+following code:</p> 
+ 
+<pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> foo$ (n $path)
+  (<a href="COMMON-LISP____CONS.html">cons</a> n $path))
+
+(<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> foo (x)
+  `(foo$ ,x $path))
+
+(<a href="ACL2____ADD-MACRO-ALIAS.html">add-macro-alias</a> foo foo$)
+(<a href="ACL2____IN-THEORY.html">in-theory</a> (<a href="ACL2____DISABLE.html">disable</a> foo))</pre> 
+ 
+<p>The theorem Matt proposed looking at was the following:</p> 
+ 
+<pre class="code">(<a href="ACL2____THM.html">thm</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____LIST.html">list</a> (foo x) (foo$ x $path) (foo$ x other-path))
+            (<a href="COMMON-LISP____CAR.html">car</a> (<a href="COMMON-LISP____CONS.html">cons</a> a b))))</pre> 
+ 
+<p>With no support for untranslate, this theorem ends up producing the 
+following goal:</p> 
+ 
+<pre class="code">Goal'
+(<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (<a href="COMMON-LISP____LIST.html">LIST</a> (FOO$ X $PATH)
+             (FOO$ X $PATH)
+             (FOO$ X OTHER-PATH))
+       A).</pre> 
+ 
+<p>The RTL untranslator can handle this given the following command:</p> 
+ 
+<pre class="code">(<a href="ACL2____TABLE.html">table</a> rtl-tbl 'sigs-btree
+       (symbol-alist-to-btree
+        (dollar-alist '(foo) nil)))</pre> 
+ 
+<p>This yields the following, nice goal:</p> 
+ 
+<pre class="code">Goal'
+(<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (<a href="COMMON-LISP____LIST.html">LIST</a> (FOO X)
+             (FOO X)
+             (FOO$ X OTHER-PATH))
+       A).</pre> 
+ 
+<p>Matt challenged me to come up with a system that would rewrite only $path. 
+Using the untranslate pattern table, here is the command:</p> 
+ 
+<pre class="code">(<a href="ACL2____ADD-UNTRANSLATE-PATTERN.html">add-untranslate-pattern</a> (foo$ ?n $path) (foo ?n))</pre> 
+ 
+<p>As you can see, it produces exactly the same output:</p> 
+ 
+<pre class="code">Goal'
+(<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (<a href="COMMON-LISP____LIST.html">LIST</a> (FOO X)
+             (FOO X)
+             (FOO$ X OTHER-PATH))
+       A).</pre> 
+ 
+ 
+<h3>The Pattern Matching Syntax</h3> 
+ 
+<p>The syntax for these patterns is as follows:</p> 
+ 
+<p>Any quoted constant matches with a quoted constant.  Note that numbers and 
+so forth must be MANUALLY quoted.</p> 
+ 
+<p>Unquoted symbols behave as follows:</p> 
+ 
+<ul> 
+ 
+<li>If the symbol has no leading <span class="v">?</span> character, then the symbol matches only 
+with variables of exactly the same name.  For example, if you were using a 
+stobj named $path, you could use the symbol $path in your pattern and it would 
+match only with $path.</li> 
+ 
+<li>Symbols beginning with a leading <span class="v">?</span> character are treated as match 
+variables.  For example, <span class="v">?x</span> in the above patterns behaves as a wildcard 
+and will match with any term.</li> 
+ 
+</ul> 
+ 
+<p>So, for example, the pattern <span class="v">(even/odd-p 'even ?x)</span> above matches 
+exactly those terms whose function symbol is <span class="v">even/odd-p</span>, whose first 
+argument is the quoted constant symbol even, and whose second argument is any 
+term.</p> 
+ 
+<p>Similarly, the pattern <span class="v">(foo$ ?n $path)</span> matches exactly those terms 
+whose function symbol is <span class="v">foo$</span>, whose first argument is any term, and 
+whose second argument is exactly the variable $path.</p>
+</body>
+</html>

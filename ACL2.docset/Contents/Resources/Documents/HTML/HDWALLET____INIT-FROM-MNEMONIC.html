@@ -1,0 +1,126 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Init-from-mnemonic</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=HDWALLET____INIT-FROM-MNEMONIC">Click for Init-from-mnemonic in the Full Manual</a></h3>
+
+<p>Initialization of the wallet from a mnemonic (and passphrase).</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(init-from-mnemonic mnemonic passphrase) → (mv error? stat?)</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">mnemonic</span> — <font color="#606060">Guard <span class="v">(<a href="COMMON-LISP____STRINGP.html">stringp</a> mnemonic)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">passphrase</span> — <font color="#606060">Guard <span class="v">(<a href="COMMON-LISP____STRINGP.html">stringp</a> passphrase)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">error?</span> — <font color="#606060">Type <span class="v">(<a href="HDWALLET____MAYBE-COMMAND-ERROR-P.html">maybe-command-error-p</a> error?)</span>.</font>
+</dd> 
+<dd>
+<span class="tt">stat?</span> — <font color="#606060">Type <span class="v">(<a href="HDWALLET____MAYBE-STATP.html">maybe-statp</a> stat?)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>This models the command used to initialize the wallet 
+     from a mnemonic (and a passphrase). 
+     This may be used to port the keys from another wallet, 
+     as opposed to creating a new wallet from scratch 
+     via <span class="tt"><a href="HDWALLET____INIT-FROM-ENTROPY.html">init-from-entropy</a></span>.</p><p>This initialization function takes two strings as inputs, 
+     the first of which should be 
+     a space-separated sequence of BIP 39 mnemonic words; 
+     however, we do not check that it is, 
+     because, as noted in <span class="tt"><a href="BITCOIN____BIP39-MNEMONIC-TO-SEED.html">bip39-mnemonic-to-seed</a></span>, 
+     the seed derivation works for any string. 
+     The two input strings are converted to a BIP 32 seed, 
+     from which the master key is derived. 
+     The master key determines the initial key tree.</p><p>We also immediately derive 
+     the purpose key 44', 
+     the Ethereum mainnet coin type key 60', 
+     the default account key 0', 
+     and the external chain key 0; 
+     see <span class="tt"><a href="HDWALLET____STAT.html">stat</a></span>. 
+     We set the number of address keys to 0 initially, 
+     i.e. we do not (attempt to) derive any address key yet.</p><p>The derivation of the master key, or of the other keys mentioned above, 
+     may fail. 
+     This is rare, but not impossible. 
+     In this case, initialization fails, 
+     as signaled by this function returning an error as the first result 
+     (and <span class="v">nil</span> as second result).</p><p>If this initialization operation succeeds, 
+     the initial state of the wallet satisfies 
+     all the constraints formalized by <span class="tt"><a href="HDWALLET____STAT-WFP.html">stat-wfp</a></span>.</p><p>Errors are returned if the mnemonic or passphrase strings 
+     are unreasonably large. 
+     Such large strings are virtually impossible to type, 
+     but we need the check to ensure that 
+     the guards of the involved cryptographic functions are satisfied.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>init-from-mnemonic</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> init-from-mnemonic (mnemonic passphrase)
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____STRINGP.html">stringp</a> mnemonic)
+                                   (<a href="COMMON-LISP____STRINGP.html">stringp</a> passphrase))))
+       (<a href="ACL2____B_A2.html">b*</a> (((unless (<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="COMMON-LISP____LENGTH.html">length</a> mnemonic) (<a href="COMMON-LISP____EXPT.html">expt</a> 2 125)))
+             (<a href="ACL2____MV.html">mv</a> (<a href="HDWALLET____COMMAND-ERROR-MALFORMED-MNEMONIC.html">command-error-malformed-mnemonic</a> mnemonic)
+                 nil))
+            ((unless (<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="COMMON-LISP____LENGTH.html">length</a> passphrase)
+                        (<a href="COMMON-LISP____-.html">-</a> (<a href="COMMON-LISP____EXPT.html">expt</a> 2 125) (<a href="COMMON-LISP_____B2.html">+</a> 128 4 8))))
+             (<a href="ACL2____MV.html">mv</a> (<a href="HDWALLET____COMMAND-ERROR-MALFORMED-PASSPHRASE.html">command-error-malformed-passphrase</a> passphrase)
+                 nil))
+            (seed (<a href="BITCOIN____BIP39-MNEMONIC-TO-SEED.html">bip39-mnemonic-to-seed</a> mnemonic passphrase))
+            ((<a href="ACL2____MV.html">mv</a> error? tree)
+             (<a href="BITCOIN____BIP32-MASTER-TREE.html">bip32-master-tree</a> seed))
+            ((when error?)
+             (<a href="ACL2____MV.html">mv</a> (<a href="HDWALLET____COMMAND-ERROR-ROOT-KEY-DERIVATION-FAIL.html">command-error-root-key-derivation-fail</a>)
+                 nil))
+            (path nil)
+            (next *purpose-index*)
+            ((<a href="ACL2____MV.html">mv</a> error? tree)
+             (<a href="BITCOIN____BIP32-EXTEND-TREE.html">bip32-extend-tree</a> tree path next))
+            ((when error?)
+             (<a href="ACL2____MV.html">mv</a> (<a href="HDWALLET____COMMAND-ERROR-PURPOSE-KEY-DERIVATION-FAIL.html">command-error-purpose-key-derivation-fail</a>)
+                 nil))
+            (path (<a href="ACL2____RCONS.html">rcons</a> next path))
+            (next *coin-type-index*)
+            ((<a href="ACL2____MV.html">mv</a> error? tree)
+             (<a href="BITCOIN____BIP32-EXTEND-TREE.html">bip32-extend-tree</a> tree path next))
+            ((when error?)
+             (<a href="ACL2____MV.html">mv</a> (<a href="HDWALLET____COMMAND-ERROR-COIN-TYPE-KEY-DERIVATION-FAIL.html">command-error-coin-type-key-derivation-fail</a>)
+                 nil))
+            (path (<a href="ACL2____RCONS.html">rcons</a> next path))
+            (next *account-index*)
+            ((<a href="ACL2____MV.html">mv</a> error? tree)
+             (<a href="BITCOIN____BIP32-EXTEND-TREE.html">bip32-extend-tree</a> tree path next))
+            ((when error?)
+             (<a href="ACL2____MV.html">mv</a> (<a href="HDWALLET____COMMAND-ERROR-ACCOUNT-KEY-DERIVATION-FAIL.html">command-error-account-key-derivation-fail</a>)
+                 nil))
+            (path (<a href="ACL2____RCONS.html">rcons</a> next path))
+            (next *external-chain-index*)
+            ((<a href="ACL2____MV.html">mv</a> error? tree)
+             (<a href="BITCOIN____BIP32-EXTEND-TREE.html">bip32-extend-tree</a> tree path next))
+            ((when error?)
+             (<a href="ACL2____MV.html">mv</a> (<a href="HDWALLET____COMMAND-ERROR-EXTERNAL-CHAIN-KEY-DERIVATION-FAIL.html">command-error-external-chain-key-derivation-fail</a>)
+                 nil)))
+           (<a href="ACL2____MV.html">mv</a> nil (<a href="HDWALLET____STAT.html">stat</a> tree 0))))</pre> 
+<p><b>Theorem: </b>maybe-command-error-p-of-init-from-mnemonic.error?</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> maybe-command-error-p-of-init-from-mnemonic.error?
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?error? ?stat?)
+              (<a href="HDWALLET____INIT-FROM-MNEMONIC.html">init-from-mnemonic</a> mnemonic passphrase)))
+            (<a href="HDWALLET____MAYBE-COMMAND-ERROR-P.html">maybe-command-error-p</a> error?))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>maybe-statp-of-init-from-mnemonic.stat?</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> maybe-statp-of-init-from-mnemonic.stat?
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?error? ?stat?)
+              (<a href="HDWALLET____INIT-FROM-MNEMONIC.html">init-from-mnemonic</a> mnemonic passphrase)))
+            (<a href="HDWALLET____MAYBE-STATP.html">maybe-statp</a> stat?))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>statp-of-init-from-mnemonic-when-no-error</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> statp-of-init-from-mnemonic-when-no-error
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> error? stat?)
+              (<a href="HDWALLET____INIT-FROM-MNEMONIC.html">init-from-mnemonic</a> mnemonic passphrase)))
+            (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____NOT.html">not</a> error?) (<a href="HDWALLET____STATP.html">statp</a> stat?))))</pre> 
+<p><b>Theorem: </b>stat-wfp-of-init-from-mnemonic-when-no-error</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> stat-wfp-of-init-from-mnemonic-when-no-error
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> error? stat?)
+              (<a href="HDWALLET____INIT-FROM-MNEMONIC.html">init-from-mnemonic</a> mnemonic passphrase)))
+            (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____NOT.html">not</a> error?)
+                     (<a href="HDWALLET____STAT-WFP.html">stat-wfp</a> stat?))))</pre> 
+
+</body>
+</html>

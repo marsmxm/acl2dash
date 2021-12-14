@@ -1,0 +1,100 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Defun-mode-caveat</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____DEFUN-MODE-CAVEAT">Click for Defun-mode-caveat in the Full Manual</a></h3>
+
+<p>Potential soundness issue for functions with <a href="ACL2____DEFUN-MODE.html">defun-mode</a> 
+  <span class="v">:</span><span class="tt"><a href="ACL2____PROGRAM.html">program</a></span></p><p>See <a href="ACL2____RAW-LISP-ERROR.html">raw-lisp-error</a> for a general discussion of raw Lisp 
+ errors.  Although the discussion below focuses on raw Lisp errors that arise 
+ from calls of <span class="v">:</span><span class="tt"><a href="ACL2____PROGRAM.html">program</a></span> mode functions, the soundness concerns 
+ expressed below apply to all raw Lisp errors.</p> 
+ 
+ <p>Technically speaking, in the current implementation, the execution of 
+ functions having <a href="ACL2____DEFUN-MODE.html">defun-mode</a> <span class="v">:</span><span class="tt"><a href="ACL2____PROGRAM.html">program</a></span> may damage the ACL2 
+ system in a way that renders it unsound.  In practice, we have never seen this 
+ happen; so, the explanations below can be viewed as extremely paranoid. 
+ Nevertheless, here we document this concern, even if it should be taken with 
+ more than a grain of salt.</p> 
+ 
+ <p>See <a href="ACL2____DEFUN-MODE.html">defun-mode</a> for a discussion of <a href="ACL2____DEFUN-MODE.html">defun-mode</a>s.  That 
+ discussion describes an imagined implementation that is slightly different 
+ from this one.  This note explains that the current implementation is open to 
+ unsoundness.</p> 
+ 
+ <p>For discussion of a different soundness issue that is also related to 
+ function execution, see <a href="ACL2____GENERALIZED-BOOLEANS.html">generalized-booleans</a>.</p> 
+ 
+ <p>The execution of a function having <a href="ACL2____DEFUN-MODE.html">defun-mode</a> <span class="v">:</span><span class="tt"><a href="ACL2____PROGRAM.html">program</a></span> 
+ may violate Common Lisp <a href="ACL2____GUARD.html">guard</a>s on the subroutines used.  (This may be 
+ true even for calls of a function on arguments that satisfy its <a href="ACL2____GUARD.html">guard</a>, 
+ because ACL2 has not verified that its <a href="ACL2____GUARD.html">guard</a> is sufficient to protect 
+ its subroutines.)  When a <a href="ACL2____GUARD.html">guard</a> is violated at runtime all bets are 
+ off.  That is, no guarantees are made either about the answer being ``right'' 
+ or about the continued rationality of the ACL2 system itself.</p> 
+ 
+ <p>For example, suppose you make the following <span class="tt"><a href="COMMON-LISP____DEFUN.html">defun</a></span>:</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> crash (i)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :mode :program :guard (<a href="COMMON-LISP____INTEGERP.html">integerp</a> i)))
+  (<a href="COMMON-LISP____CAR.html">car</a> i))</pre> 
+ 
+ <p>Note that the declared guard does not in fact adequately protect the 
+ subroutines in the body of <span class="v">crash</span>; indeed, satisfying the guard to 
+ <span class="v">crash</span> will guarantee that the <span class="tt"><a href="COMMON-LISP____CAR.html">car</a></span> expression is in violation of 
+ its guard.  Because this function is admitted in <span class="v">:</span><span class="tt"><a href="ACL2____PROGRAM.html">program</a></span>-mode, 
+ no checks are made concerning the suitability of the guard.  Furthermore, in 
+ the current ACL2 implementation, <span class="v">crash</span> is executed directly in Common 
+ Lisp.  Thus if you call <span class="v">crash</span> on an argument satisfying its guard you 
+ will cause an erroneous computation to take place.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(crash 7)
+
+Error: Caught fatal error [memory may be damaged]
+...</pre> 
+ 
+ <p>There is no telling how much damage is done by this errant computation.  In 
+ some lisps your ACL2 job may actually crash back to the operating system.  In 
+ other lisps you may be able to recover from the ``hard error'' and resume ACL2 
+ in a damaged but apparently functional image.</p> 
+ 
+ <p>THUS, HAVING A FUNCTION WITH <a href="ACL2____DEFUN-MODE.html">defun-mode</a> <span class="v">:</span><span class="tt"><a href="ACL2____PROGRAM.html">program</a></span> IN 
+ YOUR SYSTEM ABSOLVES US, THE ACL2 IMPLEMENTORS, FROM RESPONSIBILITY FOR THE 
+ SOUNDNESS OF OUR SYSTEM.</p> 
+ 
+ <p>Furthermore</p> 
+ 
+ <p>ACL2 DOES NOT YET PROVIDE ANY MEANS OF REGAINING ASSURANCES OF SOUNDNESS 
+ AFTER THE INTRODUCTION OF A FUNCTION IN <span class="v">:</span><span class="tt"><a href="ACL2____PROGRAM.html">program</a></span> MODE, EVEN IF IT 
+ IS ULTIMATELY CONVERTED TO <span class="v">:</span><span class="tt"><a href="ACL2____LOGIC.html">logic</a></span> MODE (since its execution could 
+ have damaged the system in a way that makes it possible to verify its 
+ termination and <a href="ACL2____GUARD.html">guard</a>s unsoundly).</p> 
+ 
+ <p>Finally,</p> 
+ 
+ <p>THE VAST MAJORITY OF ACL2 SYSTEM CODE IS IN <span class="v">:</span><span class="tt"><a href="ACL2____PROGRAM.html">program</a></span> MODE AND 
+ SO ALL BETS ARE OFF FROM BEFORE YOU START!</p> 
+ 
+ <p>This hopeless state of current affairs will change, we think.  We think we 
+ have defined our functions ``correctly'' in the sense that they can be 
+ converted, without ``essential'' modification, to <span class="v">:</span><span class="tt"><a href="ACL2____LOGIC.html">logic</a></span> mode. 
+ We think it very unlikely that a mis-guarded function in <span class="v">:</span><span class="tt"><a href="ACL2____PROGRAM.html">program</a></span> 
+ mode (whether ours or yours) will cause unsoundness without some sort of hard 
+ lisp error accompanying it.  We think that ultimately we can make it possible 
+ to execute your functions (interpretively) without risk to the system, even 
+ when some have <span class="v">:</span><span class="tt"><a href="ACL2____PROGRAM.html">program</a></span> mode.  In that imagined implementation, 
+ code using functions having <span class="v">:</span><span class="tt"><a href="ACL2____PROGRAM.html">program</a></span> mode would run more slowly, 
+ but safely.  These functions could be introduced into the logic ex post facto, 
+ whereupon the code's execution would speed up because Common Lisp would be 
+ allowed to execute it directly.  We therefore ask that you simply pretend that 
+ this is that imagined implementation, introduce functions in <span class="v">:</span><span class="tt"><a href="ACL2____PROGRAM.html">program</a></span> mode, use them as convenient and perhaps ultimately introduce some of 
+ them in <span class="v">:</span><span class="tt"><a href="ACL2____LOGIC.html">logic</a></span> mode and prove their properties.  If you use the 
+ system this way we can develop (or dismiss) this style of formal system 
+ development.  BUT BE ON THE LOOKOUT FOR SCREWUPS DUE TO DAMAGE CAUSED BY THE 
+ EXECUTION OF YOUR FUNCTIONS HAVING <span class="v">:</span><span class="tt"><a href="ACL2____PROGRAM.html">program</a></span> MODE!</p>
+</body>
+</html>

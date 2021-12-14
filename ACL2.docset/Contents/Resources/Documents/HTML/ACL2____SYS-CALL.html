@@ -1,0 +1,127 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Sys-call</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____SYS-CALL">Click for Sys-call in the Full Manual</a></h3>
+
+<p>Make a system call to the host operating system</p><pre class="code">Example Forms:
+(<a href="ACL2____SYS-CALL.html">sys-call</a> "cp" '("foo.lisp" "foo-copied.lisp"))
+(<a href="ACL2____PROG2_42.html">prog2$</a> (<a href="ACL2____SYS-CALL.html">sys-call</a> "cp" '("foo.lisp" "foo-copied.lisp"))
+        (<a href="ACL2____SYS-CALL-STATUS.html">sys-call-status</a> state))</pre> 
+ 
+ <p>The first argument of <span class="v">sys-call</span> is a command for the host operating 
+ system, and the second argument is a list of strings that are the arguments 
+ for that command.</p> 
+ 
+ <p>The use of <span class="tt"><a href="ACL2____PROG2_42.html">prog2$</a></span> in the second example form above is optional, but 
+ illustrates how to get the return status.  See <a href="ACL2____SYS-CALL-STATUS.html">sys-call-status</a>. 
+ <span class="v">Sys-call</span> itself always returns <span class="v">nil</span>.</p> 
+ 
+ <p><b>WARNING</b>: The details of how <span class="v">sys-call</span> works can vary among 
+ different host Lisp implementations!  Consider for example wildcard expansion, 
+ such as when executing the form <span class="v">(<a href="ACL2____SYS-CALL.html">sys-call</a> "ls" '("*.lisp"))</span>.  For 
+ ACL2 built on Allegro CL, CCL, CMUCL, GCL, or SBCL, we have seen this result 
+ in an error message such as <span class="v">"No such file or directory"</span>, even though 
+ file of with names of the form <span class="v">*.lisp</span> are present in the current 
+ directory; but for ACL2 built on LispWorks, a list of such filenames is 
+ printed.  For another example, in GCL and perhaps some other lisps, you can 
+ put the arguments with the command; but this is not the case, for example, in 
+ Allegro CL running on Linux.</p> 
+ 
+ <p>More generally, we note that <span class="v">sys-call</span> does not provide some features 
+ that one may expect of a shell.  We mentioned wildcard expansion above; other 
+ sorts of shell expansion may also not be supported, such as <span class="v">~/</span>. 
+ <span class="v">Sys-call</span> also does not directly support output redirection.  If you want 
+ to run a program, <span class="v">P</span>, and redirect its output, one option is to create a 
+ wrapper script, <span class="v">W</span> to call instead.  Thus <span class="v">W</span> might be a shell script 
+ containing the line:</p> 
+ 
+ <pre class="code">P $* &gt;&amp; foo.out</pre> 
+ 
+ <p>Another approach is suggested by <a href="https://ccl.clozure.com/manual/chapter9.2.html" target="_blank"><nobr>a passage in the CCL 
+ manual<img src="../Icon_External_Link.png" title="External link to https://ccl.clozure.com/manual/chapter9.2.html"></nobr></a>: call the shell program.  For example, here is a how one might list 
+ the <span class="v">.lisp</span> files in a directory.</p> 
+ 
+ <pre class="code">(<a href="ACL2____SYS-CALL.html">sys-call</a> "sh" '("-c" "ls *.lisp"))</pre> 
+ 
+ <p>For related utilities, see <a href="ACL2____SYS-CALL_A2.html">sys-call*</a> and <a href="ACL2____SYS-CALL_B2.html">sys-call+</a>.  Both of 
+ those utilities return a suitable status (rather than requiring a separate 
+ call of a separate function, <span class="tt"><a href="ACL2____SYS-CALL-STATUS.html">sys-call-status</a></span>, as described later 
+ below).  Also, <span class="v">sys-call+</span> returns the command's output, but (like 
+ <span class="v">sys-call</span>) <span class="v">sys-call*</span> does not.  An important distinction is that both 
+ <span class="v">sys-call+</span> and <span class="v">sys-call*</span> can make their calls to the operating system 
+ during proofs, unlike <span class="v">sys-call</span> as we now explain.</p> 
+ 
+ <p><span class="v">Sys-call</span> does not invoke the operating system when it is invoked 
+ inside the theorem prover or <a href="ACL2____PROOF-BUILDER.html">proof-builder</a>.  The following example, 
+ from Eric Smith, illustrates this point: presumably we only want to reason 
+ about the return value, not write a file during a proof!</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTTAG.html">defttag</a> foo)
+(<a href="ACL2____THM.html">thm</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____SYS-CALL.html">sys-call</a> "touch" (<a href="COMMON-LISP____LIST.html">list</a> "/tmp/XXX"))
+            nil)
+     :hints (("Goal" :in-theory (<a href="ACL2____DISABLE.html">disable</a> (:type-prescription sys-call)))))</pre> 
+ 
+ <p>Through Version 7.4, running this example did indeed create file 
+ <span class="v">/tmp/XXX</span> if that file did not already exist.  Now, the <a href="ACL2____EXECUTABLE-COUNTERPART.html">executable-counterpart</a> of <span class="v">sys-call</span> is disabled, which avoids that 
+ specific behavior.  Moreover: even with that executable-counterpart enabled, 
+ no file is created; <span class="v">sys-call</span> returns <span class="v">nil</span> without invoking the 
+ operating system.  If such an evaluation attempt occurs during invocation of a 
+ <a href="ACL2____CLAUSE-PROCESSOR.html">clause-processor</a> or <a href="ACL2____META.html">meta</a>function, then an error will be 
+ signaled.</p> 
+ 
+ <pre class="code">General Form:
+(<a href="ACL2____SYS-CALL.html">sys-call</a> cmd args)</pre> 
+ 
+ <p>This function logically returns <span class="v">nil</span>.  However, it makes the indicated 
+ call to the host operating system, as described above (not during a proof), 
+ using a function supplied ``under the hood'' by the underlying Lisp system. 
+ This is an advanced feature that requires a trust tag (see below).  As noted 
+ above, host lisps differ on their handling of <span class="v">sys-call</span>; see the raw Lisp 
+ definition of ACL2 source function <span class="v">system-call</span> for details, including 
+ exactly the underlying Lisp code that is invoked.  You can then look at that 
+ host lisp's manual for details about that underlying function.</p> 
+ 
+ <p>On occasions where one wishes to obtain the numeric status returned by the 
+ host operating system (or more precisely, by the Lisp function under the hood 
+ that passes the system call to the host operating system), one may do so; see 
+ <a href="ACL2____SYS-CALL-STATUS.html">sys-call-status</a>.  The status value is the value returned by that Lisp 
+ function, which may well be the same numeric value returned by the host 
+ operating system for the underlying system call.</p> 
+ 
+ <p>Note that <span class="v">sys-call</span> does not touch the ACL2 <span class="tt"><a href="ACL2____STATE.html">state</a></span>; however, 
+ <span class="tt"><a href="ACL2____SYS-CALL-STATUS.html">sys-call-status</a></span> updates the <span class="v">acl2-oracle</span> field of the 
+ <span class="v">state</span>.</p> 
+ 
+ <p>Be careful if you use <span class="v">sys-call</span>!  It can be used for example to 
+ overwrite files, or worse!  We view a use of <span class="v">sys-call</span> as a call to the 
+ operating system that is made outside ACL2.  The following example from Bob 
+ Boyer shows how to use <span class="v">sys-call</span> to execute, in effect, arbitrary Lisp 
+ forms.  ACL2 provides a ``trust tag'' mechanism that requires execution of a 
+ <span class="tt"><a href="ACL2____DEFTTAG.html">defttag</a></span> form before you can use <span class="v">sys-call</span>; see <a href="ACL2____DEFTTAG.html">defttag</a>. 
+ (Note: The setting of the raw Lisp variable <span class="v">*features*</span> below is just to 
+ illustrate that any such mischief is possible.  Normally <span class="v">*features*</span> is a 
+ list with more than a few elements.)</p> 
+ 
+ <pre class="code">% cat foo
+print *0x85d2064=0x838E920
+detach
+q
+% acl2
+... boilerplate deleted
+ACL2 !&gt;(<a href="ACL2____SYS-CALL.html">sys-call</a> "gdb -p $PPID -w &lt; foo &gt;&amp; /dev/null " nil)
+NIL
+ACL2 !&gt;:q
+
+Exiting the ACL2 read-eval-print loop.  To re-enter, execute (<a href="ACL2____LP.html">LP</a>).
+ACL2&gt;*features*
+
+(:AKCL-SET-MV)
+
+ACL2&gt;</pre>
+</body>
+</html>

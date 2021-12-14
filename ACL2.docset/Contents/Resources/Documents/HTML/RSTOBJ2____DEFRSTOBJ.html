@@ -1,0 +1,200 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Defrstobj</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=RSTOBJ2____DEFRSTOBJ">Click for Defrstobj in the Full Manual</a></h3>
+
+<p>Record-like <a href="ACL2____STOBJ.html">stobj</a>s combine the run-time efficiency of stobjs 
+with the reasoning efficiency of records.  They are designed for modeling, 
+e.g., the state of a processor or virtual machine.</p> <p>Defrstobj creates an abstract stobj where the concrete stobj 
+contains some user-specified scalar fields, fixed-length array fields, and child stobjs, but 
+the logical interface is that of a multityped record (see <a href="RSTOBJ2____DEF-MULTITYPED-RECORD.html">def-multityped-record</a>).  The executable accessors/updaters expand to calls of 
+a single multityped record accessor/updater so that only a small number of 
+theorems are needed for reasoning about reads over writes, and writes over 
+writes, etc.</p> 
+ 
+<p>This topic pertains only to <span class="v">rstobj2::defrstobj</span>, defined in 
+<span class="v">centaur/defrstobj2/defrstobj.lisp</span>.  A previous version, 
+<span class="v">rstobj::defrstobj</span>, is defined in <span class="v">centaur/defrstobj/defrstobj.lisp</span>, 
+and another one before that in <span class="v">projects/legacy-defrstobj/defrstobj.lisp</span>.</p> 
+ 
+<p>The main difference between this version and previous versions is the logical 
+interface.  In previous versions the top-level stobj was an untyped record 
+containing certain keys (those corresponding to array fields) that were 
+uniformly typed records.  In this version, the entire stobj is a multityped 
+record and the array contents are not their own subfields.</p> 
+ 
+<h4>Invocation and Options</h4> 
+<p>Example invocations:</p> 
+<pre class="code">(<a href="RSTOBJ2____DEFRSTOBJ.html">defrstobj</a> myst
+  (u32-scalar :type (unsigned-byte 32) :initially 0 :fix (<a href="ACL2____EC-CALL.html">ec-call</a> (acl2::loghead$inline 32 x)))
+  (u32-array :type (<a href="COMMON-LISP____ARRAY.html">array</a> (unsigned-byte 32) (16)) :initially 5 :fix (<a href="ACL2____LOGHEAD.html">acl2::loghead</a> 32 (<a href="ACL2____IFIX.html">ifix</a> x)))
+  (nat-scalar :type (integer 0 *) :initially 6 :fix (<a href="ACL2____NFIX.html">nfix</a> x))
+  (nat-array :type (<a href="COMMON-LISP____ARRAY.html">array</a> (integer 0 *) (12)) :initially 8 :fix (<a href="ACL2____NFIX.html">nfix</a> x)))
+
+(<a href="RSTOBJ2____DEFRSTOBJ.html">defrstobj</a> parent
+  (parent-nat-scalar :type (integer 0 *) :initially 0 :fix (<a href="ACL2____NFIX.html">nfix</a> x))
+  ;; "Exporting" two fields from the child stobj into this parent stobj
+  (child-u32-array :type (<a href="COMMON-LISP____ARRAY.html">array</a> (unsigned-byte 32) (16))
+                   :initially 5
+                   :fix (<a href="ACL2____LOGHEAD.html">acl2::loghead</a> 32 (<a href="ACL2____IFIX.html">ifix</a> x))
+                   :child-stobj child
+                   :child-accessor get-u32-array
+                   :child-updater  set-u32-array)
+  (child-u32-scalar :type (unsigned-byte 32)
+                    :initially 0
+                    :fix (<a href="ACL2____LOGHEAD.html">acl2::loghead</a> 32 (<a href="ACL2____IFIX.html">ifix</a> x))
+                    :child-stobj child
+                    :child-accessor get-u32-scalar
+                    :child-updater  set-u32-scalar)
+  :enable '(get-u32-array-over-set-u32-array
+            get-u32-scalar-over-set-u32-scalar
+            get-u32-array-default-value
+            get-u32-scalar-default-value))</pre> 
+ 
+<p>The first argument to <span class="v">defrstobj</span> is the name of the abstract stobj 
+to generate; the rest of the arguments are field specifiers and top-level 
+keyword options, as follows:</p> 
+ 
+<ul> 
+<li>
+<span class="v">:recname</span> -- name of the multityped record to generate, default <span class="v">&lt;name&gt;rec</span>
+</li> 
+<li>
+<span class="v">:inline</span> -- inline the concrete stobj accessor/updaters; default T</li> 
+<li>
+<span class="v">:non-memoizable</span> -- declare the concrete stobj non-memoizable; default NIL</li> 
+<li>
+<span class="v">:concrete-stobj</span> -- name of the concrete stobj, default <span class="v">&lt;name&gt;$c</span>
+</li> 
+<li>
+<span class="v">:pkg-sym</span> -- symbol in whose package all new names will be generated, default <span class="v">name</span>
+</li> 
+<li>
+<span class="v">:elem-p</span> -- name of the element predicate function to be generated, default <span class="v">&lt;name&gt;-elem-p</span>
+</li> 
+<li>
+<span class="v">:elem-fix</span> -- name of the element fixing function to be generated, default <span class="v">&lt;name&gt;-elem-fix</span>
+</li> 
+<li>
+<span class="v">:elem-default</span> -- name of the element default function to be generated, default <span class="v">&lt;name&gt;-elem-default</span>
+</li> 
+<li>
+<span class="v">:logic-stobj</span> -- variable name to use for the logical analogue of the 
+stobj in the logic definitions of the accessors and updaters; default 
+<span class="v">&lt;name&gt;$a</span>
+</li> 
+<li>
+<span class="v">:recognizer</span> -- name of the stobj recognizer function; default <span class="v">&lt;name&gt;p</span>
+</li> 
+<li>
+<span class="v">:logic-recognizer</span> -- logic version of the stobj recognizer function; default <span class="v">&lt;logic-stobj&gt;p</span>
+</li> 
+<li>
+<span class="v">:creator</span> -- name of the stobj creator function; default <span class="v">create-&lt;name&gt;</span>
+</li> 
+<li>
+<span class="v">:logic-creator</span> -- logic version of the stobj creator function; default <span class="v">create-&lt;logic-stobj&gt;</span>
+</li> 
+<li>
+<span class="v">:accessor-template</span> -- list of symbols whose names will be concatenated 
+to generate the name of a field accessor, where <span class="v">acl2::x</span> stands for the name of 
+a field; default <span class="v">(get- x)</span>
+</li> 
+<li>
+<span class="v">:updater-template</span> -- list of symbols whose names will be concatenated 
+to generate the name of a field updater, where <span class="v">acl2::x</span> stands for the name 
+of a field; default <span class="v">(set- x)</span>
+</li> 
+<li>
+<span class="v">:accessor</span> -- name of the generic accessor; default is generated from 
+the accessor template by substituting <span class="v">name</span> for <span class="v">x</span>; therefore the 
+default for the default accessor template is <span class="v">get-&lt;name&gt;</span>
+</li> 
+<li>
+<span class="v">:updater</span> -- name of the generic updater; default is generated from the 
+updater template by substituting <span class="v">name</span> for <span class="v">x</span>; therefore the default 
+for the default updater template is <span class="v">set-&lt;name&gt;</span>. </li> 
+</ul> 
+ 
+<p>Fields consist of a name followed by a keyword/value list where the 
+acceptable keys are the following:</p> 
+ 
+<ul> 
+<li>
+<span class="v">:type</span> -- the stobj field type, such as <span class="v">string</span> or 
+<span class="v">(<a href="COMMON-LISP____ARRAY.html">array</a> (integer 0 *) (12))</span>, defaulting to <span class="v">t</span>.</li> 
+ 
+<li>
+<span class="v">:pred</span> -- the element recognizer predicate, as an expression in terms 
+of <span class="v">x</span>, where the default is generated from <span class="v">:type</span> by applying 
+<span class="v">translate-declaration-to-guard</span>.  May be more specific than the stobj field 
+type.</li> 
+ 
+<li>
+<span class="v">:fix</span> -- the element fixing function, as an expression in terms of 
+<span class="v">x</span>, defaulting to the identity <span class="v">x</span>, which is only valid for untyped 
+fields</li> 
+ 
+<li>
+<span class="v">:initially</span> -- the initial value of the field or of an element for 
+array fields; default <span class="v">nil</span>
+</li> 
+ 
+<li>
+<span class="v">:accessor</span> -- the name of the accessor for the field; default is 
+determined by the <span class="v">:accessor-template</span> top-level argument</li> 
+ 
+<li>
+<span class="v">:updater</span> -- the name of the updater for the field; default is 
+determined by the <span class="v">:updater-template</span> top-level argument</li> 
+ 
+<li>
+<span class="v">:logic-accessor</span> -- the logical version of the accessor function, 
+default <span class="v">&lt;accessor&gt;$a</span>
+</li> 
+ 
+<li>
+<span class="v">:logic-updater</span> -- the logical version of the updater function, 
+default <span class="v">&lt;updater&gt;$a</span>
+</li> 
+ 
+<li>
+<span class="v">:child-stobj</span> -- the name of a previously-introduced stobj</li> 
+ 
+<li>
+<span class="v">:child-accessor</span> -- the name of an accessor function of some 
+field of the child stobj</li> 
+ 
+<li>
+<span class="v">:child-updater</span> -- the name of an updater function of some 
+field of the child stobj</li> 
+ 
+<li>
+<span class="v">:key</span> -- the keyword corresponding to the field, for use as a key in 
+the typed record.</li> 
+</ul> 
+ 
+<p>When a field is based off a child stobj, then <span class="v">defrstobj</span> 
+requires certain theorems about the child stobj's accessors and 
+updaters to be made available to it using the top-level keyword option 
+<span class="v">:enable</span>.  Two kinds of theorems are expected:</p> 
+ 
+<ul> 
+ 
+<li>Non-interference Theorems -- standard accessor/updater 
+independence or read-over-write theorems. Also see <a href="STOBJS____STOBJ-UPDATER-INDEPENDENCE.html">stobjs::stobj-updater-independence</a> and <span class="v">std/stobjs/nicestobj</span> for 
+a possible strategy to adopt to prove these kinds of theorems.</li> 
+ 
+<li>Default-value Theorems -- theorems stating that calling the 
+accessor on a stobj's creator function returns the default value.</li> 
+ 
+</ul> 
+ 
+
+</body>
+</html>

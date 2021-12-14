@@ -1,0 +1,96 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Stobj-example-2</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____STOBJ-EXAMPLE-2">Click for Stobj-example-2 in the Full Manual</a></h3>
+
+<p>An example of the use of arrays in single-threaded objects</p><p>The following event</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFSTOBJ.html">defstobj</a> ms
+  (pcn  :type integer                  :initially 0)
+  (mem  :type (<a href="COMMON-LISP____ARRAY.html">array</a> integer (100000)) :initially -1)
+  (code :type t                        :initially nil))</pre> 
+ 
+ <p>introduces a single-threaded object named <span class="v">ms</span> (which stands for 
+ ``machine state'').  The object has three fields, a <span class="v">pcn</span> or program 
+ counter, a <span class="v">mem</span> or memory, and a <span class="v">code</span> field.</p> 
+ 
+ <p>The <span class="v">mem</span> field is occupied by an object initially of type <span class="v">(<a href="COMMON-LISP____ARRAY.html">array</a>
+ integer (100000))</span>.  Logically speaking, this is a list of length 
+ <span class="v">100000</span>, each element of which is an integer.  But in the underlying 
+ implementation of the <span class="v">ms</span> object, this field is occupied by a raw Lisp 
+ array, initially of size 100000.</p> 
+ 
+ <p>You might expect the above <span class="v">defstobj</span> to define the accessor function 
+ <span class="v">mem</span> and the updater <span class="v">update-mem</span>.  <i>That does not happen!</i>.</p> 
+ 
+ <p>The above event defines the accessor function <span class="v">memi</span> and the updater 
+ <span class="v">update-memi</span>.  These functions do not access/update the <span class="v">mem</span> field of 
+ the <span class="v">ms</span> object; they access/update the individual elements of the array in 
+ that field.</p> 
+ 
+ <p>In particular, the logical definitions of the two functions are:</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> memi (i ms)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard
+                  (<a href="COMMON-LISP____AND.html">and</a> (msp ms)
+                       (<a href="COMMON-LISP____INTEGERP.html">integerp</a> i)
+                       (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> 0 i)
+                       (<a href="COMMON-LISP_____C3.html">&lt;</a> i (mem-length ms)))))
+  (<a href="COMMON-LISP____NTH.html">nth</a> i (<a href="COMMON-LISP____NTH.html">nth</a> 1 ms)))
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> update-memi (i v ms)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard
+                  (<a href="COMMON-LISP____AND.html">and</a> (msp ms)
+                       (<a href="COMMON-LISP____INTEGERP.html">integerp</a> i)
+                       (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> 0 i)
+                       (<a href="COMMON-LISP_____C3.html">&lt;</a> i (mem-length ms))
+                       (<a href="COMMON-LISP____INTEGERP.html">integerp</a> v))))
+  (<a href="ACL2____UPDATE-NTH-ARRAY.html">update-nth-array</a> 1 i v ms))</pre> 
+ 
+ <p>For example, to access the 511th (0-based) memory location of the current 
+ <span class="v">ms</span> you could evaluate:</p> 
+ 
+ <pre class="code">ACL2 !&gt;(memi 511 ms)
+-1</pre> 
+ 
+ <p>The answer is <span class="v">-1</span> initially, because that is the above-specified 
+ initial value of the elements of the <span class="v">mem</span> array.</p> 
+ 
+ <p>To set that element you could do</p> 
+ 
+ <pre class="code">ACL2 !&gt;(update-memi 511 777 ms)
+&lt;ms&gt;
+ACL2 !&gt;(memi 511 ms)
+777</pre> 
+ 
+ <p>The raw Lisp implementing these two functions is shown below.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> memi (i ms)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____TYPE.html">type</a> (<a href="COMMON-LISP____AND.html">and</a> fixnum (integer 0 *)) i))
+  (<a href="COMMON-LISP____THE.html">the</a> integer
+       (aref (<a href="COMMON-LISP____THE.html">the</a> (simple-array integer (<a href="COMMON-LISP_____A2.html">*</a>))
+                  (svref ms 1))
+             (<a href="COMMON-LISP____THE.html">the</a> (<a href="COMMON-LISP____AND.html">and</a> fixnum (integer 0 *)) i))))
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> update-memi (i v ms)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____TYPE.html">type</a> (<a href="COMMON-LISP____AND.html">and</a> fixnum (integer 0 *)) i)
+           (<a href="COMMON-LISP____TYPE.html">type</a> integer v))
+  (<a href="COMMON-LISP____PROGN.html">progn</a>
+   (setf (aref (<a href="COMMON-LISP____THE.html">the</a> (simple-array integer (<a href="COMMON-LISP_____A2.html">*</a>))
+                    (svref ms 1))
+               (<a href="COMMON-LISP____THE.html">the</a> (<a href="COMMON-LISP____AND.html">and</a> fixnum (integer 0 *)) i))
+         (<a href="COMMON-LISP____THE.html">the</a> integer v))
+   ms))</pre> 
+ 
+ <p>If you want to see the raw Lisp supporting a <span class="v">defstobj</span>, execute the 
+ <span class="v">defstobj</span> and then evaluate the ACL2 form <span class="v">(<a href="COMMON-LISP____NTH.html">nth</a> 4 (global-val
+ 'cltl-command (<a href="ACL2____W.html">w</a> state)))</span>.</p> 
+ 
+ <p>To continue the stobj tour, see <a href="ACL2____STOBJ-EXAMPLE-3.html">stobj-example-3</a>.</p>
+</body>
+</html>

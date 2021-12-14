@@ -1,0 +1,194 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Vl-make-n-bit-div-step</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL2014____VL-MAKE-N-BIT-DIV-STEP">Click for Vl-make-n-bit-div-step in the Full Manual</a></h3>
+
+<p>Single step in a basic division/remainder algorithm.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(vl-make-n-bit-div-step n) → mods</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">n</span> — <font color="#606060">Guard <span class="v">(<a href="ACL2____NATP.html">natp</a> n)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">mods</span> — A non-empty module list.  The first module in the list 
+                       is the desired module; the other modules are any 
+                       necessary supporting modules.<br>    <font color="#606060">Type <span class="v">(<a href="VL2014____VL-MODULELIST-P.html">vl-modulelist-p</a> mods)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>We generate the module <span class="v">VL_N_BIT_DIV_STEP</span> in terms of <a href="VL2014____PRIMITIVES.html">primitives</a>.  This module carries out a single step in a simple restoring 
+division algorithm.</p> 
+ 
+<p>To understand this code you will need to understand restoring division.  We 
+sketch our implementation here, but to understand why it works you should see 
+a textbook on computer arithmetic.</p> 
+ 
+<p>Imagine a double-wide register, sometimes called AQ, whose halves we will 
+treat independently as A and Q.</p> 
+ 
+<pre class="code">+--------------+--------------+
+|   'A' half   |   'Q' half   |    2n bits total
++--------------+--------------+
+    n bits         n bits</pre> 
+ 
+<p>Initially, A is zeroed and Q is set to the dividend.  Then we take N 
+steps (described below).  After these steps, A will contain the remainder and Q 
+will contain the quotient.</p> 
+ 
+<p>In each step, we are going to:</p> 
+ 
+<ol> 
+<li>Shift the whole register AQ left by 1, then</li> 
+<li>Modify A and the bottom bit of Q, i.e., Q[0].</li> 
+</ol> 
+ 
+<p>Note that, except for the shifting step, we don't touch Q besides its bottom 
+bit.  Since Q eventually becomes the quotient, what we're really doing here is 
+computing the quotient one bit at a time.  During the first iteration, we 
+compute its most significant bit.  During the next iteration, we compute its 
+next most significant bit, and so on.</p> 
+ 
+<p>The details of each step are as follows.  After shifting AQ, we compare the 
+divisor (which remains fixed throughout all iterations) against A.  If the 
+divisor "fits" into A, i.e., when <span class="v">divisor &lt;= A</span>, we reduce A by the 
+divisor and set the low bit of Q to 1.  Otherwise, we leave A alone and set the 
+low bit of Q to 0.</p> 
+ 
+<p>How does <span class="v">VL_N_BIT_DIV_STEP</span> fit into this?  It computes the next value 
+of AQ, given the current value of AQ and the divisor.  For example, in the 5-bit 
+case, the general idea is something like this:</p> 
+ 
+<pre class="code">module VL_5_BIT_DIV_STEP (a_next, q_next,   // Updated AQ
+                          a_prev, q_prev,   // Starting AQ
+                          divisor) ;
+
+  output [4:0] a_next, q_next;
+  input [4:0] a_prev, q_prev;
+  input [4:0] divisor;
+
+  // Temporary AQ is the starting AQ, shifted left by 1,
+  // which drops the top bit of A:
+
+  wire [4:0] a, q;
+  assign {a, q} = {a_prev[3:0], q_prev, 1'b0};
+
+  wire fits = divisor &lt;= a;                 // Does it fit?
+  assign a_next = fits ? a - divisor : a;   // Maybe Adjust A
+  assign q_next = {q[3:1], fits};           // Install Q[0]
+
+endmodule</pre> 
+ 
+<p>The only twists are the following, basic optimizations:</p> 
+ 
+<ul> 
+ 
+<li>We do the comparison and subtraction using the same adder core.</li> 
+ 
+<li>We expect the divisor to be given to us already negated, instead of 
+separately negating it in each step.</li> 
+ 
+</ul> 
+ 
+<p>Note that the semantics of Verilog require that if any bit of the dividend 
+or divisor is <span class="v">X</span> or <span class="v">Z</span>, then every bit of the output is <span class="v">X</span>.  We do 
+not deal with this requirement in the individual steps; it's part of the 
+wrapper.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>vl-make-n-bit-div-step</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ vl-make-n-bit-div-step (n)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____NATP.html">natp</a> n)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP_____E3_D3.html">&gt;=</a> n 2)))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'vl-make-n-bit-div-step))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+   ((n (<a href="ACL2____LNFIX.html">lnfix</a> n))
+    (name (<a href="ACL2____HONS-COPY.html">hons-copy</a> (<a href="STR____CAT.html">cat</a> "VL_" (natstr n) "_BIT_DIV_STEP")))
+    ((<a href="ACL2____MV.html">mv</a> an-expr an-port an-portdecl an-vardecl)
+     (<a href="VL2014____VL-OCCFORM-MKPORT.html">vl-occform-mkport</a> "a_next"
+                        :vl-output n))
+    ((<a href="ACL2____MV.html">mv</a> qn-expr qn-port qn-portdecl qn-vardecl)
+     (<a href="VL2014____VL-OCCFORM-MKPORT.html">vl-occform-mkport</a> "q_next"
+                        :vl-output n))
+    ((<a href="ACL2____MV.html">mv</a> ap-expr ap-port ap-portdecl ap-vardecl)
+     (<a href="VL2014____VL-OCCFORM-MKPORT.html">vl-occform-mkport</a> "a_prev"
+                        :vl-input n))
+    ((<a href="ACL2____MV.html">mv</a> qp-expr qp-port qp-portdecl qp-vardecl)
+     (<a href="VL2014____VL-OCCFORM-MKPORT.html">vl-occform-mkport</a> "q_prev"
+                        :vl-input n))
+    ((<a href="ACL2____MV.html">mv</a> d~-expr d~-port d~-portdecl d~-vardecl)
+     (<a href="VL2014____VL-OCCFORM-MKPORT.html">vl-occform-mkport</a> "divisor_bar"
+                        :vl-input n))
+    ((<a href="ACL2____MV.html">mv</a> a-expr a-vardecl)
+     (<a href="VL2014____VL-OCCFORM-MKWIRE.html">vl-occform-mkwire</a> "a" n))
+    ((<a href="ACL2____MV.html">mv</a> diff-expr diff-vardecl)
+     (<a href="VL2014____VL-OCCFORM-MKWIRE.html">vl-occform-mkwire</a> "diff" n))
+    ((<a href="ACL2____MV.html">mv</a> fits-expr fits-vardecl)
+     (<a href="VL2014____VL-OCCFORM-MKWIRE.html">vl-occform-mkwire</a> "fits" 1))
+    (ass-mods (<a href="VL2014____VL-MAKE-N-BIT-ASSIGN.html">vl-make-n-bit-assign</a> n))
+    (add-mods (<a href="VL2014____VL-MAKE-N-BIT-ADDER-CORE.html">vl-make-n-bit-adder-core</a> n))
+    (mux-mods (<a href="VL2014____VL-MAKE-N-BIT-MUX.html">vl-make-n-bit-mux</a> n t))
+    (support (<a href="COMMON-LISP____APPEND.html">append</a> ass-mods add-mods mux-mods))
+    (ass-mod (<a href="COMMON-LISP____CAR.html">car</a> ass-mods))
+    (add-mod (<a href="COMMON-LISP____CAR.html">car</a> add-mods))
+    (mux-mod (<a href="COMMON-LISP____CAR.html">car</a> mux-mods))
+    (init-inst
+        (<a href="VL2014____VL-SIMPLE-INST.html">vl-simple-inst</a>
+             ass-mod "init" a-expr
+             (<a href="VL2014____MAKE-VL-NONATOM.html">make-vl-nonatom</a>
+                  :op :vl-concat
+                  :args (<a href="COMMON-LISP____LIST.html">list</a> (<a href="VL2014____VL-MAKE-PARTSELECT.html">vl-make-partselect</a> ap-expr (<a href="COMMON-LISP____-.html">-</a> n 2) 0)
+                              (<a href="VL2014____VL-MAKE-BITSELECT.html">vl-make-bitselect</a> qp-expr (<a href="COMMON-LISP____-.html">-</a> n 1)))
+                  :finalwidth n
+                  :finaltype :vl-unsigned)))
+    (core-inst (<a href="VL2014____VL-SIMPLE-INST.html">vl-simple-inst</a> add-mod "core" diff-expr fits-expr
+                               a-expr d~-expr |*sized-1'b1*|))
+    (amux-inst (<a href="VL2014____VL-SIMPLE-INST.html">vl-simple-inst</a> mux-mod "amux"
+                               an-expr fits-expr diff-expr a-expr))
+    (qout-inst
+        (<a href="VL2014____VL-SIMPLE-INST.html">vl-simple-inst</a>
+             ass-mod "qout" qn-expr
+             (<a href="VL2014____MAKE-VL-NONATOM.html">make-vl-nonatom</a>
+                  :op :vl-concat
+                  :args (<a href="COMMON-LISP____LIST.html">list</a> (<a href="VL2014____VL-MAKE-PARTSELECT.html">vl-make-partselect</a> qp-expr (<a href="COMMON-LISP____-.html">-</a> n 2) 0)
+                              fits-expr)
+                  :finalwidth n
+                  :finaltype :vl-unsigned))))
+   (<a href="COMMON-LISP____CONS.html">cons</a>
+       (<a href="VL2014____MAKE-VL-MODULE.html">make-vl-module</a>
+            :name name
+            :origname name
+            :ports (<a href="COMMON-LISP____LIST.html">list</a> an-port qn-port ap-port qp-port d~-port)
+            :portdecls (<a href="COMMON-LISP____LIST.html">list</a> an-portdecl qn-portdecl
+                             ap-portdecl qp-portdecl d~-portdecl)
+            :vardecls (<a href="COMMON-LISP____LIST.html">list</a> an-vardecl qn-vardecl
+                            ap-vardecl qp-vardecl d~-vardecl
+                            a-vardecl diff-vardecl fits-vardecl)
+            :modinsts (<a href="COMMON-LISP____LIST.html">list</a> init-inst core-inst amux-inst qout-inst)
+            :minloc *vl-fakeloc*
+            :maxloc *vl-fakeloc*)
+       support))))</pre> 
+<p><b>Theorem: </b>vl-modulelist-p-of-vl-make-n-bit-div-step</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-modulelist-p-of-vl-make-n-bit-div-step
+        (<a href="ACL2____B_A2.html">b*</a> ((mods (<a href="VL2014____VL-MAKE-N-BIT-DIV-STEP.html">vl-make-n-bit-div-step</a> n)))
+            (<a href="VL2014____VL-MODULELIST-P.html">vl-modulelist-p</a> mods))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>type-of-vl-make-n-bit-div-step</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> type-of-vl-make-n-bit-div-step
+        (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____TRUE-LISTP.html">true-listp</a> (<a href="VL2014____VL-MAKE-N-BIT-DIV-STEP.html">vl-make-n-bit-div-step</a> n))
+             (<a href="COMMON-LISP____CONSP.html">consp</a> (<a href="VL2014____VL-MAKE-N-BIT-DIV-STEP.html">vl-make-n-bit-div-step</a> n)))
+        :rule-classes :type-prescription)</pre> 
+<p><b>Theorem: </b>vl-make-n-bit-div-step-of-nfix-n</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-make-n-bit-div-step-of-nfix-n
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL2014____VL-MAKE-N-BIT-DIV-STEP.html">vl-make-n-bit-div-step</a> (<a href="ACL2____NFIX.html">nfix</a> n))
+               (<a href="VL2014____VL-MAKE-N-BIT-DIV-STEP.html">vl-make-n-bit-div-step</a> n)))</pre> 
+<p><b>Theorem: </b>vl-make-n-bit-div-step-nat-equiv-congruence-on-n</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-make-n-bit-div-step-nat-equiv-congruence-on-n
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____NAT-EQUIV.html">acl2::nat-equiv</a> n n-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL2014____VL-MAKE-N-BIT-DIV-STEP.html">vl-make-n-bit-div-step</a> n)
+                        (<a href="VL2014____VL-MAKE-N-BIT-DIV-STEP.html">vl-make-n-bit-div-step</a> n-equiv)))
+        :rule-classes :congruence)</pre> 
+
+</body>
+</html>

@@ -1,0 +1,346 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Vl-constint-atom-expandsizes</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL2014____VL-CONSTINT-ATOM-EXPANDSIZES">Click for Vl-constint-atom-expandsizes in the Full Manual</a></h3>
+
+<p>Propagate the final width and type of an expression into a constant 
+integer atom.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(vl-constint-atom-expandsizes x finalwidth finaltype ctx warnings) 
+  → 
+(mv successp warnings new-x)</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">x</span> — <font color="#606060">Guard <span class="v">(<a href="VL2014____VL-EXPR-P.html">vl-expr-p</a> x)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">finalwidth</span> — <font color="#606060">Guard <span class="v">(<a href="ACL2____NATP.html">natp</a> finalwidth)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">finaltype</span> — <font color="#606060">Guard <span class="v">(<a href="VL2014____VL-EXPRTYPE-P.html">vl-exprtype-p</a> finaltype)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">ctx</span> — <font color="#606060">Guard <span class="v">(<a href="VL2014____VL-CONTEXT-P.html">vl-context-p</a> ctx)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">warnings</span> — <font color="#606060">Guard <span class="v">(<a href="VL2014____VL-WARNINGLIST-P.html">vl-warninglist-p</a> warnings)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">successp</span> — <font color="#606060">Type <span class="v">(<a href="ACL2____BOOLEANP.html">booleanp</a> successp)</span>.</font>
+</dd> 
+<dd>
+<span class="tt">warnings</span> — <font color="#606060">Type <span class="v">(<a href="VL2014____VL-WARNINGLIST-P.html">vl-warninglist-p</a> warnings)</span>.</font>
+</dd> 
+<dd>
+<span class="tt">new-x</span> — <font color="#606060">Type <span class="v">(<a href="VL2014____VL-EXPR-P.html">vl-expr-p</a> new-x)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p><b>Warning</b>: this function should typically only be called by 
+the <a href="VL2014____EXPRESSION-SIZING.html">expression-sizing</a> transform.</p> 
+ 
+<p>We expect that the finalwidth is at least as large as the constant's 
+original width, and that if the constant was originally unsigned then the 
+finaltype should also be unsigned.  If these conditions are not met, expansion 
+fails with fatal warnings.</p> 
+ 
+<p>The new atom we build, <span class="v">x-prime</span> will have a new <a href="VL2014____VL-CONSTINT-P.html">vl-constint-p</a> for 
+its guts, where the origwidth and origtype have been modified to match the 
+final width and type of the atom.  We have no choice but to do this in the case 
+of a true sign extension, because the new value might not fit into the original 
+width.  So for consistency we do it in all cases.  <b>BOZO</b> having 
+<span class="v">:finalwidth</span> and <span class="v">:finaltype</span> fields for atoms seems somewhat redundant 
+if we are changing the width and type of the guts.  We could consider forcing 
+these fields to either be nil or to agree with the constint's width/type (and 
+similarly for weirdints).  Otherwise we can make this part of well-typed 
+expressions, but I'm partial to the former.</p> 
+ 
+<h3>Compatibility Warnings</h3> 
+ 
+<p>In certain cases we issue non-fatal "compatibility warnings" to say that 
+an expression might have different values on different Verilog implementations. 
+It is scary to expand originally-unsized numbers (most frequently plain decimal 
+numbers) past 32-bits because this could perhaps result in 
+implementation-dependent behavior.  For instance, consider:</p> 
+ 
+<pre class="code">wire signed [47:0] foo, bar;
+assign bar = ...;
+assign foo = bar + 'h 8000_0000 ;  // bar + 2^31</pre> 
+ 
+<p>Suppose <span class="v">bar</span> is zero.  On a 32-bit system, the 2^31 represents a 
+negative number, so when we sign-extend it to 48 bits we get 
+<span class="v">FFFF_8000_0000</span>.  The final value of <span class="v">foo</span> is thus <span class="v">FFFF_8000_0000</span>. 
+But on a 64-bit system, the 2^31 represents a positive number and we would 
+instead end up sign-extending <span class="v">bar</span> to 64 bits.  The 64-bit addition 
+produces <span class="v">0000_0000_8000_0000</span> which is then truncated to 48 bits.  The 
+final value of <span class="v">foo</span> is thus <span class="v">0000_8000_0000</span>, which does not match the 
+32-bit implementation.</p> 
+ 
+<p>So, when can these kinds of problems arise?</p> 
+ 
+<p>If bar was unsigned, then I think there is no problem because we will need 
+to zero-extend the 2^31 to 48 bits, which yields <span class="v">0000_8000_0000</span> regardless 
+of whether we are on a 32-bit, 64-bit, or other-bit implementation.</p> 
+ 
+<p>I once imagined that the sign-bit of the constant had to be 1 to cause 
+problems, but it is still possible to demonstrate a compatibility problem with 
+a zero sign bit.  On the other hand, because examples I can think of seem to 
+rely upon shift operations and hence be relatively unlikely, I mark these as 
+minor warnings.  Here is an example of such a problem:</p> 
+ 
+<pre class="code">wire signed [47:0] foo, bar;
+assign bar = ...;
+assign foo = (bar + 5) &gt;&gt; 1;</pre> 
+ 
+<p>Suppose bar is <span class="v">FFFF_FFFF_FFFF</span>.  On the 64-bit implementation, the 
+addition produces is done in 64 bits and produces <span class="v">1_0000_0000_0004</span>, which 
+is then shifted to obtain <span class="v">8000_0000_0002</span>.  On a 32-bit implementation, the 
+addition is only done in 48 bits and the carry is lost, so the sum is <span class="v">4</span> 
+and the final result is <span class="v">2</span>.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>vl-constint-atom-expandsizes</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ vl-constint-atom-expandsizes
+ (x finalwidth finaltype ctx warnings)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="VL2014____VL-EXPR-P.html">vl-expr-p</a> x)
+                             (<a href="ACL2____NATP.html">natp</a> finalwidth)
+                             (<a href="VL2014____VL-EXPRTYPE-P.html">vl-exprtype-p</a> finaltype)
+                             (<a href="VL2014____VL-CONTEXT-P.html">vl-context-p</a> ctx)
+                             (<a href="VL2014____VL-WARNINGLIST-P.html">vl-warninglist-p</a> warnings))))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a>
+      (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="VL2014____VL-ATOM-P.html">vl-atom-p</a> x)
+                         (<a href="VL2014____VL-FAST-CONSTINT-P.html">vl-fast-constint-p</a> (<a href="VL2014____VL-ATOM-_E3GUTS.html">vl-atom-&gt;guts</a> x)))))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'vl-constint-atom-expandsizes))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+   ((x (<a href="VL2014____VL-EXPR-FIX.html">vl-expr-fix</a> x))
+    (<a href="ACL2____CTX.html">ctx</a> (<a href="VL2014____VL-CONTEXT-FIX.html">vl-context-fix</a> ctx))
+    (finalwidth (<a href="ACL2____LNFIX.html">lnfix</a> finalwidth))
+    (finaltype (vl-exprtype-fix finaltype))
+    (guts (<a href="VL2014____VL-ATOM-_E3GUTS.html">vl-atom-&gt;guts</a> x))
+    ((<a href="VL2014____VL-CONSTINT.html">vl-constint</a> guts) guts)
+    ((when (<a href="COMMON-LISP_____E3.html">&gt;</a> guts.origwidth finalwidth))
+     (<a href="ACL2____MV.html">mv</a>
+      nil
+      (<a href="VL2014____FATAL.html">fatal</a>
+       :type :vl-programming-error
+       :msg
+       "~a0: origwidth &gt; finalwidth when expanding ~a1. ~
+                           This indicates a serious bug in our sizing code."
+       :args (<a href="COMMON-LISP____LIST.html">list</a> ctx x))
+      x))
+    ((unless (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____EQ.html">eq</a> guts.origtype finaltype)
+                 (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQ.html">eq</a> guts.origtype :vl-signed)
+                      (<a href="COMMON-LISP____EQ.html">eq</a> finaltype :vl-unsigned))))
+     (<a href="ACL2____MV.html">mv</a>
+      nil
+      (<a href="VL2014____FATAL.html">fatal</a>
+       :type :vl-programming-error
+       :msg
+       "~a0: origtype is ~s1 but finaltype is ~s2 when ~
+                           expanding ~a3.  This indicates a serious bug in ~
+                           our typing code."
+       :args (<a href="COMMON-LISP____LIST.html">list</a> ctx guts.origtype finaltype x))
+      x))
+    ((when (<a href="COMMON-LISP_____D3.html">=</a> guts.origwidth finalwidth))
+     (<a href="ACL2____B_A2.html">b*</a> ((new-guts (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQ.html">eq</a> guts.origtype finaltype)
+                        guts
+                        (<a href="VL2014____CHANGE-VL-CONSTINT.html">change-vl-constint</a> guts
+                                            :origwidth finalwidth
+                                            :origtype finaltype)))
+          (new-x (<a href="VL2014____CHANGE-VL-ATOM.html">change-vl-atom</a> x
+                                 :guts new-guts
+                                 :finalwidth finalwidth
+                                 :finaltype finaltype)))
+         (<a href="ACL2____MV.html">mv</a> t (<a href="VL2014____OK.html">ok</a>) new-x)))
+    ((when (<a href="COMMON-LISP____EQ.html">eq</a> finaltype :vl-unsigned))
+     (<a href="ACL2____B_A2.html">b*</a> ((new-guts (<a href="VL2014____CHANGE-VL-CONSTINT.html">change-vl-constint</a> guts
+                                        :origwidth finalwidth
+                                        :origtype finaltype))
+          (new-x (<a href="VL2014____CHANGE-VL-ATOM.html">change-vl-atom</a> x
+                                 :guts new-guts
+                                 :finalwidth finalwidth
+                                 :finaltype finaltype)))
+         (<a href="ACL2____MV.html">mv</a> t (<a href="VL2014____OK.html">ok</a>) new-x)))
+    (new-value
+     (<a href="VL2014____VL-SIGN-EXTEND-CONSTINT.html">vl-sign-extend-constint</a> guts.value guts.origwidth finalwidth))
+    (new-guts (<a href="VL2014____CHANGE-VL-CONSTINT.html">change-vl-constint</a> guts
+                                  :value new-value
+                                  :origwidth finalwidth))
+    (new-x (<a href="VL2014____CHANGE-VL-ATOM.html">change-vl-atom</a> x
+                           :guts new-guts
+                           :finalwidth finalwidth
+                           :finaltype finaltype))
+    ((unless guts.wasunsized)
+     (<a href="ACL2____MV.html">mv</a> t (<a href="VL2014____OK.html">ok</a>) new-x))
+    (minorp (<a href="COMMON-LISP_____D3.html">=</a> new-value guts.value))
+    (<a href="VL2014____WARNINGS.html">warnings</a>
+     (<a href="VL2014____WARN.html">warn</a>
+      :type (<a href="COMMON-LISP____IF.html">if</a> minorp
+                :vl-warn-integer-size-minor :vl-warn-integer-size)
+      :msg
+      (<a href="COMMON-LISP____IF.html">if</a>
+       minorp
+       "~a0: the unsized integer ~a1 occurs in a context ~
+                          that is larger than 32-bits.  In rare cases ~
+                          (particularly involving right-shifts), the ~
+                          resulting expression may produce different results ~
+                          on Verilog implementations with different integer ~
+                          sizes; consider adding an explicit size to this ~
+                          number."
+       "~a0: the unsized integer ~a1 occurs in a signed ~
+                        context that is larger than 32-bits; it is likely ~
+                        that this could cause the expression results to ~
+                        differ between Verilog implementations that have ~
+                        different integer sizes.  Adding an explicit size to ~
+                        this number is recommended.")
+      :args (<a href="COMMON-LISP____LIST.html">list</a> ctx x))))
+   (<a href="ACL2____MV.html">mv</a> t warnings new-x))))</pre> 
+<p><b>Theorem: </b>booleanp-of-vl-constint-atom-expandsizes.successp</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> booleanp-of-vl-constint-atom-expandsizes.successp
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?successp ?warnings ?new-x)
+              (<a href="VL2014____VL-CONSTINT-ATOM-EXPANDSIZES.html">vl-constint-atom-expandsizes</a>
+                   x finalwidth finaltype ctx warnings)))
+            (<a href="ACL2____BOOLEANP.html">booleanp</a> successp))
+        :rule-classes :type-prescription)</pre> 
+<p><b>Theorem: </b>vl-warninglist-p-of-vl-constint-atom-expandsizes.warnings</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-warninglist-p-of-vl-constint-atom-expandsizes.warnings
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?successp ?warnings ?new-x)
+              (<a href="VL2014____VL-CONSTINT-ATOM-EXPANDSIZES.html">vl-constint-atom-expandsizes</a>
+                   x finalwidth finaltype ctx warnings)))
+            (<a href="VL2014____VL-WARNINGLIST-P.html">vl-warninglist-p</a> warnings))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>vl-expr-p-of-vl-constint-atom-expandsizes.new-x</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-expr-p-of-vl-constint-atom-expandsizes.new-x
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?successp ?warnings ?new-x)
+              (<a href="VL2014____VL-CONSTINT-ATOM-EXPANDSIZES.html">vl-constint-atom-expandsizes</a>
+                   x finalwidth finaltype ctx warnings)))
+            (<a href="VL2014____VL-EXPR-P.html">vl-expr-p</a> new-x))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>warning-irrelevance-of-vl-constint-atom-expandsizes</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ warning-irrelevance-of-vl-constint-atom-expandsizes
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((ret1 (<a href="VL2014____VL-CONSTINT-ATOM-EXPANDSIZES.html">vl-constint-atom-expandsizes</a>
+              x finalwidth finaltype ctx warnings))
+   (ret2
+     (<a href="VL2014____VL-CONSTINT-ATOM-EXPANDSIZES.html">vl-constint-atom-expandsizes</a> x finalwidth finaltype nil nil)))
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____SYNTAXP.html">syntaxp</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> ctx ''nil)
+                              (<a href="COMMON-LISP____EQUAL.html">equal</a> warnings ''nil))))
+           (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 0 ret1) (<a href="ACL2____MV-NTH.html">mv-nth</a> 0 ret2))
+                (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 2 ret1)
+                       (<a href="ACL2____MV-NTH.html">mv-nth</a> 2 ret2))))))</pre> 
+<p><b>Theorem: </b>no-change-loserp-of-vl-constint-atom-expandsizes</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> no-change-loserp-of-vl-constint-atom-expandsizes
+        (<a href="COMMON-LISP____LET.html">let</a> ((ret (<a href="VL2014____VL-CONSTINT-ATOM-EXPANDSIZES.html">vl-constint-atom-expandsizes</a>
+                        x finalwidth finaltype ctx warnings)))
+             (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 0 ret))
+                      (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 2 ret)
+                             (<a href="VL2014____VL-EXPR-FIX.html">vl-expr-fix</a> x)))))</pre> 
+<p><b>Theorem: </b>vl-expr-welltyped-p-of-vl-constint-atom-expandsizes</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     vl-expr-welltyped-p-of-vl-constint-atom-expandsizes
+     (<a href="COMMON-LISP____LET.html">let</a> ((ret (<a href="VL2014____VL-CONSTINT-ATOM-EXPANDSIZES.html">vl-constint-atom-expandsizes</a>
+                     x finalwidth finaltype ctx warnings)))
+          (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 0 ret)
+                        (<a href="ACL2____FORCE.html">force</a> (<a href="VL2014____VL-ATOM-P.html">vl-atom-p</a> x))
+                        (<a href="ACL2____FORCE.html">force</a> (<a href="VL2014____VL-CONSTINT-P.html">vl-constint-p</a> (<a href="VL2014____VL-ATOM-_E3GUTS.html">vl-atom-&gt;guts</a> x))))
+                   (<a href="VL2014____VL-EXPR-WELLTYPED-P.html">vl-expr-welltyped-p</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 2 ret)))))</pre> 
+<p><b>Theorem: </b>vl-expr-&gt;finalwidth-of-vl-constint-atom-expandsizes</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     vl-expr-&gt;finalwidth-of-vl-constint-atom-expandsizes
+     (<a href="COMMON-LISP____LET.html">let</a> ((ret (<a href="VL2014____VL-CONSTINT-ATOM-EXPANDSIZES.html">vl-constint-atom-expandsizes</a>
+                     x finalwidth finaltype ctx warnings)))
+          (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 0 ret)
+                        (<a href="ACL2____FORCE.html">force</a> (<a href="VL2014____VL-ATOM-P.html">vl-atom-p</a> x))
+                        (<a href="ACL2____FORCE.html">force</a> (<a href="VL2014____VL-CONSTINT-P.html">vl-constint-p</a> (<a href="VL2014____VL-ATOM-_E3GUTS.html">vl-atom-&gt;guts</a> x))))
+                   (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL2014____VL-EXPR-_E3FINALWIDTH.html">vl-expr-&gt;finalwidth</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 2 ret))
+                          (<a href="ACL2____NFIX.html">nfix</a> finalwidth)))))</pre> 
+<p><b>Theorem: </b>vl-expr-&gt;finaltype-of-vl-constint-atom-expandsizes</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     vl-expr-&gt;finaltype-of-vl-constint-atom-expandsizes
+     (<a href="COMMON-LISP____LET.html">let</a> ((ret (<a href="VL2014____VL-CONSTINT-ATOM-EXPANDSIZES.html">vl-constint-atom-expandsizes</a>
+                     x finalwidth finaltype ctx warnings)))
+          (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 0 ret)
+                        (<a href="ACL2____FORCE.html">force</a> (<a href="VL2014____VL-ATOM-P.html">vl-atom-p</a> x))
+                        (<a href="ACL2____FORCE.html">force</a> (<a href="VL2014____VL-CONSTINT-P.html">vl-constint-p</a> (<a href="VL2014____VL-ATOM-_E3GUTS.html">vl-atom-&gt;guts</a> x))))
+                   (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL2014____VL-EXPR-_E3FINALTYPE.html">vl-expr-&gt;finaltype</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 2 ret))
+                          (vl-exprtype-fix finaltype)))))</pre> 
+<p><b>Theorem: </b>vl-constint-atom-expandsizes-of-vl-expr-fix-x</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-constint-atom-expandsizes-of-vl-expr-fix-x
+ (<a href="COMMON-LISP____EQUAL.html">equal</a>
+    (<a href="VL2014____VL-CONSTINT-ATOM-EXPANDSIZES.html">vl-constint-atom-expandsizes</a> (<a href="VL2014____VL-EXPR-FIX.html">vl-expr-fix</a> x)
+                                  finalwidth finaltype ctx warnings)
+    (<a href="VL2014____VL-CONSTINT-ATOM-EXPANDSIZES.html">vl-constint-atom-expandsizes</a>
+         x finalwidth finaltype ctx warnings)))</pre> 
+<p><b>Theorem: </b>vl-constint-atom-expandsizes-vl-expr-equiv-congruence-on-x</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-constint-atom-expandsizes-vl-expr-equiv-congruence-on-x
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="VL2014____VL-EXPR-EQUIV.html">vl-expr-equiv</a> x x-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL2014____VL-CONSTINT-ATOM-EXPANDSIZES.html">vl-constint-atom-expandsizes</a>
+                             x finalwidth finaltype ctx warnings)
+                        (<a href="VL2014____VL-CONSTINT-ATOM-EXPANDSIZES.html">vl-constint-atom-expandsizes</a>
+                             x-equiv
+                             finalwidth finaltype ctx warnings)))
+        :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>vl-constint-atom-expandsizes-of-nfix-finalwidth</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-constint-atom-expandsizes-of-nfix-finalwidth
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL2014____VL-CONSTINT-ATOM-EXPANDSIZES.html">vl-constint-atom-expandsizes</a> x (<a href="ACL2____NFIX.html">nfix</a> finalwidth)
+                                             finaltype ctx warnings)
+               (<a href="VL2014____VL-CONSTINT-ATOM-EXPANDSIZES.html">vl-constint-atom-expandsizes</a>
+                    x finalwidth finaltype ctx warnings)))</pre> 
+<p><b>Theorem: </b>vl-constint-atom-expandsizes-nat-equiv-congruence-on-finalwidth</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-constint-atom-expandsizes-nat-equiv-congruence-on-finalwidth
+ (<a href="ACL2____IMPLIES.html">implies</a>
+      (<a href="ACL2____NAT-EQUIV.html">acl2::nat-equiv</a> finalwidth finalwidth-equiv)
+      (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL2014____VL-CONSTINT-ATOM-EXPANDSIZES.html">vl-constint-atom-expandsizes</a>
+                  x finalwidth finaltype ctx warnings)
+             (<a href="VL2014____VL-CONSTINT-ATOM-EXPANDSIZES.html">vl-constint-atom-expandsizes</a> x finalwidth-equiv
+                                           finaltype ctx warnings)))
+ :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>vl-constint-atom-expandsizes-of-vl-exprtype-fix-finaltype</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-constint-atom-expandsizes-of-vl-exprtype-fix-finaltype
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL2014____VL-CONSTINT-ATOM-EXPANDSIZES.html">vl-constint-atom-expandsizes</a>
+                    x finalwidth (vl-exprtype-fix finaltype)
+                    ctx warnings)
+               (<a href="VL2014____VL-CONSTINT-ATOM-EXPANDSIZES.html">vl-constint-atom-expandsizes</a>
+                    x finalwidth finaltype ctx warnings)))</pre> 
+<p><b>Theorem: </b>vl-constint-atom-expandsizes-vl-exprtype-equiv-congruence-on-finaltype</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-constint-atom-expandsizes-vl-exprtype-equiv-congruence-on-finaltype
+ (<a href="ACL2____IMPLIES.html">implies</a>
+  (vl-exprtype-equiv finaltype finaltype-equiv)
+  (<a href="COMMON-LISP____EQUAL.html">equal</a>
+       (<a href="VL2014____VL-CONSTINT-ATOM-EXPANDSIZES.html">vl-constint-atom-expandsizes</a>
+            x finalwidth finaltype ctx warnings)
+       (<a href="VL2014____VL-CONSTINT-ATOM-EXPANDSIZES.html">vl-constint-atom-expandsizes</a> x finalwidth
+                                     finaltype-equiv ctx warnings)))
+ :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>vl-constint-atom-expandsizes-of-vl-context-fix-ctx</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-constint-atom-expandsizes-of-vl-context-fix-ctx
+ (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL2014____VL-CONSTINT-ATOM-EXPANDSIZES.html">vl-constint-atom-expandsizes</a> x finalwidth
+                                      finaltype (<a href="VL2014____VL-CONTEXT-FIX.html">vl-context-fix</a> ctx)
+                                      warnings)
+        (<a href="VL2014____VL-CONSTINT-ATOM-EXPANDSIZES.html">vl-constint-atom-expandsizes</a>
+             x finalwidth finaltype ctx warnings)))</pre> 
+<p><b>Theorem: </b>vl-constint-atom-expandsizes-vl-context-equiv-congruence-on-ctx</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-constint-atom-expandsizes-vl-context-equiv-congruence-on-ctx
+ (<a href="ACL2____IMPLIES.html">implies</a>
+  (vl-context-equiv ctx ctx-equiv)
+  (<a href="COMMON-LISP____EQUAL.html">equal</a>
+       (<a href="VL2014____VL-CONSTINT-ATOM-EXPANDSIZES.html">vl-constint-atom-expandsizes</a>
+            x finalwidth finaltype ctx warnings)
+       (<a href="VL2014____VL-CONSTINT-ATOM-EXPANDSIZES.html">vl-constint-atom-expandsizes</a> x finalwidth
+                                     finaltype ctx-equiv warnings)))
+ :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>vl-constint-atom-expandsizes-of-vl-warninglist-fix-warnings</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-constint-atom-expandsizes-of-vl-warninglist-fix-warnings
+ (<a href="COMMON-LISP____EQUAL.html">equal</a>
+    (<a href="VL2014____VL-CONSTINT-ATOM-EXPANDSIZES.html">vl-constint-atom-expandsizes</a> x finalwidth finaltype
+                                  ctx (<a href="VL2014____VL-WARNINGLIST-FIX.html">vl-warninglist-fix</a> warnings))
+    (<a href="VL2014____VL-CONSTINT-ATOM-EXPANDSIZES.html">vl-constint-atom-expandsizes</a>
+         x finalwidth finaltype ctx warnings)))</pre> 
+<p><b>Theorem: </b>vl-constint-atom-expandsizes-vl-warninglist-equiv-congruence-on-warnings</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-constint-atom-expandsizes-vl-warninglist-equiv-congruence-on-warnings
+ (<a href="ACL2____IMPLIES.html">implies</a>
+  (<a href="VL2014____VL-WARNINGLIST-EQUIV.html">vl-warninglist-equiv</a> warnings warnings-equiv)
+  (<a href="COMMON-LISP____EQUAL.html">equal</a>
+       (<a href="VL2014____VL-CONSTINT-ATOM-EXPANDSIZES.html">vl-constint-atom-expandsizes</a>
+            x finalwidth finaltype ctx warnings)
+       (<a href="VL2014____VL-CONSTINT-ATOM-EXPANDSIZES.html">vl-constint-atom-expandsizes</a> x finalwidth
+                                     finaltype ctx warnings-equiv)))
+ :rule-classes :congruence)</pre> 
+
+</body>
+</html>

@@ -1,0 +1,167 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Make-event-example-1</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____MAKE-EVENT-EXAMPLE-1">Click for Make-event-example-1 in the Full Manual</a></h3>
+
+<p>An example use of <span class="tt"><a href="ACL2____MAKE-EVENT.html">make-event</a></span></p><p>Here, we develop a reasonably self-contained example that 
+ illustrates how to use <span class="v">make-event</span> to develop tools, by solving a 
+ challenge posed by Alessandro Coglio.  For another such example, see <a href="ACL2____MAKE-EVENT-EXAMPLE-2.html">make-event-example-2</a>.</p> 
+ 
+ <p>The challenge is to develop a programmatic method for solving the following 
+ sort of problem.</p> 
+ 
+ <ol> 
+ 
+ <li>Create a <span class="tt"><a href="COMMON-LISP____DEFUN.html">defun</a></span> form.</li> 
+ 
+ <li>Submit it to ACL2, obtaining a new ACL2 <a href="ACL2____STATE.html">state</a> whose <a href="ACL2____WORLD.html">world</a> 
+ includes the function just submitted.</li> 
+ 
+ <li>Access various elements of this function (e.g., unnormalized body).</li> 
+ 
+ <li>Create and return a new <span class="v">defun</span> that's based on elements of the 
+ previous one.</li> 
+ 
+ <li>Submit this new defun via a <span class="tt"><a href="ACL2____MAKE-EVENT.html">make-event</a></span>, but in a state that does 
+ not include the previous <span class="v">defun</span>.</li> 
+ 
+ </ol> 
+ 
+ <p>We illustrate how to do this sort of thing by specifying the ``new 
+ <span class="v">defun</span> that's based on elements of the previous one'' to be as follows: 
+ add the formal, <span class="v">y</span>, and modify the body so that <span class="v">y</span> is consed onto the 
+ old body.  Of course, this is a trivial example that could be done without 
+ <span class="v">make-event</span>; but we solve it in a way that shows how to solve any such 
+ problem.  For simplificity, let's not worry about the case that <span class="v">y</span> is 
+ already a formal of the existing <span class="v">defun</span>.  Here are the main steps.</p> 
+ 
+ <ul> 
+ 
+ <li>(a) Submit the <span class="v">defun</span>.</li> 
+ 
+ <li>(b) Gather information from the resulting world.  In this case, we access 
+ the formals and body of the definition.</li> 
+ 
+ <li>(c) Create the desired event.</li> 
+ 
+ </ul> 
+ 
+ <p>The following code does those three things, as explained in comments below, 
+ which include references to the three steps above.</p> 
+ 
+ <pre class="code">(<a href="ACL2____ER-PROGN.html">er-progn</a>
+
+; Each of the two forms below returns an error triple (see @(see
+; error-triple)), so we can evaluate both by using er-progn, which
+; returns the last (<a href="COMMON-LISP____SECOND.html">second</a>) error triple.
+
+ (<a href="COMMON-LISP____DEFUN.html">defun</a> foo (x) (<a href="COMMON-LISP____CONS.html">cons</a> x x)) ; (a)
+ (<a href="COMMON-LISP____LET.html">let</a> ((<a href="ACL2____FORMALS.html">formals</a> (<a href="ACL2____FORMALS.html">formals</a> 'foo (<a href="ACL2____W.html">w</a> state))) ; (b)
+       (<a href="ACL2____BODY.html">body</a> (<a href="ACL2____BODY.html">body</a> 'foo nil (<a href="ACL2____W.html">w</a> state))))
+   (<a href="ACL2____VALUE.html">value</a> `(<a href="COMMON-LISP____DEFUN.html">defun</a> foo ,(<a href="COMMON-LISP____CONS.html">cons</a> 'y formals) ; (c)
+             (<a href="COMMON-LISP____CONS.html">cons</a> y ,body)))))</pre> 
+ 
+ <p>So far so good: we have computed an error triple <span class="v">(<a href="ACL2____MV.html">mv</a> nil val state)</span> 
+ whose value component, <span class="v">val</span>, is the desired <span class="v">defun</span> form.  However, 
+ that leaves us in a world that includes the first <span class="v">defun</span> form.  For a 
+ solution to the original challenge (for our specific case), that must not be 
+ the case, and moveover the second <span class="v">defun</span> form should be included in the 
+ current world.  Fortunately, <span class="tt"><a href="ACL2____MAKE-EVENT.html">make-event</a></span> is perfectly suited to do both 
+ of these things.  Consider the following form, which simply wraps 
+ <span class="v">make-event</span> around the code displayed just above.</p> 
+ 
+ <pre class="code">(<a href="ACL2____MAKE-EVENT.html">make-event</a> (<a href="ACL2____ER-PROGN.html">er-progn</a>
+             (<a href="COMMON-LISP____DEFUN.html">defun</a> foo (x) (<a href="COMMON-LISP____CONS.html">cons</a> x x))
+             (<a href="COMMON-LISP____LET.html">let</a> ((<a href="ACL2____FORMALS.html">formals</a> (<a href="ACL2____FORMALS.html">formals</a> 'foo (<a href="ACL2____W.html">w</a> state)))
+                   (<a href="ACL2____BODY.html">body</a> (<a href="ACL2____BODY.html">body</a> 'foo nil (<a href="ACL2____W.html">w</a> state))))
+               (<a href="ACL2____VALUE.html">value</a> `(<a href="COMMON-LISP____DEFUN.html">defun</a> foo ,(<a href="COMMON-LISP____CONS.html">cons</a> 'y formals)
+                         (<a href="COMMON-LISP____CONS.html">cons</a> y ,body))))))</pre> 
+ 
+ <p>The expansion phase (see <a href="ACL2____MAKE-EVENT.html">make-event</a>) computes the new <span class="v">defun</span> 
+ form — the one with the extra formal and modified body — and then 
+ that new <span class="v">defun</span> form is evaluated in the original world, which does not 
+ include the first <span class="v">defun</span> form.</p> 
+ 
+ <p>We complete the job by making a programmatic solution, with a macro that 
+ expands to such a <span class="v">make-event</span> form.  We make it nice by inhibiting all 
+ output except error output.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> cons-y-onto-body (def new-name)
+  `(<a href="ACL2____MAKE-EVENT.html">make-event</a>
+    (<a href="ACL2____WITH-OUTPUT_12.html">with-output!</a>
+      :off :all
+      :on error
+      (<a href="ACL2____ER-PROGN.html">er-progn</a>
+       ,def
+       (<a href="COMMON-LISP____LET_A2.html">let*</a> ((<a href="ACL2____NAME.html">name</a> ',(<a href="COMMON-LISP____CADR.html">cadr</a> def))
+              (new-name ',new-name)
+              (<a href="ACL2____FORMALS.html">formals</a> (<a href="ACL2____FORMALS.html">formals</a> name (<a href="ACL2____W.html">w</a> state)))
+              (<a href="ACL2____BODY.html">body</a> (<a href="ACL2____BODY.html">body</a> name nil (<a href="ACL2____W.html">w</a> state))))
+         (<a href="ACL2____VALUE.html">value</a> (<a href="COMMON-LISP____LIST.html">list</a> 'defun new-name (<a href="COMMON-LISP____CONS.html">cons</a> 'y formals)
+                      (<a href="COMMON-LISP____LIST.html">list</a> 'cons 'y body))))))
+    :on-behalf-of :quiet!))</pre> 
+ 
+ <p>This could be improved by doing some error checking, but we leave that as 
+ an exercise.</p> 
+ 
+ <p>Below is a log, with comments added, that shows uses of the macro 
+ above.</p> 
+ 
+ <pre class="code">; First we call the macro successfully.  Notice that although we inhibited
+; output during the expansion phase (using with-output!), below we see output
+; from the resulting new defun event.
+
+ACL2 !&gt;(cons-y-onto-body (<a href="COMMON-LISP____DEFUN.html">defun</a> f (x) x) new-f)
+
+Since NEW-F is non-recursive, its admission is trivial.  We observe
+that the type of NEW-F is described by the theorem (<a href="COMMON-LISP____CONSP.html">CONSP</a> (NEW-F Y X)).
+We used primitive type reasoning.
+
+Summary
+Form:  ( DEFUN NEW-F ...)
+Rules: ((:FAKE-RUNE-FOR-TYPE-SET NIL))
+Time:  0.01 seconds (prove: 0.00, print: 0.00, other: 0.01)
+
+Summary
+Form:  ( MAKE-EVENT (<a href="ACL2____WITH-OUTPUT_12.html">WITH-OUTPUT!</a> :OFF ...) ...)
+Rules: NIL
+Time:  0.03 seconds (prove: 0.00, print: 0.00, other: 0.03)
+ NEW-F
+ACL2 !&gt;:pe new-f ; Check that the new definition was indeed submitted.
+ L         2:x(CONS-Y-ONTO-BODY (<a href="COMMON-LISP____DEFUN.html">DEFUN</a> F # ...) NEW-F)
+              
+&gt;L             (<a href="COMMON-LISP____DEFUN.html">DEFUN</a> NEW-F (Y X) (<a href="COMMON-LISP____CONS.html">CONS</a> Y X))
+ACL2 !&gt;:pe f ; Check that the old definition was NOT submitted.
+
+
+ACL2 Error in :PE:  The object F is not a logical name.  See :DOC logical-
+name.
+
+; The defun below is ill-formed, so we get an error when it is submitted,
+; during the expansion phase.  Our use of with-output! allowed error messages,
+; so we see the error message in this case.
+
+ACL2 !&gt;(cons-y-onto-body (<a href="COMMON-LISP____DEFUN.html">defun</a> g (x) (<a href="COMMON-LISP_____B2.html">+</a> y y)) new-g)
+
+
+ACL2 Error in ( DEFUN G ...):  The body of G contains a free occurrence
+of the variable symbol Y.
+
+
+Summary
+Form:  ( MAKE-EVENT (<a href="ACL2____WITH-OUTPUT_12.html">WITH-OUTPUT!</a> :OFF ...) ...)
+Rules: NIL
+Time:  0.00 seconds (prove: 0.00, print: 0.00, other: 0.00)
+
+ACL2 Error in ( MAKE-EVENT (<a href="ACL2____WITH-OUTPUT_12.html">WITH-OUTPUT!</a> :OFF ...) ...):  See :DOC
+failure.
+
+******** FAILED ********
+ACL2 !&gt;</pre>
+</body>
+</html>

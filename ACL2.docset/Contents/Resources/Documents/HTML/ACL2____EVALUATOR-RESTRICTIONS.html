@@ -1,0 +1,373 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Evaluator-restrictions</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____EVALUATOR-RESTRICTIONS">Click for Evaluator-restrictions in the Full Manual</a></h3>
+
+<p>Some restrictions on the use of evaluators in meta-level rules</p><p>Note: This topic, which explains some subtleties for evaluators, 
+ can probably be skipped by most readers.</p> 
+ 
+ <p>Rules of class <span class="v">:</span><span class="tt"><a href="ACL2____META.html">meta</a></span> and of class <span class="v">:</span><span class="tt"><a href="ACL2____CLAUSE-PROCESSOR.html">clause-processor</a></span> are stated using so-called ``evaluator'' functions.  Here we 
+ explain some restrictions related to evaluators.  Below we refer primarily to 
+ <span class="v">:meta</span> rules, but the discussion applies equally to <span class="v">:clause-processor</span> 
+ rules.</p> 
+ 
+ <p>In a nutshell, we require that a rule's evaluator does not support any 
+ <a href="ACL2____META-EXTRACT.html">meta-extract</a> functions in the rule or any <span class="tt"><a href="ACL2____DEFAXIOM.html">defaxiom</a></span> events, and 
+ we require that the evaluator not be introduced under a non-trivial 
+ encapsulate.  We also require that no function has an attachment (see <a href="ACL2____DEFATTACH.html">defattach</a>) that is both ancestral in the evaluator and also ancestral in the 
+ meta or clause-processor functions.  We explain these restrictions in detail 
+ below.</p> 
+ 
+ <p>An argument given elsewhere (see <a href="ACL2____META.html">meta</a>, in particular ``Aside for the 
+ logic-minded'') explains that the correctness argument for applying 
+ metatheoretic simplifiers requires that one be able to ``grow'' an evaluator 
+ (see <a href="ACL2____DEFEVALUATOR.html">defevaluator</a>) to handle all functions in the current ACL2 <a href="ACL2____WORLD.html">world</a>.  Then we may, in essence, functionally instantiate the original 
+ evaluator to the new (``grown'') evaluator, provided that the new evaluator 
+ satisfies all of the axioms of the original.  We therefore require that the 
+ evaluator function does not support the formula of any <span class="tt"><a href="ACL2____DEFAXIOM.html">defaxiom</a></span> event. 
+ This notion of ``support'' (sometimes denoted ``is an ancestor of'') is 
+ defined recursively as follows: a function symbol supports a formula if either 
+ it occurs in that formula, or else it supports the definition or constraint 
+ for some function symbol that occurs in that formula.  Moreover, we require 
+ that neither the evaluator function nor its list version support <a href="ACL2____META-EXTRACT.html">meta-extract</a> functions if they are used in the proposed <span class="v">:meta</span> 
+ theorem.</p> 
+ 
+ <p>These requirements are necessary in order to carry out the functional 
+ instantiation argument alluded to above, as follows (where the reader may find 
+ it useful to have some familiarity with the paper ``Structured Theory 
+ Development for a Mechanized Logic'' (Journal of Automated Reasoning 26, no. 2 
+ (2001), pages 161-203).  By the usual conservativity argument, we know that 
+ the rule follows logically from the axiomatic events for its supporters.  This 
+ remains true if we functionally instantiate the evaluator with one 
+ corresponding to all the functions symbols of the current session, since none 
+ of the definitions of supporters of defaxioms or metafunctions are hit by that 
+ functional substitution.</p> 
+ 
+ <p>Notice though that the argument above depends on knowing that the rule is 
+ not itself an axiom about the evaluator!  Therefore, we also restrict 
+ evaluators so that they are not defined in the scope of a superior <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span> event with non-empty signature, in order to avoid an even more 
+ subtle problem.  The aforementioned correctness argument depends on knowing 
+ that the rule is provable from the axioms on the evaluator and metafunction 
+ (and hypothesis metafunction, if any).  The additional restriction avoids 
+ unsoundness!  The following events, if allowed, produce a proof that <span class="v">(f
+ x)</span> equals <span class="v">t</span> even though, as shown below, that does not follow logically 
+ from the axioms introduced.</p> 
+ 
+ <pre class="code">; Introduce our metafunction.
+(<a href="COMMON-LISP____DEFUN.html">defun</a> my-cancel (<a href="ACL2____TERM.html">term</a>)
+  (<a href="ACL2____CASE-MATCH.html">case-match</a> term
+    (('f ('g))
+     *t*)
+    (&amp; term)))
+
+; Introduce our evaluator and prove our meta rule, but in the same
+; encapsulate!
+(<a href="ACL2____ENCAPSULATE.html">encapsulate</a>
+ ((f (x) t))
+
+ (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> f (x) (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORE.html">ignore</a> x)) t))
+
+ (<a href="ACL2____DEFEVALUATOR.html">defevaluator</a> evl evl-list
+   ((f x)))
+
+ (<a href="ACL2____DEFTHM.html">defthm</a> correctness-of-my-cancel
+   (<a href="COMMON-LISP____EQUAL.html">equal</a> (evl x a)
+          (evl (my-cancel x) a))
+   :rule-classes ((:meta :trigger-fns (f)))))
+
+; Prove that (f x) = t.
+(<a href="ACL2____ENCAPSULATE.html">encapsulate</a>
+ ()
+
+ (<a href="ACL2____LOCAL.html">local</a> (<a href="ACL2____DEFSTUB.html">defstub</a> c () t))
+
+ (<a href="ACL2____LOCAL.html">local</a> (<a href="ACL2____ENCAPSULATE.html">encapsulate</a>
+         ()
+         (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> g () (c)))
+         (<a href="ACL2____LOCAL.html">local</a> (<a href="ACL2____IN-THEORY.html">in-theory</a> (<a href="ACL2____DISABLE.html">disable</a> g (<a href="ACL2____G.html">g</a>))))
+         (<a href="ACL2____LOCAL.html">local</a> (<a href="ACL2____DEFTHM.html">defthm</a> f-g
+                  (<a href="COMMON-LISP____EQUAL.html">equal</a> (f (<a href="ACL2____G.html">g</a>)) t)
+                  :rule-classes nil))
+         (<a href="ACL2____DEFTHM.html">defthm</a> f-c
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (f (c)) t)
+           :hints (("Goal" :use f-g
+                    :in-theory (<a href="ACL2____E_F2D.html">e/d</a> (<a href="ACL2____G.html">g</a>) (correctness-of-my-cancel))))
+           :rule-classes nil)))
+
+ (<a href="ACL2____DEFTHM.html">defthm</a> f-t
+   (<a href="COMMON-LISP____EQUAL.html">equal</a> (f x) t)
+   :hints (("Goal" :by (:functional-instance
+                        f-c
+                        (c (<a href="COMMON-LISP____LAMBDA.html">lambda</a> () x)))))
+   :rule-classes nil))</pre> 
+ 
+ <p>To see that the term <span class="v">(<a href="COMMON-LISP____EQUAL.html">equal</a> (f x) t)</span> does not follow logically from 
+ the axiomatic <a href="ACL2____EVENTS.html">events</a> above, consider following the above definition of 
+ <span class="v">my-cancel</span> with the following <a href="ACL2____EVENTS.html">events</a> instead.</p> 
+ 
+ <pre class="code">; (<a href="COMMON-LISP____DEFUN.html">defun</a> my-cancel (<a href="ACL2____TERM.html">term</a>) ...) as before, then:
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> f (x)
+  (<a href="COMMON-LISP____NOT.html">not</a> x))
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> g ()
+  nil)
+
+(<a href="ACL2____DEFEVALUATOR.html">defevaluator</a> evl evl-list
+   ((f x) (<a href="ACL2____G.html">g</a>)))</pre> 
+ 
+ <p>These events imply the axiomatic events above, because we still have the 
+ definition of <span class="v">my-cancel</span>, we have a stronger <span class="tt"><a href="ACL2____DEFEVALUATOR.html">defevaluator</a></span> event, 
+ and we can now prove <span class="v">correctness-of-my-cancel</span> exactly as it is stated 
+ above.  So, the rule <span class="v">f-t</span> is a logical consequence of the chronology of 
+ the current session.  However, in the current session we can also prove the 
+ following rule, which contradicts <span class="v">f-t</span>.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> f-not-t
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> (f t) nil)
+  :rule-classes nil)</pre> 
+ 
+ <p>It follows that the current session logically yields a contradiction!</p> 
+ 
+ <p>Erik Reeber has taken the above example and modified it to prove <span class="v">nil</span> 
+ in ACL2 Version_3.1, as follows.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____IN-PACKAGE.html">in-package</a> "ACL2")
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> my-cancel (<a href="ACL2____TERM.html">term</a>)
+   (<a href="ACL2____CASE-MATCH.html">case-match</a> term
+     (('f ('g))
+      *t*)
+     (('f2 ('g2))
+      *t*)
+     (&amp; term)))
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> f2 (x)
+   (<a href="COMMON-LISP____NOT.html">not</a> x))
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> g2 ()
+   nil)
+
+(<a href="ACL2____ENCAPSULATE.html">encapsulate</a>
+  ((f (x) t))
+
+  (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> f (x) (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORE.html">ignore</a> x)) t))
+
+  (<a href="ACL2____DEFEVALUATOR.html">defevaluator</a> evl evl-list
+    ((f x)
+     (f2 x)
+     (g2)))
+
+  (<a href="ACL2____DEFTHM.html">defthm</a> correctness-of-my-cancel
+    (<a href="COMMON-LISP____EQUAL.html">equal</a> (evl x a)
+           (evl (my-cancel x) a))
+    :rule-classes ((:meta :trigger-fns (f)))))
+
+(<a href="ACL2____ENCAPSULATE.html">encapsulate</a>
+  ()
+
+  (<a href="ACL2____LOCAL.html">local</a> (<a href="ACL2____DEFSTUB.html">defstub</a> c () t))
+
+  (<a href="ACL2____LOCAL.html">local</a> (<a href="ACL2____ENCAPSULATE.html">encapsulate</a>
+          ()
+          (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> g () (c)))
+          (<a href="ACL2____LOCAL.html">local</a> (<a href="ACL2____IN-THEORY.html">in-theory</a> (<a href="ACL2____DISABLE.html">disable</a> g (<a href="ACL2____G.html">g</a>))))
+          (<a href="ACL2____LOCAL.html">local</a> (<a href="ACL2____DEFTHM.html">defthm</a> f-g
+                   (<a href="COMMON-LISP____EQUAL.html">equal</a> (f (<a href="ACL2____G.html">g</a>)) t)
+                   :rule-classes nil))
+          (<a href="ACL2____DEFTHM.html">defthm</a> f-c
+            (<a href="COMMON-LISP____EQUAL.html">equal</a> (f (c)) t)
+            :hints (("Goal" :use f-g
+                     :in-theory (<a href="ACL2____E_F2D.html">e/d</a> (<a href="ACL2____G.html">g</a>) (correctness-of-my-cancel))))
+            :rule-classes nil)))
+
+  (<a href="ACL2____DEFTHM.html">defthm</a> f-t
+    (<a href="COMMON-LISP____EQUAL.html">equal</a> (f x) t)
+    :hints (("Goal" :by (:functional-instance
+                         f-c
+                         (c (<a href="COMMON-LISP____LAMBDA.html">lambda</a> () x)))))
+    :rule-classes nil))
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> g ()
+   nil)
+
+; Below is the expansion of the following defevaluator, changed slightly as
+; indicated by comments.
+; (<a href="ACL2____DEFEVALUATOR.html">defevaluator</a> evl2 evl2-list ((f x) (f2 x) (<a href="ACL2____G.html">g</a>) (g2)))
+
+(<a href="ACL2____ENCAPSULATE.html">ENCAPSULATE</a>
+  (((EVL2 * *) =&gt; *)
+   ((EVL2-LIST * *) =&gt; *))
+  (<a href="ACL2____SET-INHIBIT-WARNINGS.html">SET-INHIBIT-WARNINGS</a> "theory")
+  (<a href="ACL2____LOCAL.html">LOCAL</a> (<a href="ACL2____IN-THEORY.html">IN-THEORY</a> *DEFEVALUATOR-FORM-BASE-THEORY*))
+  (<a href="ACL2____LOCAL.html">LOCAL</a>
+   (<a href="ACL2____MUTUAL-RECURSION.html">MUTUAL-RECURSION</a> (<a href="COMMON-LISP____DEFUN.html">DEFUN</a> EVL2 (X A)
+                       (<a href="COMMON-LISP____DECLARE.html">DECLARE</a> (<a href="ACL2____XARGS.html">XARGS</a> :VERIFY-GUARDS NIL
+                                       :MEASURE (<a href="ACL2____ACL2-COUNT.html">ACL2-COUNT</a> X)
+                                       :WELL-FOUNDED-RELATION O&lt;
+                                       :MODE :LOGIC))
+                       (<a href="COMMON-LISP____COND.html">COND</a> ((<a href="COMMON-LISP____SYMBOLP.html">SYMBOLP</a> X) (<a href="COMMON-LISP____CDR.html">CDR</a> (<a href="ACL2____ASSOC-EQ.html">ASSOC-EQ</a> X A)))
+                             ((<a href="COMMON-LISP____ATOM.html">ATOM</a> X) NIL)
+                             ((<a href="COMMON-LISP____EQ.html">EQ</a> (<a href="COMMON-LISP____CAR.html">CAR</a> X) 'QUOTE) (<a href="COMMON-LISP____CAR.html">CAR</a> (<a href="COMMON-LISP____CDR.html">CDR</a> X)))
+                             ((<a href="COMMON-LISP____CONSP.html">CONSP</a> (<a href="COMMON-LISP____CAR.html">CAR</a> X))
+                              (EVL2 (<a href="COMMON-LISP____CAR.html">CAR</a> (<a href="COMMON-LISP____CDR.html">CDR</a> (<a href="COMMON-LISP____CDR.html">CDR</a> (<a href="COMMON-LISP____CAR.html">CAR</a> X))))
+                                    (<a href="ACL2____PAIRLIS_42.html">PAIRLIS$</a> (<a href="COMMON-LISP____CAR.html">CAR</a> (<a href="COMMON-LISP____CDR.html">CDR</a> (<a href="COMMON-LISP____CAR.html">CAR</a> X)))
+                                              (EVL2-LIST (<a href="COMMON-LISP____CDR.html">CDR</a> X) A))))
+                             ((<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (<a href="COMMON-LISP____CAR.html">CAR</a> X) 'F) ; changed f to f2 just below
+                              (F2 (EVL2 (<a href="COMMON-LISP____CAR.html">CAR</a> (<a href="COMMON-LISP____CDR.html">CDR</a> X)) A)))
+                             ((<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (<a href="COMMON-LISP____CAR.html">CAR</a> X) 'F2)
+                              (F2 (EVL2 (<a href="COMMON-LISP____CAR.html">CAR</a> (<a href="COMMON-LISP____CDR.html">CDR</a> X)) A)))
+                             ((<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (<a href="COMMON-LISP____CAR.html">CAR</a> X) 'G) (<a href="ACL2____G.html">G</a>))
+                             ((<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (<a href="COMMON-LISP____CAR.html">CAR</a> X) 'G2) (G2))
+                             (T NIL)))
+                     (<a href="COMMON-LISP____DEFUN.html">DEFUN</a> EVL2-LIST (X-LST A)
+                       (<a href="COMMON-LISP____DECLARE.html">DECLARE</a> (<a href="ACL2____XARGS.html">XARGS</a> :MEASURE (<a href="ACL2____ACL2-COUNT.html">ACL2-COUNT</a> X-LST)
+                                       :WELL-FOUNDED-RELATION O&lt;))
+                       (<a href="COMMON-LISP____COND.html">COND</a> ((<a href="COMMON-LISP____ENDP.html">ENDP</a> X-LST) NIL)
+                             (T (<a href="COMMON-LISP____CONS.html">CONS</a> (EVL2 (<a href="COMMON-LISP____CAR.html">CAR</a> X-LST) A)
+                                      (EVL2-LIST (<a href="COMMON-LISP____CDR.html">CDR</a> X-LST) A)))))))
+
+  (<a href="ACL2____DEFTHM.html">DEFTHM</a> EVL2-CONSTRAINT-1
+    (<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____SYMBOLP.html">SYMBOLP</a> X)
+             (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (EVL2 X A)
+                    (<a href="COMMON-LISP____CDR.html">CDR</a> (<a href="ACL2____ASSOC-EQ.html">ASSOC-EQ</a> X A)))))
+  (<a href="ACL2____DEFTHM.html">DEFTHM</a> EVL2-CONSTRAINT-2
+    (<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____AND.html">AND</a> (<a href="COMMON-LISP____CONSP.html">CONSP</a> X) (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (<a href="COMMON-LISP____CAR.html">CAR</a> X) 'QUOTE))
+             (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (EVL2 X A) (<a href="COMMON-LISP____CADR.html">CADR</a> X))))
+  (<a href="ACL2____DEFTHM.html">DEFTHM</a> EVL2-CONSTRAINT-3
+    (<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____AND.html">AND</a> (<a href="COMMON-LISP____CONSP.html">CONSP</a> X) (<a href="COMMON-LISP____CONSP.html">CONSP</a> (<a href="COMMON-LISP____CAR.html">CAR</a> X)))
+             (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (EVL2 X A)
+                    (EVL2 (<a href="COMMON-LISP____CADDAR.html">CADDAR</a> X)
+                          (<a href="ACL2____PAIRLIS_42.html">PAIRLIS$</a> (<a href="COMMON-LISP____CADAR.html">CADAR</a> X)
+                                    (EVL2-LIST (<a href="COMMON-LISP____CDR.html">CDR</a> X) A))))))
+  (<a href="ACL2____DEFTHM.html">DEFTHM</a> EVL2-CONSTRAINT-4
+    (<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____NOT.html">NOT</a> (<a href="COMMON-LISP____CONSP.html">CONSP</a> X-LST))
+             (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (EVL2-LIST X-LST A) NIL)))
+  (<a href="ACL2____DEFTHM.html">DEFTHM</a> EVL2-CONSTRAINT-5
+    (<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____CONSP.html">CONSP</a> X-LST)
+             (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (EVL2-LIST X-LST A)
+                    (<a href="COMMON-LISP____CONS.html">CONS</a> (EVL2 (<a href="COMMON-LISP____CAR.html">CAR</a> X-LST) A)
+                          (EVL2-LIST (<a href="COMMON-LISP____CDR.html">CDR</a> X-LST) A)))))
+  (<a href="ACL2____DEFTHM.html">DEFTHM</a> EVL2-CONSTRAINT-6
+    (<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____AND.html">AND</a> (<a href="COMMON-LISP____NOT.html">NOT</a> (<a href="COMMON-LISP____CONSP.html">CONSP</a> X))
+                  (<a href="COMMON-LISP____NOT.html">NOT</a> (<a href="COMMON-LISP____SYMBOLP.html">SYMBOLP</a> X)))
+             (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (EVL2 X A) NIL)))
+  (<a href="ACL2____DEFTHM.html">DEFTHM</a> EVL2-CONSTRAINT-7
+    (<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____AND.html">AND</a> (<a href="COMMON-LISP____CONSP.html">CONSP</a> X) (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (<a href="COMMON-LISP____CAR.html">CAR</a> X) 'F))
+             (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (EVL2 X A) ; changed f to f2 just below
+                    (F2 (EVL2 (<a href="COMMON-LISP____CADR.html">CADR</a> X) A)))))
+  (<a href="ACL2____DEFTHM.html">DEFTHM</a> EVL2-CONSTRAINT-8
+    (<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____AND.html">AND</a> (<a href="COMMON-LISP____CONSP.html">CONSP</a> X) (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (<a href="COMMON-LISP____CAR.html">CAR</a> X) 'F2))
+             (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (EVL2 X A)
+                    (F2 (EVL2 (<a href="COMMON-LISP____CADR.html">CADR</a> X) A)))))
+  (<a href="ACL2____DEFTHM.html">DEFTHM</a> EVL2-CONSTRAINT-9
+    (<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____AND.html">AND</a> (<a href="COMMON-LISP____CONSP.html">CONSP</a> X) (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (<a href="COMMON-LISP____CAR.html">CAR</a> X) 'G))
+             (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (EVL2 X A) (<a href="ACL2____G.html">G</a>))))
+  (<a href="ACL2____DEFTHM.html">DEFTHM</a> EVL2-CONSTRAINT-10
+    (<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____AND.html">AND</a> (<a href="COMMON-LISP____CONSP.html">CONSP</a> X) (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (<a href="COMMON-LISP____CAR.html">CAR</a> X) 'G2))
+             (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (EVL2 X A) (G2)))))
+
+(<a href="ACL2____DEFTHM.html">defthm</a> f2-t
+   (<a href="COMMON-LISP____EQUAL.html">equal</a> (f2 x) t)
+   :hints (("Goal" :by (:functional-instance
+                        f-t
+                        (f f2)
+                        (evl evl2)
+                        (evl-list evl2-list)))))
+
+(<a href="ACL2____DEFTHM.html">defthm</a> bug-implies-nil
+   nil
+   :hints (("Goal" :use ((:instance f2-t (x t)))))
+   :rule-classes nil)</pre> 
+ 
+ <p>Finally, we also require that no function has an attachment (see <a href="ACL2____DEFATTACH.html">defattach</a>) that is both ancestral in the evaluator and also ancestral in the 
+ meta or clause-processor functions.  (If you don't use <span class="tt"><a href="ACL2____DEFATTACH.html">defattach</a></span> or 
+ <span class="tt"><a href="ACL2____APPLY_42.html">apply$</a></span> — more specifically, <a href="ACL2____WARRANT.html">warrant</a>s — then you can 
+ ignore this condition.)  Without this restriction, the following events prove 
+ <span class="v">nil</span>.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____IN-PACKAGE.html">in-package</a> "ACL2")
+(<a href="ACL2____DEFSTUB.html">defstub</a> f () t)
+(<a href="ACL2____DEFEVALUATOR.html">defevaluator</a> evl evl-list
+  ((f)))
+(<a href="COMMON-LISP____DEFUN.html">defun</a> my-meta-fn (x)
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> x '(f))
+      (<a href="COMMON-LISP____LIST.html">list</a> 'quote (f))
+    x))
+(<a href="ACL2____DEFTHM.html">defthm</a> my-meta-fn-correct
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> (evl x a)
+         (evl (my-meta-fn x) a))
+  :rule-classes ((:meta :trigger-fns (f))))
+(<a href="COMMON-LISP____DEFUN.html">defun</a> constant-nil ()
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t))
+  nil)
+(<a href="ACL2____DEFATTACH.html">defattach</a> f constant-nil)
+(<a href="ACL2____DEFTHM.html">defthm</a> f-is-nil
+; proved using my-meta-fn-correct
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> (f) nil)
+  :rule-classes nil)
+(<a href="ACL2____DEFTHM.html">defthm</a> contradiction
+  nil
+  :hints (("Goal" :use ((:functional-instance
+                         f-is-nil
+                         (f (<a href="COMMON-LISP____LAMBDA.html">lambda</a> () t))))))
+  :rule-classes nil)</pre> 
+ 
+ <p>Here is an example that doesn't use <span class="tt"><a href="ACL2____DEFATTACH.html">defattach</a></span> explicitly, but uses 
+ <a href="ACL2____WARRANT.html">warrant</a>s, which essentially have attachments so that every call of a 
+ warrant evaluates to <span class="v">T</span>.  As for the preceding example, these events 
+ succeed if we remove the restriction stated above about common ancestors of 
+ the evaluator and the meta or clause-processor function.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____IN-PACKAGE.html">in-package</a> "ACL2")
+
+(<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "projects/apply/top" :dir :system)
+
+(<a href="ACL2____DEFEVALUATOR.html">defevaluator</a> evl evl-list
+  ((<a href="ACL2____APPLY_42.html">apply$</a> fn args)))
+
+(<a href="ACL2____ENCAPSULATE.html">encapsulate</a>
+  ()
+  (<a href="ACL2____LOCAL.html">local</a> (<a href="ACL2____DEFUN_42.html">defun$</a> f () (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t)) t))
+  (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> my-meta-fn (x)
+           (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> x '(<a href="ACL2____APPLY_42.html">apply$</a> 'f 'nil))
+                    (apply$-warrant-f))
+               *t*
+             x)))
+  (<a href="ACL2____LOCAL.html">local</a> (<a href="ACL2____DEFTHM.html">defthm</a> my-meta-fn-correct
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (evl x a)
+                  (evl (my-meta-fn x) a))
+           :rule-classes ((:meta :trigger-fns (<a href="ACL2____APPLY_42.html">apply$</a>)))))
+  (<a href="ACL2____DEFTHM.html">defthm</a> unwarranted-fact-about-quote-f
+    (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____APPLY_42.html">apply$</a> 'f nil) t)
+    :rule-classes nil))
+
+(<a href="ACL2____DEFUN_42.html">defun$</a> f () nil)
+
+(<a href="ACL2____DEFTHM.html">defthm</a> apply$-warrant-f-false
+  (<a href="COMMON-LISP____NOT.html">not</a> (apply$-warrant-f))
+  :hints (("Goal" :use unwarranted-fact-about-quote-f))
+  :rule-classes nil)
+
+; But apply$-warrant-f is a function with no non-trivial constraint.
+
+(<a href="ACL2____DEFTHM.html">defthm</a> contradiction
+  nil
+  :hints
+  (("Goal"
+    :use (:functional-instance
+          apply$-warrant-f-false
+          (apply$-warrant-f (<a href="COMMON-LISP____LAMBDA.html">lambda</a> () t))
+          (<a href="ACL2____APPLY_42-USERFN.html">apply$-userfn</a> (<a href="COMMON-LISP____LAMBDA.html">lambda</a> (fn args) nil))
+          (<a href="ACL2____BADGE-USERFN.html">badge-userfn</a> (<a href="COMMON-LISP____LAMBDA.html">lambda</a> (fn) '(APPLY$-BADGE 0 1 . T))))))
+  :rule-classes nil)</pre> 
+ 
+ <p>To see why this restriction is sufficient, see a comment in the ACL2 source 
+ code entitled ``; Essay on Correctness of Meta Reasoning.''</p>
+</body>
+</html>

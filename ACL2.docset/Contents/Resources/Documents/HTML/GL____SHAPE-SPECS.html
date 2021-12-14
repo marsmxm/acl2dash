@@ -1,0 +1,135 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Shape-specs</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=GL____SHAPE-SPECS">Click for Shape-specs in the Full Manual</a></h3>
+
+<p>Simplified symbolic objects useful for coverage proofs in GL.</p><p>Shape specifiers are a simplified format of GL symbolic objects, 
+capable of representing Booleans, numbers, conses, free variables, and function 
+calls.  While less expressive than full-fledged symbolic objects, shape spec 
+objects make it easier to prove coverage lemmas necessary for proving theorems 
+by symbolic simulation.  Here, we document common constructions of shape-spec 
+objects and what it means to prove coverage.</p> 
+ 
+<h3>Creating Shape Spec Objects</h3> 
+ 
+<p>Shape spec objects are analogues of <a href="GL____SYMBOLIC-OBJECTS.html">symbolic objects</a>, but with several tweaks that make 
+it more straightforward to prove that a given concrete object is covered:</p> 
+<ul> 
+<li>Symbolic objects contain arbitrary Boolean formulas (BDDs or AIGs), whereas 
+shape specifiers are restricted to contain only independent Boolean variables. 
+Therefore, every bit in a shape specifier is independent from every other 
+bit.</li> 
+<li>The <span class="v">:g-apply</span> symbolic object construct is replaced by the <span class="v">:g-call</span> 
+shape specifier construct.  The <span class="v">:g-call</span> object has an additional field that holds a 
+user-provided inverse function, which is useful for proving coverage; see <a href="GL____G-CALL.html">g-call</a>.</li> 
+</ul> 
+ 
+<p>Shape spec objects may be created using the following constructors 
+ (roughly in order of usefulness).  Additionally, a non-keyword atom is a shape 
+spec representing itself:</p> 
+ 
+<dl> 
+ 
+<dt><span class="v">(G-BOOLEAN &lt;num&gt;)</span></dt> 
+ 
+<dd>Represents a Boolean.  <span class="v">num</span> (a natural number) may not be repeated in 
+any other <span class="v">:G-BOOLEAN</span> or <span class="v">:G-NUMBER</span> construct in the shape-spec.</dd> 
+ 
+<dt><span class="v">(G-INTEGER &lt;list-of-nums&gt;)</span></dt> 
+ 
+<dd>Represents a two's-complement integer with bits corresponding to the list, 
+least significant bit first.  Rationals and complex rationals are also 
+available; see <a href="GL____SYMBOLIC-OBJECTS.html">symbolic-objects</a>.  A :G-INTEGER construct with a list of 
+length <span class="v">N</span> represents integers <span class="v">X</span> where <span class="v">(<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> (<a href="COMMON-LISP____-.html">-</a> (<a href="COMMON-LISP____EXPT.html">expt</a> 2 (<a href="COMMON-LISP_____B2.html">+</a> -1 n))) x)</span> and 
+<span class="v">(<a href="COMMON-LISP_____C3.html">&lt;</a> x (<a href="COMMON-LISP____EXPT.html">expt</a> 2 (<a href="COMMON-LISP_____B2.html">+</a> -1 n)))</span>.  The <span class="v">list-of-nums</span> must be natural numbers, may not 
+repeat, and may not occur in any other <span class="v">:G-BOOLEAN</span> or <span class="v">:G-INTEGER</span>/ 
+<span class="v">:G-NUMBER</span> construct.</dd> 
+ 
+<dt><span class="v">(G-NUMBER (<a href="COMMON-LISP____LIST.html">list</a> &lt;list-of-nums&gt;))</span></dt> 
+<dd>Same as the <span class="v">G-INTEGER</span> form above, for backward compatibility.</dd> 
+ 
+<dt><span class="v">(<a href="COMMON-LISP____CONS.html">cons</a> &lt;Car&gt; &lt;Cdr&gt;)</span></dt> 
+ 
+<dd>Represents a cons; Car and Cdr should be well-formed shape specifiers.</dd> 
+ 
+<dt><span class="v">(G-VAR &lt;name&gt;)</span></dt> 
+ 
+<dd>A free variable that may represent any object.  This is primarily useful 
+when using GL's term-level capabilities; see <a href="GL____TERM-LEVEL-REASONING.html">term-level-reasoning</a>.</dd> 
+ 
+<dt><span class="v">(<a href="GL____G-CALL.html">G-CALL</a> &lt;fnname&gt; &lt;arglist&gt; &lt;inverse&gt;)</span></dt> 
+ 
+<dd>Represents a call of the named function applied to the given arguments. 
+The <span class="v">inverse</span> does not affect the symbolic object generated, which is 
+<span class="v">(:G-APPLY &lt;fnname&gt; . &lt;arglist&gt;)</span>, but is used in the coverage proof; see 
+<a href="GL____G-CALL.html">g-call</a>. This construct is primarily useful when using GL's term-level 
+capabilities; see <a href="GL____TERM-LEVEL-REASONING.html">term-level-reasoning</a>.</dd> 
+ 
+<dt><span class="v">(G-ITE &lt;test&gt; &lt;then&gt; &lt;else&gt;)</span></dt> 
+<dd>Represents an if/then/else, where <span class="v">test</span>, <span class="v">then</span>, and <span class="v">else</span> are 
+shape specs.</dd> 
+ 
+</dl> 
+ 
+ 
+<h3>What is a Coverage Proof?</h3> 
+ 
+<p>In order to prove a theorem by symbolic simulation, one binds each variable 
+mentioned in the theorem to a symbolic object and then symbolically simulates 
+the conclusion of the theorem on these symbolic objects.  If the result is 
+true, what can we conclude?  It depends on the coverage of the symbolic inputs. 
+For example, one might symbolically simulate the term <span class="v">(<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="COMMON-LISP_____B2.html">+</a> A B) 7)</span> with 
+<span class="v">A</span> and <span class="v">B</span> bound to symbolic objects representing two-bit natural 
+numbers and recieve a result of <span class="v">T</span>.  From this, it would be fallacious to 
+conclude <span class="v">(<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="COMMON-LISP_____B2.html">+</a> 6 8) 7)</span>, because the symbolic simulation didn't cover the 
+case where <span class="v">A</span> was 6 and <span class="v">B</span> 7.  In fact, it isn't certain that we can 
+conclude <span class="v">(<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="COMMON-LISP_____B2.html">+</a> 2 2) 7)</span> from our symbolic simulation, because the symbolic 
+object bindings for <span class="v">A</span> and <span class="v">B</span> might have interedependencies such that 
+<span class="v">A</span> and <span class="v">B</span> can't simultaneously represent 2.  (For example, the bindings 
+could be such that bit 0 of <span class="v">A</span> and <span class="v">B</span> are always opposite.)  In order 
+to prove a useful theorem from the result of such a symbolic simulation, we 
+must show that some set of concrete input vectors is covered by the symbolic 
+objects bound to <span class="v">A</span> and <span class="v">B</span>.  But in general, it is a tough 
+computational problem to determine the set of concrete input vectors that are 
+covered by a given symbolic input vector.</p> 
+ 
+<p>To make these determinations easier, shape spec objects are somewhat 
+restricted.  Whereas symbolic objects generally use BDDs (or AIGs, depending on 
+the <a href="GL____MODES.html">mode</a>) to represent 
+individual Booleans or bits of numeric values (see <a href="GL____SYMBOLIC-OBJECTS.html">symbolic-objects</a>), 
+shape specs instead use natural numbers representing Boolean variables. 
+Additionally, shape specs are restricted such that no Boolean variable number may 
+be used more than once among the bindings for the variables of a theorem; this 
+prevents interdependencies among them.</p> 
+ 
+<p>While in general it is a difficult problem to determine whether a symbolic 
+object can evaluate to a given concrete object, a function 
+<span class="v">SHAPE-SPEC-OBJ-IN-RANGE</span> can make that determination about shape specs. 
+<span class="v">SHAPE-SPEC-OBJ-IN-RANGE</span> takes two arguments, a shape spec and some object, 
+and returns T if that object is in the coverage set of the shape spec, and NIL 
+otherwise.  Therefore, if we wish to conclude that shape specs bound to <span class="v">A</span> 
+and <span class="v">B</span> cover all two-bit natural numbers, we may prove the following 
+theorem:</p> 
+ 
+<pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____NATP.html">natp</a> a) (<a href="COMMON-LISP_____C3.html">&lt;</a> a 4)
+              (<a href="ACL2____NATP.html">natp</a> b) (<a href="COMMON-LISP_____C3.html">&lt;</a> b 4))
+         (shape-spec-obj-in-range (<a href="COMMON-LISP____LIST.html">list</a> a-binding b-binding)
+                                  (<a href="COMMON-LISP____LIST.html">list</a> a b)))</pre> 
+ 
+<p>When proving a theorem using the GL clause processor, variable bindings are 
+given as shape specs so that coverage obligations may be stated in terms of 
+<span class="v">SHAPE-SPEC-OBJ-IN-RANGE</span>.  The shape specs are converted to symbolic 
+objects and may be parametrized based on some restrictions from the hypotheses, 
+restricting their range further.  Thus, in order to prove a theorem about 
+fixed-length natural numbers, for example, one may provide a shape specifier 
+that additionally covers negative integers of the given length; parametrization 
+can then restrict the symbolic inputs used in the simulation to only cover the 
+naturals, while the coverage proof may still be done using the simpler, 
+unparametrized shape spec.</p>
+</body>
+</html>

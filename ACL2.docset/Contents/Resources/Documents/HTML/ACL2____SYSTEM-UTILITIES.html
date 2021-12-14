@@ -1,0 +1,704 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>System-utilities</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____SYSTEM-UTILITIES">Click for System-utilities in the Full Manual</a></h3>
+
+<p>Some built-in programming utilities pertaining to the ACL2 system</p><p>Since the ACL2 system is written in itself, the source code defines 
+ many utilities that support the ACL2 implementation.  Some of these have been 
+ found to be useful not only to the ACL2 developers, but to those who use ACL2 
+ to perform tasks other than the traditional ones: writing and submitting 
+ definitions, and proving theorems about the functions defined.</p> 
+ 
+ <p>This topic provides a summary of some of those utilities that are built 
+ into the ACL2 system.  It is intended to be a growing document, with 
+ contributions from those in the community who find such utilities that benefit 
+ them.  It has already grown substantially from an initial version created by 
+ the ACL2 implementors, and others will likely continue to add to it over 
+ time.</p> 
+ 
+ <p><b>WARNING 1</b>.  Some system utilities are in <span class="v">:</span><span class="tt"><a href="ACL2____PROGRAM.html">program</a></span> mode, 
+ and for many of those, <a href="ACL2____GUARD.html">guard</a>s are incomplete or missing entirely. 
+ Incorrect use of such utilities can thus lead to scary (though often harmless) 
+ raw Lisp errors!  Although this situation may improve over time, for now users 
+ of these utilities must cope with that danger just as the ACL2 implementors 
+ cope with it, which is by understanding the requirements on each utility that 
+ is invoked.  For example, if you incorrectly invoke <span class="v">(<a href="ACL2____UNTRANSLATE.html">untranslate</a> (<a href="COMMON-LISP____CONS.html">cons</a> 3 4)
+ nil (<a href="ACL2____W.html">w</a> state))</span>, where perhaps <span class="v">(<a href="ACL2____UNTRANSLATE.html">untranslate</a> '(<a href="COMMON-LISP____CONS.html">cons</a> '3 '4) nil (<a href="ACL2____W.html">w</a> state))</span> 
+ was intended, then the resulting raw Lisp error is your responsibility for 
+ invoking <span class="v">untranslate</span> on the object <span class="v">(3 . 4)</span> instead of the term 
+ <span class="v">(<a href="COMMON-LISP____CONS.html">cons</a> '3 '4)</span>.</p> 
+ 
+ <p><b>WARNING 2</b>.  These utilities are subject to change.  They were 
+ developed to support the ACL2 system, and as ACL2 evolves, its developers 
+ claim the right to modify these functions — even their input-output 
+ <a href="ACL2____SIGNATURE.html">signature</a>s.  That said, changes to these functions are likely to be 
+ quite rare.</p> 
+ 
+ <p>The ACL2 system comes with substantial comments.  As of Version_7.1 (May, 
+ 2015), out of slightly under 10 MB of source code (not including 4.8 MB of 
+ <a href="COMMON-LISP____DOCUMENTATION.html">documentation</a> topics), nearly 400 KB (just over 40%) were comment 
+ lines.  This topic is not intended to supplant or duplicate those comments, 
+ but rather, only to note system utilities of interest to the community.  If 
+ you find the source comments inadequate, please feel free to ask the system 
+ implementors to make corresponding additions to the source code comments. 
+ Note that if you execute the command</p> 
+ 
+ <pre class="code">egrep -e '^; Essay on' *.lisp</pre> 
+ 
+ <p>in your ACL2 sources directory, you will see the names of more than 90 long 
+ source comments, or ``Essays'', that can provide additional background.</p> 
+ 
+ <p>Also see <a href="ACL2____PROGRAMMING.html">programming</a> and its subtopics, in particular <a href="ACL2____PROGRAMMING-WITH-STATE.html">programming-with-state</a>, which describes many built-in system 
+ utilities.  For example, a subsection of <a href="ACL2____PROGRAMMING-WITH-STATE.html">programming-with-state</a>, 
+ entitled ``SEQUENTIAL PROGRAMMING'', introduces handy utilities <span class="tt"><a href="ACL2____PPROGN.html">pprogn</a></span> 
+ and <span class="tt"><a href="ACL2____ER-PROGN.html">er-progn</a></span> along with links to their documentation.  You may also 
+ wish to see <a href="ACL2____SYSTEM-ATTACHMENTS.html">system-attachments</a> for how to make a few changes to the 
+ behavior of ACL2.</p> 
+ 
+ <p>Here is another option for finding a buit-in system utility: As ACL2 
+ developers sometimes do, use <span class="v">meta-.</span> or <span class="v">meta-x tags-apropos</span> in Emacs 
+ to find utilities with given substrings in their names.  For example, if in 
+ Emacs you submit the command <span class="v">meta-x tags-apropos</span> and reply <span class="v">pwd</span> at 
+ the prompt, you'll find a raw Lisp function <span class="v">our-pwd</span> that ACL2 defines as 
+ an analogue to the Linux <span class="v">pwd</span> command; and, with <span class="v">meta-x tags-search</span> 
+ applied to <span class="v">(our-pwd</span>, you can see how ACL2 source code uses this 
+ utility.</p> 
+ 
+ <h3>List of a few built-in system utilities</h3> 
+ 
+ <p>Every function mentioned below belongs in the constant <span class="tt"><a href="ACL2_____A2ACL2-SYSTEM-EXPORTS_A2.html">*ACL2-system-exports*</a></span>.  Also see <a href="ACL2____ACL2-BUILT-INS.html">ACL2-built-ins</a> for built-in utilities 
+ that are less relevant to the ACL2 system, and see <a href="ACL2____PROGRAMMING.html">programming</a> for 
+ utilities in general.</p> 
+ 
+ <ul> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____ACL2-UNWIND-PROTECT.html">acl2-unwind-protect</a> expl body cleanup1 cleanup2)</span>: This particularly 
+ sophisticated utility (warning: for advanced system hackers) is logically just 
+ the following (where the formals shown above are capitalized). 
+ 
+ <pre class="code">(<a href="ACL2____MV-LET.html">mv-let</a> (erp val state)
+        BODY
+        (<a href="COMMON-LISP____COND.html">cond</a> (erp (<a href="ACL2____PPROGN.html">pprogn</a> CLEANUP1 (<a href="ACL2____MV.html">mv</a> erp val state)))
+              (t   (<a href="ACL2____PPROGN.html">pprogn</a> CLEANUP2 (<a href="ACL2____MV.html">mv</a> erp val state)))))</pre> 
+ 
+ However, aborts are typically handled by causing the ``cleanup'' forms to be 
+ executed, in the spirit of Common Lisp's <span class="v">unwind-protect</span>.  In typical use 
+ the cleanup forms restore the values of <a href="ACL2____STATE.html">state</a> global variables that 
+ were ``temporarily'' set by <span class="v">body</span>.  Note that <span class="v">expl</span> is essentially 
+ ignored.  For more information see the Essay on Unwind-Protect in the ACL2 
+ source code.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____ADD-SUFFIX.html">add-suffix</a> sym str)</span>: Extend a symbol <span class="v">sym</span> with a suffix 
+ expressed as a string <span class="v">str</span>.  The resulting symbol is in the same package 
+ as the original symbol.  For instance, <span class="v">(<a href="ACL2____ADD-SUFFIX.html">add-suffix</a> 'abc "DEF")</span> results 
+ in the symbol <span class="v">'abcdef</span>, in the same package as <span class="v">'abc</span>.  See <span class="tt"><a href="ACL2____ADD-SUFFIX-TO-FN.html">add-suffix-to-fn</a></span> for a variant that may be more appropriate for generating 
+ new function names.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____ADD-SUFFIX-TO-FN.html">add-suffix-to-fn</a> sym suffix)</span>: Variant of <span class="tt"><a href="ACL2____ADD-SUFFIX.html">add-suffix</a></span> that 
+ puts the new symbol in the <span class="v">"ACL2"</span> package when <span class="v">sym</span> is in the 
+ <span class="v">"COMMON-LISP"</span> package.  New function symbols cannot be in the 
+ <span class="v">"COMMON-LISP"</span> package; thus, this utility may be appropriate when 
+ generating new function names from old ones.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____ALL-ATTACHMENTS.html">all-attachments</a> wrld)</span>: Return a list of all attachment pairs <span class="v">(f
+ . g)</span> where <span class="v">g</span> is attached to <span class="v">f</span> (see <a href="ACL2____DEFATTACH.html">defattach</a>) in the <a href="ACL2____WORLD.html">world</a>, <span class="v">wrld</span>, except for two cases that are ignored for this purpose: 
+ [warrant]s, and attachments introduced with a non-<span class="v">nil</span> value of 
+ <span class="v">:skip-checks</span>.  To obtain the attachment to a function symbol <span class="v">f</span>, 
+ without the restrictions above and with value <span class="v">nil</span> if there is no 
+ attachment to <span class="v">f</span>, evaluate <span class="v">(<a href="COMMON-LISP____CDR.html">cdr</a> (attachment-pair 'f wrld))</span>.  To 
+ obtain the list of all built-in attachments, evaluate <span class="v">(global-val
+ 'attachments-at-ground-zero (<a href="ACL2____W.html">w</a> state))</span>.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____ALL-CALLS.html">all-calls</a> names term alist ans)</span>:  Accumulate into <span class="v">ans</span> 
+ (which typically is <span class="v">nil</span> at the top level) all pseudo-terms <span class="v">u/alist</span> 
+ such that for some <span class="v">f</span> in the list, <span class="v">names</span>, <span class="v">u</span> is a subterm of the 
+ pseudo-term, <span class="v">term</span>, that is a call of the symbol, <span class="v">f</span>.  Note that 
+ <span class="v">(all-calls-lst names lst alist ans)</span> is similar, except for a list, 
+ <span class="v">lst</span>, of terms in place of a single term, <span class="v">term</span>.</li> 
+ 
+ <li>
+<span class="v">(all-ffn-symbs term ans)</span>: Accumulate into <span class="v">ans</span> 
+ (which typically is <span class="v">nil</span> at the top level) all function symbols called in 
+ the given term.  This may become deprecated, and is just a macro expanding to 
+ a corresponding call of <span class="v">all-fnnames1</span>; see <span class="v">all-fnnames</span>, 
+ <span class="v">all-fnnames-lst</span>, and <span class="v">all-fnnames1</span>, below.</li> 
+ 
+ <li>
+<span class="v">(all-ffn-symbs-lst lst ans)</span>: Accumulate into <span class="v">ans</span> 
+ (which typically is <span class="v">nil</span> at the top level) all function symbols called in 
+ the given list of terms.  This may become deprecated, and is just a macro 
+ expanding to a corresponding call of <span class="v">all-fnnames1</span>; see <span class="v">all-fnnames</span>, 
+ <span class="v">all-fnnames-lst</span>, and <span class="v">all-fnnames1</span>, below.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____ALL-FNNAMES.html">all-fnnames</a> term)</span>: Return a list of all function symbols called in 
+ the given term.  This is a macro call expanding to <span class="v">(<a href="ACL2____ALL-FNNAMES1.html">all-fnnames1</a> nil term
+ nil)</span>.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____ALL-FNNAMES-LST.html">all-fnnames-lst</a> lst)</span>: Return a list of all function symbols called 
+ in the given list of terms.  This is a macro call expanding to 
+ <span class="v">(<a href="ACL2____ALL-FNNAMES1.html">all-fnnames1</a> t lst nil)</span>.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____ALL-FNNAMES1.html">all-fnnames1</a> flg x acc)</span>: Accumulate into <span class="v">acc</span> the function 
+ symbols called in the given term or list of terms, <span class="v">x</span>, according to 
+ whether <span class="v">flg</span> is <span class="v">nil</span> (for a term) or not <span class="v">nil</span> (for a list of 
+ terms), respectively.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____ALL-VARS.html">all-vars</a> x)</span>: For a <span class="tt"><a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a></span> <span class="v">x</span>, return a 
+ duplicate-free list of all variables in <span class="v">x</span>, in reverse print order of 
+ first occurrence.  For example, <span class="v">all-vars</span> of <span class="v">'(f (<a href="ACL2____G.html">g</a> a b) c)</span> is <span class="v">'(c
+ b a)</span>.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____ARGLISTP.html">arglistp</a> lst)</span>: Return true iff <span class="v">lst</span> is a <span class="v">nil</span>-terminated 
+ list of distinct, legal variable names, usable as the formal argument 
+ list (hence the name of this utility) of a function.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____ARITY.html">arity</a> fn w)</span>: For a function symbol or <span class="v">lambda</span> expression <span class="v">fn</span> 
+ of <a href="ACL2____WORLD.html">world</a> <span class="v">w</span>, return the number of its formal parameters.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____BODY.html">body</a> fn normalp w)</span>: <span class="v">Fn</span> should either be a <span class="v">:</span><span class="tt"><a href="ACL2____LOGIC.html">logic</a></span>-mode function symbol of <a href="ACL2____WORLD.html">world</a> <span class="v">w</span> or a <span class="v">lambda</span> 
+ expression.  If <span class="v">fn</span> is a symbol and <span class="v">normalp</span> is <span class="v">nil</span>, then return 
+ the body (translated but unnormalized) of its original definition.  If <span class="v">fn</span> 
+ is a <span class="v">lambda</span> expression, return its body.  We now discuss the remaining 
+ case, where <span class="v">fn</span> is a <span class="v">:</span><span class="tt"><a href="ACL2____LOGIC.html">logic</a></span>-mode function symbol and 
+ <span class="v">normalp</span> is true.  In the usual case that no <a href="ACL2____DEFINITION.html">definition</a> rule has 
+ been introduced for <span class="v">fn</span> with a non-<span class="v">nil</span> value of 
+ <span class="v">:install-body</span> (which is the default), return the <a href="ACL2____NORMALIZE.html">normalize</a>d body 
+ from the <span class="v">defun</span> form that introduced <span class="v">fn</span>, or <span class="v">nil</span> if <span class="v">fn</span> was 
+ not introduced with <span class="v">defun</span> (as with <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span>, <span class="tt"><a href="ACL2____DEFSTUB.html">defstub</a></span>, 
+ or <span class="tt"><a href="ACL2____DEFCHOOSE.html">defchoose</a></span>) — except that in the case that <span class="v">:normalize nil</span> 
+ was specified in that <span class="v">defun</span> form (see <a href="ACL2____XARGS.html">xargs</a>), return the 
+ unnormalized body.  The remaining case is that at least one <a href="ACL2____DEFINITION.html">definition</a> 
+ rule for <span class="v">fn</span> has been installed.  In that case, the latest such rule 
+ provides the body (see source function <span class="v">latest-body</span> for how hypotheses are 
+ handled), with one exception: if the equivalence relation for that rule is 
+ other than <span class="v">equal</span>, then the unnormalized body is returned.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____CONJOIN.html">conjoin</a> lst)</span>: The conjunction of the given list of terms.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____CONJOIN2.html">conjoin2</a> term1 term2)</span>: The conjunction of the given two terms.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____CONS-TERM.html">cons-term</a> fn args)</span>: Returns a <a href="ACL2____TERM.html">term</a> with function symbol (or 
+ <a href="COMMON-LISP____LAMBDA.html">lambda</a> expression) <span class="v">fn</span> and arguments <span class="v">args</span>.  Evaluation may be 
+ performed for calls of primitives — that is, built-in functions without 
+ definitions — on arguments that are quoted constants, for example as 
+ follows. 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____CONS-TERM.html">cons-term</a> 'coerce (<a href="COMMON-LISP____LIST.html">list</a> ''"abc" ''list))
+'(#\a #\b #\c)
+ACL2 !&gt;</pre> 
+ 
+ To avoid such evaluation, use <span class="v">fcons-term</span> (``fast cons-term''), described 
+ below.  Also see <span class="v">cons-term*</span> and <span class="v">fcons-term*</span> below.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____CONS-TERM_A2.html">cons-term*</a> fn arg1 arg2 ...)</span>: This variant of <span class="v">cons-term</span> 
+ (described above) returns a term with the indicated function and arguments, 
+ where the arguments are ``spread'' into individual actual parameters rather 
+ than provided as a list.  Some simplification may be done; to avoid that, use 
+ <span class="v">fcons-term*</span>.  Also see <span class="v">cons-term</span> above and <span class="v">fcons-term</span> 
+ below.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____DEFAULT-STATE-VARS.html">default-state-vars</a> state-p &amp;key ...)</span>: Returns a record suitable as 
+ an argument for some utilities that take the <a href="ACL2____WORLD.html">world</a> as an argument but 
+ not the <a href="ACL2____STATE.html">state</a>, such as <span class="v">translate-cmp</span>.  That record provides values 
+ for certain state global variables (which are not stored in the world), such 
+ as <span class="v">guard-checking-on</span> (which holds the <a href="ACL2____GUARD.html">guard</a>-checking mode).  As 
+ described below, <span class="v">default-state-vars</span> provides suitable defaults, which 
+ however can be modified by supplying keyword arguments corresponding to 
+ certain state globals, such as <span class="v">:guard-checking-on</span>.  When the required 
+ argument is <span class="v">t</span>, those defaults are the values of those state globals; 
+ thus, <span class="v">t</span> is probably the right value to use for that argument when the 
+ state is available in the calling context.  Otherwise, those defaults are the 
+ values commonly found in those state globals.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____DEFINED-CONSTANT.html">defined-constant</a> name w)</span>: If <span class="v">name</span> is <span class="v">t</span>, <span class="v">nil</span>, or 
+ defined using <span class="tt"><a href="ACL2____DEFCONST.html">defconst</a></span>, return <span class="v">(<a href="COMMON-LISP____QUOTE.html">quote</a> val)</span> where <span class="v">val</span> is the 
+ value of <span class="v">name</span>; otherwise return <span class="v">nil</span>.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____DEFUN-MODE.html">defun-mode</a> fn w)</span>: If <span class="v">fn</span> is a function symbol, return the <a href="ACL2____DEFUN-MODE.html">defun-mode</a> of <span class="v">fn</span>: <span class="v">:program</span> if <span class="v">fn</span> is in <span class="v">:</span><span class="tt"><a href="ACL2____PROGRAM.html">program</a></span> 
+ mode, <span class="v">:logic</span> if <span class="v">fn</span> is in <span class="v">:</span><span class="tt"><a href="ACL2____LOGIC.html">logic</a></span> mode.  If <span class="v">fn</span> is 
+ not a function symbol, return <span class="v">nil</span>.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____DISABLEDP.html">disabledp</a> name)</span>: The list of <a href="ACL2____RUNE.html">rune</a>s introduced with <span class="v">name</span> 
+ that are currently <a href="ACL2____DISABLE.html">disable</a>d.  See <a href="ACL2____DISABLEDP.html">disabledp</a>.  Also see 
+ <span class="v">enabled-runep</span>, below, for a more direct test of whether a given rune is 
+ <a href="ACL2____ENABLE.html">enable</a>d.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____DISJOIN.html">disjoin</a> lst)</span>: The disjunction of the given list of terms.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____DISJOIN2.html">disjoin2</a> term1 term2)</span>: The disjunction of the given two terms.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____DOUBLET-LISTP.html">doublet-listp</a> x)</span>: Returns <span class="v">t</span> if <span class="v">lst</span> is a list of 
+ two-element lists <span class="v">(x1 x2)</span>, else <span class="v">nil</span>.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____DUMB-NEGATE-LIT.html">dumb-negate-lit</a> t1)</span>: For the given <a href="ACL2____TERM.html">term</a> <span class="v">t1</span>, return a 
+ term that is propositionally equivalent to <span class="v">(<a href="COMMON-LISP____NOT.html">not</a> t1)</span>.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____DUMB-OCCUR.html">dumb-occur</a> x y)</span>: Return <span class="v">t</span> if the term <span class="v">x</span> occurs free in the 
+ term <span class="v">y</span>, but without looking for <span class="v">x</span> inside of quoted constants; else, 
+ returns <span class="v">nil</span>.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____DUMB-OCCUR-VAR.html">dumb-occur-var</a> x y)</span>: Return <span class="v">t</span> if the variable <span class="v">x</span> occurs 
+ free in the term <span class="v">y</span>, else <span class="v">nil</span>.  This is the same as <span class="v">dumb-occur</span>, 
+ but optimized for the case that <span class="v">x</span> is a variable.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____ENABLED-NUMEP.html">enabled-numep</a> nume ens wrld)</span>: Return true iff the given 
+ nume (numeric representation of a <a href="ACL2____RUNE.html">rune</a>) in the <a href="ACL2____WORLD.html">world</a>, <span class="v">wrld</span>, 
+ is <a href="ACL2____ENABLE.html">enable</a>d with respect to the given enabled structure, <span class="v">ens</span>. 
+ (For example, <span class="v">(ens state)</span> returns the global enabled structure; during a 
+ proof, the enabled structure comes from the so-called rewrite-constant.) 
+ <span class="v">Nil</span> is also a valid first argument, in which case the return value is 
+ <span class="v">t</span>.  See also <span class="v">enabled-runep</span>.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____ENABLED-RUNEP.html">enabled-runep</a> rune ens wrld)</span>: Return true iff the given <a href="ACL2____RUNE.html">rune</a> 
+ in the <a href="ACL2____WORLD.html">world</a>, <span class="v">wrld</span>, is <a href="ACL2____ENABLE.html">enable</a>d with respect to the given 
+ enabled structure (as discussed for <span class="v">enabled-numep</span>, just above).  See also 
+ <span class="v">enabled-numep</span>, which may be more efficient since <span class="v">enabled-runep</span> is 
+ defined in terms of <span class="v">enabled-numep</span>.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____FARGN.html">fargn</a> x n)</span>: For a <span class="tt"><a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a></span> <span class="v">x</span> that is a function 
+ call and for a positive integer <span class="v">n</span>, return the <span class="v">n</span>-th argument of 
+ <span class="v">x</span>, where the numbering of arguments starts at 1.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____FARGS.html">fargs</a> x)</span>: For a <span class="tt"><a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a></span> <span class="v">x</span> that is a function call, 
+ return its arguments.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____FCONS-TERM.html">fcons-term</a> fn args)</span>: This variant of <span class="v">cons-term</span> (described 
+ above) returns a term with the indicated function and arguments, without any 
+ simplification.  Also see <span class="v">cons-term</span> and <span class="v">cons-term*</span> above, and 
+ <span class="v">fcons-term*</span> below.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____FCONS-TERM_A2.html">fcons-term*</a> fn arg1 arg2 ...)</span>: This variant of <span class="v">fcons-term</span> 
+ (described above) returns a term with the indicated function and arguments, 
+ without any simplification, and where the arguments are ``spread'' into 
+ individual actual parameters rather than provided as a list.  Also see 
+ <span class="v">cons-term</span>, <span class="v">cons-term*</span>, and <span class="v">fcons-term</span> above.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____FDEFUN-MODE.html">fdefun-mode</a> fn)</span>: For a function symbol <span class="v">fn</span>, return the <a href="ACL2____DEFUN-MODE.html">defun-mode</a> of <span class="v">fn</span>: <span class="v">:program</span> if <span class="v">fn</span> is in <span class="v">:</span><span class="tt"><a href="ACL2____PROGRAM.html">program</a></span> 
+ mode, <span class="v">:logic</span> if <span class="v">fn</span> is in <span class="v">:</span><span class="tt"><a href="ACL2____LOGIC.html">logic</a></span> mode.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____FFN-SYMB.html">ffn-symb</a> x)</span>: This version of <span class="v">fn-symb</span> (described below) assumes 
+ that <span class="v">x</span> is a <span class="tt"><a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a></span> that is a function call, without 
+ checking that <span class="v">x</span> is a function call (the leading ``f'' is for ``fast''), 
+ and returns its called function or <span class="v">lambda</span> expression.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____FFN-SYMB-P.html">ffn-symb-p</a> x sym)</span>: For a <span class="tt"><a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a></span> <span class="v">x</span>, return <span class="v">t</span> 
+ if it is a function call whose function symbol is <span class="v">sym</span>, else return 
+ <span class="v">nil</span>.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____FFNNAMEP.html">ffnnamep</a> fn term)</span>: Returns <span class="v">t</span> when the function <span class="v">fn</span> 
+ (possibly a <a href="COMMON-LISP____LAMBDA.html">lambda</a> expression) is used as a function in <span class="v">term</span>, 
+ which is assumed to be a <span class="tt"><a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a></span>; else returns <span class="v">nil</span>.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____FFNNAMEP-LST.html">ffnnamep-lst</a> fn lst)</span>: Returns <span class="v">t</span> when the function <span class="v">fn</span> 
+ (possibly a <a href="COMMON-LISP____LAMBDA.html">lambda</a> expression) is used as a function in a member of the 
+ list <span class="v">lst</span> of <span class="tt"><a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a></span>s; else returns <span class="v">nil</span>.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____FIX-PKG.html">fix-pkg</a> pkg)</span>: Returns <span class="v">pkg</span>, which should be <span class="v">nil</span> or a 
+ non-empty string, with one exception: if <span class="v">pkg</span> is 
+ <span class="v">"COMMON-LISP"</span> then <span class="v">"ACL2"</span> is returned.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____FLAMBDA-APPLICATIONP.html">flambda-applicationp</a> x)</span>: For a <span class="tt"><a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a></span> <span class="v">x</span> that is 
+ not a variable, return <span class="v">t</span> if it is a function call whose function symbol 
+ is a <span class="v">lambda</span> expression, else return <span class="v">nil</span>.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____FLAMBDAP.html">flambdap</a> fn)</span>: True when <span class="v">fn</span> is a <span class="v">lambda</span> expression.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____FLATTEN-ANDS-IN-LIT.html">flatten-ands-in-lit</a> term)</span>: Returns a list of terms whose conjunction 
+ is equivalent to the given term (which satisfies <span class="tt"><a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a></span>), 
+ obtained by flattening its conjunctive structure.  For example, 
+ <span class="v">(<a href="ACL2____FLATTEN-ANDS-IN-LIT.html">flatten-ands-in-lit</a> '(<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____IF.html">if</a> x y 'nil) z 'nil))</span> is the list <span class="v">(x y
+ z)</span>.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____FN-RUNE-NUME.html">fn-rune-nume</a> fn nflg xflg wrld)</span>: For a function symbol <span class="v">fn</span>, 
+ return either the <a href="ACL2____RUNE.html">rune</a> (case <span class="v">nflg</span> = <span class="v">nil</span>) or nume (numeric 
+ representation of a rune) (case <span class="v">nflg</span> = <span class="v">t</span>) associated with either 
+ <span class="v">(:DEFINITION fn)</span> (case <span class="v">xflg</span> = <span class="v">nil</span>) or 
+ <span class="v">(:EXECUTABLE-COUNTERPART fn)</span> (case <span class="v">xflg</span> = <span class="v">t</span>).  If <span class="v">fn</span> is a 
+ constrained function, return <span class="v">nil</span> for all combinations of the flags.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____FN-SYMB.html">fn-symb</a> x)</span>: For a <span class="tt"><a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a></span> <span class="v">x</span>, return its called 
+ function or <span class="v">lambda</span> expression if <span class="v">x</span> is a function call, otherwise 
+ return <span class="v">nil</span>.  Also see <span class="v">ffn-symb</span>, above.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____FORMALS.html">formals</a> fn w)</span>: For a function symbol <span class="v">fn</span> of <a href="ACL2____WORLD.html">world</a> <span class="v">w</span>, 
+ return its list of formal parameters.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____FORMULA.html">formula</a> name normalp w)</span>: For an event name or <a href="ACL2____RUNE.html">rune</a>, 
+ <span class="v">name</span>, of <a href="ACL2____WORLD.html">world</a> <span class="v">w</span>, return the corresponding formula if 
+ any (<a href="ACL2____NORMALIZE.html">normalize</a>d iff <span class="v">normalp</span> is true), else <span class="v">nil</span>.  See <a href="ACL2____FORMULA.html">formula</a>.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____FQUOTEP.html">fquotep</a> x)</span>: For a <span class="tt"><a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a></span> <span class="v">x</span> that is not a 
+ variable, return true iff <span class="v">x</span> is a quoted constant.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____FSUBCOR-VAR.html">fsubcor-var</a> vars terms form)</span>: This variant of <span class="v">subcor-var</span> 
+ (described below) also substitutes, in the <span class="tt"><a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a></span> <span class="v">form</span>, the 
+ variables in the list of <span class="tt"><a href="COMMON-LISP____SYMBOLP.html">symbolp</a></span>s <span class="v">vars</span> with the corresponding 
+ elements in the list of <span class="tt"><a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a></span>s <span class="v">terms</span>, but without 
+ performing any simplification.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____FUNCTION-SYMBOLP.html">function-symbolp</a> sym w)</span>: True when the symbol <span class="v">sym</span> is a function 
+ symbol in the <a href="ACL2____WORLD.html">world</a> <span class="v">w</span>.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____GENVAR.html">genvar</a> pkg-witness prefix n avoid-lst)</span>: Generate a new variable 
+ name.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____GET-BRR-LOCAL.html">get-brr-local</a> var state)</span>: The value of brr-local variable <span class="v">var</span>; 
+ this is the utility used by <a href="ACL2____BRR_04.html">brr@</a>.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____GET-DEFUN-EVENT.html">get-defun-event</a> name w)</span>: For the given name of a defined function in 
+ the current ACL2 <a href="ACL2____WORLD.html">world</a> <span class="v">w</span>, return its <span class="tt"><a href="COMMON-LISP____DEFUN.html">defun</a></span> form.  Note 
+ that this applies to both <span class="v">:</span><span class="tt"><a href="ACL2____LOGIC.html">logic</a></span>-mode and <span class="v">:</span><span class="tt"><a href="ACL2____PROGRAM.html">program</a></span>-mode functions, in spite of the name, ``logical'' (which is actually 
+ intended to distinguish from ``raw Lisp'').</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____GET-EVENT.html">get-event</a> name w)</span>: For the given name of an event in the current 
+ ACL2 <a href="ACL2____WORLD.html">world</a> <span class="v">w</span>, return that event.  Typically there is only one such 
+ event, but for built-in functions the most recent event might be a variant of 
+ a <span class="tt"><a href="ACL2____VERIFY-TERMINATION.html">verify-termination</a></span> event, so consider using <span class="v">get-defun-event</span> for 
+ names of functions (see above).</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____GET-SKIPPED-PROOFS-P.html">get-skipped-proofs-p</a> name w)</span>: For the given name of an event in the 
+ current ACL2 <a href="ACL2____WORLD.html">world</a> <span class="v">w</span>, return <span class="v">t</span> if proofs were skipped when 
+ introducing that event, as with <span class="tt"><a href="ACL2____SKIP-PROOFS.html">skip-proofs</a></span> or using <span class="tt"><a href="ACL2____SET-LD-SKIP-PROOFSP.html">set-ld-skip-proofsp</a></span> — that is, with proofs skipped other than by the 
+ system (as with <span class="tt"><a href="ACL2____INCLUDE-BOOK.html">include-book</a></span>); else return <span class="v">nil</span>.  Exception: if 
+ <span class="v">name</span> is a function symbol that is either built in or in <span class="v">:</span><span class="tt"><a href="ACL2____PROGRAM.html">program</a></span> mode, return <span class="v">nil</span>.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____GUARD.html">guard</a> fn stobj-optp w)</span>: For a function symbol or <span class="v">lambda</span> 
+ expression <span class="v">fn</span> of <a href="ACL2____WORLD.html">world</a> <span class="v">w</span>, return its <a href="ACL2____GUARD.html">guard</a>. Optimize 
+ the <a href="ACL2____STOBJ.html">stobj</a> recognizers away iff <span class="v">stobj-optp</span> is true.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____IMPLICATE.html">implicate</a> t1 t2)</span>: For terms <span class="v">t1</span> and <span class="v">t2</span>, return a term that 
+ is propositionally equivalent to <span class="v">(<a href="ACL2____IMPLIES.html">implies</a> t1 t2)</span>.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____IO_F3.html">io?</a> token commentp shape vars body &amp;key ...)</span>: This is a complex 
+ macro that may be most fully understood by reading the source code, including 
+ comments in its definition and examples of its use.  But the following 
+ example from the definition of source function <span class="v">print-failure1</span> may get the 
+ idea across. 
+ 
+ <pre class="code">(<a href="ACL2____IO_F3.html">io?</a> summary nil state (channel)
+     (<a href="ACL2____FMS.html">fms</a> *proof-failure-string* nil channel state nil))</pre> 
+ 
+ This is essentially just the <span class="v">body</span> argument, which here is the indicated 
+ <span class="tt"><a href="ACL2____FMS.html">fms</a></span> call, but where, going through the other arguments: 
+ 
+   <ul> 
+ 
+   <li>
+<span class="v">summary</span> — evaluation only takes place when <span class="v">summary</span> 
+   output is enabled (see <a href="ACL2____SET-INHIBIT-OUTPUT-LST.html">set-inhibit-output-lst</a>);</li> 
+ 
+   <li>
+<span class="v">nil</span> — don't enter a wormhole;</li> 
+ 
+   <li>
+<span class="v">state</span> — the body (which here is the <span class="v">fms</span> call) returns a 
+   single <span class="v">state</span> value; and finally</li> 
+ 
+   <li>
+<span class="v">channel</span> — this is the list of free variables in the 
+   body (which here is the <span class="v">fms</span> call).</li> 
+ 
+   </ul> 
+ </li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____KNOWN-PACKAGE-ALIST.html">known-package-alist</a> state)</span>: Returns a list of package entries, as 
+ explained in the definition of <span class="v">make-package-entry</span> in ACL2 sources, which 
+ is followed by simple accessor definitions (all in file <span class="v">axioms.lisp</span> as of 
+ this writing).  This list includes entries for hidden packages (see <a href="ACL2____HIDDEN-DEATH-PACKAGE.html">hidden-death-package</a>).  As a package is introduced, its package entry is 
+ pushed on the front of the existing known-package-alist.  Note that this list 
+ can be accessed directly from a <a href="ACL2____WORLD.html">world</a>, <span class="v">w</span>, with: <span class="v">(global-val
+ 'known-package-alist w)</span>.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____LAMBDA-APPLICATIONP.html">lambda-applicationp</a> x)</span>: For a <span class="tt"><a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a></span> <span class="v">x</span>, return 
+ <span class="v">t</span> if it is a function call whose function symbol is a <span class="v">lambda</span> 
+ expression, else return <span class="v">nil</span>.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____LAMBDA-BODY.html">lambda-body</a> x)</span>: For a <span class="v">lambda</span> expression <span class="v">x</span>, return its 
+ body.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____LAMBDA-FORMALS.html">lambda-formals</a> x)</span>: For a <span class="v">lambda</span> expression <span class="v">x</span>, return its 
+ formal parameters.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____LEGAL-CONSTANTP.html">legal-constantp</a> name)</span>: Returns <span class="v">t</span> if <span class="v">name</span> is a legal 
+ constant name, else <span class="v">nil</span>.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____LEGAL-VARIABLEP.html">legal-variablep</a> name)</span>: Returns <span class="v">t</span> if <span class="v">name</span> is a legal 
+ variable name, else <span class="v">nil</span>.  For example, <span class="v">x</span> is a legal variable name 
+ but the following are not: <span class="v">:abc</span>, <span class="v">t</span>, <span class="v">nil</span>, <span class="v">&amp;a</span> (a lambda 
+ keyword), <span class="v">*c*</span> (syntax of a constant), and <span class="v">pi</span> (a Common Lisp 
+ constant).</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____LOGICP.html">logicp</a> fn w)</span>: For a function symbol <span class="v">fn</span> of <a href="ACL2____WORLD.html">world</a> 
+ <span class="v">w</span>, return <span class="v">t</span> when the <span class="v">symbol-class</span> of <span class="v">fn</span> in <span class="v">w</span> is not 
+ <span class="v">:program</span>, else <span class="v">nil</span>.  (See <span class="v">symbol-class</span>, below.)</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____MAKE-LAMBDA.html">make-lambda</a> args body)</span>: Return the <span class="v">lambda</span> expression with 
+ formal parameters <span class="v">args</span> and body <span class="v">body</span>.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____MAKE-LAMBDA-APPLICATION.html">make-lambda-application</a> formals body actuals)</span>: Return the 
+ <span class="v">lambda</span> application that is essentially <span class="v">((<a href="COMMON-LISP____LAMBDA.html">lambda</a> formals body)
+ . actuals)</span>.  However, extra formals and corresponding actuals are added when 
+ <span class="v">body</span> has free variables that do not belong to <span class="v">formals</span>, because 
+ lambdas must be closed in ACL2.  A similar function is <span class="v">make-lambda-term</span>, 
+ but that one does not drop unused formals, while <span class="v">make-lambda-application</span> 
+ does drop them.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____MAKE-LAMBDA-TERM.html">make-lambda-term</a> formals actuals body)</span>: Return the <span class="v">lambda</span> 
+ application that is essentially <span class="v">((<a href="COMMON-LISP____LAMBDA.html">lambda</a> formals body) . actuals)</span>. 
+ However, extra formals and corresponding actuals are added when <span class="v">body</span> has 
+ free variables that do not belong to <span class="v">formals</span>, because lambdas must be 
+ closed in ACL2.  A similar function is <span class="v">make-lambda-application</span>, but that 
+ one drops unused formals, while <span class="v">make-lambda-term</span> does not.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____NVARIABLEP.html">nvariablep</a> x)</span>: For a <span class="tt"><a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a></span> <span class="v">x</span>, return true iff 
+ <span class="v">x</span> is not a variable (i.e. it is a quoted constant or a function 
+ call).</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____PARTITION-REST-AND-KEYWORD-ARGS.html">partition-rest-and-keyword-args</a> x keys)</span>: <span class="v">x</span> should be a list of 
+ the form <span class="v">(a1 ... an :key1 v1 ... :keyk vk)</span>, where no <span class="v">ai</span> is a 
+ keyword.  The result is <span class="v">(<a href="ACL2____MV.html">mv</a> erp rest alist)</span>, where <span class="v">erp</span> is 
+ non-<span class="v">nil</span> if and only if the keyword section of <span class="v">x</span> (that is, starting 
+ with <span class="v">:key1</span>) is ill-formed, that is: some <span class="v">:keyi</span> is not a keyword, 
+ <span class="v">:keyi</span> and <span class="v">:keyj</span> are the same for some distinct i and j, or some 
+ <span class="v">:keyi</span> is not a member of <span class="v">keys</span>.  When <span class="v">erp</span> is <span class="v">nil</span>, then 
+ <span class="v">rest</span> is <span class="v">(a1 ... an)</span> and alist is equivalent (as a mapping) to 
+ <span class="v">((:key1 . v1) ... (:keyk . vk))</span>.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____PLIST-WORLDP.html">plist-worldp</a> alist)</span>: Recognizer for when <span class="v">alist</span> is syntactically 
+ well-formed as an ACL2 logical <a href="ACL2____WORLD.html">world</a>, sometimes suitable for use in 
+ <a href="ACL2____GUARD.html">guard</a>s.  Note: for a somewhat deeper check, see community book 
+ <span class="v">books/system/pseudo-good-worldp.lisp</span>.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____PRETTYIFY-CLAUSE.html">prettyify-clause</a> cl let*-abstractionp wrld)</span>: Returns an untranslated 
+ (user-level) term that is equivalent to the clause, <span class="v">cl</span>.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____PROGRAMP.html">programp</a> fn w)</span>: For a function symbol <span class="v">fn</span> of <a href="ACL2____WORLD.html">world</a> 
+ <span class="v">w</span>, return <span class="v">t</span> when the <span class="v">symbol-class</span> of <span class="v">fn</span> in <span class="v">w</span> is 
+ <span class="v">:program</span>, else <span class="v">nil</span>.  (See <span class="v">symbol-class</span>, below.)</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____QUOTEP.html">quotep</a> x)</span>: For a <span class="tt"><a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a></span> <span class="v">x</span>, return true iff <span class="v">x</span> 
+ is a quoted constant.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____RECURSIVEP.html">recursivep</a> fn flg w)</span>: <span class="v">Fn</span> should be a <span class="v">:</span><span class="tt"><a href="ACL2____LOGIC.html">logic</a></span>-mode 
+ function symbol <span class="v">fn</span> of the <a href="ACL2____WORLD.html">world</a>, <span class="v">w</span>.  The result is the list 
+ of mutually recursive functions of which <span class="v">fn</span> is a member.  The list is 
+ empty iff <span class="v">fn</span> is not recursive.  The list contains just <span class="v">fn</span> iff 
+ <span class="v">fn</span> is singly recursive.  NOTE: <span class="v">flg</span> should be <span class="v">t</span> or <span class="v">nil</span>.  If 
+ <span class="v">flg</span> is <span class="v">nil</span>, the result is based solely on the <span class="tt"><a href="COMMON-LISP____DEFUN.html">defun</a></span> form that 
+ introduced <span class="v">fn</span> and is equal to <span class="v">(<a href="ACL2____GETPROPC.html">getpropc</a> fn 'recursivep nil w)</span>.  If 
+ <span class="v">flg</span> is <span class="v">t</span>, then the most recent <a href="ACL2____DEFINITION.html">definition</a> rule for <span class="v">fn</span> 
+ with a non-<span class="v">nil</span> value of <span class="v">:install-body</span> — which could be the 
+ original definition — will cause <span class="v">recursivep</span> to return the 
+ <span class="v">:clique</span> specified by that rule; see <a href="ACL2____RULE-CLASSES.html">rule-classes</a>.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____STOBJP.html">stobjp</a> x known-stobjs w)</span>: Returns a non-<span class="v">nil</span> value when <span class="v">x</span> 
+ is to be treated as a <a href="ACL2____STOBJ.html">stobj</a> name, else <span class="v">nil</span>.  Argument 
+ <span class="v">known-stobjs</span> is a list of all such names, or else <span class="v">t</span>, standing for 
+ all stobj names in the <a href="ACL2____WORLD.html">world</a>, <span class="v">w</span>.  If you want to know whether 
+ <span class="v">x</span> has been defined as a stobj in <span class="v">w</span>, use <span class="v">known-stobjs</span> = <span class="v">t</span>. 
+ Technicality: if <span class="v">known-stobjs</span> is a list then it is allowed to contain any 
+ number of <span class="v">nil</span> elements (as may be the case for the the <span class="v">stobjs-in</span> or 
+ <span class="v">stobjs-out</span> of a symbol), which are ignored.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____STOBJS-IN.html">stobjs-in</a> fn w)</span>: For a function symbol <span class="v">fn</span> of <a href="ACL2____WORLD.html">world</a> 
+ <span class="v">w</span>, return the stobjs-in of <span class="v">fn</span>, which is the result of modifying the 
+ list of formal parameters of <span class="v">fn</span> by replacing with <span class="v">nil</span> each symbol 
+ that is not a <a href="ACL2____STOBJ.html">stobj</a> input.  Note that <span class="v">fn</span> must be a symbol, not a 
+ <a href="COMMON-LISP____LAMBDA.html">lambda</a> expression.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____STOBJS-OUT.html">stobjs-out</a> fn w)</span>: For a function symbol <span class="v">fn</span> of <a href="ACL2____WORLD.html">world</a> 
+ <span class="v">w</span>, return the stobjs-out of <span class="v">fn</span>, which is a list whose length is the 
+ number of return values of <span class="v">fn</span> — that is, length 1 unless <span class="v">fn</span> 
+ returns multiple values.  For each <span class="v">i</span> less than that length, if the 
+ <span class="v">i</span>th return value is a stobj, then that is the <span class="v">i</span>th element of the 
+ stobjs-out; otherwise the <span class="v">i</span>th element of the stobjs-out is <span class="v">nil</span>. 
+ Note that <span class="v">fn</span> must be a symbol, not a <a href="COMMON-LISP____LAMBDA.html">lambda</a> expression.  Moreover 
+ <span class="v">fn</span> must not be a member of the list value of the constant 
+ <span class="v">*stobjs-out-invalid*</span>, i.e., the list <span class="v">(<a href="COMMON-LISP____IF.html">if</a> return-last do$)</span>, since for 
+ these functions arbitrary multiple values may be returned.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____SUBCOR-VAR.html">subcor-var</a> vars terms form)</span>: For a list <span class="v">vars</span> of symbols, a list 
+ <span class="v">terms</span> of <span class="tt"><a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a></span>s, and a <span class="tt"><a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a></span> <span class="v">form</span>, 
+ substitute, in <span class="v">form</span>, the <i>i</i>-th variable from <span class="v">vars</span> with the 
+ <i>i</i>-th term from <span class="v">terms</span>.  Note that <span class="v">vars</span> and <span class="v">terms</span> should 
+ have the same length.  ("<span class="v">subcor</span>" stands for "substitute 
+ corresponding elements".)  Some simplification may be done; to avoid 
+ that, use <span class="v">fsubcor-var</span> (``fast substitute corresponding elements''), 
+ described above.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____SUBLIS-FN-SIMPLE.html">sublis-fn-simple</a> alist term)</span>, <span class="v">(<a href="ACL2____SUBLIS-FN.html">sublis-fn</a> alist term
+ bound-vars)</span>: Both of these apply the functional substitution, <span class="v">alist</span>, to 
+ the given term.  Thus in both cases, all keys of <span class="v">alist</span> are function 
+ symbols.  In the case of <span class="v">sublis-fn-simple</span>, each key of <span class="v">alist</span> is 
+ mapped to a function symbol; but for <span class="v">sublis-fn</span>, a key may instead be 
+ mapped to a legal <a href="COMMON-LISP____LAMBDA.html">lambda</a> expression.  The other difference between the 
+ two functions is that for <span class="v">sublis-fn</span>, the formal <span class="v">bound-vars</span> is a list 
+ of variables, generally <span class="v">nil</span> at the top level.  For details see the Lisp 
+ comments in the ACL2 sources for function <span class="v">sublis-fn-rec</span> (which is more 
+ general than either <span class="v">sublis-fn-simple</span> and <span class="v">sublis-fn</span>, and is called by 
+ both of them to do the real work).</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____SUBLIS-FN-LST-SIMPLE.html">sublis-fn-lst-simple</a> alist termlist)</span>: Apply the given functional 
+ substitution, <span class="v">alist</span>, to each term in <span class="v">termlist</span>, essentially by 
+ applying <span class="v">sublis-fn-simple</span> to alist and each such term.  See the 
+ description of <span class="v">sublis-fn-simple</span>, above.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____SUBLIS-VAR.html">sublis-var</a> alist form)</span>: Substitute <span class="v">alist</span> into the <a href="ACL2____TERM.html">term</a>, 
+ <span class="v">form</span>.  <span class="v">Alist</span> should be an alist that associates symbols with <span class="tt"><a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a></span>s, and <span class="v">term</span> should also satisfy <span class="v">pseudo-termp</span>.  Note 
+ that the substitution process evaluates calls of primitives on quoted 
+ constants, essentially using <span class="tt"><a href="ACL2____CONS-TERM.html">cons-term</a></span>.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____SUBSEQUENCEP.html">subsequencep</a> lst1 lst2)</span>: Determine whether the list lst1 is a 
+ subsequence of the list lst2, although not necessarily a proper 
+ subsequence.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____SUBST-EXPR.html">subst-expr</a> new old term)</span>: Substitute <span class="v">new</span> for <span class="v">old</span> in 
+ <span class="v">term</span>; all are assumed to be <a href="ACL2____TERM.html">term</a>s.  This function provides a 
+ slightly optimized version of equivalent function <span class="v">(subst-expr1 new old
+ term)</span>.  Also, the former causes an explicit error if <span class="v">old</span> is a quoted 
+ constant, and neither will search strictly inside a quoted subterm of 
+ <span class="v">old</span>.  A more complex function (perhaps a bit less likely to stay forever 
+ unchanged), <span class="v">subst-equiv-expr</span>, may be found in the source code; it can 
+ substitute one expression for another when the two are equivalent, but not 
+ necessarily equal.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____SUBST-VAR.html">subst-var</a> new old term)</span>: Substitute <span class="v">new</span> for <span class="v">old</span> in 
+ <span class="v">term</span>; all are assumed to be <a href="ACL2____TERM.html">term</a>s, but moreover, <span class="v">old</span> is 
+ assumed to be a variable.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____SYMBOL-CLASS.html">symbol-class</a> name w)</span>: For a function symbol, <span class="v">name</span>, of the ACL2 
+ <a href="ACL2____WORLD.html">world</a> <span class="v">w</span>, return <span class="v">:program</span> if <span class="v">name</span> is in <span class="v">:</span><span class="tt"><a href="ACL2____PROGRAM.html">program</a></span> mode, <span class="v">:common-lisp-compliant</span> if <span class="v">name</span> is <a href="ACL2____GUARD.html">guard</a>-verified, and otherwise, <span class="v">:ideal</span>.  If <span class="v">name</span> is the name of a 
+ theorem (more specifically, has a <span class="v">'theorem</span> property; see <a href="ACL2____GETPROP.html">getprop</a>), 
+ return <span class="v">:ideal</span> unless the theorem is guard-verified, in which case return 
+ <span class="v">:common-lisp-compliant</span>.  Otherwise return <span class="v">:program</span>.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____SYMBOL-DOUBLET-LISTP.html">symbol-doublet-listp</a> lst)</span>: Returns <span class="v">t</span> if <span class="v">lst</span> is a list of 
+ two-element lists <span class="v">(x1 x2)</span> where <span class="v">x1</span> is a symbol, else <span class="v">nil</span>.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____TERMP.html">termp</a> x w)</span>: Is <span class="v">x</span> a <a href="ACL2____TERM.html">term</a> in logical <a href="ACL2____WORLD.html">world</a> 
+ <span class="v">w</span>?</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____TRANS-EVAL.html">trans-eval</a> form ctx state aok)</span>: Translate and then evaluate 
+ <span class="v">form</span>.  See <a href="ACL2____TRANS-EVAL.html">trans-eval</a> for discussion and related utilities.</li> 
+ 
+ <li>
+<span class="v">translate</span>, <span class="v">translate1</span>, <span class="v">translate11</span>, <span class="v">translate-cmp</span>, and 
+ <span class="v">translate1-cmp</span>: Functions that translate user-level input to translated 
+ <a href="ACL2____TERM.html">term</a>s, as recognized by <span class="v">termp</span>.  Note that these functions perform 
+ macroexpansion, which checks <a href="ACL2____GUARD.html">guard</a>s on <a href="ACL2____PRIMITIVE.html">primitive</a>s; see <a href="ACL2____SAFE-MODE.html">safe-mode</a>.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____TRANSLATE-HINTS.html">translate-hints</a> name-tree lst ctx wrld state)</span>: Translate a given 
+ list of user-level hints, <span class="v">lst</span>, to internal form.  NOTE: this function 
+ returns an <a href="ACL2____ERROR-TRIPLE.html">error-triple</a>, and it checks the syntax of <span class="v">lst</span>.  Its 
+ documentation essentially resides in a comment in source function 
+ <span class="v">translate-hints1</span>.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____UNTRANSLATE.html">untranslate</a> term iff-flg w)</span>: see <a href="ACL2____UNTRANSLATE.html">untranslate</a>.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____VALUE.html">value</a> x)</span>: This macro call expands to <span class="v">(<a href="ACL2____MV.html">mv</a> nil x state)</span>.  For 
+ related discussion, see <a href="ACL2____ERROR-TRIPLE.html">error-triple</a>.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____VARIABLEP.html">variablep</a> x)</span>: For a <span class="tt"><a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a></span> <span class="v">x</span>, return true iff 
+ <span class="v">x</span> is a variable, i.e., a symbol.</li> 
+ 
+ </ul> 
+ 
+ 
+</body>
+</html>

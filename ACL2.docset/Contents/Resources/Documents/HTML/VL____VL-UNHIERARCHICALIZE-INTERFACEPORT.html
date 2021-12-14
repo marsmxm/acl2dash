@@ -1,0 +1,365 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Vl-unhierarchicalize-interfaceport</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL____VL-UNHIERARCHICALIZE-INTERFACEPORT">Click for Vl-unhierarchicalize-interfaceport in the Full Manual</a></h3>
+
+<p>Sanity check and normalize interface port arguments by dropping 
+hierarchical modinst name components, e.g., transform <span class="v">mypipe.producer</span> to 
+just <span class="v">mypipe</span>.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(vl-unhierarchicalize-interfaceport arg port ss inst warnings) 
+  → 
+(mv warnings new-arg)</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">arg</span> — Actual for this port.<br>    <font color="#606060">Guard <span class="v">(<a href="VL____VL-PLAINARG-P.html">vl-plainarg-p</a> arg)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">port</span> — Corresponding port; not necessarily an interface port.<br>    <font color="#606060">Guard <span class="v">(<a href="VL____VL-PORT-P.html">vl-port-p</a> port)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">ss</span> — <font color="#606060">Guard <span class="v">(<a href="VL____VL-SCOPESTACK-P.html">vl-scopestack-p</a> ss)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">inst</span> — The module instance itself, context for error messages.<br>    <font color="#606060">Guard <span class="v">(<a href="VL____VL-MODINST-P.html">vl-modinst-p</a> inst)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">warnings</span> — <font color="#606060">Guard <span class="v">(<a href="VL____VL-WARNINGLIST-P.html">vl-warninglist-p</a> warnings)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">warnings</span> — <font color="#606060">Type <span class="v">(<a href="VL____VL-WARNINGLIST-P.html">vl-warninglist-p</a> warnings)</span>.</font>
+</dd> 
+<dd>
+<span class="tt">new-arg</span> — If <span class="v">arg</span> is of the form <span class="v">myinterface.myport</span> 
+                          and everything is OK, this will just be 
+                          <span class="v">myinterface</span>.  In any other case, we just return 
+                          <span class="v">arg</span> unchanged.<br>    <font color="#606060">Type <span class="v">(<a href="VL____VL-PLAINARG-P.html">vl-plainarg-p</a> new-arg)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>See SystemVerilog-2012 Section 25.5, especially at the top of Page 
+718.  Suppose we have an interface called <span class="v">IPipe</span> with modports named 
+<span class="v">producer</span> and <span class="v">consumer</span>.  The names of these modport declarations can 
+be used in two distinct places:</p> 
+ 
+<pre class="code">module fooBuilder( IPipe.producer pipe ) ;  // &lt;-- .producer used in the module's port
+  ...
+endmodule
+
+module top ;
+  IPipe mypipe;
+  fooBuilder prod ( mypipe.producer );   // &lt;-- .producer used in module instance
+endmodule</pre> 
+ 
+<p>Our goal here is to deal with the latter kind of usage.  The basic idea is 
+to reduce such an argument to just <span class="v">mypipe</span>, after checking that its 
+interface is compatible with the module's interface declaration.  This way, 
+later VL code for dealing with interface ports doesn't have to think about 
+hierarchical identifiers that point at modports.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>vl-unhierarchicalize-interfaceport</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ vl-unhierarchicalize-interfaceport
+ (arg port ss inst warnings)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="VL____VL-PLAINARG-P.html">vl-plainarg-p</a> arg)
+                             (<a href="VL____VL-PORT-P.html">vl-port-p</a> port)
+                             (<a href="VL____VL-SCOPESTACK-P.html">vl-scopestack-p</a> ss)
+                             (<a href="VL____VL-MODINST-P.html">vl-modinst-p</a> inst)
+                             (<a href="VL____VL-WARNINGLIST-P.html">vl-warninglist-p</a> warnings))))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'vl-unhierarchicalize-interfaceport))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+   ((port (<a href="VL____VL-PORT-FIX.html">vl-port-fix</a> port))
+    ((<a href="VL____VL-PLAINARG.html">vl-plainarg</a> arg)
+     (<a href="VL____VL-PLAINARG-FIX.html">vl-plainarg-fix</a> arg))
+    ((<a href="VL____VL-MODINST.html">vl-modinst</a> inst)
+     (<a href="VL____VL-MODINST-FIX.html">vl-modinst-fix</a> inst))
+    ((unless (<a href="VL____VL-PORT-INTERFACE-P.html">vl-port-interface-p</a> port))
+     (<a href="ACL2____MV.html">mv</a> (<a href="VL____OK.html">ok</a>) arg))
+    ((<a href="VL____VL-INTERFACEPORT.html">vl-interfaceport</a> port))
+    (expr (<a href="VL____VL-PLAINARG-_E3EXPR.html">vl-plainarg-&gt;expr</a> arg))
+    ((unless expr)
+     (<a href="ACL2____MV.html">mv</a> (<a href="VL____FATAL.html">fatal</a> :type :vl-instance-blank-interface-port
+                :msg "~a0: interface port ~s1 is blank."
+                :args (<a href="COMMON-LISP____LIST.html">list</a> inst port.name))
+         arg))
+    ((unless (<a href="VL____VL-EXPR-CASE.html">vl-expr-case</a> expr :vl-index))
+     (<a href="ACL2____MV.html">mv</a>
+      (<a href="VL____FATAL.html">fatal</a>
+        :type :vl-instance-interface-port-bad-connection
+        :msg
+        "~a0: interface port argument isn't an interface: .~s1(~a2)"
+        :args (<a href="COMMON-LISP____LIST.html">list</a> inst port.name expr))
+      arg))
+    ((<a href="VL____VL-INDEX.html">vl-index</a> expr))
+    ((<a href="ACL2____MV.html">mv</a> err trace ?context tail)
+     (<a href="VL____VL-FOLLOW-SCOPEEXPR.html">vl-follow-scopeexpr</a> expr.scope ss
+                          :strictp nil))
+    ((when err)
+     (<a href="ACL2____MV.html">mv</a>
+      (<a href="VL____FATAL.html">fatal</a>
+       :type :vl-instance-interface-port-unresolved
+       :msg
+       "~a0: error resolving interface port argument .~s1(~a2): ~@3"
+       :args (<a href="COMMON-LISP____LIST.html">list</a> inst port.name expr err))
+      arg))
+    ((<a href="VL____VL-HIDSTEP.html">vl-hidstep</a> step1) (<a href="COMMON-LISP____FIRST.html">first</a> trace))
+    ((when (<a href="VL____VL-SCOPEITEM-MODINST-P.html">vl-scopeitem-modinst-p</a> step1.item))
+     (<a href="ACL2____B_A2.html">b*</a>
+      (((<a href="VL____VL-MODINST.html">vl-modinst</a> step1.item))
+       (iface (<a href="VL____VL-SCOPESTACK-FIND-DEFINITION.html">vl-scopestack-find-definition</a> step1.item.modname ss))
+       ((unless (<a href="COMMON-LISP____AND.html">and</a> iface (<a href="VL____VL-SCOPEDEF-INTERFACE-P.html">vl-scopedef-interface-p</a> iface)))
+        (<a href="ACL2____MV.html">mv</a>
+         (<a href="VL____FATAL.html">fatal</a>
+          :type :vl-instance-interface-port-bad-connection
+          :msg
+          "~a0: interface port argument isn't an interface: .~s1(~a2)"
+          :args (<a href="COMMON-LISP____LIST.html">list</a> inst port.name expr))
+         arg))
+       ((unless (<a href="COMMON-LISP____EQUAL.html">equal</a> step1.item.modname port.ifname))
+        (<a href="ACL2____MV.html">mv</a>
+         (<a href="VL____FATAL.html">fatal</a>
+          :type :vl-instance-interface-port-bad-connection
+          :msg
+          "~a0: type error: interface port ~s1 (<a href="COMMON-LISP____TYPE.html">type</a> ~s2) ~
+                               is connected to ~a3 (<a href="COMMON-LISP____TYPE.html">type</a> ~s4)."
+          :args (<a href="COMMON-LISP____LIST.html">list</a> inst port.name
+                      port.ifname expr step1.item.modname))
+         arg)))
+      (<a href="ACL2____MV.html">mv</a> (<a href="VL____OK.html">ok</a>) arg)))
+    ((when (<a href="VL____VL-SCOPEITEM-INTERFACEPORT-P.html">vl-scopeitem-interfaceport-p</a> step1.item))
+     (<a href="ACL2____B_A2.html">b*</a>
+      (((<a href="VL____VL-INTERFACEPORT.html">vl-interfaceport</a> step1.item))
+       ((unless (<a href="COMMON-LISP____EQUAL.html">equal</a> step1.item.ifname port.ifname))
+        (<a href="ACL2____MV.html">mv</a>
+         (<a href="VL____FATAL.html">fatal</a>
+          :type :vl-instance-interface-port-bad-connection
+          :msg
+          "~a0: type error: interface port ~s1 (<a href="COMMON-LISP____TYPE.html">type</a> ~s2) ~
+                               is connected to ~a3 (<a href="COMMON-LISP____TYPE.html">type</a> ~s4)."
+          :args (<a href="COMMON-LISP____LIST.html">list</a> inst port.name
+                      port.ifname expr step1.item.ifname))
+         arg)))
+      (<a href="ACL2____MV.html">mv</a> (<a href="VL____OK.html">ok</a>) arg)))
+    ((unless (<a href="VL____VL-SCOPEITEM-MODPORT-P.html">vl-scopeitem-modport-p</a> step1.item))
+     (<a href="ACL2____MV.html">mv</a>
+      (<a href="VL____FATAL.html">fatal</a>
+        :type :vl-instance-interface-port-bad-connection
+        :msg
+        "~a0: interface port argument isn't an interface: .~s1(~a2)"
+        :args (<a href="COMMON-LISP____LIST.html">list</a> inst port.name expr))
+      arg))
+    ((when (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____CONSP.html">consp</a> expr.indices)
+               (<a href="COMMON-LISP____NOT.html">not</a> (vl-partselect-case expr.part :none))))
+     (<a href="ACL2____MV.html">mv</a>
+      (<a href="VL____FATAL.html">fatal</a>
+        :type :vl-instance-modport-indexing
+        :msg
+        "~a0: array indexing can't be applied to modport: .~s1(~a2)"
+        :args (<a href="COMMON-LISP____LIST.html">list</a> inst port.name expr))
+      arg))
+    ((<a href="VL____VL-MODPORT.html">vl-modport</a> step1.item))
+    ((unless (vl-hidexpr-case tail :end))
+     (<a href="ACL2____MV.html">mv</a>
+      (<a href="VL____FATAL.html">fatal</a>
+       :type :vl-instance-modport-indexing
+       :msg
+       "~a0: error resolving interface port argument .~s1(~a2): ~
+                         trying to index through modport ~s3 with ~a4."
+       :args (<a href="COMMON-LISP____LIST.html">list</a> inst
+                   port.name expr step1.item.name tail))
+      arg))
+    ((unless (<a href="COMMON-LISP____CONSP.html">consp</a> (<a href="COMMON-LISP____CDR.html">cdr</a> trace)))
+     (<a href="ACL2____MV.html">mv</a>
+      (<a href="VL____FATAL.html">fatal</a>
+        :type :vl-instance-interface-port-bad-connection
+        :msg
+        "~a0: interface port argument isn't an interface: .~s1(~a2)"
+        :args (<a href="COMMON-LISP____LIST.html">list</a> inst port.name expr))
+      arg))
+    ((<a href="VL____VL-HIDSTEP.html">vl-hidstep</a> step2) (<a href="COMMON-LISP____SECOND.html">second</a> trace))
+    ((unless (<a href="VL____VL-SCOPEITEM-MODINST-P.html">vl-scopeitem-modinst-p</a> step2.item))
+     (<a href="ACL2____MV.html">mv</a>
+      (<a href="VL____FATAL.html">fatal</a>
+       :type :vl-instance-interface-port-bad-connection
+       :msg
+       "~a0: unsupported interface port argument .~s1(~a2). ~
+                         We currently only support arguments with modport ~
+                         specifiers for direct interface instantiations, but ~
+                         modport ~s3 is found via ~a4."
+       :args (<a href="COMMON-LISP____LIST.html">list</a> inst port.name
+                   expr step1.item.name step2.item))
+      arg))
+    ((<a href="VL____VL-MODINST.html">vl-modinst</a> step2.item))
+    (iface (<a href="VL____VL-SCOPESTACK-FIND-DEFINITION.html">vl-scopestack-find-definition</a> step2.item.modname ss))
+    ((unless (<a href="COMMON-LISP____AND.html">and</a> iface (<a href="VL____VL-SCOPEDEF-INTERFACE-P.html">vl-scopedef-interface-p</a> iface)))
+     (<a href="ACL2____MV.html">mv</a>
+      (<a href="VL____FATAL.html">fatal</a>
+       :type :vl-programming-error
+       :msg
+       "~a0: unsupported interface port argument .~s1(~a2). ~
+                         Expected the modport ~s3 to be inside an interface, ~
+                         but found it inside ~s4 which is a ~a5.  Thought ~
+                         that modports should only occur in interfaces."
+       :args (<a href="COMMON-LISP____LIST.html">list</a> inst port.name
+                   expr step1.item.name step2.name iface))
+      arg))
+    ((<a href="VL____VL-INTERFACE.html">vl-interface</a> iface))
+    ((unless (<a href="COMMON-LISP____EQUAL.html">equal</a> iface.name port.ifname))
+     (<a href="ACL2____MV.html">mv</a>
+      (<a href="VL____FATAL.html">fatal</a>
+       :type :vl-instance-interface-port-bad-connection
+       :msg
+       "~a0: type error: interface port ~s1 (<a href="COMMON-LISP____TYPE.html">type</a> ~s2) is ~
+                         connected to ~a3 (<a href="COMMON-LISP____TYPE.html">type</a> ~s4)."
+       :args (<a href="COMMON-LISP____LIST.html">list</a> inst
+                   port.name port.ifname expr iface.name))
+      arg))
+    ((unless (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____NOT.html">not</a> port.modport)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> port.modport step1.item.name)))
+     (<a href="ACL2____MV.html">mv</a>
+      (<a href="VL____FATAL.html">fatal</a>
+       :type :vl-instance-interface-port-bad-connection
+       :msg
+       "~a0: modport clash for .~s1(~a2).  In submodule ~s3 ~
+                         the port is declared as modport ~s4, so you can't ~
+                         instantiate it with modport ~s5."
+       :args (<a href="COMMON-LISP____LIST.html">list</a> inst port.name expr inst.modname
+                   port.modport step1.item.name))
+      arg))
+    ((<a href="ACL2____MV.html">mv</a> chop-okp
+         new-scopeexpr indices ?lastname)
+     (<a href="VL____VL-SCOPEEXPR-SPLIT-RIGHT.html">vl-scopeexpr-split-right</a> expr.scope))
+    ((unless chop-okp)
+     (<a href="ACL2____MV.html">mv</a>
+      (<a href="VL____FATAL.html">fatal</a>
+       :type :vl-programming-error
+       :msg
+       "~a0: reducing interface port .~s1(~a2) by dropping ~
+                         modport ~s3: somehow failed to split the modport?"
+       :args (<a href="COMMON-LISP____LIST.html">list</a> inst port.name expr step1.item.name))
+      arg))
+    ((when indices)
+     (<a href="ACL2____MV.html">mv</a>
+      (<a href="VL____FATAL.html">fatal</a>
+       :type :vl-instance-interface-port-unsupported
+       :msg
+       "~a0: reducing interface port .~s1(~a2) by dropping ~
+                         modport ~s3: indices on pre-modport expression?  ~
+                         BOZO we might need to support this for interface ~
+                         arrays.")
+      arg))
+    (modportname-as-expr
+     (<a href="VL____MAKE-VL-LITERAL.html">make-vl-literal</a> :val (<a href="VL____MAKE-VL-STRING.html">make-vl-string</a> :value step1.item.name)))
+    (interfacename-as-expr
+         (<a href="VL____MAKE-VL-LITERAL.html">make-vl-literal</a> :val (<a href="VL____MAKE-VL-STRING.html">make-vl-string</a> :value port.ifname)))
+    (new-atts (<a href="COMMON-LISP____LIST_A2.html">list*</a> (<a href="COMMON-LISP____CONS.html">cons</a> "VL_REMOVED_EXPLICIT_MODPORT"
+                           modportname-as-expr)
+                     (<a href="COMMON-LISP____CONS.html">cons</a> "VL_INTERFACE_NAME"
+                           interfacename-as-expr)
+                     arg.atts))
+    (new-arg (<a href="VL____CHANGE-VL-PLAINARG.html">change-vl-plainarg</a>
+                  arg
+                  :expr (<a href="VL____CHANGE-VL-INDEX.html">change-vl-index</a> expr
+                                         :scope new-scopeexpr)
+                  :atts new-atts)))
+   (<a href="ACL2____MV.html">mv</a> (<a href="VL____OK.html">ok</a>) new-arg))))</pre> 
+<p><b>Theorem: </b>vl-warninglist-p-of-vl-unhierarchicalize-interfaceport.warnings</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-warninglist-p-of-vl-unhierarchicalize-interfaceport.warnings
+ (<a href="ACL2____B_A2.html">b*</a>
+  (((<a href="ACL2____MV.html">mv</a> ?warnings ?new-arg)
+    (<a href="VL____VL-UNHIERARCHICALIZE-INTERFACEPORT.html">vl-unhierarchicalize-interfaceport</a> arg port ss inst warnings)))
+  (<a href="VL____VL-WARNINGLIST-P.html">vl-warninglist-p</a> warnings))
+ :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>vl-plainarg-p-of-vl-unhierarchicalize-interfaceport.new-arg</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-plainarg-p-of-vl-unhierarchicalize-interfaceport.new-arg
+ (<a href="ACL2____B_A2.html">b*</a>
+  (((<a href="ACL2____MV.html">mv</a> ?warnings ?new-arg)
+    (<a href="VL____VL-UNHIERARCHICALIZE-INTERFACEPORT.html">vl-unhierarchicalize-interfaceport</a> arg port ss inst warnings)))
+  (<a href="VL____VL-PLAINARG-P.html">vl-plainarg-p</a> new-arg))
+ :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>vl-unhierarchicalize-interfaceport-of-vl-plainarg-fix-arg</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-unhierarchicalize-interfaceport-of-vl-plainarg-fix-arg
+ (<a href="COMMON-LISP____EQUAL.html">equal</a>
+    (<a href="VL____VL-UNHIERARCHICALIZE-INTERFACEPORT.html">vl-unhierarchicalize-interfaceport</a> (<a href="VL____VL-PLAINARG-FIX.html">vl-plainarg-fix</a> arg)
+                                        port ss inst warnings)
+    (<a href="VL____VL-UNHIERARCHICALIZE-INTERFACEPORT.html">vl-unhierarchicalize-interfaceport</a> arg port ss inst warnings)))</pre> 
+<p><b>Theorem: </b>vl-unhierarchicalize-interfaceport-vl-plainarg-equiv-congruence-on-arg</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-unhierarchicalize-interfaceport-vl-plainarg-equiv-congruence-on-arg
+ (<a href="ACL2____IMPLIES.html">implies</a>
+  (<a href="VL____VL-PLAINARG-EQUIV.html">vl-plainarg-equiv</a> arg arg-equiv)
+  (<a href="COMMON-LISP____EQUAL.html">equal</a>
+      (<a href="VL____VL-UNHIERARCHICALIZE-INTERFACEPORT.html">vl-unhierarchicalize-interfaceport</a> arg port ss inst warnings)
+      (<a href="VL____VL-UNHIERARCHICALIZE-INTERFACEPORT.html">vl-unhierarchicalize-interfaceport</a>
+           arg-equiv port ss inst warnings)))
+ :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>vl-unhierarchicalize-interfaceport-of-vl-port-fix-port</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-unhierarchicalize-interfaceport-of-vl-port-fix-port
+ (<a href="COMMON-LISP____EQUAL.html">equal</a>
+    (<a href="VL____VL-UNHIERARCHICALIZE-INTERFACEPORT.html">vl-unhierarchicalize-interfaceport</a> arg (<a href="VL____VL-PORT-FIX.html">vl-port-fix</a> port)
+                                        ss inst warnings)
+    (<a href="VL____VL-UNHIERARCHICALIZE-INTERFACEPORT.html">vl-unhierarchicalize-interfaceport</a> arg port ss inst warnings)))</pre> 
+<p><b>Theorem: </b>vl-unhierarchicalize-interfaceport-vl-port-equiv-congruence-on-port</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-unhierarchicalize-interfaceport-vl-port-equiv-congruence-on-port
+ (<a href="ACL2____IMPLIES.html">implies</a>
+  (<a href="VL____VL-PORT-EQUIV.html">vl-port-equiv</a> port port-equiv)
+  (<a href="COMMON-LISP____EQUAL.html">equal</a>
+      (<a href="VL____VL-UNHIERARCHICALIZE-INTERFACEPORT.html">vl-unhierarchicalize-interfaceport</a> arg port ss inst warnings)
+      (<a href="VL____VL-UNHIERARCHICALIZE-INTERFACEPORT.html">vl-unhierarchicalize-interfaceport</a>
+           arg port-equiv ss inst warnings)))
+ :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>vl-unhierarchicalize-interfaceport-of-vl-scopestack-fix-ss</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-unhierarchicalize-interfaceport-of-vl-scopestack-fix-ss
+ (<a href="COMMON-LISP____EQUAL.html">equal</a>
+    (<a href="VL____VL-UNHIERARCHICALIZE-INTERFACEPORT.html">vl-unhierarchicalize-interfaceport</a>
+         arg port (<a href="VL____VL-SCOPESTACK-FIX.html">vl-scopestack-fix</a> ss)
+         inst warnings)
+    (<a href="VL____VL-UNHIERARCHICALIZE-INTERFACEPORT.html">vl-unhierarchicalize-interfaceport</a> arg port ss inst warnings)))</pre> 
+<p><b>Theorem: </b>vl-unhierarchicalize-interfaceport-vl-scopestack-equiv-congruence-on-ss</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-unhierarchicalize-interfaceport-vl-scopestack-equiv-congruence-on-ss
+ (<a href="ACL2____IMPLIES.html">implies</a>
+  (<a href="VL____VL-SCOPESTACK-EQUIV.html">vl-scopestack-equiv</a> ss ss-equiv)
+  (<a href="COMMON-LISP____EQUAL.html">equal</a>
+      (<a href="VL____VL-UNHIERARCHICALIZE-INTERFACEPORT.html">vl-unhierarchicalize-interfaceport</a> arg port ss inst warnings)
+      (<a href="VL____VL-UNHIERARCHICALIZE-INTERFACEPORT.html">vl-unhierarchicalize-interfaceport</a>
+           arg port ss-equiv inst warnings)))
+ :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>vl-unhierarchicalize-interfaceport-of-vl-modinst-fix-inst</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-unhierarchicalize-interfaceport-of-vl-modinst-fix-inst
+ (<a href="COMMON-LISP____EQUAL.html">equal</a>
+    (<a href="VL____VL-UNHIERARCHICALIZE-INTERFACEPORT.html">vl-unhierarchicalize-interfaceport</a>
+         arg port ss (<a href="VL____VL-MODINST-FIX.html">vl-modinst-fix</a> inst)
+         warnings)
+    (<a href="VL____VL-UNHIERARCHICALIZE-INTERFACEPORT.html">vl-unhierarchicalize-interfaceport</a> arg port ss inst warnings)))</pre> 
+<p><b>Theorem: </b>vl-unhierarchicalize-interfaceport-vl-modinst-equiv-congruence-on-inst</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-unhierarchicalize-interfaceport-vl-modinst-equiv-congruence-on-inst
+ (<a href="ACL2____IMPLIES.html">implies</a>
+  (<a href="VL____VL-MODINST-EQUIV.html">vl-modinst-equiv</a> inst inst-equiv)
+  (<a href="COMMON-LISP____EQUAL.html">equal</a>
+      (<a href="VL____VL-UNHIERARCHICALIZE-INTERFACEPORT.html">vl-unhierarchicalize-interfaceport</a> arg port ss inst warnings)
+      (<a href="VL____VL-UNHIERARCHICALIZE-INTERFACEPORT.html">vl-unhierarchicalize-interfaceport</a>
+           arg port ss inst-equiv warnings)))
+ :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>vl-unhierarchicalize-interfaceport-of-vl-warninglist-fix-warnings</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-unhierarchicalize-interfaceport-of-vl-warninglist-fix-warnings
+ (<a href="COMMON-LISP____EQUAL.html">equal</a>
+    (<a href="VL____VL-UNHIERARCHICALIZE-INTERFACEPORT.html">vl-unhierarchicalize-interfaceport</a>
+         arg port
+         ss inst (<a href="VL____VL-WARNINGLIST-FIX.html">vl-warninglist-fix</a> warnings))
+    (<a href="VL____VL-UNHIERARCHICALIZE-INTERFACEPORT.html">vl-unhierarchicalize-interfaceport</a> arg port ss inst warnings)))</pre> 
+<p><b>Theorem: </b>vl-unhierarchicalize-interfaceport-vl-warninglist-equiv-congruence-on-warnings</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-unhierarchicalize-interfaceport-vl-warninglist-equiv-congruence-on-warnings
+ (<a href="ACL2____IMPLIES.html">implies</a>
+  (<a href="VL____VL-WARNINGLIST-EQUIV.html">vl-warninglist-equiv</a> warnings warnings-equiv)
+  (<a href="COMMON-LISP____EQUAL.html">equal</a>
+      (<a href="VL____VL-UNHIERARCHICALIZE-INTERFACEPORT.html">vl-unhierarchicalize-interfaceport</a> arg port ss inst warnings)
+      (<a href="VL____VL-UNHIERARCHICALIZE-INTERFACEPORT.html">vl-unhierarchicalize-interfaceport</a>
+           arg port ss inst warnings-equiv)))
+ :rule-classes :congruence)</pre> 
+
+</body>
+</html>

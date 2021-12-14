@@ -1,0 +1,437 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Verify-guards</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____VERIFY-GUARDS">Click for Verify-guards in the Full Manual</a></h3>
+
+<p>Verify the <a href="ACL2____GUARD.html">guard</a>s of a function</p><p>See <a href="ACL2____GUARD.html">guard</a> for a general discussion of guards.</p> 
+ 
+ <p>Before discussing the <span class="v">verify-guards</span> event, we first discuss guard 
+ verification, which can take place at definition time or, later, using 
+ <span class="v">verify-guards</span>.  Typically, guard verification takes place at definition 
+ time if a guard (or type, or <a href="ACL2____STOBJS.html">stobjs</a>) has been supplied explicitly 
+ unless <span class="v">:verify-guards nil</span> has been specified; see <a href="COMMON-LISP____DEFUN.html">defun</a> and see 
+ <a href="ACL2____XARGS.html">xargs</a>, and see <a href="ACL2____SET-VERIFY-GUARDS-EAGERNESS.html">set-verify-guards-eagerness</a> for how to change 
+ this default.  The point of guard verification is to ensure that during 
+ evaluation of an expression without free variables, no guard violation takes 
+ place.</p> 
+ 
+ <p>Technical Notes: (1) The first argument of <span class="v">verify-guards</span> must be a 
+ function symbol, the name of a <span class="tt"><a href="ACL2____DEFTHM.html">defthm</a></span> or <span class="tt"><a href="ACL2____DEFAXIOM.html">defaxiom</a></span> event, a 
+ <span class="tt"><a href="ACL2____LAMBDA_42.html">lambda$</a></span> expression, or an unquoted well-formed <span class="v">LAMBDA</span> object; it 
+ must not be a macro-alias for a function symbol (see <a href="ACL2____MACRO-ALIASES-TABLE.html">macro-aliases-table</a>).  See <a href="ACL2____VERIFY-GUARDS_B2.html">verify-guards+</a> for a utility that does not 
+ have this restriction.  (2) When the guards of a defined function, <span class="v">fn</span>, 
+ are verified <span class="v">verify-guards</span> also includes the guards of all the functions 
+ that are mutually recursive with <span class="v">fn</span>, if any, plus the guards of all the 
+ quoted well-formed <span class="v">LAMBDA</span> objects used by <span class="v">fn</span> or any function in its 
+ mutually-recursive clique.  Guard obligations for <span class="v">lambda$</span> and <span class="v">LAMBDA</span> 
+ objects are <i>not</i> included when the first argument is the name of a 
+ theorem or axiom.  Details are discussed further below.</p> 
+ 
+ <p>Guard verification is intended to guarantee that for any call of a given 
+ function, if its <a href="ACL2____GUARD.html">guard</a> holds for that call then the <a href="ACL2____GUARD.html">guard</a> will 
+ hold for every function call in the body of that function.  Moreover, in order 
+ to avoid guard violations during evaluation of the function's guard itself, 
+ guard verification also is intended to guarantee that the guards are satisfied 
+ for all calls in the guard itself.  Consider the following simple example.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> f (x)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x)
+                              (<a href="COMMON-LISP____INTEGERP.html">integerp</a> (<a href="COMMON-LISP____CAR.html">car</a> x)))))
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____RATIONALP.html">rationalp</a> (<a href="COMMON-LISP____CDR.html">cdr</a> x))
+      (<a href="COMMON-LISP_____B2.html">+</a> (<a href="COMMON-LISP____CAR.html">car</a> x) (<a href="COMMON-LISP____CDR.html">cdr</a> x))
+    17))</pre> 
+ 
+ <p>If you evaluate <span class="v">(f t)</span>, for example, in the top-level loop, you will 
+ (by default) get a guard error.  The point of guard verification is to 
+ guarantee the absence of guard errors, and we start by using this example to 
+ illustrate the proof obligations that guarantee such absence.</p> 
+ 
+ <p>The body of the above definition has the following function calls, where 
+ the first is the entire body.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____RATIONALP.html">rationalp</a> (<a href="COMMON-LISP____CDR.html">cdr</a> x))
+    (<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="COMMON-LISP____CAR.html">car</a> x) (<a href="COMMON-LISP____CDR.html">cdr</a> x))
+  17)
+(<a href="COMMON-LISP____RATIONALP.html">rationalp</a> (<a href="COMMON-LISP____CDR.html">cdr</a> x)) ; the test of the top-level IF call
+(<a href="COMMON-LISP____CDR.html">cdr</a> x)             ; from (<a href="COMMON-LISP____RATIONALP.html">rationalp</a> (<a href="COMMON-LISP____CDR.html">cdr</a> x))
+(<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="COMMON-LISP____CAR.html">car</a> x) (<a href="COMMON-LISP____CDR.html">cdr</a> x)) ; the true branch of the top-level IF call
+(<a href="COMMON-LISP____CAR.html">car</a> x)             ; from (<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="COMMON-LISP____CAR.html">car</a> x) (<a href="COMMON-LISP____CDR.html">cdr</a> x))
+(<a href="COMMON-LISP____CDR.html">cdr</a> x)             ; from (<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="COMMON-LISP____CAR.html">car</a> x) (<a href="COMMON-LISP____CDR.html">cdr</a> x))</pre> 
+ 
+ <p>We thus see potentially six conditions to prove, one for each call.  The 
+ guards of the function symbols of those calls are <span class="v">t</span> for <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span> and 
+ <span class="tt"><a href="COMMON-LISP____RATIONALP.html">rationalp</a></span>, <span class="v">(<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x) (<a href="COMMON-LISP____EQUAL.html">equal</a> x nil))</span> for both <span class="v">(<a href="COMMON-LISP____CAR.html">car</a> x)</span> and 
+ <span class="v">(<a href="COMMON-LISP____CDR.html">cdr</a> x)</span>, and finally that both arguments are rationals for <span class="v">&lt;</span>. 
+ Moreover, we can take advantage of ``contextual assumptions'': the 
+ <span class="v">if</span>-test conditions and the top-level <span class="v">:guard</span>.  Thus, for 
+ <span class="v">verify-guards</span> the proof obligation from the body of <span class="v">f</span> is as 
+ follows.</p> 
+ 
+ <pre class="code">(<a href="ACL2____IMPLIES.html">implies</a>
+ (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x) (<a href="COMMON-LISP____INTEGERP.html">integerp</a> (<a href="COMMON-LISP____CAR.html">car</a> x))) ; from the :guard
+ (<a href="COMMON-LISP____AND.html">and</a> t ; from the top-level IF call
+      t ; from (<a href="COMMON-LISP____RATIONALP.html">rationalp</a> (<a href="COMMON-LISP____CDR.html">cdr</a> x))
+      (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x) (<a href="COMMON-LISP____EQUAL.html">equal</a> x nil)) ; from the first (<a href="COMMON-LISP____CDR.html">cdr</a> x)
+      (<a href="ACL2____IMPLIES.html">implies</a>
+       (<a href="COMMON-LISP____RATIONALP.html">rationalp</a> (<a href="COMMON-LISP____CDR.html">cdr</a> x)) ; IF-test for calls in the true branch
+       (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x) (<a href="COMMON-LISP____EQUAL.html">equal</a> x nil)) ; from (<a href="COMMON-LISP____CAR.html">car</a> x)
+            (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x) (<a href="COMMON-LISP____EQUAL.html">equal</a> x nil)) ; from the second (<a href="COMMON-LISP____CDR.html">cdr</a> x)
+            (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____RATIONALP.html">rationalp</a> (<a href="COMMON-LISP____CAR.html">car</a> x)) (<a href="COMMON-LISP____RATIONALP.html">rationalp</a> (<a href="COMMON-LISP____CDR.html">cdr</a> x))) ; from the &lt; call
+            ))))</pre> 
+ 
+ <p>But the <span class="v">:guard</span> itself generates a similar sort of proof obligation. 
+ Note that the guard <span class="v">(<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x) (<a href="COMMON-LISP____INTEGERP.html">integerp</a> (<a href="COMMON-LISP____CAR.html">car</a> x)))</span> is really an 
+ abbreviation (i.e. via the macro <span class="tt"><a href="COMMON-LISP____AND.html">and</a></span>) for the term <span class="v">(<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x)
+ (<a href="COMMON-LISP____INTEGERP.html">integerp</a> (<a href="COMMON-LISP____CAR.html">car</a> x)) nil)</span>.  The guard proof obligation for the guard itself is 
+ thus as follows.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____AND.html">and</a> t ; from (<a href="COMMON-LISP____CONSP.html">consp</a> x)
+     (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x)
+              (<a href="COMMON-LISP____AND.html">and</a> t         ; from (<a href="COMMON-LISP____INTEGERP.html">integerp</a> (<a href="COMMON-LISP____CAR.html">car</a> x)) ;
+                   (<a href="COMMON-LISP____CONSP.html">consp</a> x) ; from (<a href="COMMON-LISP____CAR.html">car</a> x) ;
+                   )))</pre> 
+ 
+ <p>All of the above proof obligations are indeed theorems, and guard 
+ verification succeeds for the above definition of <span class="v">f</span>.</p> 
+ 
+ <p>The example above illustrates the general procedure for generating the 
+ guard proof obligation.  Each function call is considered in the body or guard 
+ of the function, and it is required that the guard is met for that call, under 
+ certain ``contextual assumptions'', which are as follows.  In the case of the 
+ body of the named function, it is assumed that the guard holds for that 
+ function on its formal parameters.  And in both cases — the body of the 
+ named function and also its guard — the governing tests from superior 
+ calls of <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span> are also assumed.  (However, additional conjectures are 
+ generated for <span class="v">loop$</span> statements.  See the section <b>Special Guard 
+ Conjectures for LOOP$</b> in the documentation for <span class="tt"><a href="ACL2____LOOP_42.html">loop$</a></span>.)</p> 
+ 
+ <p>As mentioned above, if the guard on a function is not <span class="v">t</span>, then guard 
+ verification requires not only consideration of the body under the assumption 
+ that the guard is true, but also consideration of the guard itself.  Thus, for 
+ example, guard verification fails in the following example, even though there 
+ are no proof obligations arising from the body, because the guard itself can 
+ cause a guard violation when evaluated for an arbitrary value of <span class="v">x</span>:</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> foo (x)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____CAR.html">car</a> x)))
+  x)</pre> 
+ 
+ <p>We turn now to the <span class="v">verify-guards</span> event as a way of verifying the <a href="ACL2____GUARD.html">guard</a>s for a function or theorem.</p> 
+ 
+ <pre class="code">Examples:
+(<a href="ACL2____VERIFY-GUARDS.html">verify-guards</a> flatten)
+(<a href="ACL2____VERIFY-GUARDS.html">verify-guards</a> flatten
+               :hints (("Goal" :use (:instance assoc-of-app)))
+               :guard-debug t ; default = nil
+               :guard-simplify nil ; default = t
+               :otf-flg t)
+(<a href="ACL2____VERIFY-GUARDS.html">verify-guards</a> (<a href="ACL2____LAMBDA_42.html">lambda$</a> (x)
+                 (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____NATP.html">natp</a> x)))
+                 (<a href="COMMON-LISP_____B2.html">+</a> 1 x)))
+(<a href="ACL2____VERIFY-GUARDS.html">verify-guards</a>
+  (<a href="COMMON-LISP____LAMBDA.html">LAMBDA</a> (X)
+          (<a href="COMMON-LISP____DECLARE.html">DECLARE</a> (<a href="ACL2____XARGS.html">XARGS</a> :GUARD (<a href="ACL2____NATP.html">NATP</a> X) :SPLIT-TYPES T))
+          (<a href="ACL2____RETURN-LAST.html">RETURN-LAST</a> 'PROGN
+                       '(<a href="ACL2____LAMBDA_42.html">LAMBDA$</a> (X)
+                                 (<a href="COMMON-LISP____DECLARE.html">DECLARE</a> (<a href="ACL2____XARGS.html">XARGS</a> :GUARD (<a href="ACL2____NATP.html">NATP</a> X)))
+                                 (<a href="COMMON-LISP_____B2.html">+</a> 1 X))
+                       (<a href="ACL2____BINARY-_B2.html">BINARY-+</a> '1 X))))
+
+General Form:
+(<a href="ACL2____VERIFY-GUARDS.html">verify-guards</a> name
+        :hints          hints
+        :guard-debug    gdbg   ; default is nil, but any value is legal
+        :guard-simplify gsmp ; default is t, may be set to nil
+        :otf-flg        otf-flg)</pre> 
+ 
+ <p>In the General Form above, <span class="v">name</span> is the name of a <span class="v">:</span><span class="tt"><a href="ACL2____LOGIC.html">logic</a></span> 
+ function (see <a href="ACL2____DEFUN-MODE.html">defun-mode</a>) or of a theorem or axiom, or else is a <span class="tt"><a href="ACL2____LAMBDA_42.html">lambda$</a></span> expression or a well-formed <span class="v">LAMBDA</span> object (not <i>quoted</i>). 
+ <a href="ACL2____MIXED-MODE-FUNCTIONS.html">Mixed-mode-functions</a> cannot be guard verified.</p> 
+ 
+ <p>If <span class="v">name</span> is a <span class="v">lambda$</span> expression it is translated (to a quoted 
+ well-formed <span class="v">LAMBDA</span> object), the formals, declaration, and body are 
+ extracted, and <span class="v">verify-guards</span> behaves as though <span class="v">name</span> were the name of 
+ some defined function with those formals, declaration, and body.  If <span class="v">name</span> 
+ is a <span class="v">LAMBDA</span> object, it is checked for well-formedness (see <span class="tt"><a href="ACL2____WELL-FORMED-LAMBDA-OBJECTP.html">well-formed-lambda-objectp</a></span>), the formals, declaration, and body are extracted 
+ <span class="v">verify-guards</span> behaves as though <span class="v">name</span> were the name of some defined 
+ function with those formals, declaration, and body.  for <span class="v">lambda$</span>.  We 
+ henceforth limit our attention to <span class="v">name</span> being the name of a function, 
+ theorem or axiom.</p> 
+ 
+ <p>Note: Since we encourage you to use <span class="v">lambda$</span> instead of trying to type 
+ quoted well-formed <span class="v">LAMBDA</span> objects, you might wonder why we allow 
+ <span class="v">verify-guards</span> to operate on well-formed <span class="v">LAMBDA</span> objects instead of 
+ <span class="v">lambda$</span> expressions.  The answer is that in proof output and in <span class="tt"><a href="ACL2____PRINT-CL-CACHE.html">print-cl-cache</a></span> output you see quoted well-formed <span class="v">LAMBDA</span> objects and we 
+ expect you might grab the text of such an object and submit it to 
+ <span class="v">verify-guards</span>.</p> 
+ 
+ <p>In the most common case <span class="v">name</span> is the name of a function that has not 
+ yet had its <a href="ACL2____GUARD.html">guard</a>s verified, each subroutine of which has had its <a href="ACL2____GUARD.html">guard</a>s verified.  The values <span class="tt"><a href="ACL2____HINTS.html">hints</a></span>, <span class="tt"><a href="ACL2____OTF-FLG.html">otf-flg</a></span>, and <span class="tt"><a href="ACL2____GUARD-DEBUG.html">guard-debug</a></span> are as described in the corresponding <a href="COMMON-LISP____DOCUMENTATION.html">documentation</a> 
+ entries.  The keyword arguments above are all optional.  To admit this event, 
+ the conjunction of the guard proof obligations must be proved.  If all the 
+ guard obligations are proved, <span class="v">name</span> is considered to have had its <a href="ACL2____GUARD.html">guard</a>s verified.  The <span class="v">:guard-simplify</span> option controls certain 
+ simplifications that may be applied to the guard conjecture while generating 
+ the initial goal; setting it to <span class="v">nil</span> skips all simplifications that depend 
+ on the set of currently <a href="ACL2____ENABLE.html">enable</a>d rules.</p> 
+ 
+ <p>See <a href="ACL2____GUARD-FORMULA-UTILITIES.html">guard-formula-utilities</a> for utilities that let you view the 
+ formula to be proved by <span class="v">verify-guards</span>, but without creating an event.</p> 
+ 
+ <p>If <span class="v">name</span> is one of several functions in a mutually recursive clique, 
+ <span class="v">verify-guards</span> will attempt to verify the <a href="ACL2____GUARD.html">guard</a>s of all of the 
+ functions.</p> 
+ 
+ <p>If the guard or body of <span class="v">name</span> include any quoted well-formed 
+ <span class="v">LAMBDA</span> objects, <span class="v">verify-guards</span> include their proof obligations in 
+ those generated for <span class="v">name</span>.  Roughly speaking, the guard obligations for a 
+ well-formed <span class="v">LAMBDA</span> object are exactly those that would be generated for a 
+ separately defined non-recursive function with the formals, guard, and body of 
+ the <span class="v">LAMBDA</span> object.  We discuss this further in the ``Remarks on 
+ <span class="v">LAMBDA</span> objects in defined functions'' below.  As a non-logical 
+ side-effect of the successful verification of all the proof obligations, all 
+ well-formed <span class="v">LAMBDA</span> objects in the guard or body of <span class="v">name</span> (including 
+ <span class="v">name</span> itself if it is a <span class="v">lambda$</span> expression or <span class="v">LAMBDA</span> object) are 
+ added to the compiled lambda cache.  This will speed up the execution of 
+ <span class="v">name</span> in the evaluation theory when those well-formed <span class="v">LAMBDA</span> objects 
+ are <span class="v">apply$</span>d.  See <span class="tt"><a href="ACL2____PRINT-CL-CACHE.html">print-cl-cache</a></span>.</p> 
+ 
+ <p>If <span class="v">name</span> is a theorem or axiom name, <span class="v">verify-guards</span> verifies the 
+ guards of the associated formula.  When a theorem has had its guards verified 
+ then you know that the theorem will evaluate to non-<span class="v">nil</span> in all Common 
+ Lisps, without causing a runtime error (other than possibly a resource error). 
+ In particular, you know that the theorem's validity does not depend upon 
+ ACL2's arbitrary completion of the domains of partial Common Lisp 
+ functions.</p> 
+ 
+ <p>For example, if <span class="v">app</span> is defined as</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> app (x y)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____TRUE-LISTP.html">true-listp</a> x)))
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ENDP.html">endp</a> x)
+      y
+      (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CAR.html">car</a> x) (app (<a href="COMMON-LISP____CDR.html">cdr</a> x) y))))</pre> 
+ 
+ <p>then we can verify the guards of <span class="v">app</span> and we can prove the theorem:</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> assoc-of-app
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> (app (app a b) c) (app a (app b c))))</pre> 
+ 
+ <p>However, if you go into almost any Common Lisp in which <span class="v">app</span> is defined 
+ as shown and evaluate</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____EQUAL.html">equal</a> (app (app 1 2) 3) (app 1 (app 2 3)))</pre> 
+ 
+ <p>we get an error or, perhaps, something worse like <span class="v">nil</span>!  How can this 
+ happen since the formula is an instance of a theorem?  It is supposed to be 
+ true!</p> 
+ 
+ <p>It happens because the theorem exploits the fact that ACL2 has completed 
+ the domains of the partially defined Common Lisp functions like <span class="tt"><a href="COMMON-LISP____CAR.html">car</a></span> 
+ and <span class="tt"><a href="COMMON-LISP____CDR.html">cdr</a></span>, defining them to be <span class="v">nil</span> on all non-conses.  The formula 
+ above violates the guards on <span class="v">app</span>.  It is therefore ``unreasonable'' to 
+ expect it to be valid in Common Lisp.</p> 
+ 
+ <p>But the following formula is valid in Common Lisp:</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____TRUE-LISTP.html">true-listp</a> a)
+         (<a href="ACL2____TRUE-LISTP.html">true-listp</a> b))
+    (<a href="COMMON-LISP____EQUAL.html">equal</a> (app (app a b) c) (app a (app b c)))
+    t)</pre> 
+ 
+ <p>That is, no matter what the values of <span class="v">a</span>, <span class="v">b</span> and <span class="v">c</span> the formula 
+ above evaluates to <span class="v">t</span> in all Common Lisps (unless the Lisp engine runs out 
+ of memory or stack computing it).  Furthermore the above formula is a 
+ theorem:</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> guarded-assoc-of-app
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____TRUE-LISTP.html">true-listp</a> a)
+           (<a href="ACL2____TRUE-LISTP.html">true-listp</a> b))
+      (<a href="COMMON-LISP____EQUAL.html">equal</a> (app (app a b) c) (app a (app b c)))
+      t))</pre> 
+ 
+ <p>This formula, <span class="v">guarded-assoc-of-app</span>, is very easy to prove from 
+ <span class="v">assoc-of-app</span>.  So why prove it?  The interesting thing about 
+ <span class="v">guarded-assoc-of-app</span> is that we can verify the guards of the formula. 
+ That is, <span class="v">(<a href="ACL2____VERIFY-GUARDS.html">verify-guards</a> guarded-assoc-of-app)</span> succeeds.  Note that it has 
+ to prove that if <span class="v">a</span> and <span class="v">b</span> are true lists then so is <span class="v">(app a b)</span> to 
+ establish that the guard on the outermost <span class="v">app</span> on the left is satisfied. 
+ By verifying the guards of the theorem we know it will evaluate to true in all 
+ Common Lisps.  Put another way, we know that the validity of the formula does 
+ not depend on ACL2's completion of the partial functions or that the formula 
+ is ``well-typed.''</p> 
+ 
+ <p>One last complication: The careful reader might have thought we could state 
+ <span class="v">guarded-assoc-of-app</span> as</p> 
+ 
+ <pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____TRUE-LISTP.html">true-listp</a> a)
+              (<a href="ACL2____TRUE-LISTP.html">true-listp</a> b))
+         (<a href="COMMON-LISP____EQUAL.html">equal</a> (app (app a b) c)
+                (app a (app b c))))</pre> 
+ 
+ <p>rather than using the <span class="v">if</span> form of the theorem.  We cannot!  The reason 
+ is technical: <span class="tt"><a href="ACL2____IMPLIES.html">implies</a></span> is defined as a function in ACL2.  When it is 
+ called, both arguments are evaluated and then the obvious truth table is 
+ checked.  That is, <span class="v">implies</span> is not ``lazy.''  Hence, when we write the 
+ guarded theorem in the <span class="v">implies</span> form we have to prove the guards on the 
+ conclusion without knowing that the hypothesis is true.  It would have been 
+ better had we defined <span class="v">implies</span> as a macro that expanded to the <span class="v">if</span> 
+ form, making it lazy.  But we did not and after we introduced guards we did 
+ not want to make such a basic change.  For a utility that deals with this sort 
+ of problem automatically, see <span class="tt"><a href="ACL2____DEFTHMG.html">defthmg</a></span>.</p> 
+ 
+ <p>Recall however that <span class="v">verify-guards</span> is almost always used to verify the 
+ guards on a function definition rather than a theorem.  We now return to that 
+ discussion.</p> 
+ 
+ <p><span class="v">Verify-guards</span> must often be used when the value of a recursive call of 
+ a defined function is given as an argument to a subroutine that is <a href="ACL2____GUARD.html">guard</a>ed.  An example of such a situation is given below.  Suppose <span class="v">app</span> 
+ (read ``append'') has a <a href="ACL2____GUARD.html">guard</a> requiring its first argument to be a 
+ <span class="tt"><a href="ACL2____TRUE-LISTP.html">true-listp</a></span>.  Consider</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> rev (x)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____TRUE-LISTP.html">true-listp</a> x)))
+  (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____ENDP.html">endp</a> x) nil)
+        (t (app (<a href="ACL2____REV.html">rev</a> (<a href="COMMON-LISP____CDR.html">cdr</a> x)) (<a href="COMMON-LISP____LIST.html">list</a> (<a href="COMMON-LISP____CAR.html">car</a> x))))))</pre> 
+ 
+ <p>Observe that the value of a recursive call of <span class="v">rev</span> is being passed into 
+ a <a href="ACL2____GUARD.html">guard</a>ed subroutine, <span class="v">app</span>.  In order to verify the <a href="ACL2____GUARD.html">guard</a>s 
+ of this definition we must show that <span class="v">(<a href="ACL2____REV.html">rev</a> (<a href="COMMON-LISP____CDR.html">cdr</a> x))</span> produces a <span class="tt"><a href="ACL2____TRUE-LISTP.html">true-listp</a></span>, since that is what the <a href="ACL2____GUARD.html">guard</a> of <span class="v">app</span> requires.  How do 
+ we know that <span class="v">(<a href="ACL2____REV.html">rev</a> (<a href="COMMON-LISP____CDR.html">cdr</a> x))</span> is a <span class="tt"><a href="ACL2____TRUE-LISTP.html">true-listp</a></span>?  The most elegant 
+ argument is a two-step one, appealing to the following two lemmas: (1) When 
+ <span class="v">x</span> is a <span class="tt"><a href="ACL2____TRUE-LISTP.html">true-listp</a></span>, <span class="v">(<a href="COMMON-LISP____CDR.html">cdr</a> x)</span> is a <span class="tt"><a href="ACL2____TRUE-LISTP.html">true-listp</a></span>.  (2) 
+ When <span class="v">z</span> is a <span class="tt"><a href="ACL2____TRUE-LISTP.html">true-listp</a></span>, <span class="v">(<a href="ACL2____REV.html">rev</a> z)</span> is a <span class="tt"><a href="ACL2____TRUE-LISTP.html">true-listp</a></span>. 
+ But the second lemma is a generalized property of <span class="v">rev</span>, the function we 
+ are defining.  This property could not be stated before <span class="v">rev</span> is defined 
+ and so is not known to the theorem prover when <span class="v">rev</span> is defined.</p> 
+ 
+ <p>Therefore, we might break the admission of <span class="v">rev</span> into three steps: 
+ define <span class="v">rev</span> without addressing its <a href="ACL2____GUARD.html">guard</a> verification, prove some 
+ general properties about <span class="v">rev</span>, and then verify the <a href="ACL2____GUARD.html">guard</a>s.  This 
+ can be done as follows:</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> rev (x)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____TRUE-LISTP.html">true-listp</a> x)
+                  :verify-guards nil))    ; Note this additional xarg.
+  (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____ENDP.html">endp</a> x) nil)
+        (t (app (<a href="ACL2____REV.html">rev</a> (<a href="COMMON-LISP____CDR.html">cdr</a> x)) (<a href="COMMON-LISP____LIST.html">list</a> (<a href="COMMON-LISP____CAR.html">car</a> x))))))
+
+(<a href="ACL2____DEFTHM.html">defthm</a> true-listp-rev
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____TRUE-LISTP.html">true-listp</a> x2)
+           (<a href="ACL2____TRUE-LISTP.html">true-listp</a> (<a href="ACL2____REV.html">rev</a> x2))))
+
+(<a href="ACL2____VERIFY-GUARDS.html">verify-guards</a> rev)</pre> 
+ 
+ <p>The ACL2 system can actually admit the original definition of <span class="v">rev</span>, 
+ verifying the <a href="ACL2____GUARD.html">guard</a>s as part of the <span class="tt"><a href="COMMON-LISP____DEFUN.html">defun</a></span> event.  The reason is 
+ that, in this particular case, the system's heuristics just happen to hit upon 
+ the lemma <span class="v">true-listp-rev</span>.  But in many more complicated functions it is 
+ necessary for the user to formulate the inductively provable properties before 
+ <a href="ACL2____GUARD.html">guard</a> verification is attempted.</p> 
+ 
+ <p><b>Remarks on <span class="v">LAMBDA</span> objects in defined functions</b>.  The guard 
+ obligations of a function, <span class="v">name</span>, include the guard obligations of every 
+ quoted well-formed <span class="v">LAMBDA</span> object occurring in either the guard or body of 
+ <span class="v">name</span>.  We point this out because quoted well-formed <span class="v">LAMBDA</span> objects 
+ are, after all, just quoted constants and no other quoted constant generates 
+ guard obligations!  Note also that we collect <i>all</i> quoted well-formed 
+ <span class="v">LAMBDA</span> objects, not just the translations of <span class="tt"><a href="ACL2____LAMBDA_42.html">lambda$</a></span> expressions 
+ and not just objects in slots of <a href="ACL2____ILK.html">ilk</a> <span class="v">:FN</span>.  (We do not actually 
+ expect the user to write quoted well-formed <span class="v">LAMBDA</span> objects in 
+ non-<span class="v">:FN</span> slots -- it can't be done with <span class="v">lambda$</span> expressions -- but we 
+ collect them all anyway.  If such a quoted constant is not guard verifiable, 
+ you could always use so-called Bypass 1 of <a href="ACL2____GRATUITOUS-LAMBDA-OBJECT-RESTRICTIONS.html">gratuitous-lambda-object-restrictions</a> and avoid quoting it.)  We assume that 
+ when calls of <span class="v">name</span> are executed some of those <span class="v">LAMBDA</span> objects may 
+ reach <span class="v">apply$</span> and be applied.  Those applications will be faster if the 
+ guards for the <span class="v">LAMBDA</span>s are verified too.  The guard obligations of a 
+ quoted well-formed <span class="v">LAMBDA</span> object are just those obligations that would be 
+ generated by a defined function with the same formals, guard, and body as the 
+ <span class="v">LAMBDA</span> object.  Those obligations are unioned with the rest of the 
+ obligations generated for <span class="v">name</span> and all must be proved for 
+ <span class="v">(<a href="ACL2____VERIFY-GUARDS.html">verify-guards</a> name)</span> to be successful.  If the guards of some <span class="v">LAMBDA</span> 
+ object requires hints to prove, the hints may be supplied to 
+ <span class="v">verify-guards</span> as you would for any other failing guard obligation in 
+ <span class="v">name</span>.  When successfull, the <span class="v">LAMBDA</span> objects thus verified are added, 
+ behind the scenes, to the compiled lambda cache (see <span class="tt"><a href="ACL2____PRINT-CL-CACHE.html">print-cl-cache</a></span>) 
+ to speed up <span class="v">apply$</span> in the evaluation theory.</p> 
+ 
+ <p>Since, in general, <span class="v">LAMBDA</span> objects can be passed around or re-used in 
+ different contexts, the guard obligations generated for a quoted well-formed 
+ <span class="v">LAMBDA</span> object occurring in <span class="v">name</span> are entirely independent of the 
+ guard on the <span class="v">name</span> itself.  This is best explained by example.</p> 
+ 
+ <p>In the <span class="v">defun</span> below, which contains a <span class="v">lambda$</span> expression in its 
+ body, we assume each function has the guard shown below:</p> 
+ 
+ <pre class="code">function        formals              guard 
+f                 (x)                (fp x) 
+g                 (x y)              (gp x y) 
+the lambda$       (x)                (lp x) 
+r                 (x)                (rp x) 
+s                 (x)                (sp x) 
+</pre> 
+ 
+ <p>We also assume that the ilks of <span class="v">g</span> are <span class="v">:FN</span> and <span class="v">NIL</span>.  Then the 
+ guard obligations generated for</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> f (x)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (fp x)))
+ (<a href="ACL2____G.html">g</a> (<a href="ACL2____LAMBDA_42.html">lambda$</a> (x)
+             (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____LP.html">lp</a> x)))
+             (r x))
+    (<a href="ACL2____S.html">s</a> x)))</pre> 
+ 
+ <p>is</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____AND.html">and</a>
+ (<a href="ACL2____IMPLIES.html">implies</a> (fp x) (sp x))        ; f can call s
+ (<a href="ACL2____IMPLIES.html">implies</a> (fp x)                ; f can call g
+          (gp (<a href="ACL2____LAMBDA_42.html">lambda$</a> (x)
+                       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (hg x)))
+                       (r x))
+              (<a href="ACL2____S.html">s</a> x)))
+ (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____LP.html">lp</a> x) (rp x))        ; the lambda$ can call r
+ )</pre> 
+ 
+ <p>Note: The actual obligation will have been generated from the fully 
+ translated body of <span class="v">f</span> and the <span class="v">lambda$</span> expression will have been 
+ converted to a quoted well-formed <span class="v">LAMBDA</span> object.  But we will refer to it 
+ as a <span class="v">lambda$</span> here for clarity.</p> 
+ 
+ <p>In particular note that the last conjecture, establishing that the 
+ <span class="v">lambda$</span> can call <span class="v">r</span>, does not have <span class="v">f</span>'s guard as a hypothesis. 
+ The <span class="v">lambda$</span> is being guard verified in a ``context free'' way because we 
+ cannot (or at least do not) trace the hypotheses governing every time it is 
+ called in <span class="v">g</span> and the variable <span class="v">x</span> in <span class="v">f</span> and its guard is unrelated 
+ to the local variable <span class="v">x</span> in the <span class="v">lambda$</span>.  Furthermore, if <span class="v">apply$</span> 
+ ever encounters this <span class="v">lambda$</span> it will know it has been guard 
+ verified (because it finds it marked as such in the cache) and it may well 
+ <i>not</i> be under a call of <span class="v">f</span>.  Be that as it may, the guard 
+ obligations of the <span class="v">lambda$</span> are included in the guard obligations for 
+ <span class="v">f</span>.  As of ACL2 Version 8.1, the guard obligation that <span class="v">g</span> can call the 
+ <span class="v">lambda$</span> is checked by computation every time the <span class="v">lambda$</span> is 
+ <span class="v">apply$</span>d.  That is, <span class="v">(<a href="ACL2____LP.html">lp</a> x)</span> is run on each object the <span class="v">lambda$</span> is 
+ <span class="v">apply$</span>d to and the compiled code for the <span class="v">lambda$</span> is run only if its 
+ guard approves.</p> 
+ 
+ <p><b>Remark on computation of guard conjectures and evaluation</b>.  When 
+ ACL2 computes the <a href="ACL2____GUARD.html">guard</a> conjecture for the body of a function, it 
+ evaluates any ground subexpressions (those with no free variables), for calls 
+ of functions whose <span class="v">:</span><span class="tt"><a href="ACL2____EXECUTABLE-COUNTERPART.html">executable-counterpart</a></span> <a href="ACL2____RUNE.html">rune</a>s are 
+ <span class="tt"><a href="ACL2____ENABLE.html">enable</a></span>d.  Note that here, ``enabled'' refers to the current global 
+ <a href="ACL2____THEORY.html">theory</a>, not to any <span class="v">:</span><span class="tt"><a href="ACL2____HINTS.html">hints</a></span> given to the guard verification 
+ process; after all, the guard conjecture is computed even before its initial 
+ goal is produced.  Also note that this evaluation is done in an environment as 
+ though <span class="v">:set-guard-checking :all</span> had been executed, so that we can trust 
+ that this evaluation takes place without guard violations; see <a href="ACL2____SET-GUARD-CHECKING.html">set-guard-checking</a>.</p> 
+ 
+ <p>If you want to verify the <a href="ACL2____GUARD.html">guard</a>s on functions that are built into 
+ ACL2, you will first need to put them into <span class="v">:</span><span class="tt"><a href="ACL2____LOGIC.html">logic</a></span> mode.  See 
+ <a href="ACL2____VERIFY-TERMINATION.html">verify-termination</a>, specifically the ``Remark on system functions'' in 
+ that <a href="COMMON-LISP____DOCUMENTATION.html">documentation</a>.</p>
+</body>
+</html>

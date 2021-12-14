@@ -1,0 +1,162 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Bitsets</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____BITSETS">Click for Bitsets in the Full Manual</a></h3>
+
+<p>Bitsets library: uses bitmasks to represent finite sets of (small) 
+natural numbers.</p><h3>Introduction</h3> 
+ 
+<p>In this library, sets of natural numbers are represented as natural numbers 
+by saying <span class="v">a</span> is a member of the set <span class="v">X</span> when <span class="v">(<a href="COMMON-LISP____LOGBITP.html">logbitp</a> a X)</span>.  For 
+instance, the set {1, 2, 4} would be represented as the number 22.  In binary, 
+this number is 10110, and you can see that bits 1, 2, and 4 are each 
+"true".</p> 
+ 
+<p>This representation enjoys certain efficiencies.  In particular, operations 
+like union, intersection, difference, and subset testing can be carried out in 
+a "word at a time" fashion with bit operations.</p> 
+ 
+<p>But bitsets are only appropriate for sets whose elements are reasonably 
+small numbers since the space needed to represent a bitset is determined by its 
+maximal element.  If your sets contain extremely small numbers---less than 
+28-60, depending on the Lisp---then they can be represented as fixnums and the 
+bitset operations will be remarkably efficient.</p> 
+ 
+<p>Beyond this, bignums are necessary.  Even though bignum operations generally 
+involve memory allocation and are much slower than fixnum operations, using 
+bignums to represent sets can still be very efficient.  For instance, on 64-bit 
+CCL, bignums are represented as a header/data pair where the data is an array 
+of 32-bit words; operations like <a href="COMMON-LISP____LOGAND.html">logand</a> can smash together the two data 
+arrays a word at a time.</p> 
+ 
+<p>Let's define the <i>density</i> of a set as its cardinality divided by its 
+maximal element plus one (to account for zero-indexing).  Under this 
+definition, the set {1, 2, 4} has a density of 60%, whereas {96, 97, 98} has a 
+density of 3%.</p> 
+ 
+<p>Without destructive updates, you probably can't do much better than bitsets 
+for dense sets.  But bitsets are not good at representing sparse sets.  For 
+instance, you would need 8 KB of memory just to represent the singleton set 
+{65536}.</p> 
+ 
+<p>The <a href="ACL2____SBITSETS.html">sparse bitsets</a> library is an 
+alternative to bitsets that uses lists of <span class="v">(offset . data)</span> pairs instead of 
+ordinary natural numbers as the set representation.  This representation is 
+perhaps somewhat less efficient for dense sets, but is far more efficient for 
+sparse sets (e.g., {65536} can be represented with a single cons of fixnums 
+instead of an 8 KB bignum.) and still provides word-at-a-time operations in 
+many cases.</p> 
+ 
+ 
+<h3>Bitset Operations</h3> 
+ 
+<p>Convention:</p> 
+ 
+<ul> 
+<li>
+<span class="v">a, b, ...</span> denote set elements</li> 
+<li>
+<span class="v">X, Y, ...</span> denote sets.</li> 
+</ul> 
+ 
+<p>There is no such explicit <span class="v">bitsetp</span> recognizer; instead we just use 
+<span class="v">natp</span>.  Similarly there is no separate bitset-fixing function because we 
+just use <span class="v">nfix</span>.</p> 
+ 
+<p>See <a href="BITSETS____REASONING.html">reasoning</a> for some notes about how to prove theorems about bitset 
+functions.</p> 
+ 
+<h5>Bitset Constructors</h5> 
+ 
+<dl> 
+ 
+<dt><span class="v">(<a href="ACL2____BITSET-SINGLETON.html">bitset-singleton</a> a)</span></dt> 
+<dd>Constructs the set <span class="v">{a}</span>
+</dd> 
+<dd>Execution: <span class="v">(<a href="COMMON-LISP____ASH.html">ash</a> 1 a)</span>
+</dd> 
+ 
+<dt><span class="v">(<a href="ACL2____BITSET-INSERT.html">bitset-insert</a> a X)</span></dt> 
+<dd>Constructs the set <span class="v">X U {a}</span>
+</dd> 
+<dd>Execution: <span class="v">(<a href="COMMON-LISP____LOGIOR.html">logior</a> (<a href="COMMON-LISP____ASH.html">ash</a> 1 a) x)</span>
+</dd> 
+ 
+<dt><span class="v">(<a href="ACL2____BITSET-LIST.html">bitset-list</a> a b ...)</span></dt> 
+<dd>Constructs the set <span class="v">{a, b, ...}</span>
+</dd> 
+<dd>Execution: repeated <span class="v">bitset-insert</span>s</dd> 
+ 
+<dt><span class="v">(<a href="ACL2____BITSET-LIST_A2.html">bitset-list*</a> a b ... X)</span></dt> 
+<dd>Constructs the set <span class="v">X U {a, b, ...}</span>
+</dd> 
+<dd>Execution: repeated <span class="v">bitset-insert</span>s</dd> 
+ 
+<dt><span class="v">(<a href="ACL2____BITSET-DELETE.html">bitset-delete</a> a X)</span></dt> 
+<dd>Constructs the set <span class="v">X - {a}</span>
+</dd> 
+<dd>Execution: <span class="v">(<a href="COMMON-LISP____LOGANDC1.html">logandc1</a> (<a href="COMMON-LISP____ASH.html">ash</a> 1 a) x)</span>
+</dd> 
+ 
+<dt><span class="v">(<a href="ACL2____BITSET-UNION.html">bitset-union</a> X Y ...)</span></dt> 
+<dd>Constructs the set <span class="v">X U Y U ...</span>
+</dd> 
+<dd>Execution: <span class="v">(<a href="COMMON-LISP____LOGIOR.html">logior</a> x (<a href="COMMON-LISP____LOGIOR.html">logior</a> y ...))</span>
+</dd> 
+ 
+<dt><span class="v">(<a href="ACL2____BITSET-INTERSECT.html">bitset-intersect</a> X Y ...)</span></dt> 
+<dd>Constructs the set <span class="v">X \intersect Y \intersect ...</span>
+</dd> 
+<dd>Execution: <span class="v">(<a href="COMMON-LISP____LOGAND.html">logand</a> x (<a href="COMMON-LISP____LOGAND.html">logand</a> y ...))</span>
+</dd> 
+ 
+<dt><span class="v">(<a href="ACL2____BITSET-DIFFERENCE.html">bitset-difference</a> X Y)</span></dt> 
+<dd>Constructs the set <span class="v">X - Y</span>
+</dd> 
+<dd>Execution: <span class="v">(<a href="COMMON-LISP____LOGANDC1.html">logandc1</a> y x)</span>
+</dd> 
+</dl> 
+ 
+<h5>Inspecting Bitsets</h5> 
+ 
+<dl> 
+<dt><span class="v">(<a href="ACL2____BITSET-MEMBERP.html">bitset-memberp</a> a X)</span></dt> 
+<dd>Determine whether <span class="v">a</span> is a member of the set <span class="v">X</span>
+</dd> 
+<dd>Execution: <span class="v">(<a href="COMMON-LISP____LOGBITP.html">logbitp</a> a x)</span>
+</dd> 
+ 
+<dt><span class="v">(<a href="ACL2____BITSET-INTERSECTP.html">bitset-intersectp</a> X Y)</span></dt> 
+<dd>Determines whether <span class="v">X</span> and <span class="v">Y</span> have any common members</dd> 
+<dd>Execution: <span class="v">(<a href="COMMON-LISP____LOGTEST.html">logtest</a> x y)</span>
+</dd> 
+ 
+<dt><span class="v">(<a href="ACL2____BITSET-SUBSETP.html">bitset-subsetp</a> X Y)</span></dt> 
+<dd>Determines whether <span class="v">X</span> is a subset of <span class="v">Y</span>
+</dd> 
+<dd>Execution: <span class="v">(<a href="COMMON-LISP_____D3.html">=</a> 0 (<a href="COMMON-LISP____LOGANDC2.html">logandc2</a> y x))</span>
+</dd> 
+ 
+<dt><span class="v">(<a href="ACL2____BITSET-CARDINALITY.html">bitset-cardinality</a> X)</span></dt> 
+<dd>Determines the cardinality of <span class="v">X</span>
+</dd> 
+<dd>Execution: <span class="v">(<a href="COMMON-LISP____LOGCOUNT.html">logcount</a> x)</span>
+</dd> 
+ 
+</dl> 
+ 
+<h5>Enumerating Bitset Members</h5> 
+ 
+<dl> 
+<dt><span class="v">(<a href="ACL2____BITSET-MEMBERS.html">bitset-members</a> X)</span></dt> 
+<dd>Constructs an ordinary ordered set with the elements of X.</dd> 
+<dd>Expensive: must cons together all of the set elements.</dd> 
+<dd>Important in <a href="BITSETS____REASONING.html">reasoning</a> about bitsets.</dd> 
+</dl>
+</body>
+</html>

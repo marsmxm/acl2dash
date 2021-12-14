@@ -1,0 +1,293 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Vl-tweak-fussy-warning-type</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL____VL-TWEAK-FUSSY-WARNING-TYPE">Click for Vl-tweak-fussy-warning-type in the Full Manual</a></h3>
+
+<p>Heuristically categorize fussy warnings according to severity.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(vl-tweak-fussy-warning-type type a b asize bsize op ss scopes) 
+  → 
+adjusted-type</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">type</span> — Base warning type, which we may adjust.<br>    <font color="#606060">Guard <span class="v">(<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> type)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">a</span> — LHS expression, i.e., A in: A + B, or C ? A : B.<br>    <font color="#606060">Guard <span class="v">(<a href="VL____VL-EXPR-P.html">vl-expr-p</a> a)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">b</span> — RHS expression, i.e., B in: A + B, or C ? A : B.<br>    <font color="#606060">Guard <span class="v">(<a href="VL____VL-EXPR-P.html">vl-expr-p</a> b)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">asize</span> — Self-determined size of A.<br>    <font color="#606060">Guard <span class="v">(<a href="ACL2____NATP.html">natp</a> asize)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">bsize</span> — Self-determined size of B.<br>    <font color="#606060">Guard <span class="v">(<a href="ACL2____NATP.html">natp</a> bsize)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">op</span> — The particular operation.<br>    <font color="#606060">Guard <span class="v">(<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> op)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">ss</span> — Scope where the expression occurs.<br>    <font color="#606060">Guard <span class="v">(<a href="VL____VL-SCOPESTACK-P.html">vl-scopestack-p</a> ss)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">scopes</span> — Precomputed overrides for parameter and function types.<br>    <font color="#606060">Guard <span class="v">(<a href="VL____VL-ELABSCOPES-P.html">vl-elabscopes-p</a> scopes)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">adjusted-type</span> — <span class="v">NIL</span> for <i>do not warn</i>, or some other warning type 
+                  that is derived from <span class="v">type</span>.<br>    <font color="#606060">Type <span class="v">(<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> adjusted-type)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>This function is called when we've just noticed that A and B have 
+different self-sizes but are used in an expression like <span class="v">A == B</span>, <span class="v">A &amp;
+B</span>, <span class="v">C ? A : B</span>, or similar, and hence one or the other is going to be 
+implicitly extended.  We're going to issue a fussy size warning, and we want to 
+decide what type to give it.  I.e., is this a minor warning, or a normal 
+warning?</p> 
+ 
+<p>My original approach was just to say: the warning should be minor if ASIZE 
+or BSIZE is 32.  But this happens in many very common cases where unsized 
+numbers are used, such as:</p> 
+ 
+<pre class="code">foo[3:0] == 7;          //  4 bits == 32 bits
+foo[0] ? bar[3:0] : 0;  //  foo[0] ? 4 bits : 32 bits</pre> 
+ 
+<p>Over time I have added many additional tweaks, see the comments for 
+details.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>vl-tweak-fussy-warning-type</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ vl-tweak-fussy-warning-type
+ (<a href="COMMON-LISP____TYPE.html">type</a> a b asize bsize op ss scopes)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> type)
+                             (<a href="VL____VL-EXPR-P.html">vl-expr-p</a> a)
+                             (<a href="VL____VL-EXPR-P.html">vl-expr-p</a> b)
+                             (<a href="ACL2____NATP.html">natp</a> asize)
+                             (<a href="ACL2____NATP.html">natp</a> bsize)
+                             (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> op)
+                             (<a href="VL____VL-SCOPESTACK-P.html">vl-scopestack-p</a> ss)
+                             (<a href="VL____VL-ELABSCOPES-P.html">vl-elabscopes-p</a> scopes))))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'vl-tweak-fussy-warning-type))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+   ((<a href="COMMON-LISP____TYPE.html">type</a> (<a href="ACL2____SYMBOL-FIX.html">acl2::symbol-fix</a> type))
+    (op (<a href="ACL2____SYMBOL-FIX.html">acl2::symbol-fix</a> op))
+    (asize (<a href="ACL2____LNFIX.html">lnfix</a> asize))
+    (bsize (<a href="ACL2____LNFIX.html">lnfix</a> bsize))
+    (ss (<a href="VL____VL-SCOPESTACK-FIX.html">vl-scopestack-fix</a> ss))
+    (scopes (<a href="VL____VL-ELABSCOPES-FIX.html">vl-elabscopes-fix</a> scopes))
+    (a (<a href="VL____VL-TWEAK-FUSSY-WARNING-TYPE-PRECLEAN.html">vl-tweak-fussy-warning-type-preclean</a> a))
+    (b (<a href="VL____VL-TWEAK-FUSSY-WARNING-TYPE-PRECLEAN.html">vl-tweak-fussy-warning-type-preclean</a> b))
+    ((<a href="ACL2____MV.html">mv</a> a asize)
+     (vl-tweak-fussy-warning-expr-size a asize))
+    ((<a href="ACL2____MV.html">mv</a> b bsize)
+     (vl-tweak-fussy-warning-expr-size b bsize))
+    ((when (<a href="COMMON-LISP____EQUAL.html">equal</a> asize bsize)) nil)
+    (a-zerop (<a href="COMMON-LISP____AND.html">and</a> (<a href="VL____VL-EXPR-RESOLVED-P.html">vl-expr-resolved-p</a> a)
+                  (<a href="COMMON-LISP____EQL.html">eql</a> (<a href="VL____VL-RESOLVED-_E3VAL.html">vl-resolved-&gt;val</a> a) 0)))
+    (b-zerop (<a href="COMMON-LISP____AND.html">and</a> (<a href="VL____VL-EXPR-RESOLVED-P.html">vl-expr-resolved-p</a> b)
+                  (<a href="COMMON-LISP____EQL.html">eql</a> (<a href="VL____VL-RESOLVED-_E3VAL.html">vl-resolved-&gt;val</a> b) 0)))
+    ((when (<a href="COMMON-LISP____OR.html">or</a> a-zerop b-zerop)) nil)
+    ((when (<a href="COMMON-LISP____OR.html">or</a> (vl-fussy-may-as-well-be-extint-p a)
+               (vl-fussy-may-as-well-be-extint-p b)))
+     nil)
+    ((when (vl-suppress-fussy-warning-for-shift-of-mask op a b))
+     nil)
+    (a-fits-b-p
+        (<a href="COMMON-LISP____AND.html">and</a> (<a href="VL____VL-EXPR-RESOLVED-P.html">vl-expr-resolved-p</a> a)
+             (<a href="COMMON-LISP____OR.html">or</a> (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> bsize (<a href="VL____VL-RESOLVED-_E3VAL.html">vl-resolved-&gt;val</a> a))
+                 (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP_____C3.html">&lt;</a> 0 bsize)
+                      (<a href="ACL2____SIGNED-BYTE-P.html">signed-byte-p</a> bsize (<a href="VL____VL-RESOLVED-_E3VAL.html">vl-resolved-&gt;val</a> a))))))
+    (b-fits-a-p
+        (<a href="COMMON-LISP____AND.html">and</a> (<a href="VL____VL-EXPR-RESOLVED-P.html">vl-expr-resolved-p</a> b)
+             (<a href="COMMON-LISP____OR.html">or</a> (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> asize (<a href="VL____VL-RESOLVED-_E3VAL.html">vl-resolved-&gt;val</a> b))
+                 (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP_____C3.html">&lt;</a> 0 asize)
+                      (<a href="ACL2____SIGNED-BYTE-P.html">signed-byte-p</a> asize (<a href="VL____VL-RESOLVED-_E3VAL.html">vl-resolved-&gt;val</a> b))))))
+    ((when
+       (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____OR.html">or</a> a-fits-b-p b-fits-a-p)
+            (<a href="COMMON-LISP____MEMBER.html">member</a> op
+                    '(:vl-binary-eq :vl-binary-neq
+                                    :vl-binary-ceq :vl-binary-cne
+                                    :vl-binary-lt :vl-binary-lte
+                                    :vl-binary-gt :vl-binary-gte))))
+     nil)
+    (a-plusp
+         (<a href="VL____VL-EXPR-CASE.html">vl-expr-case</a>
+              a
+              :vl-binary (<a href="VL____VL-TWEAK-FUSSY-WARNING-TYPE-ARITHOP.html">vl-tweak-fussy-warning-type-arithop</a> a.op)
+              :otherwise nil))
+    (b-plusp
+         (<a href="VL____VL-EXPR-CASE.html">vl-expr-case</a>
+              b
+              :vl-binary (<a href="VL____VL-TWEAK-FUSSY-WARNING-TYPE-ARITHOP.html">vl-tweak-fussy-warning-type-arithop</a> b.op)
+              :otherwise nil))
+    (ret-type
+     (<a href="COMMON-LISP____IF.html">if</a>
+      (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP_____C3.html">&lt;</a> asize bsize) a-plusp b-plusp)
+      (<a href="ACL2____INTERN-IN-PACKAGE-OF-SYMBOL.html">intern-in-package-of-symbol</a> (<a href="STR____CAT.html">cat</a> (<a href="COMMON-LISP____SYMBOL-NAME.html">symbol-name</a> type) "-MINOR")
+                                   type)
+      type))
+    (a32p (<a href="COMMON-LISP____EQL.html">eql</a> asize 32))
+    (b32p (<a href="COMMON-LISP____EQL.html">eql</a> bsize 32))
+    ((unless (<a href="COMMON-LISP____OR.html">or</a> a32p b32p)) ret-type)
+    ((<a href="ACL2____MV.html">mv</a> expr-32 size-other)
+     (<a href="COMMON-LISP____IF.html">if</a> a32p (<a href="ACL2____MV.html">mv</a> a bsize) (<a href="ACL2____MV.html">mv</a> b asize)))
+    (atoms (<a href="VL____VL-EXPR-INTERESTING-SIZE-ATOMS.html">vl-expr-interesting-size-atoms</a> expr-32))
+    (unsized (<a href="VL____VL-COLLECT-UNSIZED-INTS.html">vl-collect-unsized-ints</a> atoms ss scopes))
+    (unsized-vals (<a href="VL____VL-EXPRLIST-RESOLVED-_E3VALS.html">vl-exprlist-resolved-&gt;vals</a>
+                       (<a href="VL____VL-COLLECT-RESOLVED-EXPRS.html">vl-collect-resolved-exprs</a> unsized)))
+    (unsized-fit-p (ints-probably-fit-p size-other unsized-vals))
+    ((unless unsized-fit-p)
+     (<a href="ACL2____INTERN-IN-PACKAGE-OF-SYMBOL.html">intern-in-package-of-symbol</a>
+          (<a href="STR____CAT.html">cat</a> (<a href="COMMON-LISP____SYMBOL-NAME.html">symbol-name</a> type) "-CONST-TOOBIG")
+          type))
+    ((when (<a href="COMMON-LISP____CONSP.html">consp</a> unsized))
+     (<a href="ACL2____INTERN-IN-PACKAGE-OF-SYMBOL.html">intern-in-package-of-symbol</a> (<a href="STR____CAT.html">cat</a> (<a href="COMMON-LISP____SYMBOL-NAME.html">symbol-name</a> type)
+                                       "-MINOR-INTSIZE")
+                                  type)))
+   ret-type)))</pre> 
+<p><b>Theorem: </b>symbolp-of-vl-tweak-fussy-warning-type</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     symbolp-of-vl-tweak-fussy-warning-type
+     (<a href="ACL2____B_A2.html">b*</a> ((adjusted-type (<a href="VL____VL-TWEAK-FUSSY-WARNING-TYPE.html">vl-tweak-fussy-warning-type</a>
+                              type a b asize bsize op ss scopes)))
+         (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> adjusted-type))
+     :rule-classes :type-prescription)</pre> 
+<p><b>Theorem: </b>vl-tweak-fussy-warning-type-of-symbol-fix-type</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-tweak-fussy-warning-type-of-symbol-fix-type
+ (<a href="COMMON-LISP____EQUAL.html">equal</a>
+   (<a href="VL____VL-TWEAK-FUSSY-WARNING-TYPE.html">vl-tweak-fussy-warning-type</a> (<a href="ACL2____SYMBOL-FIX.html">acl2::symbol-fix</a> type)
+                                a b asize bsize op ss scopes)
+   (<a href="VL____VL-TWEAK-FUSSY-WARNING-TYPE.html">vl-tweak-fussy-warning-type</a> type a b asize bsize op ss scopes)))</pre> 
+<p><b>Theorem: </b>vl-tweak-fussy-warning-type-symbol-equiv-congruence-on-type</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-tweak-fussy-warning-type-symbol-equiv-congruence-on-type
+ (<a href="ACL2____IMPLIES.html">implies</a>
+  (<a href="ACL2____SYMBOL-EQUIV.html">acl2::symbol-equiv</a> type type-equiv)
+  (<a href="COMMON-LISP____EQUAL.html">equal</a>
+     (<a href="VL____VL-TWEAK-FUSSY-WARNING-TYPE.html">vl-tweak-fussy-warning-type</a> type a b asize bsize op ss scopes)
+     (<a href="VL____VL-TWEAK-FUSSY-WARNING-TYPE.html">vl-tweak-fussy-warning-type</a> type-equiv
+                                  a b asize bsize op ss scopes)))
+ :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>vl-tweak-fussy-warning-type-of-vl-expr-fix-a</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-tweak-fussy-warning-type-of-vl-expr-fix-a
+ (<a href="COMMON-LISP____EQUAL.html">equal</a>
+   (<a href="VL____VL-TWEAK-FUSSY-WARNING-TYPE.html">vl-tweak-fussy-warning-type</a> type (<a href="VL____VL-EXPR-FIX.html">vl-expr-fix</a> a)
+                                b asize bsize op ss scopes)
+   (<a href="VL____VL-TWEAK-FUSSY-WARNING-TYPE.html">vl-tweak-fussy-warning-type</a> type a b asize bsize op ss scopes)))</pre> 
+<p><b>Theorem: </b>vl-tweak-fussy-warning-type-vl-expr-equiv-congruence-on-a</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-tweak-fussy-warning-type-vl-expr-equiv-congruence-on-a
+ (<a href="ACL2____IMPLIES.html">implies</a>
+  (<a href="VL____VL-EXPR-EQUIV.html">vl-expr-equiv</a> a a-equiv)
+  (<a href="COMMON-LISP____EQUAL.html">equal</a>
+     (<a href="VL____VL-TWEAK-FUSSY-WARNING-TYPE.html">vl-tweak-fussy-warning-type</a> type a b asize bsize op ss scopes)
+     (<a href="VL____VL-TWEAK-FUSSY-WARNING-TYPE.html">vl-tweak-fussy-warning-type</a>
+          type
+          a-equiv b asize bsize op ss scopes)))
+ :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>vl-tweak-fussy-warning-type-of-vl-expr-fix-b</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-tweak-fussy-warning-type-of-vl-expr-fix-b
+ (<a href="COMMON-LISP____EQUAL.html">equal</a>
+   (<a href="VL____VL-TWEAK-FUSSY-WARNING-TYPE.html">vl-tweak-fussy-warning-type</a> type a (<a href="VL____VL-EXPR-FIX.html">vl-expr-fix</a> b)
+                                asize bsize op ss scopes)
+   (<a href="VL____VL-TWEAK-FUSSY-WARNING-TYPE.html">vl-tweak-fussy-warning-type</a> type a b asize bsize op ss scopes)))</pre> 
+<p><b>Theorem: </b>vl-tweak-fussy-warning-type-vl-expr-equiv-congruence-on-b</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-tweak-fussy-warning-type-vl-expr-equiv-congruence-on-b
+ (<a href="ACL2____IMPLIES.html">implies</a>
+  (<a href="VL____VL-EXPR-EQUIV.html">vl-expr-equiv</a> b b-equiv)
+  (<a href="COMMON-LISP____EQUAL.html">equal</a>
+     (<a href="VL____VL-TWEAK-FUSSY-WARNING-TYPE.html">vl-tweak-fussy-warning-type</a> type a b asize bsize op ss scopes)
+     (<a href="VL____VL-TWEAK-FUSSY-WARNING-TYPE.html">vl-tweak-fussy-warning-type</a>
+          type
+          a b-equiv asize bsize op ss scopes)))
+ :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>vl-tweak-fussy-warning-type-of-nfix-asize</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-tweak-fussy-warning-type-of-nfix-asize
+ (<a href="COMMON-LISP____EQUAL.html">equal</a>
+   (<a href="VL____VL-TWEAK-FUSSY-WARNING-TYPE.html">vl-tweak-fussy-warning-type</a> type a b (<a href="ACL2____NFIX.html">nfix</a> asize)
+                                bsize op ss scopes)
+   (<a href="VL____VL-TWEAK-FUSSY-WARNING-TYPE.html">vl-tweak-fussy-warning-type</a> type a b asize bsize op ss scopes)))</pre> 
+<p><b>Theorem: </b>vl-tweak-fussy-warning-type-nat-equiv-congruence-on-asize</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-tweak-fussy-warning-type-nat-equiv-congruence-on-asize
+ (<a href="ACL2____IMPLIES.html">implies</a>
+  (<a href="ACL2____NAT-EQUIV.html">acl2::nat-equiv</a> asize asize-equiv)
+  (<a href="COMMON-LISP____EQUAL.html">equal</a>
+     (<a href="VL____VL-TWEAK-FUSSY-WARNING-TYPE.html">vl-tweak-fussy-warning-type</a> type a b asize bsize op ss scopes)
+     (<a href="VL____VL-TWEAK-FUSSY-WARNING-TYPE.html">vl-tweak-fussy-warning-type</a>
+          type
+          a b asize-equiv bsize op ss scopes)))
+ :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>vl-tweak-fussy-warning-type-of-nfix-bsize</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-tweak-fussy-warning-type-of-nfix-bsize
+ (<a href="COMMON-LISP____EQUAL.html">equal</a>
+   (<a href="VL____VL-TWEAK-FUSSY-WARNING-TYPE.html">vl-tweak-fussy-warning-type</a> type a b asize (<a href="ACL2____NFIX.html">nfix</a> bsize)
+                                op ss scopes)
+   (<a href="VL____VL-TWEAK-FUSSY-WARNING-TYPE.html">vl-tweak-fussy-warning-type</a> type a b asize bsize op ss scopes)))</pre> 
+<p><b>Theorem: </b>vl-tweak-fussy-warning-type-nat-equiv-congruence-on-bsize</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-tweak-fussy-warning-type-nat-equiv-congruence-on-bsize
+ (<a href="ACL2____IMPLIES.html">implies</a>
+  (<a href="ACL2____NAT-EQUIV.html">acl2::nat-equiv</a> bsize bsize-equiv)
+  (<a href="COMMON-LISP____EQUAL.html">equal</a>
+     (<a href="VL____VL-TWEAK-FUSSY-WARNING-TYPE.html">vl-tweak-fussy-warning-type</a> type a b asize bsize op ss scopes)
+     (<a href="VL____VL-TWEAK-FUSSY-WARNING-TYPE.html">vl-tweak-fussy-warning-type</a>
+          type
+          a b asize bsize-equiv op ss scopes)))
+ :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>vl-tweak-fussy-warning-type-of-symbol-fix-op</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-tweak-fussy-warning-type-of-symbol-fix-op
+ (<a href="COMMON-LISP____EQUAL.html">equal</a>
+  (<a href="VL____VL-TWEAK-FUSSY-WARNING-TYPE.html">vl-tweak-fussy-warning-type</a> type
+                               a b asize bsize (<a href="ACL2____SYMBOL-FIX.html">acl2::symbol-fix</a> op)
+                               ss scopes)
+  (<a href="VL____VL-TWEAK-FUSSY-WARNING-TYPE.html">vl-tweak-fussy-warning-type</a> type a b asize bsize op ss scopes)))</pre> 
+<p><b>Theorem: </b>vl-tweak-fussy-warning-type-symbol-equiv-congruence-on-op</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-tweak-fussy-warning-type-symbol-equiv-congruence-on-op
+ (<a href="ACL2____IMPLIES.html">implies</a>
+  (<a href="ACL2____SYMBOL-EQUIV.html">acl2::symbol-equiv</a> op op-equiv)
+  (<a href="COMMON-LISP____EQUAL.html">equal</a>
+     (<a href="VL____VL-TWEAK-FUSSY-WARNING-TYPE.html">vl-tweak-fussy-warning-type</a> type a b asize bsize op ss scopes)
+     (<a href="VL____VL-TWEAK-FUSSY-WARNING-TYPE.html">vl-tweak-fussy-warning-type</a>
+          type
+          a b asize bsize op-equiv ss scopes)))
+ :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>vl-tweak-fussy-warning-type-of-vl-scopestack-fix-ss</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-tweak-fussy-warning-type-of-vl-scopestack-fix-ss
+ (<a href="COMMON-LISP____EQUAL.html">equal</a>
+   (<a href="VL____VL-TWEAK-FUSSY-WARNING-TYPE.html">vl-tweak-fussy-warning-type</a>
+        type a
+        b asize bsize op (<a href="VL____VL-SCOPESTACK-FIX.html">vl-scopestack-fix</a> ss)
+        scopes)
+   (<a href="VL____VL-TWEAK-FUSSY-WARNING-TYPE.html">vl-tweak-fussy-warning-type</a> type a b asize bsize op ss scopes)))</pre> 
+<p><b>Theorem: </b>vl-tweak-fussy-warning-type-vl-scopestack-equiv-congruence-on-ss</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-tweak-fussy-warning-type-vl-scopestack-equiv-congruence-on-ss
+ (<a href="ACL2____IMPLIES.html">implies</a>
+  (<a href="VL____VL-SCOPESTACK-EQUIV.html">vl-scopestack-equiv</a> ss ss-equiv)
+  (<a href="COMMON-LISP____EQUAL.html">equal</a>
+     (<a href="VL____VL-TWEAK-FUSSY-WARNING-TYPE.html">vl-tweak-fussy-warning-type</a> type a b asize bsize op ss scopes)
+     (<a href="VL____VL-TWEAK-FUSSY-WARNING-TYPE.html">vl-tweak-fussy-warning-type</a>
+          type
+          a b asize bsize op ss-equiv scopes)))
+ :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>vl-tweak-fussy-warning-type-of-vl-elabscopes-fix-scopes</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-tweak-fussy-warning-type-of-vl-elabscopes-fix-scopes
+ (<a href="COMMON-LISP____EQUAL.html">equal</a>
+   (<a href="VL____VL-TWEAK-FUSSY-WARNING-TYPE.html">vl-tweak-fussy-warning-type</a>
+        type a b asize
+        bsize op ss (<a href="VL____VL-ELABSCOPES-FIX.html">vl-elabscopes-fix</a> scopes))
+   (<a href="VL____VL-TWEAK-FUSSY-WARNING-TYPE.html">vl-tweak-fussy-warning-type</a> type a b asize bsize op ss scopes)))</pre> 
+<p><b>Theorem: </b>vl-tweak-fussy-warning-type-vl-elabscopes-equiv-congruence-on-scopes</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-tweak-fussy-warning-type-vl-elabscopes-equiv-congruence-on-scopes
+ (<a href="ACL2____IMPLIES.html">implies</a>
+  (<a href="VL____VL-ELABSCOPES-EQUIV.html">vl-elabscopes-equiv</a> scopes scopes-equiv)
+  (<a href="COMMON-LISP____EQUAL.html">equal</a>
+     (<a href="VL____VL-TWEAK-FUSSY-WARNING-TYPE.html">vl-tweak-fussy-warning-type</a> type a b asize bsize op ss scopes)
+     (<a href="VL____VL-TWEAK-FUSSY-WARNING-TYPE.html">vl-tweak-fussy-warning-type</a>
+          type
+          a b asize bsize op ss scopes-equiv)))
+ :rule-classes :congruence)</pre> 
+
+</body>
+</html>

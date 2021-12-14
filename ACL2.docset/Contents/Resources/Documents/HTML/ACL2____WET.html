@@ -1,0 +1,233 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Wet</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____WET">Click for Wet in the Full Manual</a></h3>
+
+<p>Evaluate a form and print subsequent error trace</p><p>The acronym ``wet'' stands for ``with-error-trace''.  <span class="v">Wet</span> 
+ provides a convenient way to obtain a backtrace when evaluation causes a guard 
+ violation or other error.</p> 
+ 
+ <h3>Summary Documentation</h3> 
+ 
+ <pre class="code">General Form:
+(<a href="ACL2____WET.html">wet</a> form           ; an arbitrary form
+     :book bk-form  ; optional, not evaluated; specify different wet book
+     ;;; the rest are optional and evaluated:
+     :compile c     ; :same, t, or nil; default :same (nil if :fns supplied)
+     :fullp h       ; nil by default, else handle some raw Lisp errors
+     :evisc-tuple e ; an evisc-tuple
+     :fns fns       ; :all, or a list of functions to show in a backtrace</pre> 
+ 
+ <p><span class="v">Form</span> is evaluated.  If there is an error, a backtrace stack is printed 
+ to the standard output (<span class="tt"><a href="ACL2_____A2STANDARD-CO_A2.html">*standard-co*</a></span>), containing (by default) the 
+ user-defined function calls made before the error.  Such printing is 
+ controlled by the <span class="v">:evisc-tuple</span> if supplied; otherwise, hiding of large 
+ structures will occur.</p> 
+ 
+ <h3>Discussion</h3> 
+ 
+ <p>The basic idea is that <span class="v">(<a href="ACL2____WET.html">wet</a> form)</span> evaluates <span class="v">form</span> and, if there is 
+ an error, shows a backtrace of calls that led to that error.  Note however 
+ that by default only calls of user-defined (not built-in) functions 
+ ``supporting'' <span class="v">form</span> in the following sense will show up in the backtrace: 
+ those that occur in the macroexpansion of <span class="v">form</span> or (recursively) support 
+ any of those functions.  So for example, since <span class="v">(<a href="ACL2____MAKE-EVENT.html">make-event</a> form)</span> 
+ macroexpands to <span class="v">(make-event-fn (<a href="COMMON-LISP____QUOTE.html">quote</a> form) ...)</span>, calls of functions 
+ occurring in <span class="v">form</span> will likely not show up in the backtrace by default. 
+ The option <span class="v">:fns all</span> overrides this default, with potential loss of speed; 
+ more on this below.</p> 
+ 
+ <p>The following example explains the use of <span class="v">wet</span>.  First, submit the 
+ following three definitions:</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> foo (x) (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____CONSP.html">consp</a> x))) (<a href="COMMON-LISP____CAR.html">car</a> x))
+(<a href="COMMON-LISP____DEFUN.html">defun</a> bar (x) (foo (<a href="COMMON-LISP____CDR.html">cdr</a> x)))
+(<a href="COMMON-LISP____DEFUN.html">defun</a> g (x) (bar (<a href="COMMON-LISP____CDR.html">cdr</a> x)))</pre> 
+ 
+ <p>Now imagine you have obtained the following guard violation:</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____G.html">g</a> '(3 4))
+
+ACL2 Error in TOP-LEVEL:  The guard for the function call (FOO X),
+which is (<a href="COMMON-LISP____CONSP.html">CONSP</a> X), is violated by the arguments in the call (FOO NIL).
+To debug see :DOC print-gv, see :DOC trace, and see :DOC wet.  See
+:DOC set-guard-checking for information about suppressing this check
+with (<a href="ACL2____SET-GUARD-CHECKING.html">set-guard-checking</a> :none), as recommended for new users.
+
+ACL2 !&gt;</pre> 
+ 
+ <p>With <span class="v">wet</span>, you can get a backtrace of user-defined functions.  The 
+ package prefixes shown below, <span class="v">ACL2_*1*_</span>, indicate that the 
+ executable-counterparts of the corresponding submitted functions are being 
+ called; see <a href="ACL2____EVALUATION.html">evaluation</a>.  Don't forget to start with <span class="v">(<a href="ACL2____INCLUDE-BOOK.html">include-book</a>
+ "misc/wet" :dir :system)</span>.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____WET.html">wet</a> (<a href="ACL2____G.html">g</a> '(3 4)))
+; Fast loading /projects/acl2/devel/books/misc/wet.fasl
+
+TTAG NOTE: Adding ttag :TRACE! from the top level loop.
+
+ACL2 Error in WET:  The guard for the function call (FOO X), which
+is (<a href="COMMON-LISP____CONSP.html">CONSP</a> X), is violated by the arguments in the call (FOO NIL).
+To debug see :DOC print-gv, see :DOC trace, and see :DOC wet.  See
+:DOC set-guard-checking for information about suppressing this check
+with (<a href="ACL2____SET-GUARD-CHECKING.html">set-guard-checking</a> :none), as recommended for new users.
+
+Backtrace stack:
+----------------
+1. (ACL2_*1*_ACL2::FOO NIL)
+2. (ACL2_*1*_ACL2::BAR (4))
+3. (ACL2_*1*_ACL2::G (3 4))
+
+ACL2 !&gt;</pre> 
+ 
+ <p>By default, large structures are hidden during the printing of the 
+ backtrace stack.  (Technical detail: by default the global abbrev-evisc-tuple 
+ is used, if bound; see <a href="ACL2____SET-EVISC-TUPLE.html">set-evisc-tuple</a>.  But you can supply a value for 
+ keyword argument <span class="v">:evisc-tuple</span> to modify the printing: <span class="v">nil</span> to avoid 
+ hiding, else a suitable evisc-tuple, as shown below (see <a href="ACL2____EVISC-TUPLE.html">evisc-tuple</a>).</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____WET.html">wet</a> (<a href="ACL2____G.html">g</a> '(3 4)) :evisc-tuple (<a href="ACL2____EVISC-TUPLE.html">evisc-tuple</a> 1 1 nil nil))
+; Fast loading /projects/acl2/devel/books/misc/wet.fasl
+
+TTAG NOTE: Adding ttag :TRACE! from the top level loop.
+
+ACL2 Error in WET:  The guard for the function call (FOO X), which
+is (<a href="COMMON-LISP____CONSP.html">CONSP</a> X), is violated by the arguments in the call (FOO NIL).
+To debug see :DOC print-gv, see :DOC trace, and see :DOC wet.  See
+:DOC set-guard-checking for information about suppressing this check
+with (<a href="ACL2____SET-GUARD-CHECKING.html">set-guard-checking</a> :none), as recommended for new users.
+
+Backtrace stack:
+----------------
+1. (ACL2_*1*_ACL2::FOO ...)
+2. (ACL2_*1*_ACL2::BAR ...)
+3. (ACL2_*1*_ACL2::G ...)
+
+ACL2 !&gt;</pre> 
+ 
+ <p>For a backtrace as a data object, evaluate the form <span class="v">(<a href="ACL2_____04.html">@</a> wet-stack)</span>. 
+ But note that this object may not be a legal ACL2 value, for example because 
+ of the ``<span class="v">*1*</span>'' symbols shown above.</p> 
+ 
+ <h3>Keyword Arguments</h3> 
+ 
+ <p>The <span class="v">:fullp</span> option.  Consider the following example.</p> 
+ 
+ <pre class="code">(<a href="ACL2____PROGRAM.html">program</a>)
+(<a href="COMMON-LISP____DEFUN.html">defun</a> foo (x) (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____CONSP.html">consp</a> x))) (<a href="COMMON-LISP____CAR.html">car</a> x))
+(<a href="COMMON-LISP____DEFUN.html">defun</a> bar (x) (foo (<a href="COMMON-LISP____CDR.html">cdr</a> x)))
+(<a href="COMMON-LISP____DEFUN.html">defun</a> g (x) (bar (<a href="COMMON-LISP____CDR.html">cdr</a> x)))
+; Raw Lisp error:
+(<a href="ACL2____G.html">g</a> '(3 4 . 5))</pre> 
+ 
+ <p>We may be initially disappointed using <span class="v">wet</span> on this example, as follows 
+ — it didn't work!</p> 
+ 
+ <pre class="code">ACL2 p!&gt;(<a href="ACL2____WET.html">wet</a> (<a href="ACL2____G.html">g</a> '(3 4 . 5)))
+
+TTAG NOTE: Adding ttag :TRACE! from the top level loop.
+
+***********************************************
+************ ABORTING from raw Lisp ***********
+********** (see :DOC raw-lisp-error) **********
+Error:  Fault during read of memory address #x2D
+While executing: FOO
+***********************************************
+
+The message above might explain the error.  If not, and
+if you didn't cause an explicit interrupt (Control-C),
+then the root cause may be call of a :program mode
+function that has the wrong guard specified, or even no
+guard specified (i.e., an implicit guard of t).
+See :DOC raw-lisp-error and see :DOC guards.
+
+To enable breaks into the debugger (also see :DOC acl2-customization):
+(<a href="ACL2____SET-DEBUGGER-ENABLE.html">SET-DEBUGGER-ENABLE</a> T)
+ACL2 p!&gt;</pre> 
+ 
+ <p>The fix is to use <span class="v">:fullp t</span>.</p> 
+ 
+ <pre class="code">ACL2 p!&gt;(<a href="ACL2____WET.html">wet</a> (<a href="ACL2____G.html">g</a> '(3 4 . 5)) :fullp t)
+
+TTAG NOTE: Adding ttag :TRACE! from the top level loop.
+
+
+ACL2 Error in WET:  The guard for the :program function call (FOO X),
+which is (<a href="COMMON-LISP____CONSP.html">CONSP</a> X), is violated by the arguments in the call (FOO 5).
+See :DOC set-guard-checking for information about suppressing this
+check with (<a href="ACL2____SET-GUARD-CHECKING.html">set-guard-checking</a> :none), as recommended for new users.
+To debug see :DOC print-gv, see :DOC trace, and see :DOC wet.
+
+
+Backtrace stack:
+----------------
+1. (ACL2_*1*_ACL2::FOO 5)
+2. (ACL2_*1*_ACL2::BAR (4 . 5))
+3. (ACL2_*1*_ACL2::G (3 4 . 5))
+
+ACL2 p!&gt;</pre> 
+ 
+ <p>Why doesn't <span class="v">wet</span> always do things this way?  The answer pertains to 
+ performance.  When <span class="v">:fullp</span> is non-nil, <span class="v">wet</span> sets guard-checking to 
+ <span class="v">:all</span> before evaluating the given form; see <a href="ACL2____SET-GUARD-CHECKING.html">set-guard-checking</a>. 
+ This may slow down evaluation substantially, which is why it is not the 
+ default behavior.</p> 
+ 
+ <p>The <span class="v">:fns</span> option.  As mentioned above, by default the <span class="v">wet</span> 
+ backtrace shows user-defined functions that syntactically ``support'' the form 
+ being evaluated.  This default can be overridden by supplying an explicit 
+ list, <span class="v">fns</span>, of functions, using option <span class="v">:fns fns</span>; these will then be 
+ the functions whose calls are eligible for inclusion in the backtrace.  The 
+ special value <span class="v">:fns :all</span> will allow all user-defined function calls in the 
+ backtrace.  This value can be useful when using <span class="tt"><a href="ACL2____MAGIC-EV-FNCALL.html">magic-ev-fncall</a></span>, for 
+ example, since the function being applied isn't typically included as a 
+ syntactic supporter of the form being evaluated.</p> 
+ 
+ <p>The <span class="v">:compile</span> option.  <span class="v">Wet</span> uses the <span class="tt"><a href="ACL2____TRACE_42.html">trace$</a></span> utility to 
+ modify the definitions of affected functions so that they can record 
+ information for the backtrace.  As described above, these affected functions 
+ are those that syntactically ``support'' the form unless specified by the 
+ <span class="v">:fns</span> option.  As is the case for <span class="v">trace$</span> — see <a href="ACL2____TRACE_42.html">trace$</a> 
+ — the new definitions of these affected functions may or may not be 
+ compiled.  For <span class="v">trace$</span> and for <span class="v">wet</span>, the default is to compile the new 
+ definition if and only if the original definition was compiled, except: For 
+ <span class="v">wet</span>, if option <span class="v">:fns :all</span> is provided, then the default is not to 
+ compile the affected definitions.  And for <span class="v">trace$</span> and <span class="v">wet</span>, the 
+ <span class="v">:compile</span> option overrides the default, to specify what will be compiled: 
+ value <span class="v">:same</span> to compile each affected function if and only if its original 
+ definition was compiled, value <span class="v">t</span> to compile all affected functions, and 
+ value <span class="v">nil</span> to skip compilation.</p> 
+ 
+ <p>The <span class="v">:book</span> option.  <span class="v">Wet</span> actually works by temporarily including a 
+ community book,</p> 
+ 
+ <pre class="code">(<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "misc/wet" :dir :system)</pre> 
+ 
+ <p>and then passing its arguments to macro <span class="v">wet!</span>, defined in that book. 
+ The keyword argument <span class="v">:book</span> allows you to specify a different book that 
+ defines a macro <span class="v">wet!</span> to which to pass its arguments.  If the value of 
+ <span class="v">:book</span> is a string, then the book named by that string is temporarily 
+ included using <span class="tt"><a href="ACL2____INCLUDE-BOOK.html">include-book</a></span>: <span class="v">(<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "bk")</span>.  Otherwise 
+ <span class="v">:book</span> should be a list of arguments, to be provided (unevaluated) to 
+ <span class="tt"><a href="ACL2____INCLUDE-BOOK.html">include-book</a></span>, for example <span class="v">("my-wet" :dir :my-utils)</span>.  Thus you 
+ can experiment by copying community book <span class="v">books/misc/wet.lisp</span> to your own 
+ directory and making modifications to the copy.  If you make changes, we 
+ invite you to share them with the ACL2 community (see <a href="ACL2____BOOKS.html">books</a>).  Note 
+ that you can also supply <span class="v">:book nil</span>, in which case the definition of 
+ <span class="v">wet!</span> in your current session will be used without including a book.</p> 
+ 
+ <h3>Concluding Remark</h3> 
+ 
+ <p>Also see <a href="ACL2____TRACE_42.html">trace$</a> for a general tracing utility.  As mentioned above, 
+ <span class="v">wet</span> is implemented using <span class="v">trace$</span>.  <span class="v">Wet</span> actually first applies 
+ <span class="tt"><a href="ACL2____UNTRACE_42.html">untrace$</a></span>; upon completion, <span class="v">wet</span> then applies <span class="tt"><a href="ACL2____TRACE_42.html">trace$</a></span> to 
+ re-trace any functions that it had untraced, using their original trace 
+ specs.</p>
+</body>
+</html>

@@ -1,0 +1,77 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Defmac</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____DEFMAC">Click for Defmac in the Full Manual</a></h3>
+
+<p>Define a macro that expands efficiently.</p><p>Example forms</p> 
+ 
+<pre class="code">(<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "misc/defmac" :dir :system)
+
+(<a href="ACL2____DEFMAC.html">defmac</a> my-xor (x y)
+  (<a href="COMMON-LISP____LIST.html">list</a> 'if x (<a href="COMMON-LISP____LIST.html">list</a> 'not y) y))
+
+(<a href="ACL2____DEFMAC.html">defmac</a> my-mac (x &amp;optional (y '3 y-p))
+  `(<a href="COMMON-LISP____LIST.html">list</a> ,x ,y ,y-p))
+
+(<a href="ACL2____DEFMAC.html">defmac</a> one-of (x &amp;rest rst)
+  :macro-fn one-of-function
+  "stubbed-out :doc."
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> rst)))
+  (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____NULL.html">null</a> rst) nil)
+        (t (<a href="COMMON-LISP____LIST.html">list</a> 'or
+                 (<a href="COMMON-LISP____LIST.html">list</a> 'eq x (<a href="COMMON-LISP____LIST.html">list</a> 'quote (<a href="COMMON-LISP____CAR.html">car</a> rst)))
+                 (<a href="COMMON-LISP____LIST_A2.html">list*</a> 'one-of x (<a href="COMMON-LISP____CDR.html">cdr</a> rst))))))~/</pre> 
+ 
+<p>General Form:</p> 
+ 
+<pre class="code">(<a href="ACL2____DEFMAC.html">defmac</a> name macro-args
+        :macro-fn name-macro-fn ; optional
+        doc-string              ; optional
+        dcl ... dcl             ; optional
+        body)</pre> 
+ 
+<p>where <span class="v">name</span> is a new symbolic name (see <a href="ACL2____NAME.html">name</a>), <a href="ACL2____MACRO-ARGS.html">macro-args</a> 
+specifies the formals of the macro (see <a href="ACL2____MACRO-ARGS.html">macro-args</a> for a description), 
+and <span class="v">body</span> is a term.  <span class="v">Doc-string</span> is an optional <a href="COMMON-LISP____DOCUMENTATION.html">documentation</a> 
+string, which (as for <span class="tt"><a href="COMMON-LISP____DEFMACRO.html">defmacro</a></span>) is essentially ignored by ACL2.  Each 
+<span class="v">dcl</span> is an optional declaration as for <a href="COMMON-LISP____DEFUN.html">defun</a> (see <a href="COMMON-LISP____DECLARE.html">declare</a>).</p> 
+ 
+<p>See <a href="COMMON-LISP____DEFMACRO.html">defmacro</a> for a discussion of <span class="v">defmacro</span>, which is the 
+traditional way of introducing macros.  <span class="v">Defmac</span> is similar to <span class="v">defmacro</span> 
+except that the resulting macro may execute significantly more efficiently, as 
+explained below.  You can use <span class="v">defmac</span> just as you would normally use 
+<span class="v">defmacro</span>, though your <span class="v">defmac</span> form should include the declaration 
+<span class="v">(<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :mode :program))</span> to be truly compatible with <span class="v">defmacro</span>, 
+which allows calls of <span class="v">:</span><a href="ACL2____PROGRAM.html">program</a> mode functions in its body.</p> 
+ 
+<p>A <span class="v">defmac</span> form generates the following form, which introduces a <a href="COMMON-LISP____DEFUN.html">defun</a> and a <a href="COMMON-LISP____DEFMACRO.html">defmacro</a>.  Here we refer to the ``General Form'' above; 
+hence the <span class="v">:macro-fn</span>, <span class="v">doc-string</span>, and each <span class="v">dcl</span> are optional.  The 
+<span class="v">doc-string</span> is as specified for <a href="COMMON-LISP____DEFMACRO.html">defmacro</a>, and each <span class="v">dcl</span> is as 
+specified for <a href="COMMON-LISP____DEFUN.html">defun</a>.  <span class="v">:Macro-fn</span> specifies <span class="v">name-macro-fn</span> (used 
+below) as illustrated above, but if <span class="v">:macro-fn</span> is not specified then 
+<span class="v">name-macro-fn</span> is obtained by adding the suffix <span class="v">"-MACRO-FN"</span> to the 
+<a href="COMMON-LISP____SYMBOL-NAME.html">symbol-name</a> of <span class="v">name</span> to get a symbol in the same package as 
+<span class="v">name</span>.  The list <span class="v">(v1 ... vk)</span> enumerates all the names introduced in 
+<span class="v">macro-args</span>.</p> 
+ 
+<pre class="code">(<a href="COMMON-LISP____PROGN.html">progn</a>
+  (<a href="COMMON-LISP____DEFUN.html">defun</a> name-macro-fn (v1 ... vk)
+    dcl ... dcl
+    body)
+  (<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> name macro-args
+    doc-string
+    (name-macro-fn v1 ... vk))
+  )</pre> 
+ 
+<p>The reason for introducing a <span class="v">defun</span> is efficiency.  ACL2 expands a macro 
+call by running its own evaluator on the body of the macro, and this can be 
+relatively slow if that body is large.  But with <span class="v">defmac</span>, the evaluator 
+call reduces quickly to a single raw Lisp call of the (executable counterpart 
+of) the auxiliary function on the actuals of the macro.</p>
+</body>
+</html>

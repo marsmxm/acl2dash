@@ -1,0 +1,248 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Time-tracker</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____TIME-TRACKER">Click for Time-tracker in the Full Manual</a></h3>
+
+<p>Display time spent during specified evaluation</p><p>The <span class="v">time-tracker</span> macro is a utility for displaying time spent 
+ during specified evaluation.  In general, the user provides this 
+ specification.  However, ACL2 itself uses this utility for tracking uses of 
+ its <a href="ACL2____TAU-SYSTEM.html">tau-system</a> reasoning utility (see <a href="ACL2____TIME-TRACKER-TAU.html">time-tracker-tau</a>).  We 
+ discuss that use as an example before discussing the general form for calls of 
+ <span class="v">time-tracker</span>.</p> 
+ 
+ <p>Note that by default, the time being tracked is runtime (cpu time); to 
+ switch to realtime (elapsed time), see <a href="ACL2____GET-INTERNAL-TIME.html">get-internal-time</a>.</p> 
+ 
+ <p>Remark for ACL2(p) users (see <a href="ACL2____PARALLELISM.html">parallelism</a>): <span class="v">time-tracker</span> is 
+ merely a no-op in ACL2(p).</p> 
+ 
+ <p>During the development of the <a href="ACL2____TAU-SYSTEM.html">tau-system</a>, we were concerned about 
+ the possibility that it would slow down proofs without any indication of how 
+ one might avoid the problem.  We wanted a utility that would alert the user in 
+ such situations.  However, the tau-system code does not return <a href="ACL2____STATE.html">state</a>, 
+ so we could not track time spent in the state.  We developed the 
+ <span class="v">time-tracker</span> utility to track time and print messages, and we did it in a 
+ general way so that others can use it in their own code.  Here is an example 
+ of such a message that could be printed during a proof.</p> 
+ 
+ <pre class="code">TIME-TRACKER-NOTE [:TAU]: Elapsed runtime in tau is 2.58 secs; see
+:DOC time-tracker-tau.</pre> 
+ 
+ <p>And here is an example of such a message that could be printed at the end 
+ of the proof.</p> 
+ 
+ <pre class="code">TIME-TRACKER-NOTE [:TAU]: For the proof above, the total time spent
+in the tau system was 20.29 seconds.  See :DOC time-tracker-tau.</pre> 
+ 
+ <p>The <span class="v">time-tracker</span> utility tracks computation time spent on behalf of a 
+ user-specified ``tag''.  In the case of the tau-system, we chose the tag, 
+ <span class="v">:tau</span>.  The first argument of <span class="v">time-tracker</span> is the tag, which in our 
+ running example is always <span class="v">:tau</span>.  Note that although all arguments of 
+ <span class="v">time-tracker</span> are evaluated, the first argument is typically a keyword and 
+ the second is always a keyword, and such arguments evaluate to themselves.</p> 
+ 
+ <p>An ACL2 function invoked at the start of a proof includes approximately the 
+ following code.</p> 
+ 
+ <pre class="code">(<a href="ACL2____PROGN_42.html">progn$</a>
+ (<a href="ACL2____TIME-TRACKER.html">time-tracker</a> :tau :end)
+ (<a href="ACL2____TIME-TRACKER.html">time-tracker</a> :tau :init
+               :times '(1 2 3 4 5)
+               :interval 5
+               :msg "Elapsed runtime in tau is ~st secs; see :DOC ~
+                     time-tracker-tau.~|~%")
+ ...)</pre> 
+ 
+ <p>The first <span class="v">time-tracker</span> call (above) ends any existing time-tracking 
+ for tag <span class="v">:tau</span>.  One might have expected it to be put into code managing 
+ the proof <a href="ACL2____SUMMARY.html">summary</a>, but we decided not to rely on that code being 
+ executed, say, in case of an interrupt.  When a given tag is not already being 
+ time-tracked, then <span class="v">:end</span> is a no-op (rather than an error).</p> 
+ 
+ <p>The second <span class="v">time-tracker</span> call (above) initiates time-tracking for the 
+ tag, <span class="v">:tau</span>.  Moreover, it specifies the effect of the <span class="v">:print?</span> 
+ keyword.  Consider the following abbreviated definition from the ACL2 source 
+ code.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> tau-clausep-lst-rec (clauses ens wrld ans ttree state calist)
+  (<a href="COMMON-LISP____COND.html">cond</a>
+   ((<a href="COMMON-LISP____ENDP.html">endp</a> clauses)
+    (<a href="ACL2____MV.html">mv</a> (<a href="COMMON-LISP____REVAPPEND.html">revappend</a> ans nil) ttree calist))
+   (t (<a href="ACL2____MV-LET.html">mv-let</a>
+       (flg1 ttree1 calist)
+       (tau-clausep (<a href="COMMON-LISP____CAR.html">car</a> clauses) ens wrld state calist)
+       (<a href="ACL2____PROG2_42.html">prog2$</a> (<a href="ACL2____TIME-TRACKER.html">time-tracker</a> :tau :print?)
+               (tau-clausep-lst-rec (<a href="COMMON-LISP____CDR.html">cdr</a> clauses) ...))))))</pre> 
+ 
+ <p>Notice that <span class="v">(<a href="ACL2____TIME-TRACKER.html">time-tracker</a> :tau :print?)</span> is executed immediately after 
+ <span class="v">tau-clausep</span> is called.  The idea is to check whether the total time 
+ elapsed inside the tau-system justifies printing a message to the user.  The 
+ specification of <span class="v">:times '(1 2 3 4 5)</span> in the <span class="v">:init</span> form above says 
+ that a message should be printed after 1 second, after 2 seconds, ..., and 
+ after 5 seconds.  Thereafter, the specification of <span class="v">:interval 5</span> in the 
+ <span class="v">:init</span> form above says that each time we print, at least 5 additional 
+ seconds should have been tracked before <span class="v">(<a href="ACL2____TIME-TRACKER.html">time-tracker</a> :tau :print?)</span> 
+ prints again.  Finally, the <span class="v">:msg</span> keyword above specifies just what should 
+ be printed.  If it is omitted, then a reasonable default message is printed 
+ (as discussed below), but in this case we wanted to print a custom message. 
+ The <span class="v">:msg</span> string above is what is printed using formatted printing (see 
+ <a href="ACL2____FMT.html">fmt</a>), where the character <span class="v">#\t</span> is bound to a string giving a 
+ decimal representation with two decimal points of the time tracked so far for 
+ tag <span class="v">:tau</span>.  (As our general description below points out, <span class="v">:msg</span> can 
+ also be a ``message'' list rather than a string.)</p> 
+ 
+ <p>But when is time actually tracked for <span class="v">:tau</span>?  Consider the following 
+ definition from the ACL2 source code.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> tau-clausep-lst (clauses ens wrld ans ttree state calist)
+  (<a href="ACL2____PROG2_42.html">prog2$</a> (<a href="ACL2____TIME-TRACKER.html">time-tracker</a> :tau :start!)
+          (<a href="ACL2____MV-LET.html">mv-let</a>
+           (clauses ttree calist)
+           (tau-clausep-lst-rec clauses ens wrld ans ttree state calist)
+           (<a href="ACL2____PROG2_42.html">prog2$</a> (<a href="ACL2____TIME-TRACKER.html">time-tracker</a> :tau :stop)
+                   (<a href="ACL2____MV.html">mv</a> clauses ttree calist)))))</pre> 
+ 
+ <p>The two calls of <span class="v">time-tracker</span> above first start, and then stop, 
+ time-tracking for the tag, <span class="v">:tau</span>.  Thus, time is tracked during evaluation 
+ of the call of <span class="v">tau-clausep-lst-rec</span>, which is the function (discussed 
+ above) that does the <a href="ACL2____TAU-SYSTEM.html">tau-system</a>'s work.</p> 
+ 
+ <p>Finally, as noted earlier above, ACL2 may print a time-tracking message for 
+ tag <span class="v">:tau</span> at the end of a proof.  The ACL2 function <span class="v">print-summary</span> 
+ contains essentially the following code.</p> 
+ 
+ <pre class="code">(<a href="ACL2____TIME-TRACKER.html">time-tracker</a> :tau :print?
+              :min-time 1
+              :msg "For the proof above, the total runtime ~
+                    spent in the tau system was ~st seconds.  ~
+                    See :DOC time-tracker-tau.~|~%")</pre> 
+ 
+ <p>The use of <span class="v">:min-time</span> says that we are to ignore the <span class="v">:times</span> and 
+ <span class="v">:interval</span> established by the <span class="v">:init</span> call described above, and 
+ instead, print a message if and only if at least 1 second (since 1 is the 
+ value of keyword <span class="v">:min-time</span>) has been tracked for tag <span class="v">:tau</span>. 
+ Formatted printing (see <a href="ACL2____FMT.html">fmt</a>) is used for the value of <span class="v">:msg</span>, where 
+ the character <span class="v">#\t</span> is bound to a decimal string representation of the 
+ time in seconds, as described above.</p> 
+ 
+ <p>The example above covers all legal values for the second argument of 
+ <span class="v">time-tracker</span> and discusses all the additional legal keyword arguments. 
+ We conclude with a precise discussion of all arguments.  Note that all 
+ arguments are evaluated; thus when we refer to an argument, we are discussing 
+ the value of that argument.  All times discussed are runtimes, i.e., cpu 
+ times, unless that default is changed; see <a href="ACL2____GET-INTERNAL-TIME.html">get-internal-time</a>.</p> 
+ 
+ <pre class="code">General forms:
+
+(<a href="ACL2____TIME-TRACKER.html">time-tracker</a> t)        ; enable time-tracking (<a href="ACL2____DEFAULT.html">default</a>)
+
+(<a href="ACL2____TIME-TRACKER.html">time-tracker</a> nil)      ; disable time-tracking
+
+(<a href="ACL2____TIME-TRACKER.html">time-tracker</a> tag       ; a symbol other than t or nil
+              option    ; :init, :end, :start, :start!, :stop, or :print?
+              ;; keyword arguments:
+              :times    ; non-nil if and only if option is :init
+              :interval ; may only be non-nil with :init option
+              :min-time ; may only be non-nil with :print? option
+              :msg      ; may only be non-nil with :init and :print? options</pre> 
+ 
+ <p>Time-tracking is enabled by default.  If the first argument is <span class="v">t</span> or 
+ <span class="v">nil</span>, then no other arguments are permitted and time-tracking is enabled 
+ or disabled, respectively.  When time-tracking is disabled, nothing below 
+ takes place.  Thus we assume time-tracking is enabled for the remainder of 
+ this discussion.  We also assume below that the first argument is neither 
+ <span class="v">t</span> nor <span class="v">nil</span>.</p> 
+ 
+ <p>We introduce some basic notions about time-tracking.  A given tag, such as 
+ <span class="v">:tau</span> in the example above, might or might not currently be ``tracked'': 
+ <span class="v">:init</span> causes the specified tag to be tracked, while <span class="v">:end</span> causes the 
+ specified tag not to be tracked.  If the tag is being tracked, the tag might 
+ or might not be ``active'': <span class="v">:start</span> and <span class="v">:start!</span> cause the tag to be 
+ in an active state, while <span class="v">:stop</span> causes the tag not to be active.  Note 
+ that only tracked tags can be in an active or inactive state.  For a tag that 
+ is being tracked, the ``accumulated time'' is the total time spent in an 
+ active state since the time that the tag most recently started being tracked, 
+ and the ``checkpoint list'' is a non-empty list of rational numbers specifying 
+ when printing may take place, as described below.</p> 
+ 
+ <p>We now consider each legal value for the second argument, or ``option'', 
+ for a call of <span class="v">time-tracker</span> on a given tag.</p> 
+ 
+ <p><span class="v">:Init</span> specifies that the tag is to be tracked.  It also establishes 
+ defaults for the operation of <span class="v">:print?</span>, as described below, using the 
+ <span class="v">:times</span>, <span class="v">:interval</span>, and <span class="v">:msg</span> keywords.  Of these three, only 
+ <span class="v">:times</span> is required, and its value must be a non-empty list of rational 
+ numbers specifying the initial checkpoint list for the tag.  It is an error to 
+ specify <span class="v">:init</span> if the tag is already being tracked.  (So if you don't care 
+ whether or not the tag is already being tracked and you want to initiate 
+ tracking for that tag, use <span class="v">:end</span> first.)</p> 
+ 
+ <p><span class="v">:End</span> specifies that if the tag is being tracked, then it should stop 
+ being tracked.  If the tag is not being tracked, then <span class="v">:end</span> has no 
+ effect.</p> 
+ 
+ <p><span class="v">:Start</span> specifies that the tag is to be active.  It is an error to 
+ specify <span class="v">:start</span> if the tag is not being tracked or is already active.</p> 
+ 
+ <p><span class="v">:Start!</span> has the same effect as <span class="v">:start</span>, except that it does not 
+ cause an error when the tag is already active.  In effect, <span class="v">:start!</span> first 
+ invokes <span class="v">:stop</span> if the tag is already active, and then invokes 
+ <span class="v">start</span>.</p> 
+ 
+ <p><span class="v">:Stop</span> specifies that the tag is to stop being active.  It is an error 
+ to specify <span class="v">:stop</span> if the tag is not being tracked or is not active.</p> 
+ 
+ <p><span class="v">:Print?</span> specifies that if the tag is being tracked (not necessarily 
+ active), then a message should be printed if a suitable condition is met.  The 
+ nature of that message and that condition depend on the keyword options 
+ supplied with <span class="v">:print?</span> as well as those supplied with the <span class="v">:init</span> 
+ option that most recently initiated tracking.  <span class="v">:Print?</span> has no effect if 
+ the tag is not being tracked, except that if certain keyword values are 
+ checked if supplied with <span class="v">:print?</span>: <span class="v">:min-time</span> must be a rational 
+ number or <span class="v">nil</span>, and <span class="v">:msg</span> must be either a string, a true-list whose 
+ <span class="v">car</span> is a string, or <span class="v">nil</span>.  The remainder of this documentation 
+ describes the <span class="v">:print?</span> option in detail under the assumption that the tag 
+ is being tracked: first, giving the conditions under which it causes a message 
+ to be printed, and second, explaining what is printed.</p> 
+ 
+ <p>When <span class="v">:print?</span> is supplied a non-<span class="v">nil</span> value of <span class="v">:min-time</span>, that 
+ value must be a rational number, in which case a message is printed if the 
+ accumulated time for the tag is at least that value.  Otherwise a message is 
+ printed if the accumulated time is greater than or equal to the <span class="v">car</span> of 
+ the checkpoint list for the tag.  In that case, the tracking state for the tag 
+ is updated in the following two ways.  First, the checkpoint list is scanned 
+ from the front and as long as the accumulated time is greater than or equal to 
+ the <span class="v">car</span> of the remaining checkpoint list, that <span class="v">car</span> is popped off the 
+ checkpoint list.  Second, if the checkpoint list has been completely emptied 
+ and a non-<span class="v">nil</span> <span class="v">:interval</span> was supplied when tracking was most recently 
+ initiated with the <span class="v">:init</span> option, then the checkpoint list is set to 
+ contain a single element, namely the sum of the accumulated time with that 
+ value of <span class="v">:interval</span>.</p> 
+ 
+ <p>Finally, suppose the above criteria are met, so that <span class="v">:print?</span> results 
+ in printing of a message.  We describe below the message, <span class="v">msg</span>, that is 
+ printed.  Here is how it is printed (see <a href="ACL2____FMT.html">fmt</a>), where 
+ <span class="v">seconds-as-decimal-string</span> is a string denoting the number of seconds of 
+ accumulated time for the tag, with two digits after the decimal point.</p> 
+ 
+ <pre class="code">(<a href="ACL2____FMS.html">fms</a> "TIME-TRACKER-NOTE [~x0]: ~@1~|"
+     (<a href="COMMON-LISP____LIST.html">list</a> (<a href="COMMON-LISP____CONS.html">cons</a> #0 tag)
+           (<a href="COMMON-LISP____CONS.html">cons</a> #1 msg)
+           (<a href="COMMON-LISP____CONS.html">cons</a> #t seconds-as-decimal-string))
+     (<a href="ACL2____PROOFS-CO.html">proofs-co</a> state) state nil)</pre> 
+ 
+ <p>The value of <span class="v">msg</span> is the value of the <span class="v">:msg</span> keyword supplied with 
+ <span class="v">:print?</span>, if non-<span class="v">nil</span>; else, the value of <span class="v">:msg</span> supplied when most 
+ recently initialization with the <span class="v">:init</span> option, if non-<span class="v">nil</span>; and 
+ otherwise, the string <span class="v">"~st s"</span> (the final ``s'' abbreviating the word 
+ ``seconds'').  It is convenient to supply <span class="v">:msg</span> as a call <span class="v">(<a href="ACL2____MSG.html">msg</a> str
+ arg-0 arg-1 ... arg-k)</span>, where <span class="v">str</span> is a string and each <span class="v">arg-i</span> is 
+ the value to be associated with <span class="v">#\i</span> upon formatted printing (as with 
+ <span class="tt"><a href="ACL2____FMT.html">fmt</a></span>) of the string <span class="v">str</span>.</p>
+</body>
+</html>

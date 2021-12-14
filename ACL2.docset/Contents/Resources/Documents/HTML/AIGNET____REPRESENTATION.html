@@ -1,0 +1,148 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Representation</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=AIGNET____REPRESENTATION">Click for Representation in the Full Manual</a></h3>
+
+<p>Logical representation of the AIG network.</p><p>We now describe the logical view of the <span class="v">aignet</span> stobj.  This 
+representation serves as the foundation for reasoning about AIG algorithms and 
+provides the logical basis for the <a href="AIGNET____BASE-API.html">base-api</a>.</p> 
+ 
+<p>Note that these definitions are used for reasoning but typically do not get 
+run.  For details about the executable representation, see <a href="AIGNET____AIGNET-IMPL.html">aignet-impl</a> 
+instead, but most users should not need to think about those details.</p> 
+ 
+ 
+<h3>The AIG Network</h3> 
+ 
+<p>Logically, <span class="v">aignet</span> is simply a list of <a href="AIGNET____NODE.html">node</a>s, where a node is of one of 
+five types distinguished by a particular symbol in its CAR, called its <a href="AIGNET____SEQUENTIAL-TYPE.html">sequential-type</a> or <b>stype</b>.  Depending on its stype, a node contains 0 or 
+more fields that encode the and-inverter graph.  We will discuss the meanings 
+of these fields later:</p> 
+ 
+<table class="xtable"> 
+<tr>
+<th>    Node Kind        </th>
+<th>    Representation              </th>
+</tr> 
+ 
+<tr>
+<td>    Primary input    </td>
+<td>    <span class="v">(:pi)</span>                  </td>
+</tr> 
+<tr>
+<td>    Register         </td>
+<td>    <span class="v">(:reg)</span>                 </td>
+</tr> 
+<tr>
+<td>    AND gate         </td>
+<td>    <span class="v">(:gate fanin0 fanin1)</span>  </td>
+</tr> 
+<tr>
+<td>    Next state       </td>
+<td>    <span class="v">(:nxst fanin regnum)</span>   </td>
+</tr> 
+<tr>
+<td>    Primary output   </td>
+<td>    <span class="v">(:po fanin)</span>            </td>
+</tr> 
+</table> 
+ 
+<p>There is one other stype, <span class="v">:const</span>, but generally no node in the list 
+actually has constant type; instead, the end of the list implicitly contains a 
+constant node.</p> 
+ 
+<p>Logically, an <span class="v">aignet</span> is constructed by simply consing new nodes onto 
+it.  A newly-created or cleared <span class="v">aignet</span> is just <span class="v">nil</span>, and contains only 
+the implicit constant node.</p> 
+ 
+ 
+<h3>Node IDs and Node Lookups</h3> 
+ 
+<p>We divide the set of nodes into <i>fanin nodes</i> and (combinational) 
+<i>outputs</i>.  Next-state and primary output nodes are outputs, and all other 
+kinds are fanin nodes.  The function <span class="v">fanin-node-p</span> discriminates between 
+these two subsets.</p> 
+ 
+<p>Each fanin node has an ID, numbered sequentially with the unique constant 
+node having ID 0.  The function <span class="v">fanin-count</span> counts the number of fanin 
+nodes in a node list.  To look up a node by ID, we use the function 
+<span class="v">(<a href="AIGNET____LOOKUP-ID.html">lookup-id</a> n aignet)</span>, which returns the unique <b>suffix</b> of the aignet 
+whose <span class="v">car</span> is a fanin node and which has <span class="v">fanin-count</span> <span class="v">n</span>.  If 
+<span class="v">n</span> is greater than the fanin count of the network, then it returns 
+<span class="v">nil</span>:</p> 
+ 
+<p><b>Function: </b>lookup-id</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> lookup-id (id aignet)
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____NATP.html">natp</a> id) (<a href="AIGNET____NODE-LISTP.html">node-listp</a> aignet))))
+       (<a href="COMMON-LISP____LET.html">let</a> ((__function__ 'lookup-id))
+            (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+            (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____ENDP.html">endp</a> aignet) (<a href="AIGNET____NODE-LIST-FIX.html">node-list-fix</a> aignet))
+                  ((<a href="COMMON-LISP____AND.html">and</a> (<a href="AIGNET____FANIN-NODE-P.html">fanin-node-p</a> (<a href="COMMON-LISP____CAR.html">car</a> aignet))
+                        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="AIGNET____FANIN-COUNT.html">fanin-count</a> aignet) (<a href="ACL2____LNFIX.html">lnfix</a> id)))
+                   (<a href="AIGNET____NODE-LIST-FIX.html">node-list-fix</a> aignet))
+                  (t (<a href="AIGNET____LOOKUP-ID.html">lookup-id</a> id (<a href="COMMON-LISP____CDR.html">cdr</a> aignet))))))</pre> 
+ 
+<p>Note that although this looks like a quadratic algorithm, it doesn't matter 
+because this is never actually executed.  Real ID lookups are carried out by 
+array accesses.</p> 
+ 
+<p>Nodes can also be looked up by stype.  The function <span class="v">(<a href="AIGNET____STYPE-COUNT.html">stype-count</a> stype
+aignet)</span> returns the number of nodes of the given stype, and analogous to 
+<span class="v">lookup-id</span>, <span class="v">(<a href="AIGNET____LOOKUP-STYPE.html">lookup-stype</a> n stype aignet)</span> returns the unique suffix of 
+the node list whose <span class="v">car</span> is of the given stype and whose <span class="v">cdr</span> has 
+<span class="v">stype-count</span> <span class="v">n</span>.  (Note: we take the cdr here and not in <span class="v">lookup-id</span> 
+because <span class="v">fanin-count</span> is off by 1 in that it doesn't count the unique 
+constant node that is at index 0.  That is, <span class="v">(<a href="AIGNET____LOOKUP-ID.html">lookup-id</a> 0 aignet)</span> is 
+supposed to return nil, whereas <span class="v">(<a href="AIGNET____LOOKUP-STYPE.html">lookup-stype</a> 0 :reg aignet)</span> is supposed 
+to return the suffix containing the 0th <span class="v">:reg</span> node.)</p> 
+ 
+<p><b>Function: </b>lookup-stype</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> lookup-stype (n stype aignet)
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____NATP.html">natp</a> n)
+                                   (<a href="AIGNET____STYPEP.html">stypep</a> stype)
+                                   (<a href="AIGNET____NODE-LISTP.html">node-listp</a> aignet))))
+       (<a href="COMMON-LISP____LET.html">let</a> ((__function__ 'lookup-stype))
+            (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+            (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____ENDP.html">endp</a> aignet) (<a href="AIGNET____NODE-LIST-FIX.html">node-list-fix</a> aignet))
+                  ((<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="AIGNET____STYPE.html">stype</a> (<a href="COMMON-LISP____CAR.html">car</a> aignet))
+                               (stype-fix stype))
+                        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="AIGNET____STYPE-COUNT.html">stype-count</a> stype (<a href="COMMON-LISP____CDR.html">cdr</a> aignet))
+                               (<a href="ACL2____LNFIX.html">lnfix</a> n)))
+                   (<a href="AIGNET____NODE-LIST-FIX.html">node-list-fix</a> aignet))
+                  (t (<a href="AIGNET____LOOKUP-STYPE.html">lookup-stype</a> n stype (<a href="COMMON-LISP____CDR.html">cdr</a> aignet))))))</pre> 
+ 
+ 
+<h3>Node Operations, Fanins, Register IDs</h3> 
+ 
+<p>Gate, next state, and primary output nodes have some fields:</p> 
+ 
+<ul> 
+<li>A gate has two fanins (representing the inputs to the AND gate),</li> 
+<li>A primary output or next-state has one fanin (the function of the output or next-state), and</li> 
+<li>A next-state also contains the register number of the corresponding register node.</li> 
+</ul> 
+ 
+<p>The fanins are <a href="AIGNET____LITERAL.html">literal</a>s, which combine a node ID with a negation flag 
+as a single natural number: <span class="v">(<a href="COMMON-LISP_____B2.html">+</a> (<a href="COMMON-LISP_____A2.html">*</a> 2 id) neg)</span>, where neg is 1 or 0.</p> 
+ 
+<p>There are many functions for constructing and accessing the various kinds of 
+nodes.  See <a href="AIGNET____NODE.html">node</a> for a reference.  Note that these node-related 
+functions are not meant to be executed; they exist only for reasoning.</p> 
+ 
+ 
+<h3>Lowest-Level API</h3> 
+ 
+<p>The functions described above—<span class="v">fanin-count</span>, <span class="v">lookup-id</span>, 
+<span class="v">stype-count</span>, <span class="v">lookup-stype</span> and the 
+other functions for operating on logical nodes, e.g., the functions described 
+under <a href="AIGNET____NODE.html">node</a>, provide the logical basis for reasoning about most kinds of 
+access to the aignet.</p> 
+ 
+<p>However, note that these functions are typically not used directly, 
+particularly for execution.  Instead, see the wrappers that implement Aignet's 
+<a href="AIGNET____BASE-API.html">base-api</a>.</p>
+</body>
+</html>

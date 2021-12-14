@@ -1,0 +1,98 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Stv-implementation-details</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____STV-IMPLEMENTATION-DETAILS">Click for Stv-implementation-details in the Full Manual</a></h3>
+
+<p>Overview of the basic flow for processing and running STVs.</p><p>Here is a high-level overview of how we compile, process, and 
+evaluate STVs.  A picture of the flow is:</p> 
+ 
+<pre class="code">User-Level STV              ESIM Module
+     |                           |
+     |   ,-----------------------+
+     |   |                       |
+     v   v                       v
+Compiled STV            Fully General Sexprs
+     |                           |
+     |   ,-----------------------'
+     |   |
+     v   v
+ Processed STV         Simulation Input Alist
+     |                         |
+     |   ,---------------------'
+     |   |
+     v   v
+  stv-run/debug
+       |    |
+       |    +-------&gt; Waveform (VCD Dump)
+       |    |
+       v    v
+ Simulation Output Alist</pre> 
+ 
+ 
+<p>Here, the user provides:</p> 
+ 
+<ul> 
+ 
+<li>The <b>User-Level STV</b>, which is a symbolic test vector written in the 
+<a href="ACL2____SYMBOLIC-TEST-VECTOR-FORMAT.html">symbolic-test-vector-format</a>,</li> 
+ 
+<li>The <b>ESIM Module</b> to simulate, which is generally produced by VL.</li> 
+ 
+<li>The <b>Simulation Input Alist</b>, which is an alist that should bind the 
+simulation variables of the symbolic test vector to concrete, natural-numbered 
+values.</li> 
+ 
+</ul> 
+ 
+<p>As a first step, we preprocess and compile the STV; see <a href="ACL2____STV-COMPILE.html">stv-compile</a>. 
+This step involves basic sanity checking and the computation of mappings that 
+record what inputs to provide to ESIM at each step of the simulation, what 
+outputs to extract after each phase, and how to translate between Esim bits and 
+the user-level input and output alists.  This compilation should generally be 
+quite fast (it's mostly involving the STV instead of the module), and it only 
+needs to be done once per STV.</p> 
+ 
+<p>Separately, we do a fully general symbolic simulation of the <a href="ACL2____ESIM.html">esim</a> 
+module for as many phases as are necessary to evaluate this STV; see <a href="ACL2____STV-FULLY-GENERAL-SIMULATION-RUN.html">stv-fully-general-simulation-run</a>.  Symbolically simulating a module for many 
+steps can be very expensive.  On the other hand, this cost can be shared across 
+all STVs that target the same module, and it can even be at least partly shared 
+when the STV's require different numbers of phases.</p> 
+ 
+<p>Next, we create a Processed STV; see <a href="ACL2____STV-PROCESS.html">stv-process</a>.  This involves 
+pulling out the fully-general expressions for the signals we actually care 
+about (cheap) and specializing these expressions using the bindings from the 
+compiled STV (slightly expensive; basically <a href="ACL2____4V-SEXPR-RESTRICT-WITH-RW.html">4v-sexpr-restrict-with-rw</a> for 
+each signal in the user-outs).</p> 
+ 
+<p>We generally expect the Processed STV to be saved as a constant, via <a href="ACL2____DEFCONSTS.html">defconsts</a> since our use of <a href="ACL2____DEFATTACH.html">defattach</a> in <a href="ACL2____ESIM.html">esim</a> prevents the sound 
+use of <a href="ACL2____DEFCONST.html">defconst</a>.  This will allow the same STV to be saved in a book and 
+reused for all evaluations of the STV.  In other words, we really expect to 
+only have to pay the price of processing an STV once.</p> 
+ 
+<p>Once the STV has been processed, we can run it with concrete values for the 
+input simulation variables; see <a href="ACL2____STV-RUN.html">stv-run</a>.  To do this, we basically need 
+to (1) translate the input numbers into bit-level bindings, (2) use <a href="ACL2____4V-SEXPR-EVAL.html">4v-sexpr-eval</a> to reduce the sexprs that are found in the Processed STV with the 
+bindings for their inputs, and (3) translate back from the resulting output-bit 
+bindings into numbers (or Xes) for the output alist.  This is about as cheap as 
+we know how to make it.</p> 
+ 
+<p>Of course, we may alternately want to run the STV and generate a waveform 
+for debugging; see <a href="ACL2____STV-DEBUG.html">stv-debug</a>.  But now there's a slight problem.  When 
+we compute the fully general sexprs, we omit internal signals because it gives 
+us a speed boost.  So, the processed STV doesn't contain the information we 
+would need to generate a waveform.</p> 
+ 
+<p>Well, basically we just do a new <a href="ACL2____ESIM.html">esim</a> simulation that does include 
+the internal variables, and then run through the rest of the process again.  We 
+<a href="ACL2____MEMOIZE.html">memoize</a> things so that even though your first call of <a href="ACL2____STV-DEBUG.html">stv-debug</a> 
+is expensive, subsequent calls will not need to redo the simulation or 
+specialization steps.</p> 
+ 
+
+</body>
+</html>

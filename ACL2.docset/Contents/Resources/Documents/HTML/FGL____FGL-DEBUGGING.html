@@ -1,0 +1,78 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Fgl-debugging</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=FGL____FGL-DEBUGGING">Click for Fgl-debugging in the Full Manual</a></h3>
+
+<p>Tools for debugging FGL failures</p> 
+<p>In this topic we list some techniques for debugging FGL failures.</p> 
+ 
+<h3>Examining the Stack</h3> 
+ 
+<p>FGL keeps almost all of the state of its interpreter inside its interpreter 
+state stobj <span class="v">interp-st</span>.  In particular, it keeps a stack containing 
+variable bindings, scratch objects, and debugging information inside this 
+stobj. Examining this stack to see where FGL ran into an error or where it's 
+spending time is one of the best tools for debugging FGL problems.</p> 
+ 
+<p>The stack is contained in a nested stobj inside the interpreter state, but 
+it can be dumped into a regular ACL2 object using the function 
+<span class="v">(fgl::interp-st-extract-stack fgl::interp-st)</span>.  Usually when FGL encounters an error it will also save the stack into a state global <span class="v">(<a href="ACL2_____04.html">@</a> :fgl-interp-error-debug-stack)</span>.  The FGL clause 
+processor is typically run on the live interp-st stobj, so if the clause processor is 
+interrupted during a proof the stack can be retrieved from that stobj, either afterward 
+from the ACL2 loop or within the raw Lisp break:</p> 
+ 
+<pre class="code">;; From within the ACL2 loop, save the stack into a constant (using std/util/defconsts.lisp):
+(<a href="ACL2____DEFCONSTS.html">defconsts</a> *my-stack* (fgl::interp-st-extract-stack fgl::interp-st))
+;; Or put it in a state global, accessed as (<a href="ACL2_____04.html">@</a> :my-stack):
+(<a href="ACL2____F-PUT-GLOBAL.html">f-put-global</a> ':my-stack (fgl::interp-st-extract-stack fgl::interp-st) state)
+
+;; From within a raw Lisp break, save the stack as a defparameter:
+(defparameter *my-stack* (fgl::interp-st-extract-stack (<a href="COMMON-LISP____CDR.html">cdr</a> (<a href="COMMON-LISP____ASSOC.html">assoc</a> 'fgl::interp-st *user-stobj-alist*)))</pre> 
+ 
+<p>Note: be sure NOT to do the latter when in a raw Lisp break resulting from a 
+stack overflow! It may cause your Lisp to crash completely.</p> 
+ 
+<p>The stack object's type is <a href="FGL____MAJOR-STACK.html">major-stack</a>, which is documented under 
+<a href="FGL____FGL-STACK.html">fgl-stack</a>.  Essentially it is a nonempty list of <a href="FGL____MAJOR-FRAME.html">major-frame</a> 
+objects representing scopes such as function calls and rewrite rules.  Each 
+frame contains some variable bindings and debug info identifying what rule 
+application that frame represents, as well as a minor stack representing a 
+nesting of lambdas.</p> 
+ 
+<p>A useful tool for examining a stack object is 
+<span class="v">(fgl::major-stack-&gt;debugframes my-stack)</span>, which returns the debug info 
+from each of the major frames paired with its index.  Often you can find the 
+frames you're most interested in by looking at the debug info, and then examine 
+those frames closer by indexing into the stack with <span class="v">nth</span> etc.</p> 
+ 
+<p>It may be useful to set a lower recursion limit for the FGL interpreter. 
+The default is 10000, but it may help to catch runaway rule applications to 
+limit it to 1000 or less.  This can be adjusted by setting the state global 
+<span class="v">:fgl-reclimit</span>.</p> 
+ 
+<h3>Tracing Rewrite Rules</h3> 
+ 
+<p>Most of the work of FGL is done by rewrite rules -- even the expansion of 
+function definitions is just treated as an application of a rewrite rule. 
+Tracing rewrites can help debug problems due to rule applications unexpectedly 
+failing or recurring out of control, etc.  See <a href="FGL____FGL-REWRITE-TRACING.html">fgl-rewrite-tracing</a>.</p> 
+ 
+<h3>Profiling</h3> 
+ 
+<p>FGL provides <a href="ACL2____ACCUMULATED-PERSISTENCE.html">accumulated 
+persistence</a>-style profiling of rewrite rules, concrete executions, and 
+FGL primitive executions.  These may help debug performance problems by showing 
+which rules are invoked many times and which rules cause other rules to be 
+invoked many times.  As with ACL2's accumulated persistence, we count two 
+numbers for each rule: tries, which simply measures the number of times the 
+rule is attempted, and frames, which measures how many tries total, including 
+other rules, happen during a top-level attempted application of the rule.</p> 
+ 
+
+</body>
+</html>

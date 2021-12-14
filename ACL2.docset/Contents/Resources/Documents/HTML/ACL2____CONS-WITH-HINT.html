@@ -1,0 +1,90 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Cons-with-hint</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____CONS-WITH-HINT">Click for Cons-with-hint in the Full Manual</a></h3>
+
+<p>Alternative to <span class="tt"><a href="COMMON-LISP____CONS.html">cons</a></span> that tries to avoid consing when a 
+ suitable <span class="v">cons</span> structure is provided as a hint.</p><p>This is a special purpose function that is intended to help with 
+ reducing the memory usage of functions that modify existing cons tree 
+ structures.  Also see <a href="ACL2____HONS.html">hons</a> for a way to share <a href="COMMON-LISP____CONS.html">cons</a> structures; 
+ however, <span class="v">cons-with-hint</span> is likely much cheaper than <span class="v">hons</span> and hence 
+ can be useful for reducing consing without the overhead of <span class="v">hons</span>.</p> 
+ 
+ <p>Logically <span class="v">(<a href="ACL2____CONS-WITH-HINT.html">cons-with-hint</a> x y hint)</span> is just <span class="v">(<a href="COMMON-LISP____CONS.html">cons</a> x y)</span>; <span class="v">hint</span> 
+ is completely irrelevant and ignored.  We generally expect that 
+ <span class="v">cons-with-hint</span> will just be left <a href="ACL2____ENABLE.html">enable</a>d, so you should never have 
+ to reason about it.</p> 
+ 
+ <p>But <span class="v">cons-with-hint</span> has a special raw Common Lisp definition that tries 
+ to avoid consing by using your <span class="v">hint</span>.  Specifically: if <span class="v">hint</span> is the 
+ cons <span class="v">(x . y)</span>, then <span class="v">hint</span> is returned without creating a new cons. 
+ Equality checking against <span class="v">x</span> and <span class="v">y</span> is done using <span class="tt"><a href="COMMON-LISP____EQL.html">eql</a></span>, which 
+ makes it a fast but incomplete check for equality.</p> 
+ 
+ <p>What good is this?  A fairly common operation in ACL2 is to ``change'' an 
+ existing data structure by consing together a new structure that is similar to 
+ it, but perhaps with some subtrees replaced.  In many cases, some portion of 
+ the structure does not need to change.</p> 
+ 
+ <p>For instance, consider a function like <span class="tt"><a href="ACL2____REMOVE-EQUAL.html">remove-equal</a></span>, which updates 
+ a list by removing all copies of some element from it.  The definition of 
+ <span class="v">remove-equal</span> is as follows (in the logic; it has a slightly different 
+ definition in raw Lisp).</p> 
+ 
+ <p><b>Function: </b>remove-equal</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> remove-equal (x l)
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____TRUE-LISTP.html">true-listp</a> l)))
+       (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____ENDP.html">endp</a> l) nil)
+             ((<a href="COMMON-LISP____EQUAL.html">equal</a> x (<a href="COMMON-LISP____CAR.html">car</a> l))
+              (<a href="ACL2____REMOVE-EQUAL.html">remove-equal</a> x (<a href="COMMON-LISP____CDR.html">cdr</a> l)))
+             (t (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CAR.html">car</a> l)
+                      (<a href="ACL2____REMOVE-EQUAL.html">remove-equal</a> x (<a href="COMMON-LISP____CDR.html">cdr</a> l))))))</pre> 
+ 
+ <p>You can see that if <span class="v">l</span> doesn't have any copies of <span class="v">x</span>, this function 
+ will essentially make a fresh copy of the whole list <span class="v">x</span>.  That could waste 
+ a lot of memory when <span class="v">x</span> is long.  The choice was made to define 
+ <span class="v">remove-equal</span> ``under the hood'' to call Common Lisp's function, 
+ <span class="v">remove</span>; but it is easy to write a new version of <span class="v">remove-equal</span> that 
+ uses <span class="v">cons-with-hint</span>:</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> remove-equal-with-hint (x l)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____TRUE-LISTP.html">true-listp</a> l)))
+  (<a href="ACL2____MBE.html">mbe</a> :logic (<a href="ACL2____REMOVE-EQUAL.html">remove-equal</a> x l)
+       :exec (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____ENDP.html">endp</a> l) nil)
+                   ((<a href="COMMON-LISP____EQUAL.html">equal</a> x (<a href="COMMON-LISP____CAR.html">car</a> l))
+                    (remove-equal-with-hint x (<a href="COMMON-LISP____CDR.html">cdr</a> l)))
+                   (t
+                    (<a href="ACL2____CONS-WITH-HINT.html">cons-with-hint</a> (<a href="COMMON-LISP____CAR.html">car</a> l)
+                                    (remove-equal-with-hint x (<a href="COMMON-LISP____CDR.html">cdr</a> l))
+                                    l)))))</pre> 
+ 
+ <p>This new version avoids consing in the case that we are not dropping an 
+ element.  For example, at the time of this writing, we found the following 
+ memory usages on our copy of ACL2 built on CCL:</p> 
+ 
+ <pre class="code">:q
+
+;; 16 MB of memory allocated
+(<a href="COMMON-LISP____LET.html">let</a> ((<a href="COMMON-LISP____LIST.html">list</a> (<a href="COMMON-LISP____MAKE-LIST.html">make-list</a> 1000 :initial-element 0)))
+  (time (loop for i from 1 to 1000 do (<a href="ACL2____REMOVE-EQUAL.html">remove-equal</a> i list))))
+
+;; 0 MB of memory allocated
+(<a href="COMMON-LISP____LET.html">let</a> ((<a href="COMMON-LISP____LIST.html">list</a> (<a href="COMMON-LISP____MAKE-LIST.html">make-list</a> 1000 :initial-element 0)))
+  (time (loop for i from 1 to 1000 do (remove-equal-with-hint i list))))</pre> 
+ 
+ <p>This memory usage is not very surprising when you consider that the list 
+ does not change when no removal takes place.  For example (still in raw 
+ Lisp):</p> 
+ 
+ <pre class="code">? (<a href="COMMON-LISP____LET.html">let</a> ((x '(a b c d e))) (<a href="COMMON-LISP____EQ.html">eq</a> x (remove-equal-with-hint 3 x)))
+T
+?</pre> 
+ 
+ <p>Note that ACL2 asks Lisp to inline calls of <span class="v">cons-with-hint</span>, so there 
+ will likely be no function call overhead for using <span class="v">cons-with-hint</span>.</p>
+</body>
+</html>

@@ -1,0 +1,76 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Safe-mode-cheat-sheet</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____SAFE-MODE-CHEAT-SHEET">Click for Safe-mode-cheat-sheet in the Full Manual</a></h3>
+
+<p>Working around ``<a href="ACL2____PROGRAM-ONLY.html">program-only</a>'' issues</p><p>This cheat sheet gives workarounds for errors caused by attempts to 
+ evaluate executable-counterparts (see <a href="ACL2____EVALUATION.html">evaluation</a>) of so-called <a href="ACL2____PROGRAM-ONLY.html">program-only</a> functions.  This most often occurs when <a href="ACL2____SAFE-MODE.html">safe-mode</a> is 
+ active.  Recall that safe-mode can be set by <span class="v">(<a href="ACL2____ASSIGN.html">assign</a> safe-mode t)</span>, and 
+ also is used during macroexpansion and other logical acts that might involve 
+ <span class="v">:</span><span class="tt"><a href="ACL2____PROGRAM.html">program</a></span> mode functions.</p> 
+ 
+ <p>The problems manifest with a hard error like this:</p> 
+ 
+ <pre class="code">HARD ACL2 ERROR in PROGRAM-ONLY:  The call
+&lt;term&gt;
+is an illegal call of a function that has been marked as ``program-
+only,'' presumably because it has special raw Lisp code and safe-mode
+is active.  See :DOC program-only for further explanation and a link
+to possible workarounds.
+(See :DOC set-iprint to be able to see elided values in this message.)</pre> 
+ 
+ <p>When the term is a call of <span class="v">ev-w</span>, an unsafe hack allowing such calls 
+ is as follows.  Warning: This may result in unsoundness!</p> 
+ 
+ <pre class="code">(<a href="ACL2____VALUE.html">value</a> :q)
+(setf (symbol-function (*1*-symbol 'ev-w))
+      (symbol-function 'ev-w))
+(<a href="ACL2____LP.html">lp</a>)</pre> 
+ 
+ <p>Typically that just leads to other similar errors and so you discover the 
+ call tree, each of whose functions can be handled similarly (also in raw 
+ Lisp):</p> 
+ 
+ <pre class="code">(setf (symbol-function (*1*-symbol 'ev-rec))
+      (symbol-function 'ev-rec))
+(setf (symbol-function (*1*-symbol 'ev-fncall-rec))
+      (symbol-function 'ev-fncall-rec))
+(setf (symbol-function (*1*-symbol 'push-warning))
+      (symbol-function 'push-warning))</pre> 
+ 
+ <p>Other times you may avoid the problem by defining your own utilities.  For 
+ example, in safe-mode you can't use the utility <span class="tt"><a href="ACL2____WITHOUT-EVISC.html">without-evisc</a></span> (which 
+ is useful when <a href="ACL2____IPRINT.html">iprint</a>ing is active).  But the following works, provided 
+ <span class="v">form</span> evaluates to an <a href="ACL2____ERROR-TRIPLE.html">error-triple</a>.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> without-evisc-error-triple (form)
+  `(<a href="ACL2____STATE-GLOBAL-LET_A2.html">state-global-let*</a>
+    ((abbrev-evisc-tuple nil set-abbrev-evisc-tuple-state)
+     (gag-mode-evisc-tuple nil set-gag-mode-evisc-tuple-state)
+     (term-evisc-tuple nil set-term-evisc-tuple-state)
+     (<a href="ACL2____LD-EVISC-TUPLE.html">ld-evisc-tuple</a> nil set-ld-evisc-tuple-state))
+    ,form))</pre> 
+ 
+ <p>The following log illustrates how to use this utility to avoid an error 
+ caused by <span class="v">without-evisc</span> in safe-mode.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____SET-IPRINT.html">set-iprint</a> t)
+
+ACL2 Observation in SET-IPRINT:  Iprinting has been enabled.
+ACL2 !&gt;(<a href="ACL2____ASSIGN.html">assign</a> safe-mode t)
+ T
+ACL2 !&gt;(<a href="ACL2____CW.html">cw</a> "Something printed with evisceration: ~X01~|"
+           '((((DEEP))))
+           (<a href="ACL2____EVISC-TUPLE.html">evisc-tuple</a> 3 4 nil nil))
+Something printed with evisceration: (((#@1#)))
+NIL
+ACL2 !&gt;(without-evisc-error-triple (<a href="ACL2____VALUE.html">value</a> '(((#@1#)))))
+ ((((DEEP))))
+ACL2 !&gt;</pre>
+</body>
+</html>

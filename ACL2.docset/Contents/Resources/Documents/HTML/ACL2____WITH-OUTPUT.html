@@ -1,0 +1,298 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>With-output</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____WITH-OUTPUT">Click for With-output in the Full Manual</a></h3>
+
+<p>Suppressing or turning on specified output for an event</p><p>The macro <span class="v">with-output</span> can be used to control ACL2 output.  It 
+ can be wrapped around an event to create a new event; see <a href="ACL2____EMBEDDED-EVENT-FORM.html">embedded-event-form</a>.  The macro <span class="v">with-output!</span> is identical except that 
+ it does not create an event and, unlike <span class="v">with-output</span>, it can be called in 
+ code.</p> 
+ 
+ <h3>Examples</h3> 
+ 
+ <pre class="code">; Turn off all output during evaluation of the indicated thm form.
+(<a href="ACL2____WITH-OUTPUT.html">with-output</a>
+ :off :all
+ :gag-mode nil
+ (<a href="ACL2____THM.html">thm</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (app (app x y) z) (app x (app y z)))))
+
+; Prove the indicated theorem with the event summary turned off and
+; using the :goals setting for gag-mode.
+(<a href="ACL2____WITH-OUTPUT.html">with-output</a>
+   :off summary
+   :gag-mode :goals
+   (<a href="ACL2____DEFTHM.html">defthm</a> app-assoc (<a href="COMMON-LISP____EQUAL.html">equal</a> (app (app x y) z) (app x (app y z)))))
+
+; Same effect as just above:
+(<a href="ACL2____WITH-OUTPUT.html">with-output</a>
+   :on summary
+   :summary-off :all
+   :gag-mode :goals
+   (<a href="ACL2____DEFTHM.html">defthm</a> app-assoc (<a href="COMMON-LISP____EQUAL.html">equal</a> (app (app x y) z) (app x (app y z)))))
+
+; Turn off all but the ``time'' and ``rules'' parts of the summary.
+(<a href="ACL2____WITH-OUTPUT.html">with-output</a>
+   :on summary
+   :summary-off (:other-than time rules)
+   :gag-mode :goals  ; use gag-mode, with goal names printed
+   (<a href="ACL2____DEFTHM.html">defthm</a> app-assoc (<a href="COMMON-LISP____EQUAL.html">equal</a> (app (app x y) z) (app x (app y z)))))
+
+; Same as specifying :off :all, but showing all output types
+; (i.e., the value of constant *valid-output-names*):
+(<a href="ACL2____WITH-OUTPUT.html">with-output</a>
+ :off (<a href="COMMON-LISP____ERROR.html">error</a> warning warning! observation prove proof-builder event history
+             summary proof-tree)
+ :gag-mode nil
+ (<a href="ACL2____THM.html">thm</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (app (app x y) z) (app x (app y z)))))
+
+; Same as above, but :stack :push says to save the current
+; inhibit-output-lst, which can be restored in a subsidiary with-output call
+; that specifies :stack :pop.
+(<a href="ACL2____WITH-OUTPUT.html">with-output</a>
+ :stack :push
+ :off :all
+ :gag-mode nil
+ (<a href="ACL2____THM.html">thm</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (app (app x y) z) (app x (app y z)))))
+
+; Abbreviate printing in gag-mode for guard goals and induction schemes, but
+; defeat abbreviated printing (<a href="COMMON-LISP____IF.html">if</a> any) for terms.
+(<a href="ACL2____WITH-OUTPUT.html">with-output</a>
+ :evisc (:gag-mode (<a href="ACL2____EVISC-TUPLE.html">evisc-tuple</a> 3 4 nil nil)
+         :term nil)
+ (<a href="COMMON-LISP____DEFUN.html">defun</a> h (x)
+   (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t))
+   (<a href="COMMON-LISP____APPEND.html">append</a> (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____MAKE-LIST.html">make-list</a> 10) x) x)))
+
+; The following use of :ctx causes the error message to start with
+; ``ACL2 Error in MY-CUSTOM-CTX'' instead of
+; ``ACL2 Error in ( DEFUN FOO ...)''.
+(<a href="ACL2____WITH-OUTPUT.html">with-output</a>
+ :ctx 'my-custom-ctx
+ (<a href="COMMON-LISP____DEFUN.html">defun</a> foo (x) y))</pre> 
+ 
+ <h3>General Form</h3> 
+ 
+ <pre class="code">(<a href="ACL2____WITH-OUTPUT.html">with-output</a> :key1 val1 ... :keyk valk form)</pre> 
+ 
+ <p>where <span class="v">form</span> should evaluate to an <a href="ACL2____ERROR-TRIPLE.html">error-triple</a>.  That evaluation 
+ takes place with output that is according to the values <span class="v">vali</span> of the 
+ keywords, <span class="v">:keyi</span>, as described below.  When the scope of <span class="v">with-output</span> 
+ is exited, then all modifications are undone, including the states of output 
+ and summary inhibition, <span class="tt"><a href="ACL2____GAG-MODE.html">gag-mode</a></span>, and <a href="ACL2____EVISC-TUPLE.html">evisc-tuple</a>s.  Each 
+ keyword may occur at most once.</p> 
+ 
+ <h3>On-off specs</h3> 
+ 
+ <p>Before discussing the keywords we introduce the notion of ``on-off specs'', 
+ which are the legal values of the keywords <span class="v">:on</span>, <span class="v">:off</span>,, 
+ <span class="v">:summary-on</span>, and <span class="v">:summary-off</span>.  An on-off spec has one of the 
+ following forms, where each <span class="v">symi</span> is a symbol, and subject to restrictions 
+ discussed below</p> 
+ 
+ <ul> 
+ 
+ <li><span class="v">:all</span></li> 
+ 
+ <li>
+<span class="v">sym</span> ; a symbol that is not <span class="v">:all</span>
+</li> 
+ 
+ <li><span class="v">(sym1 ... symk)</span></li> 
+ 
+ <li><span class="v">(:other-than sym1 ... symk)</span></li> 
+ 
+ </ul> 
+ 
+ <p>The set of ``associated valid symbols'' is defined as follows.  For 
+ <span class="v">:off</span> or <span class="v">:on</span>, these symbols are the <i>output types</i> that can be 
+ inhibited (see <a href="ACL2____SET-INHIBIT-OUTPUT-LST.html">set-inhibit-output-lst</a>), that is, members of the list 
+ stored in the constant <span class="v">*valid-output-names*</span>, the list 
+ <span class="v">(<a href="ACL2____PROOF-TREE.html">proof-tree</a> error
+            warning! warning observation prove event
+            summary proof-builder comment history)</span>.  Similarly, for <span class="v">:summary-on</span> or 
+ <span class="v">:summary-off</span>, these are the <i>summary types</i>: the parts of the <a href="ACL2____SUMMARY.html">summary</a> that can be inhibited (see <a href="ACL2____SET-INHIBITED-SUMMARY-TYPES.html">set-inhibited-summary-types</a>), that 
+ is, members of the list stored in the constant <span class="v">*summary-types*</span>, the list 
+ <span class="v">(<a href="ACL2____ERRORS.html">errors</a> form header hint-events
+        redundant rules splitter-rules steps
+        system-attachments time value warnings)</span>.  An on-off spec consisting of associated valid symbols, 
+ <span class="v">(sym1 ... symk)</span>, indicates the set of symbols, <span class="v">{sym1,...,symk}</span>.  The 
+ other legal forms of on-off spec and their meanings are as follows: <span class="v">:all</span> 
+ represents the set of all associated valid symbols, any other symbol <span class="v">sym</span> 
+ abbreviates <span class="v">(sym)</span>, and <span class="v">(:other-than sym1 ... symk)</span> represents the 
+ set of associated valid symbols that are not in the list <span class="v">(sym1
+ ... symk)</span>.</p> 
+ 
+ <p>Note that these two notions of ``associated valid symbols'' — the 
+ <i>output types</i> controlled by keywords <span class="v">:on</span> and <span class="v">:off</span>, and the 
+ <i>summary types</i> contolled by keywords <span class="v">:summary-on</span> and 
+ <span class="v">:summary-off</span> — operate independently in the following sense.  The 
+ keywords <span class="v">:on</span> and <span class="v">:off</span> control output types from the list 
+ <span class="v">*valid-output-names*</span> displayed above, one of whose members is 
+ <span class="v">SUMMARY</span>.  The keywords <span class="v">:summary-on</span> and <span class="v">:summary-off</span> control 
+ summary types from the list <span class="v">*summary-types*</span> displayed above, indicating 
+ which types of summary are to be printed in the case that <span class="v">SUMMARY</span> is 
+ among the output types that are on.  This summary control persists even as the 
+ <span class="v">SUMMARY</span> type changes state between off and on.  Consider the following 
+ example.</p> 
+ 
+ <pre class="code">(<a href="ACL2____WITH-OUTPUT.html">with-output</a> :off (<a href="ACL2____SUMMARY.html">summary</a>)
+ (<a href="ACL2____WITH-OUTPUT.html">with-output</a> :summary-off (time)
+  (<a href="ACL2____WITH-OUTPUT.html">with-output</a> :on (<a href="ACL2____SUMMARY.html">summary</a>)
+   (<a href="ACL2____THM.html">thm</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____CAR.html">car</a> (<a href="COMMON-LISP____APPEND.html">append</a> x y)) (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x) (<a href="COMMON-LISP____CAR.html">car</a> x) (<a href="COMMON-LISP____CAR.html">car</a> y)))))))</pre> 
+ 
+ <p>The resulting output does not include <span class="v">TIME</span> output in the summary.  The 
+ reason is that the second <span class="v">with-output</span> form specifies that <span class="v">TIME</span> 
+ summary output is off; then when the third (innermost) output turns 
+ <span class="v">SUMMARY</span> output on, still, the <span class="v">TIME</span> summary output is off, so the 
+ <span class="v">THM</span> call does not print the <span class="v">TIME</span> part of the summary output.  Note 
+ that the same reasoning applies if the third <span class="v">with-output</span> call above 
+ specifies <span class="v">:on :all</span> instead of <span class="v">:on (<a href="ACL2____SUMMARY.html">summary</a>)</span>; that case also produces 
+ no time output in the summary.  That is, the use of <span class="v">:on :all</span> specifies 
+ which output types are on, but does not affect which summary types are on; 
+ again, output types and summary types are controlled independently by the 
+ respective pairs <span class="v">:on/:off</span> and <span class="v">:summary-on/:summary-off</span>.</p> 
+ 
+ <h3>Keyword arguments</h3> 
+ 
+ <p>We turn now to a discussion of the keyword arguments.</p> 
+ 
+ <p><span class="v">:on</span>, <span class="v">:off</span></p> 
+ 
+ <p>The values for these keywords, which are not evaluated, must be on-off 
+ specs for these keywords (as discussed above).  If <span class="v">:on :all</span> is specified, 
+ then then every output type is turned on except for those in the set specified 
+ by the value of <span class="v">:off</span>.  Otherwise, if <span class="v">:off :all</span> is specified, then 
+ every output type is inhibited except as specified by the the value of 
+ <span class="v">:on</span>.  Otherwise <span class="v">:all</span> is not specified for either <span class="v">:on</span> or 
+ <span class="v">:off</span>, and the currently-inhibited output types are reduced as specified 
+ by the value of <span class="v">:on</span> and then extended as specified by the value of 
+ <span class="v">:off</span>.</p> 
+ 
+ <p><span class="v">:summary-on</span>, <span class="v">:summary-off</span></p> 
+ 
+ <p>The values for these keywords, which are not evaluated, must be on-off 
+ specs for these keywords.  They are interpreted exactly as are the values for 
+ <span class="v">:on</span> and <span class="v">:off</span> as described above, except that instead of output types 
+ they are interpreted with respect to the summary types (i.e., in the 
+ terminology introduced above, with respect to the set of associated valid 
+ symbols for <span class="v">:summary-on</span> and <span class="v">:summary-off</span>).</p> 
+ 
+ <p><span class="v">:gag-mode</span></p> 
+ 
+ <p>The value should evaluate to one of the legal values for <span class="tt"><a href="ACL2____SET-GAG-MODE.html">set-gag-mode</a></span>.  The effect is as though <span class="v">set-gag-mode</span> has been called with 
+ this argument, before modifying how output is inhibited, at the start of 
+ evaluating the given form.</p> 
+ 
+ <p><span class="v">:evisc</span></p> 
+ 
+ <p>The value should evaluate to a <span class="tt"><a href="ACL2____KEYWORD-VALUE-LISTP.html">keyword-value-listp</a></span>, where each key 
+ is a legal keyword for the <span class="v">:sites</span> keyword argument of <span class="tt"><a href="ACL2____SET-EVISC-TUPLE.html">set-evisc-tuple</a></span> other than <span class="v">:trace</span> and <span class="v">:brr</span> (that is, a member of 
+ the list <span class="v">(:term :ld :abbrev :gag-mode)</span>), and 
+ each value evaluates to a legal <a href="ACL2____EVISC-TUPLE.html">evisc-tuple</a> for that keyword.  The 
+ effect is as though <span class="v">set-evisc-tuple</span> has been called, before modifying how 
+ output is inhibited, with this argument at the start of evaluating the given 
+ form.</p> 
+ 
+ <p><span class="v">:ctx</span></p> 
+ 
+ <p>The value should evaluate to a context — see <a href="ACL2____CTX.html">ctx</a> — that 
+ will generally be used throughout evaluation of the given form, in place of 
+ the usual event context (including the <span class="v">"Form"</span> field of the <a href="ACL2____SUMMARY.html">summary</a>).</p> 
+ 
+ <p><span class="v">:stack</span></p> 
+ 
+ <p>The value, which is not evaluated, must be <span class="v">:push</span> or <span class="v">:pop</span>.  The 
+ effect of <span class="v">:push</span> is essentially to create a new environment for inferior 
+ calls of <span class="v">with-output</span> that can be reverted (popped) by inferior calls of 
+ <span class="v">with-output</span>, as discussed in the next section.  Note that the handling of 
+ the <span class="v">:stack</span> argument pays no attention to the <span class="v">:summary-on</span> or 
+ <span class="v">:summary-off</span> arguments.</p> 
+ 
+ <h3>More about the <span class="v">stack</span> argument</h3> 
+ 
+ <p>The <span class="v">:stack</span> keyword's effect is illustrated by the following example, 
+ where ``<span class="v">(<a href="ACL2____ENCAPSULATE.html">encapsulate</a> nil)</span>'' may replaced by ``<span class="v">(<a href="COMMON-LISP____PROGN.html">progn</a></span>'' without any 
+ change to the output that is printed.</p> 
+ 
+ <pre class="code">(<a href="ACL2____WITH-OUTPUT.html">with-output</a>
+ :stack :push :off :all
+ (<a href="ACL2____ENCAPSULATE.html">encapsulate</a> ()
+   (<a href="COMMON-LISP____DEFUN.html">defun</a> f1 (x) x)
+   (<a href="ACL2____WITH-OUTPUT.html">with-output</a> :stack :pop (<a href="COMMON-LISP____DEFUN.html">defun</a> f2 (x) x))
+   (<a href="COMMON-LISP____DEFUN.html">defun</a> f3 (x) x)
+   (<a href="ACL2____WITH-OUTPUT.html">with-output</a> :stack :pop :off warning (<a href="ACL2____IN-THEORY.html">in-theory</a> nil))
+   (<a href="COMMON-LISP____DEFUN.html">defun</a> f4 (x) x)))</pre> 
+ 
+ <p>The outer <span class="v">with-output</span> call saves the current output settings (as may 
+ have been modified by earlier calls of <span class="tt"><a href="ACL2____SET-INHIBIT-OUTPUT-LST.html">set-inhibit-output-lst</a></span>), by 
+ pushing them onto a stack, and then turns off all output.  Each inner 
+ <span class="v">with-output</span> call temporarily pops that stack, restoring the starting 
+ output settings, until it completes and undoes the effects of that pop. 
+ Unless <span class="v">event</span> output was inhibited at the top level (see <a href="ACL2____SET-INHIBIT-OUTPUT-LST.html">set-inhibit-output-lst</a>), the following output is shown:</p> 
+ 
+ <pre class="code">Since F2 is non-recursive, its admission is trivial.  We observe that
+the type of F2 is described by the theorem (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (F2 X) X).</pre> 
+ 
+ <p>And then, if <span class="v">summary</span> output was not inhibited at the top level, we get 
+ the rest of this output:</p> 
+ 
+ <pre class="code">Summary
+Form:  ( DEFUN F2 ...)
+Rules: NIL
+Warnings:  None
+Time:  0.00 seconds (prove: 0.00, print: 0.00, other: 0.00)
+
+Summary
+Form:  ( IN-THEORY NIL)
+Rules: NIL
+Warnings:  None
+Time:  0.00 seconds (prove: 0.00, print: 0.00, other: 0.00)</pre> 
+ 
+ <p>Note that the use of <span class="v">:off warning</span> suppresses a <span class="v">"Theory"</span> warning 
+ for the <span class="v">(<a href="ACL2____IN-THEORY.html">in-theory</a> nil)</span> event, and that in no case will output be printed 
+ for definitions of <span class="v">f1</span>, <span class="v">f3</span>, or <span class="v">f4</span>, or for the <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span> event itself.</p> 
+ 
+ <p>The following more detailed explanation of <span class="v">:stack</span> is intended only for 
+ advanced users.  After <span class="v">:gag-mode</span> and <span class="v">:evisc</span> are handled (if present) 
+ but before <span class="v">:on</span> or <span class="v">:off</span> is handled, the value of <span class="v">:stack</span> is 
+ handled as follows.  If the value is <span class="v">:push</span>, then <a href="ACL2____STATE.html">state</a> global 
+ <span class="v">inhibit-output-lst-stack</span> is modified by pushing the cons of the values of 
+ <a href="ACL2____STATE.html">state</a> globals <span class="v">inhibit-output-lst</span> and <span class="v">gag-mode</span> onto the value 
+ of <a href="ACL2____STATE.html">state</a> global <span class="v">inhibit-output-lst-stack</span>, which is <span class="v">nil</span> at the 
+ top level.  If the value is <span class="v">:pop</span>, then <a href="ACL2____STATE.html">state</a> global 
+ <span class="v">inhibit-output-lst-stack</span> is modified only if non-<span class="v">nil</span>, in which case 
+ its top element is popped and provides the values of <a href="ACL2____STATE.html">state</a> globals 
+ <span class="v">inhibit-output-lst</span> and <span class="v">gag-mode</span>.</p> 
+ 
+ <h3>Concluding remarks</h3> 
+ 
+ <p>Remark 1.  <b>Warning</b>: <span class="v">With-output</span> has no effect in raw 
+ Lisp (other than to expand to the provided <span class="v">form</span> argument), and hence is 
+ disallowed in function bodies.  However, you can probably get the effect you 
+ want as illustrated below, where <span class="v">&lt;form&gt;</span> must return an error-triple 
+ <span class="v">(<a href="ACL2____MV.html">mv</a> erp val state)</span>; see <a href="ACL2____LD.html">ld</a> and see <a href="ACL2____ERROR-TRIPLE.html">error-triple</a>.</p> 
+ 
+ <p>Remark 2.  Here are examples avoiding <span class="v">with-output</span>, for use in function 
+ definitions.  But note that <span class="v">with-output!</span> can be used in function 
+ definitions.</p> 
+ 
+ <pre class="code">; Inhibit all output:
+(<a href="ACL2____STATE-GLOBAL-LET_A2.html">state-global-let*</a>
+ ((inhibit-output-lst *valid-output-names*))
+ &lt;form&gt;)
+
+; Inhibit all warning output:
+(<a href="ACL2____STATE-GLOBAL-LET_A2.html">state-global-let*</a>
+ ((inhibit-output-lst
+   (<a href="ACL2____UNION-EQ.html">union-eq</a> (<a href="ACL2____F-GET-GLOBAL.html">f-get-global</a> 'inhibit-output-lst state)
+             '(warning warning!))))
+ &lt;form&gt;)</pre> 
+ 
+ <p>Note that <span class="v">with-output</span> is allowed in books.  See <a href="ACL2____EMBEDDED-EVENT-FORM.html">embedded-event-form</a>.</p>
+</body>
+</html>

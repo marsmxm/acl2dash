@@ -1,0 +1,298 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Vl-parse-define-actual</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL____VL-PARSE-DEFINE-ACTUAL">Click for Vl-parse-define-actual in the Full Manual</a></h3>
+
+<p>Collect a single argument to a text macro, like <span class="v">`max(a+b, c)</span>.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(vl-parse-define-actual name echars loc stk acc ppst) 
+  → 
+(mv successp morep actual remainder ppst)</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">name</span> — Name of macro being expanded, e.g., <span class="v">max</span>, for error messages.<br>    <font color="#606060">Guard <span class="v">(<a href="COMMON-LISP____STRINGP.html">stringp</a> name)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">echars</span> — Text we're parsing, initially follows an open paren or comma.<br>    <font color="#606060">Guard <span class="v">(<a href="VL____VL-ECHARLIST-P.html">vl-echarlist-p</a> echars)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">loc</span> — Location information in case of error messages.<br>    <font color="#606060">Guard <span class="v">(<a href="VL____VL-LOCATION-P.html">vl-location-p</a> loc)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">stk</span> — Stack of open paren/bracket/brace characters.<br>    <font color="#606060">Guard <span class="v">(<a href="ACL2____CHARACTER-LISTP.html">character-listp</a> stk)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">acc</span> — Text we've matched so far.<br>    <font color="#606060">Guard <span class="v">(<a href="VL____VL-ECHARLIST-P.html">vl-echarlist-p</a> acc)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">successp</span> — Was there any error?.<br>    <font color="#606060">Type <span class="v">(<a href="ACL2____BOOLEANP.html">booleanp</a> successp)</span>.</font>
+</dd> 
+<dd>
+<span class="tt">morep</span> — Is this the last actual?.<br>    <font color="#606060">Type <span class="v">(<a href="ACL2____BOOLEANP.html">booleanp</a> morep)</span>.</font>
+</dd> 
+<dd>
+<span class="tt">actual</span> — Contents of the actual as a string.<br>    <font color="#606060">Type <span class="v">(<a href="COMMON-LISP____STRINGP.html">stringp</a> actual)</span>.</font>
+</dd> 
+<dd>
+<span class="tt">remainder</span> — Remaining characters past the comma/closing paren.<br>    <font color="#606060">Type <span class="v">(<a href="VL____VL-ECHARLIST-P.html">vl-echarlist-p</a> remainder)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>SystemVerilog-2012 gives the following grammar (Page 641, Syntax 
+22-3):</p> 
+ 
+<pre class="code">text_macro_usage ::= text_macro_identifier [ '(' list_of_actual_arguments ')' ]
+
+list_of_actual_arguments ::= actual_argument { ',' actual_argument }
+
+actual_argument ::= expression</pre> 
+ 
+<p>But this last part is clearly total bullshit.  For instance on page 643 we 
+are told:</p> 
+ 
+<blockquote>"However, one can define an empty text macro, say <span class="v">`EMPTY</span>, and 
+use that as an actual argument.  This will be substituted in place of the 
+formal argument and will be replaced by empty text after expansion of the empty 
+text macro."</blockquote> 
+ 
+<p>It seems very clear that the empty string is not an expression.  Moreover, 
+all of this discussion of the preprocessor seems quite deeply rooted in a 
+notion of textual substitution.  Accordingly, the idea that 
+<span class="v">actual_argument ::= expression</span> seems to be very much confusing different 
+levels of representation (e.g., expressions versus text) and just cannot be 
+correct at all.</p> 
+ 
+<p>That's a bummer because we need to allow <i>something</i> to occur in these 
+actuals, and that something could be some rather complicated piece of text. 
+Interestingly, both NCVerilog and VCS permit uses of macros such as:</p> 
+ 
+<pre class="code">`define identity(a) a
+module foo;
+  `identity(reg foo;)
+endmodule</pre> 
+ 
+<p>However they complain about too many macro arguments on examples such as:</p> 
+ 
+<pre class="code">`identity(reg bar, baz;)</pre> 
+ 
+<p>Meanwhile they happily accept syntax such as:</p> 
+ 
+<pre class="code">`identity(2 + {1'b0, 1'b1</pre> 
+}) 
+ 
+<p>On Page 641 of the spec, we find some hints about what might be permitted 
+here:</p> 
+ 
+<blockquote>"Actual arguments and defaults shall not contain comma or right 
+parenthesis characters outside matched pairs of left and right parentheses 
+<span class="v">()</span>, square brackets <span class="v">[]</span>, braces <span class="v">{}</span>, double quotes <span class="v">"</span>, or an 
+escaped identifier."</blockquote> 
+ 
+<p>This paragraph seems to suggest a kind of algorithm for deciding where the 
+actual text ends, roughly: keep track of matched pairs of these special 
+characters, be smart enough to recognize strings and escaped identifiers, and 
+stop when you see a comma or right parenthesis.</p> 
+ 
+<p>I implement such an algorithm here, but of course there is a great deal of 
+room for ambiguity and confusion here, so this may well not be at all correct. 
+The system tests (centaur/vl/systest) do try to test some tricky cases, but 
+there may well be mismatches left.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>vl-parse-define-actual</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ vl-parse-define-actual
+ (name echars loc stk acc ppst)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (<a href="VL____PPST.html">ppst</a>)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____STRINGP.html">stringp</a> name)
+                             (<a href="VL____VL-ECHARLIST-P.html">vl-echarlist-p</a> echars)
+                             (<a href="VL____VL-LOCATION-P.html">vl-location-p</a> loc)
+                             (<a href="ACL2____CHARACTER-LISTP.html">character-listp</a> stk)
+                             (<a href="VL____VL-ECHARLIST-P.html">vl-echarlist-p</a> acc))))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'vl-parse-define-actual))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+   ((echars (<a href="VL____VL-ECHARLIST-FIX.html">vl-echarlist-fix</a> echars))
+    ((when (<a href="COMMON-LISP____ATOM.html">atom</a> echars))
+     (<a href="COMMON-LISP____LET.html">let</a>
+      ((<a href="VL____PPST.html">ppst</a>
+        (<a href="VL____VL-PPST-FATAL.html">vl-ppst-fatal</a>
+         :msg
+         "~a0: unexpected end of input while processing ~
+                           arguments to `~s1."
+         :args (<a href="COMMON-LISP____LIST.html">list</a> loc name))))
+      (<a href="ACL2____MV.html">mv</a> nil nil "" echars ppst)))
+    (char1 (<a href="VL____VL-ECHAR-_E3CHAR.html">vl-echar-&gt;char</a> (<a href="COMMON-LISP____CAR.html">car</a> echars)))
+    (loc1 (<a href="VL____VL-ECHAR-_E3LOC.html">vl-echar-&gt;loc</a> (<a href="COMMON-LISP____CAR.html">car</a> echars)))
+    ((when (<a href="COMMON-LISP____EQL.html">eql</a> char1 #\"))
+     (<a href="ACL2____B_A2.html">b*</a>
+      (((<a href="ACL2____MV.html">mv</a> str prefix remainder)
+        (<a href="VL____VL-READ-STRING.html">vl-read-string</a> echars
+                        (<a href="VL____VL-LEXSTATE-INIT.html">vl-lexstate-init</a> (<a href="VL____VL-PPST-_E3CONFIG.html">vl-ppst-&gt;config</a>))))
+       ((unless str)
+        (<a href="COMMON-LISP____LET.html">let</a>
+         ((<a href="VL____PPST.html">ppst</a>
+           (<a href="VL____VL-PPST-FATAL.html">vl-ppst-fatal</a>
+            :msg
+            "~a0: bad string literal while processing ~
+                                 arguments to `~s1."
+            :args (<a href="COMMON-LISP____LIST.html">list</a> loc1 name))))
+         (<a href="ACL2____MV.html">mv</a> nil nil "" echars ppst)))
+       (acc (<a href="COMMON-LISP____REVAPPEND.html">revappend</a> prefix acc)))
+      (<a href="VL____VL-PARSE-DEFINE-ACTUAL.html">vl-parse-define-actual</a> name remainder loc stk acc ppst)))
+    ((when (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQL.html">eql</a> char1 #\`)
+                (<a href="COMMON-LISP____CONSP.html">consp</a> (<a href="COMMON-LISP____CDR.html">cdr</a> echars))
+                (<a href="COMMON-LISP____EQL.html">eql</a> (<a href="VL____VL-ECHAR-_E3CHAR.html">vl-echar-&gt;char</a> (<a href="COMMON-LISP____SECOND.html">second</a> echars))
+                     #\")))
+     (<a href="ACL2____B_A2.html">b*</a>
+      (((<a href="ACL2____MV.html">mv</a> str prefix remainder)
+        (<a href="VL____VL-READ-STRING.html">vl-read-string</a> (<a href="COMMON-LISP____CDR.html">cdr</a> echars)
+                        (<a href="VL____VL-LEXSTATE-INIT.html">vl-lexstate-init</a> (<a href="VL____VL-PPST-_E3CONFIG.html">vl-ppst-&gt;config</a>))))
+       ((unless str)
+        (<a href="COMMON-LISP____LET.html">let</a>
+         ((<a href="VL____PPST.html">ppst</a>
+           (<a href="VL____VL-PPST-FATAL.html">vl-ppst-fatal</a>
+            :msg
+            "~a0: bad string literal while processing ~
+                                 arguments to `~s1."
+            :args (<a href="COMMON-LISP____LIST.html">list</a> loc1 name))))
+         (<a href="ACL2____MV.html">mv</a> nil nil "" echars ppst)))
+       (<a href="ACL2____LEN.html">len</a> (<a href="COMMON-LISP____LENGTH.html">length</a> str))
+       ((unless (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP_____C3.html">&lt;</a> 0 len)
+                     (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____CHAR.html">char</a> str (<a href="COMMON-LISP____-.html">-</a> len 1)) #\`)))
+        (<a href="COMMON-LISP____LET.html">let</a>
+         ((<a href="VL____PPST.html">ppst</a>
+           (<a href="VL____VL-PPST-FATAL.html">vl-ppst-fatal</a>
+            :msg
+            "~a0: found string literal with backtick-escaped ~
+                                 open quote but regular closing quote, i.e., ~
+                                 `\"...\", while processing arguments to ~s1."
+            :args (<a href="COMMON-LISP____LIST.html">list</a> loc1 name))))
+         (<a href="ACL2____MV.html">mv</a> nil nil "" echars ppst)))
+       (rprefix (<a href="ACL2____REV.html">rev</a> prefix))
+       (rprefix-fixed (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____FIRST.html">first</a> rprefix) (<a href="COMMON-LISP____CDDR.html">cddr</a> rprefix)))
+       (acc (<a href="COMMON-LISP____APPEND.html">append</a> rprefix-fixed acc)))
+      (<a href="VL____VL-PARSE-DEFINE-ACTUAL.html">vl-parse-define-actual</a> name remainder loc stk acc ppst)))
+    ((when (<a href="COMMON-LISP____EQL.html">eql</a> char1 #\\))
+     (<a href="ACL2____B_A2.html">b*</a>
+      (((<a href="ACL2____MV.html">mv</a> name prefix remainder)
+        (<a href="VL____VL-READ-ESCAPED-IDENTIFIER.html">vl-read-escaped-identifier</a> echars))
+       ((unless name)
+        (<a href="COMMON-LISP____LET.html">let</a>
+         ((<a href="VL____PPST.html">ppst</a>
+           (<a href="VL____VL-PPST-FATAL.html">vl-ppst-fatal</a>
+            :msg
+            "~a0:  stray backslash while processing ~
+                                 arguments to `~s1."
+            :args (<a href="COMMON-LISP____LIST.html">list</a> loc1 name))))
+         (<a href="ACL2____MV.html">mv</a> nil nil "" echars ppst)))
+       (acc (<a href="COMMON-LISP____REVAPPEND.html">revappend</a> prefix acc)))
+      (<a href="VL____VL-PARSE-DEFINE-ACTUAL.html">vl-parse-define-actual</a> name remainder loc stk acc ppst)))
+    ((when (<a href="COMMON-LISP____EQL.html">eql</a> char1 #\/))
+     (<a href="ACL2____B_A2.html">b*</a>
+      (((when (<a href="VL____VL-MATCHES-STRING-P.html">vl-matches-string-p</a> "//" echars))
+        (<a href="ACL2____B_A2.html">b*</a>
+         (((<a href="ACL2____MV.html">mv</a> successp ?prefix remainder)
+           (<a href="VL____VL-READ-UNTIL-LITERAL.html">vl-read-until-literal</a> *nls* (<a href="COMMON-LISP____CDDR.html">cddr</a> echars)))
+          ((unless successp)
+           (<a href="COMMON-LISP____LET.html">let</a>
+            ((<a href="VL____PPST.html">ppst</a>
+              (<a href="VL____VL-PPST-FATAL.html">vl-ppst-fatal</a>
+               :msg
+               "~a0: unexpected EOF while reading ~
+                                       macro arguments to ~s1."
+               :args (<a href="COMMON-LISP____LIST.html">list</a> loc1 name))))
+            (<a href="ACL2____MV.html">mv</a> nil nil "" echars ppst))))
+         (<a href="VL____VL-PARSE-DEFINE-ACTUAL.html">vl-parse-define-actual</a> name remainder loc stk acc ppst)))
+       ((when (<a href="VL____VL-MATCHES-STRING-P.html">vl-matches-string-p</a> "/*" echars))
+        (<a href="ACL2____B_A2.html">b*</a>
+         (((<a href="ACL2____MV.html">mv</a> successp ?prefix remainder)
+           (<a href="VL____VL-READ-THROUGH-LITERAL.html">vl-read-through-literal</a> "*/" (<a href="COMMON-LISP____CDDR.html">cddr</a> echars)))
+          ((unless successp)
+           (<a href="COMMON-LISP____LET.html">let</a>
+            ((<a href="VL____PPST.html">ppst</a> (<a href="VL____VL-PPST-FATAL.html">vl-ppst-fatal</a>
+                        :msg "~a0: block comment is never closed."
+                        :args (<a href="COMMON-LISP____LIST.html">list</a> (<a href="VL____VL-ECHAR-_E3LOC.html">vl-echar-&gt;loc</a> (<a href="COMMON-LISP____CAR.html">car</a> echars))))))
+            (<a href="ACL2____MV.html">mv</a> nil nil "" echars ppst))))
+         (<a href="VL____VL-PARSE-DEFINE-ACTUAL.html">vl-parse-define-actual</a> name remainder loc stk acc ppst))))
+      (<a href="VL____VL-PARSE-DEFINE-ACTUAL.html">vl-parse-define-actual</a> name (<a href="COMMON-LISP____CDR.html">cdr</a> echars)
+                              loc stk (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CAR.html">car</a> echars) acc)
+                              ppst)))
+    ((when (<a href="COMMON-LISP____MEMBER.html">member</a> char1 '(#\( #\[ #\{)))
+     (<a href="ACL2____B_A2.html">b*</a> ((stk (<a href="COMMON-LISP____CONS.html">cons</a> char1 stk))
+          (acc (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CAR.html">car</a> echars) acc)))
+         (<a href="VL____VL-PARSE-DEFINE-ACTUAL.html">vl-parse-define-actual</a> name (<a href="COMMON-LISP____CDR.html">cdr</a> echars)
+                                 loc stk acc ppst)))
+    ((when (<a href="COMMON-LISP____MEMBER.html">member</a> char1 '(#\) #\] #\})))
+     (<a href="ACL2____B_A2.html">b*</a>
+      (((when (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQL.html">eql</a> char1 #\)) (<a href="COMMON-LISP____ATOM.html">atom</a> stk)))
+        (<a href="ACL2____MV.html">mv</a> t
+            nil (<a href="COMMON-LISP____REVERSE.html">reverse</a> (<a href="VL____VL-ECHARLIST-_E3STRING.html">vl-echarlist-&gt;string</a> acc))
+            (<a href="COMMON-LISP____CDR.html">cdr</a> echars)
+            ppst))
+       (matching-char (case char1 (#\) #\()
+                            (#\] #\[)
+                            (#\} #\{)))
+       ((unless (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____CONSP.html">consp</a> stk)
+                     (<a href="COMMON-LISP____EQL.html">eql</a> (<a href="COMMON-LISP____CAR.html">car</a> stk) matching-char)))
+        (<a href="COMMON-LISP____LET.html">let</a>
+         ((<a href="VL____PPST.html">ppst</a>
+           (<a href="VL____VL-PPST-FATAL.html">vl-ppst-fatal</a>
+            :msg "~a0: unbalanced ~s1 vs. ~s2 in arguments to `~s3."
+            :args (<a href="COMMON-LISP____LIST.html">list</a> loc1 (<a href="ACL2____IMPLODE.html">implode</a> (<a href="COMMON-LISP____LIST.html">list</a> matching-char))
+                        (<a href="ACL2____IMPLODE.html">implode</a> (<a href="COMMON-LISP____LIST.html">list</a> char1))
+                        name))))
+         (<a href="ACL2____MV.html">mv</a> nil nil "" echars ppst)))
+       (stk (<a href="COMMON-LISP____CDR.html">cdr</a> stk))
+       (acc (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CAR.html">car</a> echars) acc)))
+      (<a href="VL____VL-PARSE-DEFINE-ACTUAL.html">vl-parse-define-actual</a> name (<a href="COMMON-LISP____CDR.html">cdr</a> echars)
+                              loc stk acc ppst)))
+    ((when (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____ATOM.html">atom</a> stk) (<a href="COMMON-LISP____EQL.html">eql</a> char1 #\,)))
+     (<a href="ACL2____MV.html">mv</a> t t (<a href="COMMON-LISP____REVERSE.html">reverse</a> (<a href="VL____VL-ECHARLIST-_E3STRING.html">vl-echarlist-&gt;string</a> acc))
+         (<a href="COMMON-LISP____CDR.html">cdr</a> echars)
+         ppst)))
+   (<a href="VL____VL-PARSE-DEFINE-ACTUAL.html">vl-parse-define-actual</a> name (<a href="COMMON-LISP____CDR.html">cdr</a> echars)
+                           loc stk (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CAR.html">car</a> echars) acc)
+                           ppst))))</pre> 
+<p><b>Theorem: </b>booleanp-of-vl-parse-define-actual.successp</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     booleanp-of-vl-parse-define-actual.successp
+     (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?successp
+               ?morep ?actual ?remainder ?ppst)
+           (<a href="VL____VL-PARSE-DEFINE-ACTUAL.html">vl-parse-define-actual</a> name echars loc stk acc ppst)))
+         (<a href="ACL2____BOOLEANP.html">booleanp</a> successp))
+     :rule-classes :type-prescription)</pre> 
+<p><b>Theorem: </b>booleanp-of-vl-parse-define-actual.morep</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     booleanp-of-vl-parse-define-actual.morep
+     (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?successp
+               ?morep ?actual ?remainder ?ppst)
+           (<a href="VL____VL-PARSE-DEFINE-ACTUAL.html">vl-parse-define-actual</a> name echars loc stk acc ppst)))
+         (<a href="ACL2____BOOLEANP.html">booleanp</a> morep))
+     :rule-classes :type-prescription)</pre> 
+<p><b>Theorem: </b>stringp-of-vl-parse-define-actual.actual</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     stringp-of-vl-parse-define-actual.actual
+     (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?successp
+               ?morep ?actual ?remainder ?ppst)
+           (<a href="VL____VL-PARSE-DEFINE-ACTUAL.html">vl-parse-define-actual</a> name echars loc stk acc ppst)))
+         (<a href="COMMON-LISP____STRINGP.html">stringp</a> actual))
+     :rule-classes :type-prescription)</pre> 
+<p><b>Theorem: </b>vl-echarlist-p-of-vl-parse-define-actual.remainder</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     vl-echarlist-p-of-vl-parse-define-actual.remainder
+     (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?successp
+               ?morep ?actual ?remainder ?ppst)
+           (<a href="VL____VL-PARSE-DEFINE-ACTUAL.html">vl-parse-define-actual</a> name echars loc stk acc ppst)))
+         (<a href="VL____VL-ECHARLIST-P.html">vl-echarlist-p</a> remainder))
+     :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>acl2-count-of-vl-parse-define-actual</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     acl2-count-of-vl-parse-define-actual
+     (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> successp ?morep ?actual remainder ?ppst)
+           (<a href="VL____VL-PARSE-DEFINE-ACTUAL.html">vl-parse-define-actual</a> name echars loc stk acc ppst)))
+         (<a href="ACL2____IMPLIES.html">implies</a> successp
+                  (<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="ACL2____ACL2-COUNT.html">acl2-count</a> remainder)
+                     (<a href="ACL2____ACL2-COUNT.html">acl2-count</a> (<a href="VL____VL-ECHARLIST-FIX.html">vl-echarlist-fix</a> echars)))))
+     :rule-classes ((:rewrite) (:linear)))</pre> 
+
+</body>
+</html>

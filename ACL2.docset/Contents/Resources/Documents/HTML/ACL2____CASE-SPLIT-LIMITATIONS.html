@@ -1,0 +1,97 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Case-split-limitations</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____CASE-SPLIT-LIMITATIONS">Click for Case-split-limitations in the Full Manual</a></h3>
+
+<p>Limiting the number of immediate subgoals</p><pre class="code">Examples:
+ACL2 !&gt;(<a href="ACL2____CASE-SPLIT-LIMITATIONS.html">case-split-limitations</a> (<a href="ACL2____W.html">w</a> state))
+(500 100)</pre> 
+ 
+ <p>With the setting above, which is the default, <span class="v">clausify</span> will not try 
+ subsumption/replacement if more than 500 clauses are involved.  Furthermore, 
+ the simplifier, as it sweeps over a clause, will inhibit further case splits 
+ when it has accumulated 100 subgoals.  To implement this inhibition, ACL2 
+ refuses to rewrite subsequent literals, although it continues to split on any 
+ <span class="v">IF</span> calls in those literals.</p> 
+ 
+ <p>The following example illustrates how the latter restriction — 
+ specifically, not rewriting subsequent literals to avoid further case splits 
+ — can work.  We define a (rather nonsensical) function whose body 
+ introduces several cases.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> f1 (a b c)
+  (<a href="COMMON-LISP____IF.html">if</a> a
+      (<a href="COMMON-LISP____IF.html">if</a> b (<a href="COMMON-LISP____EQUAL.html">equal</a> c 0) (<a href="COMMON-LISP____EQUAL.html">equal</a> c 1))
+    (<a href="COMMON-LISP____IF.html">if</a> b (<a href="COMMON-LISP____EQUAL.html">equal</a> c 2) (<a href="COMMON-LISP____EQUAL.html">equal</a> c 3))))
+
+(<a href="ACL2____SET-CASE-SPLIT-LIMITATIONS.html">set-case-split-limitations</a> '(500 10))
+
+(<a href="ACL2____SET-GAG-MODE.html">set-gag-mode</a> nil)
+
+(<a href="ACL2____THM.html">thm</a> (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (f1 a b c) xxx)
+         (<a href="COMMON-LISP____EQUAL.html">equal</a> (f1 d e f) yyy)
+         (<a href="COMMON-LISP____EQUAL.html">equal</a> (f1 g h i) zzz))
+     :hints (("Goal" :in-theory (<a href="ACL2____DISABLE.html">disable</a> f1))
+             ("Goal'" :in-theory (<a href="ACL2____ENABLE.html">enable</a> f1)))
+     :otf-flg t)</pre> 
+ 
+ <p>We show the output below.  The simplification of the original goal to Goal' 
+ replaces the original goal, which is the clause (i.e., disjunction) consisting 
+ of the single literal (i.e., term) shown above, to the clause consisting of 
+ three literals, namely, the list:</p> 
+ 
+ <pre class="code">; Goal', as a clause (disjunction of three literals)
+((<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (F1 A B C) XXX)
+ (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (F1 D E F) YYY)
+ (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (F1 G H I) ZZZ))</pre> 
+ 
+ <p>That simplification is reflected in the value printed (as an implication) 
+ for Goal' in the output, below.  If we omit the call of <span class="tt"><a href="ACL2____SET-CASE-SPLIT-LIMITATIONS.html">set-case-split-limitations</a></span> above, then we get 64 cases, from opening up the 
+ calls of <span class="v">f1</span> and splitting on the variables <span class="v">a</span>, <span class="v">b</span>, <span class="v">d</span>, 
+ <span class="v">e</span>, <span class="v">g</span>, and <span class="v">h</span>.  But with the limit of 10 provided by 
+ set-case-split-limitations above, fewer cases are generated because rewriting 
+ of literals is inhibited, as explained below.  Here is the first part of the 
+ output for that limit of 10.</p> 
+ 
+ <pre class="code">[Note:  A hint was supplied for our processing of the goal above.
+Thanks!]
+
+This simplifies, using trivial observations, to
+
+[Note:  A hint was supplied for our processing of the goal below.
+Thanks!]
+
+Goal'
+(<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____AND.html">AND</a> (<a href="COMMON-LISP____NOT.html">NOT</a> (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (F1 A B C) XXX))
+              (<a href="COMMON-LISP____NOT.html">NOT</a> (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (F1 D E F) YYY)))
+         (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (F1 G H I) ZZZ)).
+
+This simplifies, using the :definition F1 (<a href="ACL2____IF-INTRO.html">if-intro</a>), to the following
+thirteen conjectures.
+
+Subgoal 13
+(<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____AND.html">AND</a> A B (<a href="COMMON-LISP____NOT.html">NOT</a> (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> C 0) XXX))
+              (<a href="COMMON-LISP____NOT.html">NOT</a> (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (F1 D E F) YYY)))
+         (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (F1 G H I) ZZZ)).</pre> 
+ 
+ <p>Why, though, are there 13 cases, even though the limit was specified as 10? 
+ Initially, the first literal <span class="v">(<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (F1 A B C) XXX)</span> was rewritten, 
+ splitting into four cases; and for each of those cases, the second literal was 
+ rewritten, splitting further; and so on.  However, the first time more than 10 
+ cases were generated was when there were 10 cases generated so far and a 
+ literal generated four cases — then since that one literal generated 
+ four cases, 4-1 = 3 cases were added to the 10 already generated.  From that 
+ point on, further rewriting of literals did not take place.</p> 
+ 
+ <p>In short: the first time a literal splits into enough cases so that the 
+ accumulated number of cases exceeds the limit, rewriting stops — but 
+ that last split can put us significantly past the limit specified.</p> 
+ 
+ <p>See <a href="ACL2____SET-CASE-SPLIT-LIMITATIONS.html">set-case-split-limitations</a> for a more general discussion.</p>
+</body>
+</html>

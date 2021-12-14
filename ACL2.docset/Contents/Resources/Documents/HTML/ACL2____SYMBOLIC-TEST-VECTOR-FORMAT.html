@@ -1,0 +1,261 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Symbolic-test-vector-format</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____SYMBOLIC-TEST-VECTOR-FORMAT">Click for Symbolic-test-vector-format in the Full Manual</a></h3>
+
+<p>How to write a symbolic test vector.</p><h3>Example Test Vector</h3> 
+ 
+<pre class="code">(
+;; phases:                0      1     2     3     4      5        6  ...
+;; ---------------------------------------------------------------------------
+
+ (:inputs ;; for supplying values to input wires
+  ("clock"               0      ~)
+  ("ibus[13:10]"     #b101  #b101     _)
+  ("ibus[9:0]"          op     op     _)
+  ("fwd"                16     16     _)
+  ("a_bus"               _      _    a1    a1    a2         a2        _)
+  ("b_bus"               _      _     b     b     b          b        _)
+  ("reset"               0)
+  ("fuse[0]"             X))
+
+ (:outputs ;; for extracting values on output wires
+  ("result_bus"          _      _     _     _     _       res1     res2)
+  ("result_bus[63:32]"   _      _     _     _     _    res-hi1  res-hi2)
+  ("result_bus[31:0]"    _      _     _     _     _    res-lo1  res-lo2)
+  )
+
+ (:internals ;; for extracting values on internal wires
+  ("queue0.mgr.fail"     _      _     qf1   qf2   _))
+
+;; advanced features:
+
+ (:overrides ;; for forcibly overriding values on wires
+
+  ;; abstract away product wire, replacing it with variables
+  ("foo.prod"           _      _   prod    _     _      _        _ )
+
+  ;; force fast mode to true after phase 1, no matter what its real value is
+  ("foo.fastmode"       _      _     1     1     1      1        1 ))
+
+ )</pre> 
+ 
+<h3>High-Level Overview</h3> 
+ 
+<p>The <span class="v">:inputs</span> section controls how the module's inputs will be set over 
+the course of the simulation.  For the above vector,</p> 
+ 
+<ul> 
+ 
+<li>
+<span class="v">clock</span> starts low and then toggles throughout the simulation,</li> 
+ 
+<li>
+<span class="v">ibus[13:10]</span> is held to 5 (#b101) during the first full cycle, but is 
+not constrained afterward,</li> 
+ 
+<li>
+<span class="v">ibus[9:0]</span> is held to a certain value (call it <span class="v">op</span>) during the 
+first full cycle, and is not constrained afterward,</li> 
+ 
+<li>
+<span class="v">fwd</span> is held constant at 16 during the first full cycle, but is 
+unconstrained afterward,</li> 
+ 
+<li>
+<span class="v">a_bus</span> is held at some particular value during the second full 
+cycle (call it <span class="v">a1</span>), and at a (possibly different) value, <span class="v">a2</span> during 
+the third cycle, but is unconstrained otherwise</li> 
+ 
+<li>
+<span class="v">b_bus</span> is held at the same value, call it <span class="v">b</span>, for the full second 
+and third cycle, but is unconstrained otherwise,</li> 
+ 
+<li>
+<span class="v">reset</span> is kept off for the entire simulation,</li> 
+ 
+<li>
+<span class="v">fuse[0]</span> is explicitly set to <span class="v">X</span> for the whole simulation.  This is 
+similar to setting it to <span class="v">_</span>, but is likely (1) more efficient and (2) more 
+likely to lead to false Xes in the outputs.</li> 
+ 
+<li>Any inputs to the module besides those specified above are implicitly 
+unconstrained (i.e., they are implicitly _) for the whole simulation.</li> 
+ 
+</ul> 
+ 
+<p>The <span class="v">:outputs</span> section controls when the outputs should be sampled.  For 
+this simulation:</p> 
+ 
+<ul> 
+ 
+<li>The full <span class="v">result_bus</span> will be sampled twice.  Its results from phases 5 
+and 6 will be called <span class="v">res1</span> and <span class="v">res2</span>, respectively.</li> 
+ 
+<li>The high and low parts of the <span class="v">result_bus</span> will also be sampled during 
+these cycles.  This might seem redundant, but it can be useful in cases where 
+there is an X in only one side of the result bus.</li> 
+ 
+</ul> 
+ 
+<p>The <span class="v">:internals</span> section is similar to the outputs section, but it allows 
+you to pull out the values of internal signals in the module.</p> 
+ 
+ 
+<p>The <span class="v">:overrides</span> section is similar to the inputs section, but it allows 
+you to forcibly install new values onto wires, regardless of how they are 
+actually driven by the circuit.</p> 
+ 
+ 
+<h3>Input Line Format</h3> 
+ 
+<p>Each line in the <span class="v">:inputs</span> section explains how a certain input should be 
+driven over time.  Each line has the form:</p> 
+ 
+<pre class="code">(input-name     value1    value2   ...   valueN)</pre> 
+ 
+<p>The valid input names are:</p> 
+ 
+<ul> 
+ 
+<li>A string that names a particular input bus,</li> 
+ 
+<li>A string that is a Veriog-style bit- or part-select from a particular input 
+bus,</li> 
+ 
+<li>(Advanced) an explicit list of E input bits, in LSB-first order.  We don't 
+show this above, and it's not something you probably want to use.  But it may 
+be useful to know about this; generally all of the Verilog-level stuff is just 
+layered on top of lists of E bits, using a preprocessor, and the STV compiler 
+only ever sees with these bit lists.</li> 
+ 
+</ul> 
+ 
+<p>The values explain how to set the bits of this input during the phases of 
+the simulation.  As a convenience, the last value on an input line is 
+implicitly repeated for the rest of the simulation.  What are the legal 
+values?</p> 
+ 
+<ul> 
+ 
+<li>A natural number can be used to set the input to a fixed value during this 
+particular phase.  The number supplied must be within <span class="v">[0, 2^n)</span>, where 
+<span class="v">n</span> is the size of the input, or an error will be caused.</li> 
+ 
+<li>The special <span class="v">~</span> value is intended to support clock inputs, and basically 
+means <i>invert the previous value of this signal</i>.  This is only legal for 
+one-bit inputs whose previous value expanded to <span class="v">0</span> or <span class="v">1</span>.  In practice, 
+this means the only things that can occur before a <span class="v">~</span> are <span class="v">0</span>, <span class="v">1</span>, 
+or another <span class="v">~</span>.</li> 
+ 
+<li>The special <span class="v">_</span> value represents an unconstrained, four-valued variable. 
+As a rule, use <span class="v">_</span> during any phase where you don't care about the value on 
+this input.  There is no relationship between separate underscores, e.g., in 
+the example above, separate variables are used for <span class="v">a_bus</span> during the first 
+and second phases.</li> 
+ 
+<li>The special <span class="v">:ONES</span> value sets an input bus to all 1's, no matter what 
+its size.</li> 
+ 
+<li>Besides <span class="v">x</span>, any other non-keyword symbols (like <span class="v">op</span>, <span class="v">a1</span>, 
+<span class="v">a2</span>, and <span class="v">b</span> above) are called <b>simulation variables</b>.  A 
+simulation variable lets you supply a particular value for the input at this 
+phase when you evaluate the symbolic test vector.</li> 
+ 
+<li>(Advanced) the special <span class="v">X</span> value allows you to say that an input should 
+be explicitly set to X values.  It is similar to using <span class="v">_</span>, but supplies an 
+explicit X value instead of fresh variables.  The advantage of this is that it 
+can be very efficient: X values often remain as X as they propagate through 
+gates, whereas free variables generally become larger expressions.  So, using 
+explicit Xes may lead to more efficient simulations by avoiding the 
+construction of lots of irrelevant expressions.  However, using explicit X 
+values can also lead to false Xes, e.g., whereas <span class="v">(<a href="COMMON-LISP____AND.html">AND</a> A (<a href="COMMON-LISP____NOT.html">NOT</a> A))</span> is 
+obviously 0, <span class="v">(<a href="COMMON-LISP____AND.html">AND</a> X (<a href="COMMON-LISP____NOT.html">NOT</a> X))</span> is <span class="v">X</span>.  So, using Xes can lead to overly 
+conservative results.</li> 
+ 
+</ul> 
+ 
+ 
+<h3>Output Line Format</h3> 
+ 
+<p>Each line in the <span class="v">:outputs</span> section controls when to sample certain 
+output signals.  The format is:</p> 
+ 
+<pre class="code">(output-name     value1    value2   ...   valueN)</pre> 
+ 
+<p>As with input-names, the output-names can be either (1) a string that names 
+a particular output bus, (2) a Verilog-style bit- or part-select, or (3) a list 
+of E output bits in LSB-first order.</p> 
+ 
+<p>But here the only legal values are:</p> 
+ 
+<ul> 
+ 
+<li>
+<span class="v">_</span>, which means don't sample the output at this time, or</li> 
+ 
+<li>a symbol, like <span class="v">res1</span> or <span class="v">res2</span> above, which gives a name to the 
+output at this time.  These names have to be unique, since outputs can vary 
+over time.</li> 
+ 
+</ul> 
+ 
+<p>To avoid any confusion between input and output lines, we don't allow you to 
+use <span class="v">~</span>, <span class="v">X</span>, or keyword symbols in output lines.</p> 
+ 
+ 
+<h3>Internals Line Format</h3> 
+ 
+<p>Except for their names, the lines in the <span class="v">:internals</span> section are 
+essentially the same as lines in the <span class="v">:outputs</span> section.  Generally speaking 
+we try to make the differences between outputs and internal signals as 
+invisible as possible.  For instance, it doesn't matter during <a href="ACL2____STV-RUN.html">stv-run</a> 
+whether a signal is an internal or output signal.</p> 
+ 
+<p>The names on internal lines may be strings that are Verilog-style plain or 
+hierarchical identifiers using periods as separators, which may optionally 
+include a Verilog-style bit- or part-select at the end.  It is also possible to 
+use explicit lsb-first ordered lists of ESIM paths.</p> 
+ 
+ 
+<h3>Override Line Format</h3> 
+ 
+<p>Each line in the <span class="v">:override</span> section explains how to override some 
+internal wire.</p> 
+ 
+<p>The names in override lines may be strings that are Verilog-style plain or 
+hierarchical identifiers using periods as separators, which may optionally 
+include a Verilog-style bit- or part-select at the end.  It is also possible to 
+use explicit lsb-first ordered lists of ESIM paths.</p> 
+ 
+<p>The <span class="v">value</span>s here are similar to those of input lines, except that:</p> 
+ 
+<ul> 
+ 
+<li>
+<span class="v">~</span> is not allowed, because it would be somewhat confusing.</li> 
+ 
+<li>
+<span class="v">_</span> means "don't override the wire during this phase".</li> 
+ 
+</ul> 
+ 
+<p>Every variable used in an override line becomes both an input and an output 
+variable of the STV.  For instance, in the example above, we had the following 
+override line:</p> 
+ 
+<pre class="code">("foo.prod"           _      _   prod    _     _      _        _ )</pre> 
+ 
+<p>Here, as an input to the STV, <span class="v">prod</span> allows us to forcibly set the value 
+of the wire <span class="v">foo.prod</span>.  As an output, <span class="v">prod</span> gives us the <b>original, 
+un-overridden</b> expression for <span class="v">prod</span>.  (Well, that's probably mostly 
+true.  If <span class="v">prod</span> depends on other overridden values, or is involved in some 
+combinational loop so that it affects itself, then this may not be quite 
+right.)</p>
+</body>
+</html>

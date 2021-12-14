@@ -1,0 +1,67 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Unsound-eval</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____UNSOUND-EVAL">Click for Unsound-eval in the Full Manual</a></h3>
+
+<p>A somewhat robust evaluator.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(unsound-eval sexpr &amp;key (state 'state)) 
+  → 
+(mv errmsg values state)</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">sexpr</span> — An s-expression to evaluate, typically this should be a well-formed 
+           ACL2 form without guard violations, etc.  It may mention <a href="ACL2____STOBJ.html">stobj</a>s.</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">errmsg</span> — An error <a href="ACL2____MSG.html">msg</a> on failure, or <span class="v">nil</span> on success. 
+               Note that this message is likely to be very terse/unhelpful when 
+               evaluating <span class="v">sexpr</span> causes any ACL2 error.</dd> 
+<dd>
+<span class="tt">values</span> — The list of return values from evaluating <span class="v">sexpr</span>, with 
+               stobjs elided with their names.</dd> 
+<dd>
+<span class="tt">state</span> — <font color="#606060">Type <span class="v">(state-p1 state)</span>, given <span class="v">(state-p1 state)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>In the logic, this is implemented as oracle reads, so you can't 
+prove anything about what it returns.  Even so, it is generally <b>unsound</b> 
+since it lets you to modify <span class="v">state</span> and other <a href="ACL2____STOBJ.html">stobj</a>s without 
+accounting for how they have been modified.</p> 
+ 
+<p>In the execution, we basically call ACL2's <span class="tt"><a href="ACL2____TRANS-EVAL.html">trans-eval</a></span> function 
+(technically: <span class="v">trans-eval-no-warning</span>).  But we wrap up the call in some 
+error handlers so that, e.g., guard violations and <span class="v">er</span> calls can be trapped 
+and returned as error messages.  Unfortunately these error messages are not 
+very informative—they will just say something like <span class="v">ACL2 Halted</span> 
+instead of explaining the problem.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>unsound-eval-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> unsound-eval-fn (sexpr state)
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (<a href="ACL2____STATE.html">state</a>)))
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> sexpr))
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t))
+       (<a href="COMMON-LISP____LET.html">let</a> ((__function__ 'unsound-eval))
+            (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+            (<a href="ACL2____B_A2.html">b*</a> ((<a href="COMMON-LISP____-.html">-</a> (<a href="ACL2____RAISE.html">raise</a> "Raw lisp definition not installed?"))
+                 ((<a href="ACL2____MV.html">mv</a> err1 errmsg? state)
+                  (<a href="ACL2____READ-ACL2-ORACLE.html">read-acl2-oracle</a> state))
+                 ((<a href="ACL2____MV.html">mv</a> err2 values state)
+                  (<a href="ACL2____READ-ACL2-ORACLE.html">read-acl2-oracle</a> state))
+                 ((when (<a href="COMMON-LISP____OR.html">or</a> err1 err2))
+                  (<a href="ACL2____MV.html">mv</a> (<a href="ACL2____MSG.html">msg</a> "Reading oracle failed.")
+                      nil state))
+                 ((when errmsg?) (<a href="ACL2____MV.html">mv</a> errmsg? nil state)))
+                (<a href="ACL2____MV.html">mv</a> nil values state))))</pre> 
+<p><b>Theorem: </b>state-p1-of-unsound-eval.state</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> state-p1-of-unsound-eval.state
+        (<a href="ACL2____IMPLIES.html">implies</a> (state-p1 state)
+                 (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?errmsg common-lisp::?values ?state)
+                       (unsound-eval-fn sexpr state)))
+                     (state-p1 state)))
+        :rule-classes :rewrite)</pre> 
+
+</body>
+</html>

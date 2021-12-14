@@ -1,0 +1,97 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Mixed-mode-functions</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____MIXED-MODE-FUNCTIONS">Click for Mixed-mode-functions in the Full Manual</a></h3>
+
+<p><span class="v">:</span><span class="tt"><a href="ACL2____LOGIC.html">logic</a></span> mode functions can <span class="tt"><a href="ACL2____APPLY_42.html">apply$</a></span> <span class="v">:</span><span class="tt"><a href="ACL2____PROGRAM.html">program</a></span> mode functions</p><p>Because <span class="v">:</span><span class="tt"><a href="ACL2____PROGRAM.html">program</a></span> mode functions can be given badges it 
+  is possible to <span class="tt"><a href="ACL2____APPLY_42.html">apply$</a></span> them from within <span class="v">:</span><span class="tt"><a href="ACL2____LOGIC.html">logic</a></span> mode 
+  functions.  Colloquially, we call such <span class="v">:logic</span> mode functions ``mixed 
+  mode,'' but that is a misnomer.  They are indisputably in <span class="v">:logic</span> 
+  mode.</p> 
+ 
+  <p>First, note that the only way to introduce a <span class="v">:program</span> mode function 
+  into <span class="v">:logic</span> mode functions is to use the quoted <span class="v">:program</span> mode 
+  function name in an argument slot of <a href="ACL2____ILK.html">ilk</a> <span class="v">:FN</span>, use the 
+  <span class="v">:program</span> mode function in a quoted <span class="tt"><a href="COMMON-LISP____LAMBDA.html">lambda</a></span> object or <span class="tt"><a href="ACL2____LAMBDA_42.html">lambda$</a></span> expression in a slot of <a href="ACL2____ILK.html">ilk</a> <span class="v">:FN</span> or use it in a quoted 
+  expression in a slot of ilk <span class="v">:EXPR</span>.  We do not allow <span class="v">:program</span> mode 
+  functions to be called directly from <span class="v">:logic</span> mode functions.  For 
+  example, if <span class="v">prgm</span> is defined as a <span class="v">:program</span> mode function of one 
+  argument, and has been assigned a badge by <span class="tt"><a href="ACL2____DEFBADGE.html">defbadge</a></span></p> 
+ 
+  <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> foo (x)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :mode :logic))
+  (<a href="ACL2____APPLY_42.html">apply$</a> 'prgm (<a href="COMMON-LISP____LIST.html">list</a> x)))</pre> 
+ 
+  <p>is legal but</p> 
+ 
+  <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> foo (x)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :mode :logic))
+  (prgm x))</pre> 
+ 
+  <p>is not.</p> 
+ 
+  <p>Second, the presence of a <span class="v">:program</span> mode function in a <span class="v">:logic</span> 
+  mode function prohibits the <span class="v">:logic</span> mode function from being guard 
+  verified.</p> 
+ 
+  <p>Mixed-mode functions raise interesting questions for top-level evaluation 
+  and evaluation and rewriting during proofs.</p> 
+ 
+  <p>When a <span class="v">:program</span> mode function is <span class="v">apply$</span>ed, it is always done in 
+  <span class="tt"><a href="ACL2____SAFE-MODE.html">safe-mode</a></span>.  In general, evaluating a <span class="v">:program</span> mode function at 
+  the top-level can cause hard Lisp errors.  For example,</p> 
+ 
+  <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> prgm (x) (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :mode :program)) (<a href="COMMON-LISP____CAR.html">car</a> x))</pre> 
+ 
+  <p>Then <span class="v">(prgm 23)</span> causes a hard Lisp error in both CCL and SBCL, but 
+  <span class="v">(prgm 'abc)</span> returns numbers in both of those Common Lisps, but they 
+  return different numbers.  Furthermore, there is no guarantee across all 
+  Common Lisps that <span class="v">(prgm 'abc)</span> will always return the same number 
+  throughout a given ACL2 session; the value could conceivably change as memory 
+  is allocated, compacted, garbage collected, etc., since according to the CLTL 
+  standard, one is not supposed to apply <span class="v">CAR</span> to any symbol other than 
+  <span class="v">NIL</span> but no error need be signalled.  It is likely that a CLTL 
+  implementation of <span class="v">CAR</span> just accesses memory where the <span class="v">CAR</span> component 
+  of a cons is supposed to be!</p> 
+ 
+  <p>We tolerate such behavior when <span class="v">:program</span> mode functions are directly 
+  called at the top-level because there are no axioms about them and we regard 
+  the evaluation of such programs from within the ACL2 loop as just a 
+  convenience to the user.</p> 
+ 
+  <p>But <span class="v">apply$</span> is a <span class="v">:logic</span> mode function and we must guarantee that 
+  when any <span class="v">:logic</span> mode function is evaluated functional substitutivity 
+  holds: identical calls must yield identical results.  That is, <span class="v">apply$</span> 
+  must behave like a <i>function</i> and not give different answers to the same 
+  questions over time when errors are not signaled.  We also strive to achieve 
+  the goal that <span class="v">:logic</span> mode functions never cause hard Lisp errors other 
+  than resource errors like stack overflow or memory exhaustion.  So when 
+  <span class="v">apply$</span> is given a badged <span class="v">:program</span> mode function, e.g., had we 
+  badged <span class="v">prgm</span> and then evaluated <span class="v">(<a href="ACL2____APPLY_42.html">apply$</a> 'prgm '(abc))</span>, it must at 
+  least return the same ACL2 object every time!  To achieve this end 
+  <span class="v">apply$</span> runs <span class="v">:program</span> mode functions in <span class="tt"><a href="ACL2____SAFE-MODE.html">safe-mode</a></span>. 
+  (Safe mode does shift into raw Lisp on calls of guard verified <span class="v">:logic</span> 
+  mode functions which might be called from within the <span class="v">:program</span> mode 
+  function.  But a mixed mode function cannot be guard verified because the 
+  <span class="v">:program</span> mode functions used within it cannot be guard verified.)</p> 
+ 
+  <p>This means that a top-level call of a mixed mode function generally runs 
+  slower than a corresponding call of an otherwise identical <span class="v">:program</span> mode 
+  function.  (And, on the positive side, it means that mixed mode functions 
+  actually behave like <i>functions</i> while <span class="v">:program</span> mode ones may not!) 
+  The only way to speed up a mixed-mode function is to convert the 
+  <span class="v">:program</span> mode functions in it to <span class="v">:logic</span> mode with <span class="tt"><a href="ACL2____VERIFY-TERMINATION.html">verify-termination</a></span> and verify the guards.</p> 
+ 
+  <p>As for proofs, since there are no axioms about <span class="v">:program</span> mode 
+  functions, if a mixed-mode function is expanded in a proof all <span class="v">:program</span> 
+  mode functions in it are treated as though they are undefined.  In 
+  particular, the absence of a warrant on the <span class="v">:program</span> mode function 
+  <span class="v">prgm</span> means that <span class="v">(<a href="ACL2____APPLY_42.html">apply$</a> 'prgm '(abc))</span>, is not evaluated by the 
+  prover despite the fact that it is a ground term.</p>
+</body>
+</html>

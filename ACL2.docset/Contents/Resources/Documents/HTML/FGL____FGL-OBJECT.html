@@ -1,0 +1,104 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Fgl-object</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=FGL____FGL-OBJECT">Click for Fgl-object in the Full Manual</a></h3>
+
+<p>FGL symbolic object type</p><p>This is a sum-of-products (i.e., union) type, introduced by <a href="FTY____DEFFLEXSUM.html">defflexsum</a>.</p> 
+<h5>Members</h5><dl>
+<dt>
+<span class="tt">:g-concrete</span> → <a href="FGL____G-CONCRETE.html">g-concrete</a>
+</dt> 
+<dd>FGL-object constructor for constant (quoted) objects.</dd> 
+<dt>
+<span class="tt">:g-boolean</span> → <a href="FGL____G-BOOLEAN.html">g-boolean</a>
+</dt> 
+<dd>FGL object constructor for symbolic Boolean objects.</dd> 
+<dt>
+<span class="tt">:g-integer</span> → <a href="FGL____G-INTEGER.html">g-integer</a>
+</dt> 
+<dd>FGL object constructor for symbolic integers, with Boolean functions representing the bits.</dd> 
+<dt>
+<span class="tt">:g-ite</span> → <a href="FGL____G-ITE.html">g-ite</a>
+</dt> 
+<dd>FGL object constructor for if-then-else objects.</dd> 
+<dt>
+<span class="tt">:g-apply</span> → <a href="FGL____G-APPLY.html">g-apply</a>
+</dt> 
+<dd>FGL object constructor for function calls.</dd> 
+<dt>
+<span class="tt">:g-var</span> → <a href="FGL____G-VAR.html">g-var</a>
+</dt> 
+<dd>FGL object constructor for free variables.</dd> 
+<dt>
+<span class="tt">:g-map</span> → <a href="FGL____G-MAP.html">g-map</a>
+</dt> 
+<dd>FGL object constructor for fast alists and arrays.</dd> 
+<dt>
+<span class="tt">:g-cons</span> → <a href="FGL____G-CONS.html">g-cons</a>
+</dt> 
+<dd>FGL object constructor for conses.</dd> 
+</dl> 
+<p>An FGL symbolic object is the representation for symbolic data 
+inside the FGL interpreter.  There are several kinds of objects, including 
+concrete objects that simply represent a particular explicit value, bit-level 
+objects that represent some function resulting in a Boolean or 
+bitvector (integer), and termlike objects that represent free variables and 
+calls of arbitrary functions on symbolic objects.</p> 
+ 
+<p>Symbolic objects are evaluated using <a href="FGL____FGL-OBJECT-EVAL.html">fgl-object-eval</a>.  This takes an 
+environment object of type <a href="FGL____FGL-ENV.html">fgl-env</a> consisting of an alist mapping free 
+variables to their values, for evaluating <a href="FGL____G-VAR.html">g-var</a> objects, and a Boolean 
+function environment for evaluating <a href="FGL____G-BOOLEAN.html">g-boolean</a> and <a href="FGL____G-INTEGER.html">g-integer</a> 
+objects.</p> 
+ 
+<p>The FGL object type is an <a href="ACL2____FTY.html">FTY</a>-style 
+sum-of-products type.  That means any of the sum members listed above may be 
+used to construct an object of this type.  Functions that access FGL objects 
+must check which kind of object they have been passed.  The kind of a FGL object 
+may be accessed using the <span class="v">fgl-object-kind</span> function, but usually it is 
+easier to use the <span class="v">fgl-object-case</span> macro, which we illustrate using the 
+following examples:</p> 
+<pre class="code">;; If x is a g-concrete representing an integer, return its integer-length plus
+;; one, else if it's a g-integer return the length of its bitlist, else NIL:
+ (fgl-object-case x
+    :g-concrete (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> x.val) (<a href="COMMON-LISP_____B2.html">+</a> 1 (<a href="COMMON-LISP____INTEGER-LENGTH.html">integer-length</a> x.val)))
+    :g-integer (<a href="ACL2____LEN.html">len</a> x.bits)
+    :otherwise nil)
+
+;; Check whether x can be syntactically determined to be always non-NIL.
+ (<a href="COMMON-LISP____DEFUN.html">defun</a> gobj-syntactically-nonnil (x)
+   (fgl-object-case x
+      :g-concrete (<a href="COMMON-LISP____AND.html">and</a> x.val t)
+      :g-integer  t
+      :g-boolean  (<a href="COMMON-LISP____EQ.html">eq</a> x.bool t)
+      :g-ite      (<a href="COMMON-LISP____IF.html">if</a> (gobj-syntactically-nonnil x.test)
+                      (gobj-syntactically-nonnil x.then)
+                    (<a href="COMMON-LISP____AND.html">and</a> (gobj-syntactically-nonnil x.then)
+                         (gobj-syntactically-nonnil x.else)))
+      :g-apply    nil
+      :g-var      nil
+      :g-cons     t
+      :g-map      (<a href="COMMON-LISP____AND.html">and</a> x.alist t)))
+
+;; Check whether x is a g-concrete object.
+  (fgl-object-case x :g-concrete)
+
+;; Check whether x is either a g-concrete or g-boolean object.
+  (fgl-object-case x '(:g-concrete :g-boolean))</pre> 
+ 
+<p>The first two examples above show <span class="v">fgl-object-case</span> both 
+case-splitting between different kinds and also binding fields of <span class="v">x</span> using 
+dotted notation, e.g. <span class="v">x.bits</span> above is bound to <span class="v">(<a href="FGL____G-INTEGER-_E3BITS.html">g-integer-&gt;bits</a> x)</span>. 
+The latter two show a special syntax that is a shortcut for checking the kind 
+of <span class="v">x</span>.  Note that it is likely preferable to use <span class="v">(fgl-object-case
+x :g-concrete)</span> rather than <span class="v">(<a href="COMMON-LISP____EQ.html">eq</a> (<a href="FGL____FGL-OBJECT-KIND.html">fgl-object-kind</a> x) :g-concrete)</span>, even 
+though they have the same meaning, because the former will produce an error in 
+case you misspell <span class="v">:g-concrete</span>.</p> 
+
+</body>
+</html>

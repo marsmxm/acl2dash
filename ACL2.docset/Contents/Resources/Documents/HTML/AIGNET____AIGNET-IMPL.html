@@ -1,0 +1,274 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Aignet-impl</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=AIGNET____AIGNET-IMPL">Click for Aignet-impl in the Full Manual</a></h3>
+
+<p>Implementation details of Aignet's representation for execution. 
+Since these details are hidden, most users can safely skip this section.</p><p>For background see <a href="ACL2____AIGNET.html">aignet</a> and <a href="AIGNET____REPRESENTATION.html">representation</a>.</p> 
+ 
+<p>We now describe the actual implementation of the <span class="v">aignet</span> stobj for 
+execution. Our use of <a href="ACL2____ABSTRACT-STOBJ.html">abstract-stobj</a>s means that these details are 
+completely hidden from reasoning about <span class="v">aignet</span> and have nothing at all to 
+do with the logical view of an <span class="v">aignet</span> as a list of logical nodes.  You 
+should not need to know these details when writing new Aignet algorithms or 
+when understanding existing Aignet code!</p> 
+ 
+ 
+<h3>Node Array</h3> 
+ 
+<p>The Aignet network consists mainly of an array of nodes representing a 
+topologically sorted DAG.</p> 
+ 
+<p>Each node in the graph has an ID, which is a natural number that can be used 
+to look up that node in the array.  However, often our functions take arguments 
+that may be a node or its negation; we encode this as a <a href="AIGNET____LITERAL.html">literal</a>, as 
+2*ID+NEG, where NEG is 1 signifying negated or 0 signifying not negated.</p> 
+ 
+<p>One arbitrary well-formedness condition that we impose on all Aignet 
+networks is that it must have a unique constant-false node with index 0. 
+Therefore, the literal 0 is constant-false (the constant-false node, not 
+negated), and the literal 1 is constant-true (the constant-false node, 
+negated).</p> 
+ 
+<p>Information about each node is stored in the node array as two consecutive 
+32-bit numbers, and the node ID corresponds to its position in the array.  That 
+is, the two array indices of a node are 2*ID and 2*ID+1.</p> 
+ 
+ 
+<h3>Node Encoding</h3> 
+ 
+<p>The two 32-bit values contained at these locations are broken down into two 
+30-bit data slots and four extra bits.  Three of the four extra bits encode the 
+<b>type</b> of the node, and the last extra bit encodes the <b>phase</b> of the 
+node, which is its value when all inputs/registers are 0.  The meaning of the 
+30-bit data slots depends on the type of node; in some cases it stores a 
+literal.</p> 
+ 
+<p>The encoding is broken down, least-significant bits first, as follows:</p> 
+ 
+<table class="xtable"> 
+<tr>
+<th>  Size  </th>
+<th>   Contents             </th>
+</tr> 
+<tr>
+<td>  2     </td>
+<td>   Combinational type   </td>
+</tr> 
+<tr>
+<td>  30    </td>
+<td>   Data slot 0          </td>
+</tr> 
+<tr>
+<td>  1     </td>
+<td>   Register flag        </td>
+</tr> 
+<tr>
+<td>  1     </td>
+<td>   Phase                </td>
+</tr> 
+<tr>
+<td>  30    </td>
+<td>   Data slot 1          </td>
+</tr> 
+</table> 
+ 
+<p>The combinational types are encoded as follows:</p> 
+ 
+<table class="xtable"> 
+<tr>
+<th>  Encoding  </th>
+<th>   Meaning          </th>
+</tr> 
+<tr>
+<td>  0         </td>
+<td>   Constant false   </td>
+</tr> 
+<tr>
+<td>  1         </td>
+<td>   And gate         </td>
+</tr> 
+<tr>
+<td>  2         </td>
+<td>   Input            </td>
+</tr> 
+<tr>
+<td>  3         </td>
+<td>   Output           </td>
+</tr> 
+</table> 
+ 
+<p>The register flag only applies to combinational inputs/outputs; it should be 
+0 for constants/gates (but should also be ignored in those cases).  Note that 
+the polarity here can be very <b>confusing</b>:</p> 
+ 
+<ul> 
+<li>An input with the register flag set is a register output,</li> 
+<li>An output with the register flag set is a register input.</li> 
+</ul> 
+ 
+<p>The reason for this is described in <a href="ACL2____AIGNET.html">aignet</a>: the output of a register 
+is an input to the combinational logic, and the input to a register is an 
+output from the combinational logic.</p> 
+ 
+<p>So there are, in total, six types of objects, encoded as follows:</p> 
+ 
+<table class="xtable"> 
+<tr>
+<th>   Name             </th>
+<th>  Combinational Type  </th>
+<th>   Register Flag   </th>
+</tr> 
+<tr>
+<td>   Constant         </td>
+<td>        0             </td>
+<td>        -          </td>
+</tr> 
+<tr>
+<td>   And gate         </td>
+<td>        1             </td>
+<td>        -          </td>
+</tr> 
+<tr>
+<td>   Primary Input    </td>
+<td>        2             </td>
+<td>        0          </td>
+</tr> 
+<tr>
+<td>   Register Output  </td>
+<td>        2             </td>
+<td>        1          </td>
+</tr> 
+<tr>
+<td>   Primary Output   </td>
+<td>        3             </td>
+<td>        0          </td>
+</tr> 
+<tr>
+<td>   Register Input   </td>
+<td>        3             </td>
+<td>        1          </td>
+</tr> 
+</table> 
+ 
+ 
+<h3>Restrictions and Interpretation</h3> 
+ 
+<p>Only objects with combinational types 0, 1, and 2—constants, gates, 
+and combinational inputs—may be fanins (descendants) of AND or 
+combinational output objects; combinational outputs (type 3) may not.</p> 
+ 
+<p>The meanings of the two 30-bit data slots vary based on the type:</p> 
+ 
+<ul> 
+ 
+<li>
+<b>Constants</b>.  Both data 0 slots are meaningless; they should be set to 
+0 and ignored.</li> 
+ 
+<li>
+<b>AND gates</b>.  Data 0 and 1 are literals encoding the fanins to the 
+gate.  To ensure an obvious topological ordering, the ID part of each literal 
+must be less than the gate ID.</li> 
+ 
+<li>
+<b>Combinational inputs</b>.  Data 0 is ignored and should be 0.  Fanin 1 
+gives the PI or register number, sequentially assigned and unique among 
+PI/registers.</li> 
+ 
+<li>
+<b>Primary outputs</b>.  Data 0 is the fanin (literal) of the output, whose 
+ID must (for topological ordering) be less than the output node ID.  Data 1 is 
+the output number.</li> 
+ 
+<li>
+<b>Register inputs</b>.  Data 0 is the fanin (literal) of the register, 
+whose ID must (for topological ordering) be less than this node's ID.  Fanin 1 
+is the ID of the corresponding register output, which must also be less than 
+this node's ID.  (The register number of the RI is the register number of the 
+corresponding RO.)</li> 
+ 
+</ul> 
+ 
+ 
+<h3>Register Considerations</h3> 
+ 
+<p>Having separate register input and output objects is somewhat awkward in 
+terms of saying when a network is well-formed.  In some sense, it's not 
+well-formed unless every RO has a corresponding RI.  But the RIs can't be added 
+until their input cones are built, and we'd like to be able to say the network 
+is well-formed in some sense while it is being built.  So while an RO has no 
+corresponding RI, we will say it is simply not updated: its value under 
+sequential evalutation remains the same at each frame.  A separate predicate 
+can check that this isn't the case, but we won't generally require this for 
+guards etc.</p> 
+ 
+<p>Furthermore, for convenience, we also allow RIs with fanin 1 set to 0.  In 
+this case they are not proper RIs because they do not connect to an RO, and 
+they have no register number.  They are also basically irrelevant to any 
+sequential computation, because no RI gets updated with their previous 
+value.</p> 
+ 
+<p>We require that each RI object occur later (have a larger ID) than its 
+corresponding RO object.  This allows a couple of conveniences:</p> 
+ 
+<ul> 
+ 
+<li>There is a function for adding an RO and another function for adding an RI 
+which connects it to an existing RO.  If we allowed RIs to occur first, then 
+we'd need an additional pair of functions, for adding an unconnected RI and for 
+adding an RO connected to an RI.  Maybe we could avoid this by separately 
+allowing RO/RIs to be connected, but this seems knotty in terms of 
+well-formedness.</li> 
+ 
+<li>When doing a sequential simulation or similar operation that involves 
+repeated sweeps across the AIG nodes, an RO node will be reached before the 
+corresponding RI's previous value is overwritten.  So we don't need an 
+addtional step of copying RI to RO values between frames.</li> 
+ 
+</ul> 
+ 
+<p>Also, a strategy that might alleviate any inconvenience due to needing to 
+add the RO before the RI: at the point of adding the RI, check whether the 
+RO already exists and add it first if not.</p> 
+ 
+ 
+<h3>Other Arrays</h3> 
+ 
+<p>An Aignet network is designed to have objects added one at a time without 
+later modification.  That is, new objects may be added, but existing objects 
+are not changed.  The object array itself (along with its size) contains enough 
+information to fully replicate the network; in this sense, all other 
+information recorded is auxiliary.</p> 
+ 
+<p>For efficient lookups, we do also keep arrays of inputs, outputs, and 
+registers.</p> 
+ 
+<p>The input and output arrays simply hold the IDs of inputs/outputs in the 
+order that they were added (as described above, each input/output object 
+records its input/output numbers, i.e. the index in the input/output array that 
+points back to it).</p> 
+ 
+<p>The register array is a bit more complicated, because there are typically 
+two nodes (register input and register output) associated with each register. 
+Each entry in the register array contains the ID of either a register input or 
+output.  If it is a register input, then the register is incomplete, i.e. its 
+output hasn't been added yet.  If it is a register output, then we have a 
+complete register: the register array points to the register output node, which 
+points to the register input node, which has the index in the register 
+array.</p> 
+ 
+ 
+<h3>Source Code</h3> 
+ 
+<p>For the full details, see the source code in <span class="v">aignet-exec.lisp</span> or 
+<span class="v">aignet-exec-thms.lisp</span>.</p> 
+ 
+
+</body>
+</html>

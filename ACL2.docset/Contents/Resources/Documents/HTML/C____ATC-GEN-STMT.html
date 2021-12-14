@@ -1,0 +1,981 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Atc-gen-stmt</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=C____ATC-GEN-STMT">Click for Atc-gen-stmt in the Full Manual</a></h3>
+
+<p>Generate a C statement from an ACL2 term.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(atc-gen-stmt term var-term-alist inscope loop-flag 
+              affect fn prec-fns proofs ctx state) 
+ 
+  → 
+(mv erp val state)</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">term</span> — <font color="#606060">Guard <span class="v">(<a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a> term)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">var-term-alist</span> — <font color="#606060">Guard <span class="v">(<a href="ACL2____SYMBOL-PSEUDOTERM-ALISTP.html">symbol-pseudoterm-alistp</a> var-term-alist)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">inscope</span> — <font color="#606060">Guard <span class="v">(<a href="C____ATC-SYMBOL-TYPE-ALIST-LISTP.html">atc-symbol-type-alist-listp</a> inscope)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">loop-flag</span> — <font color="#606060">Guard <span class="v">(<a href="ACL2____BOOLEANP.html">booleanp</a> loop-flag)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">affect</span> — <font color="#606060">Guard <span class="v">(<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> affect)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">fn</span> — <font color="#606060">Guard <span class="v">(<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> fn)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">prec-fns</span> — <font color="#606060">Guard <span class="v">(<a href="C____ATC-SYMBOL-FNINFO-ALISTP.html">atc-symbol-fninfo-alistp</a> prec-fns)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">proofs</span> — <font color="#606060">Guard <span class="v">(<a href="ACL2____BOOLEANP.html">booleanp</a> proofs)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">ctx</span> — <font color="#606060">Guard <span class="v">(<a href="ACL2____CTXP.html">ctxp</a> ctx)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">val</span> — <font color="#606060">Type <span class="v">(tuple (items block-item-listp)
+       (<a href="C____TYPE.html">type</a> typep)
+       (limit pseudo-termp)
+       val)
+</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>More precisely, we return a list of block items. 
+     These can be regarded as forming a compound statement, 
+     but lists of block items are compositional (via concatenation).</p><p>At the same time, we check that the term is a statement term, 
+     as described in the user documentation.</p><p>Along with the term, we pass an alist from symbols to terms 
+     that collects the <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span> and <span class="tt"><a href="ACL2____MV-LET.html">mv-let</a></span> bindings 
+     encountered along the way. 
+     These are eventually used to properly instantiate 
+     limits associated to function calls, 
+     because those limits apply to the functions' formals, 
+     which must therefore be replaced not just with the actuals of the call, 
+     but with those actuals with variables replaced with terms 
+     according to the bindings that lead to the call.</p><p>The <span class="v">loop-flag</span> parameter of this ACL2 function 
+     is the loop flag <span class="v">L</span> described in the user documentation.</p><p>The <span class="v">affect</span> parameter of this ACL2 function 
+     is the list of variables being affected by this statement. 
+     This is denoted <span class="v">vars</span> in the user documentation at <span class="tt"><a href="C____ATC.html">atc</a></span>.</p><p>Besides the generated block items, 
+     we also return a C type, which is the one returned by the statement.</p><p>We also return a limit that suffices for <span class="tt"><a href="C____EXEC-BLOCK-ITEM-LIST.html">exec-block-item-list</a></span> 
+     to execute the returned block items completely.</p><p>If the term is a conditional, there are two cases. 
+     If the test is <span class="tt"><a href="ACL2____MBT.html">mbt</a></span> or <span class="tt"><a href="ACL2____MBT_42.html">mbt$</a></span>, 
+     we discard test and `else' branch 
+     and recursively translate the `then' branch; 
+     the limit is the same as the `then' branch. 
+     Otherwise, we generate an <span class="v">if</span> statement 
+     (as a singleton block item list), 
+     with recursively generated compound statements as branches; 
+     the test expression is generated from the test term; 
+     we ensure that the two branches have the same type. 
+     When we process the branches, 
+     we extend the symbol table with a new empty scope for each branch. 
+     The calculation of the limit result is a bit more complicated in this case: 
+     we need 1 to go from <span class="tt"><a href="C____EXEC-BLOCK-ITEM-LIST.html">exec-block-item-list</a></span> 
+     to <span class="tt"><a href="C____EXEC-BLOCK-ITEM.html">exec-block-item</a></span>, 
+     another 1 to go from that to <span class="tt"><a href="C____EXEC-STMT.html">exec-stmt</a></span>, 
+     and another 1 to go to the <span class="v">:ifelse</span> case there; 
+     the test is pure and so it needs no addition to the limit; 
+     since either branch may be taken, 
+     we return the sum of the limits for the two branches. 
+     More precisely, the limit recursively returned for each branch 
+     pertains to the block item list in the branch, 
+     but those are put into a compound statement; 
+     thus, we need to increase the recursively calculated limit 
+     by 1 to go from <span class="tt"><a href="C____EXEC-BLOCK-ITEM-LIST.html">exec-block-item-list</a></span> to <span class="tt"><a href="C____EXEC-BLOCK-ITEM.html">exec-block-item</a></span>, 
+     and another 1 to go from there to <span class="tt"><a href="C____EXEC-STMT.html">exec-stmt</a></span>. 
+     In principle we could return the maximum from the two branches 
+     instead of their sum, 
+     but we want the limits to be 
+     linear combinations of sub-limits, 
+     so that ACL2's linear arithmetic can handle the reasoning about limits 
+     during the generated proofs.</p><p>If the term is a <span class="tt"><a href="ACL2____MV-LET.html">mv-let</a></span>, 
+     there are three cases. 
+     If the term involves a <span class="v">declar&lt;n&gt;</span> wrapper, 
+     we ensure that a variable with 
+     the same symbol name as the first bound variable 
+     is not already in scope 
+     (i.e. in the symbol table) 
+     and that the name is a portable ASCII identifier; 
+     we generate a declaration for the variable, 
+     initialized with the expression obtained 
+     from the term that the variable is bound to, 
+     which also determines the type of the variable, 
+     and which must affect the bound variables except the first one; 
+     the type must not be a pointer type (code generation fails if it is). 
+     Otherwise, if the term involves an <span class="v">assign&lt;n&gt;</span> wrapper, 
+     we ensure that the first bound variable is assignable, 
+     which implies that it must be in scope, 
+     and we also ensure that it has the same type as the one in scope; 
+     we generate an assignment whose right-hand side is 
+     obtained from the unwrapped term, 
+     which must be an expression term returning a C value 
+     that affects the bound variables except the first one. 
+     Otherwise, if the term involves no wrapper, 
+     we ensure that the bound variables are all assignable, 
+     and that the non-wrapped term has the form 
+     described in the user documentation; 
+     we generate code that affects the variables from that term. 
+     In all cases, we recursively generate the block items for the body 
+     and we put those just after the preceding code. 
+     We use the sum of the two limits as the overall limit: 
+     thus, after <span class="tt"><a href="C____EXEC-BLOCK-ITEM-LIST.html">exec-block-item-list</a></span> executes 
+     the block items for the bound term, 
+     it still has enough limit to execute the block items for the body term.</p><p>If the term is a <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span>, there are four cases. 
+     If the binding has the form of an array write, 
+     we generate an array assignment. 
+     The other three cases are similar to 
+     the three <span class="tt"><a href="ACL2____MV-LET.html">mv-let</a></span> cases above. 
+     The limit is calculated as follows. 
+     For the case of the term representing code that affects variables, 
+     we add up the two limits, 
+     similarly to the <span class="tt"><a href="ACL2____MV-LET.html">mv-let</a></span> case. 
+     For the other cases, we have one block item followed by block items. 
+     First, we need 1 to go from <span class="tt"><a href="C____EXEC-BLOCK-ITEM-LIST.html">exec-block-item-list</a></span> 
+     to <span class="tt"><a href="C____EXEC-BLOCK-ITEM.html">exec-block-item</a></span>. 
+     Then we take the sum of the limit for the first block item 
+     and the limit for the remaining block items 
+     (in principle we could take the maximum, 
+     but see the discussion above for <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span> 
+     for why we take the sum instead). 
+     The first block item is a declaration, an assignment, or a function call. 
+     If it is a declaration, we need 1 to go from <span class="tt"><a href="C____EXEC-BLOCK-ITEM.html">exec-block-item</a></span> 
+     to the <span class="v">:declon</span> case and to <span class="tt"><a href="C____EXEC-EXPR-CALL-OR-PURE.html">exec-expr-call-or-pure</a></span>, 
+     for which we get the limit. 
+     If it is an assignment, we need 1 to go from <span class="tt"><a href="C____EXEC-BLOCK-ITEM.html">exec-block-item</a></span> 
+     to the <span class="v">:stmt</span> case and to <span class="tt"><a href="C____EXEC-STMT.html">exec-stmt</a></span>, 
+     another 1 to go from there to the <span class="v">:expr</span> case 
+     and to <span class="tt"><a href="C____EXEC-EXPR-CALL-OR-ASG.html">exec-expr-call-or-asg</a></span>, 
+     another 1 to fo from there to <span class="tt"><a href="C____EXEC-EXPR-ASG.html">exec-expr-asg</a></span>, 
+     and another 1 to go from there to <span class="tt"><a href="C____EXEC-EXPR-CALL-OR-PURE.html">exec-expr-call-or-pure</a></span>, 
+     for which we recursively get the limit. 
+     For the remaining block items, we need to add another 1 
+     to go from <span class="tt"><a href="C____EXEC-BLOCK-ITEM-LIST.html">exec-block-item-list</a></span> to its recursive call.</p><p>If the term is a single variable 
+     and <span class="v">affect</span> is a singleton list with that variable, 
+     there are two cases: 
+     if the loop flag is <span class="v">t</span>, it is an error; 
+     otherwise, we return nothing, because 
+     this is the end of a list of block items that affects that variable. 
+     We generate 1 as the limit, 
+     because we need 1 to go from <span class="tt"><a href="C____EXEC-BLOCK-ITEM-LIST.html">exec-block-item-list</a></span> 
+     to the empty list case.</p><p>If the term is an <span class="tt"><a href="ACL2____MV.html">mv</a></span>, there are three cases. 
+     If the loop flag is <span class="v">t</span>, it is an error. 
+     Otherwise, if the arguments of <span class="tt"><a href="ACL2____MV.html">mv</a></span> are the <span class="v">affect</span> variables, 
+     we return nothing, because 
+     this is the end of a list of block items that affects that variable; 
+     we return 1 as the limit, for the same reason as the case above. 
+     Otherwise, if the <span class="tt"><a href="COMMON-LISP____CDR.html">cdr</a></span> of the arguments of <span class="tt"><a href="ACL2____MV.html">mv</a></span> 
+     are the <span class="v">affect</span> variables, 
+     we treat the <span class="tt"><a href="COMMON-LISP____CAR.html">car</a></span> of the arguments of <span class="tt"><a href="ACL2____MV.html">mv</a></span> 
+     as an expression term that must affect no variables, 
+     and generate a return statement for it.</p><p>If the term is a call of a recursive target function on its formals, 
+     different from the current function <span class="v">fn</span>, 
+     then the term represents a loop. 
+     The loop flag must be <span class="v">nil</span> for this to be allowed. 
+     We retrieve the associated loop statement and return it. 
+     We also retrieve the associated limit term, 
+     which, as explained in <span class="tt"><a href="C____ATC-FN-INFO.html">atc-fn-info</a></span>, 
+     suffices to execute <span class="tt"><a href="C____EXEC-STMT-WHILE.html">exec-stmt-while</a></span>. 
+     But here we are executing lists of block items, 
+     so we need to add 1 to go from <span class="tt"><a href="C____EXEC-BLOCK-ITEM-LIST.html">exec-block-item-list</a></span> 
+     to the call to <span class="tt"><a href="C____EXEC-BLOCK-ITEM.html">exec-block-item</a></span>, 
+     another 1 to go from there to the call to <span class="tt"><a href="C____EXEC-STMT.html">exec-stmt</a></span>, 
+     and another 1 to go from there to the call to <span class="tt"><a href="C____EXEC-STMT-WHILE.html">exec-stmt-while</a></span>.</p><p>If the term is a call of the current function <span class="v">fn</span> on its formals, 
+     we ensure that the loop flag is <span class="v">t</span>, 
+     and we generate no code. 
+     This represents the conclusion of a loop body (on some path).</p><p>If the term is a call of 
+     a non-recursive target function that returns <span class="v">void</span>, 
+     the term represents an expression statement 
+     consisting of a call to the corresponding C function. 
+     The loop flag must be <span class="v">nil</span> for this to be allowed. 
+     We ensure that all the pointer arguments are equal to the formals, 
+     and that the variables affected by the called function are correct. 
+     We retrieve the limit term associated to the called function, 
+     which, as explained in <span class="tt"><a href="C____ATC-FN-INFO.html">atc-fn-info</a></span>, 
+     suffices to execute <span class="tt"><a href="C____EXEC-FUN.html">exec-fun</a></span>. 
+     But here we are executing lists of block items, 
+     so we need to add 1 to go from <span class="tt"><a href="C____EXEC-BLOCK-ITEM-LIST.html">exec-block-item-list</a></span> 
+     to the call of <span class="tt"><a href="C____EXEC-BLOCK-ITEM.html">exec-block-item</a></span>, 
+     another 1 to go from there to the call of <span class="tt"><a href="C____EXEC-STMT.html">exec-stmt</a></span>, 
+     another 1 to go from there to the call of <span class="tt"><a href="C____EXEC-EXPR-CALL-OR-ASG.html">exec-expr-call-or-asg</a></span>, 
+     another 1 to go from there to the call of <span class="tt"><a href="C____EXEC-EXPR-CALL.html">exec-expr-call</a></span>, 
+     and another 1 to go from there to the call of <span class="tt"><a href="C____EXEC-FUN.html">exec-fun</a></span>.</p><p>If the term does not have any of the forms above, 
+     we treat it as an expression term returning a C value. 
+     We ensure that the loop flag is <span class="v">nil</span>. 
+     We also ensure that the expression affects 
+     the same variables as the statement term. 
+     For the limit, we need 1 to go from <span class="tt"><a href="C____EXEC-BLOCK-ITEM-LIST.html">exec-block-item-list</a></span> 
+     to <span class="tt"><a href="C____EXEC-BLOCK-ITEM.html">exec-block-item</a></span>, 
+     another 1 to go from there to the <span class="v">:stmt</span> case and <span class="tt"><a href="C____EXEC-STMT.html">exec-stmt</a></span>, 
+     another 1 to go from there to the <span class="v">:return</span> case 
+     and <span class="tt"><a href="C____EXEC-EXPR-CALL-OR-PURE.html">exec-expr-call-or-pure</a></span>, 
+     for which we use the recursively calculated limit.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>atc-gen-stmt</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ atc-gen-stmt
+ (term var-term-alist inscope loop-flag
+       affect fn prec-fns proofs ctx state)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (<a href="ACL2____STATE.html">state</a>)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a>
+      (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a> term)
+                         (<a href="ACL2____SYMBOL-PSEUDOTERM-ALISTP.html">symbol-pseudoterm-alistp</a> var-term-alist)
+                         (<a href="C____ATC-SYMBOL-TYPE-ALIST-LISTP.html">atc-symbol-type-alist-listp</a> inscope)
+                         (<a href="ACL2____BOOLEANP.html">booleanp</a> loop-flag)
+                         (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> affect)
+                         (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> fn)
+                         (<a href="C____ATC-SYMBOL-FNINFO-ALISTP.html">atc-symbol-fninfo-alistp</a> prec-fns)
+                         (<a href="ACL2____BOOLEANP.html">booleanp</a> proofs)
+                         (<a href="ACL2____CTXP.html">ctxp</a> ctx))))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'atc-gen-stmt))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+   ((irr (<a href="COMMON-LISP____LIST.html">list</a> nil (<a href="C____IRR-TYPE.html">irr-type</a>) nil))
+    ((<a href="ACL2____MV.html">mv</a> okp test then else)
+     (<a href="C____FTY-CHECK-IF-CALL.html">fty-check-if-call</a> term))
+    ((when okp)
+     (<a href="ACL2____B_A2.html">b*</a>
+      (((<a href="ACL2____MV.html">mv</a> mbtp &amp;) (<a href="ACL2____CHECK-MBT-CALL.html">check-mbt-call</a> test))
+       ((when mbtp)
+        (<a href="C____ATC-GEN-STMT.html">atc-gen-stmt</a> then var-term-alist inscope loop-flag
+                      affect fn prec-fns proofs ctx state))
+       ((<a href="ACL2____MV.html">mv</a> mbt$p &amp;) (<a href="ACL2____CHECK-MBT_42-CALL.html">check-mbt$-call</a> test))
+       ((when mbt$p)
+        (<a href="C____ATC-GEN-STMT.html">atc-gen-stmt</a> then var-term-alist inscope loop-flag
+                      affect fn prec-fns proofs ctx state))
+       ((<a href="ACL2____MV.html">mv</a> erp test-expr state)
+        (<a href="C____ATC-GEN-EXPR-BOOL.html">atc-gen-expr-bool</a> test inscope fn ctx state))
+       ((when erp) (<a href="ACL2____MV.html">mv</a> erp irr state))
+       ((<a href="ACL2____ER.html">er</a> (<a href="COMMON-LISP____LIST.html">list</a> then-items then-type then-limit))
+        (<a href="C____ATC-GEN-STMT.html">atc-gen-stmt</a> then var-term-alist (<a href="COMMON-LISP____CONS.html">cons</a> nil inscope)
+                      loop-flag
+                      affect fn prec-fns proofs ctx state))
+       ((<a href="ACL2____ER.html">er</a> (<a href="COMMON-LISP____LIST.html">list</a> else-items else-type else-limit))
+        (<a href="C____ATC-GEN-STMT.html">atc-gen-stmt</a> else var-term-alist (<a href="COMMON-LISP____CONS.html">cons</a> nil inscope)
+                      loop-flag
+                      affect fn prec-fns proofs ctx state))
+       ((unless (<a href="COMMON-LISP____EQUAL.html">equal</a> then-type else-type))
+        (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
+         ctx t irr
+         "When generating C code for the function ~x0, ~
+                         two branches ~x1 and ~x2 of a conditional term ~
+                         have different types ~x3 and ~x4; ~
+                         use conversion operations, if needed, ~
+                         to make the branches of the same type."
+         fn then else then-type else-type))
+       (<a href="C____TYPE.html">type</a> then-type)
+       (limit
+        (<a href="ACL2____PSEUDO-TERM-FNCALL.html">pseudo-term-fncall</a>
+         'binary-+
+         (<a href="COMMON-LISP____LIST.html">list</a> (<a href="ACL2____PSEUDO-TERM-QUOTE.html">pseudo-term-quote</a> 5)
+               (<a href="ACL2____PSEUDO-TERM-FNCALL.html">pseudo-term-fncall</a> 'binary-+
+                                   (<a href="COMMON-LISP____LIST.html">list</a> then-limit else-limit))))))
+      (<a href="ACL2____VALUE.html">acl2::value</a>
+       (<a href="COMMON-LISP____LIST.html">list</a>
+        (<a href="COMMON-LISP____LIST.html">list</a>
+           (<a href="C____BLOCK-ITEM-STMT.html">block-item-stmt</a>
+                (<a href="C____MAKE-STMT-IFELSE.html">make-stmt-ifelse</a>
+                     :test test-expr
+                     :then (<a href="C____MAKE-STMT-COMPOUND.html">make-stmt-compound</a> :items then-items)
+                     :else (<a href="C____MAKE-STMT-COMPOUND.html">make-stmt-compound</a> :items else-items))))
+        type limit))))
+    ((<a href="ACL2____MV.html">mv</a> okp var? vars indices val body wrapper?)
+     (<a href="C____ATC-CHECK-MV-LET.html">atc-check-mv-let</a> term))
+    ((when okp)
+     (<a href="ACL2____B_A2.html">b*</a>
+      ((<a href="ACL2____ALL-VARS.html">all-vars</a> (<a href="COMMON-LISP____IF.html">if</a> var? (<a href="COMMON-LISP____CONS.html">cons</a> var? vars) vars))
+       (val-instance (<a href="C____FTY-FSUBLIS-VAR.html">fty-fsublis-var</a> var-term-alist val))
+       (vals (<a href="C____ATC-MAKE-MV-NTH-TERMS.html">atc-make-mv-nth-terms</a> indices val-instance))
+       (var-term-alist-body
+           (<a href="C____ATC-UPDATE-VAR-TERM-ALIST.html">atc-update-var-term-alist</a> all-vars vals var-term-alist))
+       ((when (<a href="COMMON-LISP____EQ.html">eq</a> wrapper? 'declar))
+        (<a href="ACL2____B_A2.html">b*</a>
+         ((var var?)
+          ((<a href="ACL2____MV.html">mv</a> type? &amp; errorp)
+           (<a href="C____ATC-CHECK-VAR.html">atc-check-var</a> var inscope))
+          ((when errorp)
+           (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
+            ctx t irr
+            "When generating C code for the function ~x0, ~
+                               a new variable ~x1 has been encountered ~
+                               that has the same symbol name as, ~
+                               but different package name from, ~
+                               a variable already in scope. ~
+                               This is disallowed."
+            fn var))
+          ((when type?)
+           (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
+            ctx t irr
+            "The variable ~x0 in the function ~x1 ~
+                               is already in scope and cannot be re-declared."
+            var fn))
+          ((unless (<a href="C____ATC-IDENT-STRINGP.html">atc-ident-stringp</a> (<a href="COMMON-LISP____SYMBOL-NAME.html">symbol-name</a> var)))
+           (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
+            ctx t irr
+            "The symbol name ~s0 of ~
+                               the MV-LET variable ~x1 of the function ~x2 ~
+                               must be a portable ASCII C identifier, ~
+                               but it is not."
+            (<a href="COMMON-LISP____SYMBOL-NAME.html">symbol-name</a> var)
+            var fn))
+          ((<a href="ACL2____MV.html">mv</a> type?-list innermostp-list)
+           (<a href="C____ATC-GET-VARS-CHECK-INNERMOST.html">atc-get-vars-check-innermost</a> vars inscope))
+          ((when (<a href="ACL2____MEMBER-EQ.html">member-eq</a> nil type?-list))
+           (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
+            ctx t irr
+            "When generating C code for the function ~x0, ~
+                               an attempt is made to modify the variables ~x1, ~
+                               not all of which are in scope."
+            fn vars))
+          ((unless
+                (<a href="C____ATC-VARS-ASSIGNABLEP.html">atc-vars-assignablep</a> vars innermostp-list affect))
+           (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
+            ctx t irr
+            "When generating C code for the function ~x0, ~
+                               an attempt is made to modify the variables ~x1, ~
+                               not all of which are assignable."
+            fn vars))
+          ((<a href="ACL2____MV.html">mv</a> erp
+               (<a href="COMMON-LISP____LIST.html">list</a> init-expr
+                     init-type init-affect init-limit)
+               state)
+           (<a href="C____ATC-GEN-EXPR-CVAL.html">atc-gen-expr-cval</a> val var-term-alist
+                              inscope fn prec-fns ctx state))
+          ((when erp) (<a href="ACL2____MV.html">mv</a> erp irr state))
+          ((unless (<a href="COMMON-LISP____EQUAL.html">equal</a> init-affect vars))
+           (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
+            ctx t irr
+            "The term ~x0 to which the variable ~x1 is bound ~
+                               must affect the variables ~x2, ~
+                               but it affects ~x3 instead."
+            val var vars init-affect))
+          ((when (<a href="C____TYPE-CASE.html">type-case</a> init-type :pointer))
+           (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
+            ctx t irr
+            "The term ~x0 to which the variable ~x1 is bound ~
+                               must not have a C pointer type, ~
+                               but it has type ~x2 instead."
+            val var init-type))
+          (<a href="C____DECLON.html">declon</a>
+              (<a href="C____MAKE-DECLON-VAR.html">make-declon-var</a>
+                   :type (<a href="C____ATC-GEN-TYSPECSEQ.html">atc-gen-tyspecseq</a> init-type)
+                   :declor
+                   (<a href="C____MAKE-DECLOR.html">make-declor</a>
+                        :ident (<a href="C____MAKE-IDENT.html">make-ident</a> :name (<a href="COMMON-LISP____SYMBOL-NAME.html">symbol-name</a> var)))
+                   :init init-expr))
+          (item (<a href="C____BLOCK-ITEM-DECLON.html">block-item-declon</a> declon))
+          (inscope (<a href="C____ATC-ADD-VAR.html">atc-add-var</a> var init-type inscope))
+          ((<a href="ACL2____ER.html">er</a> (<a href="COMMON-LISP____LIST.html">list</a> body-items body-type body-limit))
+           (<a href="C____ATC-GEN-STMT.html">atc-gen-stmt</a> body
+                         var-term-alist-body inscope loop-flag
+                         affect fn prec-fns proofs ctx state))
+          (<a href="C____TYPE.html">type</a> body-type)
+          (limit
+           (<a href="ACL2____PSEUDO-TERM-FNCALL.html">pseudo-term-fncall</a>
+            'binary-+
+            (<a href="COMMON-LISP____LIST.html">list</a>
+               (<a href="ACL2____PSEUDO-TERM-QUOTE.html">pseudo-term-quote</a> 3)
+               (<a href="ACL2____PSEUDO-TERM-FNCALL.html">pseudo-term-fncall</a> 'binary-+
+                                   (<a href="COMMON-LISP____LIST.html">list</a> init-limit body-limit))))))
+         (<a href="ACL2____VALUE.html">acl2::value</a> (<a href="COMMON-LISP____LIST.html">list</a> (<a href="COMMON-LISP____CONS.html">cons</a> item body-items)
+                            type limit))))
+       ((when (<a href="COMMON-LISP____EQ.html">eq</a> wrapper? 'assign))
+        (<a href="ACL2____B_A2.html">b*</a>
+         ((var var?)
+          ((<a href="ACL2____MV.html">mv</a> type? innermostp &amp;)
+           (<a href="C____ATC-CHECK-VAR.html">atc-check-var</a> var inscope))
+          ((unless (<a href="C____ATC-VAR-ASSIGNABLEP.html">atc-var-assignablep</a> var innermostp affect))
+           (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
+            ctx t irr
+            "When generating C code for the function ~x0, ~
+                               an attempt is being made ~
+                               to modify a non-assignable variable ~x1."
+            fn var))
+          (prev-type type?)
+          ((<a href="ACL2____MV.html">mv</a> erp
+               (<a href="COMMON-LISP____LIST.html">list</a> rhs-expr rhs-type rhs-affect rhs-limit)
+               state)
+           (<a href="C____ATC-GEN-EXPR-CVAL.html">atc-gen-expr-cval</a> val var-term-alist
+                              inscope fn prec-fns ctx state))
+          ((when erp) (<a href="ACL2____MV.html">mv</a> erp irr state))
+          ((unless (<a href="COMMON-LISP____EQUAL.html">equal</a> prev-type rhs-type))
+           (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
+            ctx t irr
+            "The type ~x0 of the term ~x1 ~
+                               assigned to the LET variable ~x2 ~
+                               of the function ~x3 ~
+                               differs from the type ~x4 ~
+                               of a variable with the same symbol in scope."
+            rhs-type val var fn prev-type))
+          ((unless (<a href="COMMON-LISP____EQUAL.html">equal</a> rhs-affect vars))
+           (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
+            ctx t irr
+            "The term ~x0 to which the variable ~x1 is bound ~
+                               must affect the variables ~x2, ~
+                               but it affects ~x3 instead."
+            val var vars rhs-affect))
+          ((when (<a href="C____TYPE-CASE.html">type-case</a> rhs-type :pointer))
+           (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
+            ctx t irr
+            "The term ~x0 to which the variable ~x1 is bound ~
+                               must not have a C pointer type, ~
+                               but it has type ~x2 instead."
+            val var rhs-type))
+          (asg
+           (<a href="C____MAKE-EXPR-BINARY.html">make-expr-binary</a>
+             :op (<a href="C____BINOP-ASG.html">binop-asg</a>)
+             :arg1 (<a href="C____EXPR-IDENT.html">expr-ident</a> (<a href="C____MAKE-IDENT.html">make-ident</a> :name (<a href="COMMON-LISP____SYMBOL-NAME.html">symbol-name</a> var)))
+             :arg2 rhs-expr))
+          (<a href="C____STMT.html">stmt</a> (<a href="C____STMT-EXPR.html">stmt-expr</a> asg))
+          (item (<a href="C____BLOCK-ITEM-STMT.html">block-item-stmt</a> stmt))
+          ((<a href="ACL2____ER.html">er</a> (<a href="COMMON-LISP____LIST.html">list</a> body-items body-type body-limit))
+           (<a href="C____ATC-GEN-STMT.html">atc-gen-stmt</a> body var-term-alist inscope loop-flag
+                         affect fn prec-fns proofs ctx state))
+          (<a href="C____TYPE.html">type</a> body-type)
+          (limit
+           (<a href="ACL2____PSEUDO-TERM-FNCALL.html">pseudo-term-fncall</a>
+            'binary-+
+            (<a href="COMMON-LISP____LIST.html">list</a>
+                (<a href="ACL2____PSEUDO-TERM-QUOTE.html">pseudo-term-quote</a> 6)
+                (<a href="ACL2____PSEUDO-TERM-FNCALL.html">pseudo-term-fncall</a> 'binary-+
+                                    (<a href="COMMON-LISP____LIST.html">list</a> rhs-limit body-limit))))))
+         (<a href="ACL2____VALUE.html">acl2::value</a> (<a href="COMMON-LISP____LIST.html">list</a> (<a href="COMMON-LISP____CONS.html">cons</a> item body-items)
+                            type limit))))
+       ((unless (<a href="COMMON-LISP____EQ.html">eq</a> wrapper? nil))
+        (<a href="ACL2____PROG2_42.html">prog2$</a> (<a href="ACL2____RAISE.html">raise</a> "Internal error: LET wrapper is ~x0."
+                       wrapper?)
+                (<a href="ACL2____VALUE.html">acl2::value</a> irr)))
+       ((<a href="ACL2____MV.html">mv</a> type?-list innermostp-list)
+        (<a href="C____ATC-GET-VARS-CHECK-INNERMOST.html">atc-get-vars-check-innermost</a> vars inscope))
+       ((when (<a href="ACL2____MEMBER-EQ.html">member-eq</a> nil type?-list))
+        (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
+         ctx t irr
+         "When generating C code for the function ~x0, ~
+                         an attempt is made to modify the variables ~x1, ~
+                         not all of which are in scope."
+         fn vars))
+       ((unless (<a href="C____ATC-VARS-ASSIGNABLEP.html">atc-vars-assignablep</a> vars innermostp-list affect))
+        (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
+         ctx t irr
+         "When generating C code for the function ~x0, ~
+                         an attempt is made to modify the variables ~x1, ~
+                         not all of which are assignable."
+         fn vars))
+       ((unless (<a href="C____ATC-AFFECTING-TERM-FOR-LET-P.html">atc-affecting-term-for-let-p</a> val prec-fns))
+        (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
+         ctx t irr
+         "When generating C code for the function ~x0, ~
+                         an MV-LET has been encountered ~
+                         whose term ~x1 to which the variables are bound ~
+                         does not have the required form."
+         fn val))
+       ((<a href="ACL2____ER.html">er</a> (<a href="COMMON-LISP____LIST.html">list</a> xform-items xform-type xform-limit))
+        (<a href="C____ATC-GEN-STMT.html">atc-gen-stmt</a> val var-term-alist inscope
+                      nil vars fn prec-fns proofs ctx state))
+       ((unless (<a href="C____TYPE-CASE.html">type-case</a> xform-type :void))
+        (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
+         ctx t irr
+         "When generating C code for the function ~x0, ~
+                         an MV-LET has been encountered ~
+                         whose term ~x1 to which the variables are bound ~
+                         has the non-void type ~x2, ~
+                         which is disallowed."
+         fn val xform-type))
+       ((<a href="ACL2____ER.html">er</a> (<a href="COMMON-LISP____LIST.html">list</a> body-items body-type body-limit))
+        (<a href="C____ATC-GEN-STMT.html">atc-gen-stmt</a> body
+                      var-term-alist-body inscope loop-flag
+                      affect fn prec-fns proofs ctx state))
+       (items (<a href="COMMON-LISP____APPEND.html">append</a> xform-items body-items))
+       (<a href="C____TYPE.html">type</a> body-type)
+       (limit (<a href="ACL2____PSEUDO-TERM-FNCALL.html">pseudo-term-fncall</a> 'binary-+
+                                  (<a href="COMMON-LISP____LIST.html">list</a> xform-limit body-limit))))
+      (<a href="ACL2____VALUE.html">acl2::value</a> (<a href="COMMON-LISP____LIST.html">list</a> items type limit))))
+    ((<a href="ACL2____MV.html">mv</a> okp var val body wrapper?)
+     (<a href="C____ATC-CHECK-LET.html">atc-check-let</a> term))
+    ((when okp)
+     (<a href="ACL2____B_A2.html">b*</a>
+      ((val-instance (<a href="C____FTY-FSUBLIS-VAR.html">fty-fsublis-var</a> var-term-alist val))
+       (var-term-alist-body
+            (<a href="C____ATC-UPDATE-VAR-TERM-ALIST.html">atc-update-var-term-alist</a> (<a href="COMMON-LISP____LIST.html">list</a> var)
+                                       (<a href="COMMON-LISP____LIST.html">list</a> val-instance)
+                                       var-term-alist))
+       ((<a href="ACL2____MV.html">mv</a> okp sub elem sub-type elem-type)
+        (<a href="C____ATC-CHECK-ARRAY-WRITE.html">atc-check-array-write</a> var val))
+       ((when okp)
+        (<a href="ACL2____B_A2.html">b*</a>
+         (((unless (<a href="ACL2____MEMBER-EQ.html">member-eq</a> var affect))
+           (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
+            ctx t irr
+            "The array ~x0 is being written to, ~
+                               but it is not among the variables ~x1 ~
+                               currently affected."
+            var affect))
+          ((<a href="ACL2____MV.html">mv</a> erp (<a href="COMMON-LISP____LIST.html">list</a> arr-expr type1) state)
+           (<a href="C____ATC-GEN-EXPR-CVAL-PURE.html">atc-gen-expr-cval-pure</a> var inscope fn ctx state))
+          ((when erp) (<a href="ACL2____MV.html">mv</a> erp irr state))
+          ((<a href="ACL2____MV.html">mv</a> erp (<a href="COMMON-LISP____LIST.html">list</a> sub-expr type2) state)
+           (<a href="C____ATC-GEN-EXPR-CVAL-PURE.html">atc-gen-expr-cval-pure</a> sub inscope fn ctx state))
+          ((when erp) (<a href="ACL2____MV.html">mv</a> erp irr state))
+          ((<a href="ACL2____MV.html">mv</a> erp (<a href="COMMON-LISP____LIST.html">list</a> elem-expr type3) state)
+           (<a href="C____ATC-GEN-EXPR-CVAL-PURE.html">atc-gen-expr-cval-pure</a> elem inscope fn ctx state))
+          ((when erp) (<a href="ACL2____MV.html">mv</a> erp irr state))
+          ((unless (<a href="COMMON-LISP____EQUAL.html">equal</a> type1 (<a href="C____TYPE-POINTER.html">type-pointer</a> elem-type)))
+           (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
+            ctx t irr
+            "The array ~x0 of type ~x1 ~
+                               does not have the expected type ~x2. ~
+                               This is indicative of ~
+                               unreachable code under the guards, ~
+                               given that the code is guard-verified."
+            var type1 (<a href="C____TYPE-POINTER.html">type-pointer</a> elem-type)))
+          ((unless (<a href="COMMON-LISP____EQUAL.html">equal</a> type2 sub-type))
+           (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
+            ctx t irr
+            "The array ~x0 of type ~x1 ~
+                               is being indexed with
+                               a subscript ~x2 of type x3, ~
+                               instead of type ~x4 as expected.
+                               This is indicative of ~
+                               unreachable code under the guards, ~
+                               given that the code is guard-verified."
+            var type1 sub type2 sub-type))
+          ((unless (<a href="COMMON-LISP____EQUAL.html">equal</a> type3 elem-type))
+           (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
+            ctx t irr
+            "The array ~x0 of type ~x1 ~
+                               is being written to with ~
+                               an element ~x2 of type x3, ~
+                               instead of type ~x4 as expected.
+                               This is indicative of ~
+                               unreachable code under the guards, ~
+                               given that the code is guard-verified."
+            var type1 elem type3 elem-type))
+          (asg
+            (<a href="C____MAKE-EXPR-BINARY.html">make-expr-binary</a> :op (<a href="C____BINOP-ASG.html">binop-asg</a>)
+                              :arg1 (<a href="C____MAKE-EXPR-ARRSUB.html">make-expr-arrsub</a> :arr arr-expr
+                                                      :sub sub-expr)
+                              :arg2 elem-expr))
+          (<a href="C____STMT.html">stmt</a> (<a href="C____STMT-EXPR.html">stmt-expr</a> asg))
+          (item (<a href="C____BLOCK-ITEM-STMT.html">block-item-stmt</a> stmt))
+          ((<a href="ACL2____ER.html">er</a> (<a href="COMMON-LISP____LIST.html">list</a> body-items body-type body-limit))
+           (<a href="C____ATC-GEN-STMT.html">atc-gen-stmt</a> body
+                         var-term-alist-body inscope loop-flag
+                         affect fn prec-fns proofs ctx state))
+          (limit (<a href="ACL2____PSEUDO-TERM-FNCALL.html">pseudo-term-fncall</a> 'binary-+
+                                     (<a href="COMMON-LISP____LIST.html">list</a> (<a href="ACL2____PSEUDO-TERM-QUOTE.html">pseudo-term-quote</a> 4)
+                                           body-limit))))
+         (<a href="ACL2____VALUE.html">acl2::value</a> (<a href="COMMON-LISP____LIST.html">list</a> (<a href="COMMON-LISP____CONS.html">cons</a> item body-items)
+                            body-type limit))))
+       ((<a href="ACL2____MV.html">mv</a> type? innermostp errorp)
+        (<a href="C____ATC-CHECK-VAR.html">atc-check-var</a> var inscope))
+       ((when errorp)
+        (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
+         ctx t irr
+         "When generating C code for the function ~x0, ~
+                         a new variable ~x1 has been encountered ~
+                         that has the same symbol name as, ~
+                         but different package name from, ~
+                         a variable already in scope. ~
+                         This is disallowed."
+         fn var))
+       ((when (<a href="COMMON-LISP____EQ.html">eq</a> wrapper? 'declar))
+        (<a href="ACL2____B_A2.html">b*</a>
+         (((when type?)
+           (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
+            ctx t irr
+            "The variable ~x0 in the function ~x1 ~
+                               is already in scope and cannot be re-declared."
+            var fn))
+          ((unless (<a href="C____ATC-IDENT-STRINGP.html">atc-ident-stringp</a> (<a href="COMMON-LISP____SYMBOL-NAME.html">symbol-name</a> var)))
+           (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
+            ctx t irr
+            "The symbol name ~s0 of ~
+                               the LET variable ~x1 of the function ~x2 ~
+                               must be a portable ASCII C identifier, ~
+                               but it is not."
+            (<a href="COMMON-LISP____SYMBOL-NAME.html">symbol-name</a> var)
+            var fn))
+          ((<a href="ACL2____MV.html">mv</a> erp
+               (<a href="COMMON-LISP____LIST.html">list</a> init-expr
+                     init-type init-affect init-limit)
+               state)
+           (<a href="C____ATC-GEN-EXPR-CVAL.html">atc-gen-expr-cval</a> val var-term-alist
+                              inscope fn prec-fns ctx state))
+          ((when erp) (<a href="ACL2____MV.html">mv</a> erp irr state))
+          ((when (<a href="COMMON-LISP____CONSP.html">consp</a> init-affect))
+           (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
+            ctx t irr
+            "The term ~x0 to which the variable ~x1 is bound ~
+                               must not affect any variables, ~
+                               but it affects ~x2 instead."
+            val var init-affect))
+          ((when (<a href="C____TYPE-CASE.html">type-case</a> init-type :pointer))
+           (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
+            ctx t irr
+            "The term ~x0 to which the variable ~x1 is bound ~
+                               must not have a C pointer type, ~
+                               but it has type ~x2 instead."
+            val var init-type))
+          (<a href="C____DECLON.html">declon</a>
+              (<a href="C____MAKE-DECLON-VAR.html">make-declon-var</a>
+                   :type (<a href="C____ATC-GEN-TYSPECSEQ.html">atc-gen-tyspecseq</a> init-type)
+                   :declor
+                   (<a href="C____MAKE-DECLOR.html">make-declor</a>
+                        :ident (<a href="C____MAKE-IDENT.html">make-ident</a> :name (<a href="COMMON-LISP____SYMBOL-NAME.html">symbol-name</a> var)))
+                   :init init-expr))
+          (item (<a href="C____BLOCK-ITEM-DECLON.html">block-item-declon</a> declon))
+          (inscope (<a href="C____ATC-ADD-VAR.html">atc-add-var</a> var init-type inscope))
+          ((<a href="ACL2____ER.html">er</a> (<a href="COMMON-LISP____LIST.html">list</a> body-items body-type body-limit))
+           (<a href="C____ATC-GEN-STMT.html">atc-gen-stmt</a> body
+                         var-term-alist-body inscope loop-flag
+                         affect fn prec-fns proofs ctx state))
+          (<a href="C____TYPE.html">type</a> body-type)
+          (limit
+           (<a href="ACL2____PSEUDO-TERM-FNCALL.html">pseudo-term-fncall</a>
+            'binary-+
+            (<a href="COMMON-LISP____LIST.html">list</a>
+               (<a href="ACL2____PSEUDO-TERM-QUOTE.html">pseudo-term-quote</a> 3)
+               (<a href="ACL2____PSEUDO-TERM-FNCALL.html">pseudo-term-fncall</a> 'binary-+
+                                   (<a href="COMMON-LISP____LIST.html">list</a> init-limit body-limit))))))
+         (<a href="ACL2____VALUE.html">acl2::value</a> (<a href="COMMON-LISP____LIST.html">list</a> (<a href="COMMON-LISP____CONS.html">cons</a> item body-items)
+                            type limit))))
+       ((unless (<a href="C____ATC-VAR-ASSIGNABLEP.html">atc-var-assignablep</a> var innermostp affect))
+        (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
+         ctx t irr
+         "When generating C code for the function ~x0, ~
+                         an attempt is being made ~
+                         to modify a non-assignable variable ~x1."
+         fn var))
+       ((when (<a href="COMMON-LISP____EQ.html">eq</a> wrapper? 'assign))
+        (<a href="ACL2____B_A2.html">b*</a>
+         ((prev-type type?)
+          ((<a href="ACL2____MV.html">mv</a> erp
+               (<a href="COMMON-LISP____LIST.html">list</a> rhs-expr rhs-type rhs-affect rhs-limit)
+               state)
+           (<a href="C____ATC-GEN-EXPR-CVAL.html">atc-gen-expr-cval</a> val var-term-alist
+                              inscope fn prec-fns ctx state))
+          ((when erp) (<a href="ACL2____MV.html">mv</a> erp irr state))
+          ((unless (<a href="COMMON-LISP____EQUAL.html">equal</a> prev-type rhs-type))
+           (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
+            ctx t irr
+            "The type ~x0 of the term ~x1 ~
+                               assigned to the LET variable ~x2 ~
+                               of the function ~x3 ~
+                               differs from the type ~x4 ~
+                               of a variable with the same symbol in scope."
+            rhs-type val var fn prev-type))
+          ((when (<a href="COMMON-LISP____CONSP.html">consp</a> rhs-affect))
+           (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
+            ctx t irr
+            "The term ~x0 to which the variable ~x1 is bound ~
+                               must not affect any variables, ~
+                               but it affects ~x2 instead."
+            val var rhs-affect))
+          ((when (<a href="C____TYPE-CASE.html">type-case</a> rhs-type :pointer))
+           (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
+            ctx t irr
+            "The term ~x0 to which the variable ~x1 is bound ~
+                               must not have a C pointer type, ~
+                               but it has type ~x2 instead."
+            val var rhs-type))
+          (asg
+           (<a href="C____MAKE-EXPR-BINARY.html">make-expr-binary</a>
+             :op (<a href="C____BINOP-ASG.html">binop-asg</a>)
+             :arg1 (<a href="C____EXPR-IDENT.html">expr-ident</a> (<a href="C____MAKE-IDENT.html">make-ident</a> :name (<a href="COMMON-LISP____SYMBOL-NAME.html">symbol-name</a> var)))
+             :arg2 rhs-expr))
+          (<a href="C____STMT.html">stmt</a> (<a href="C____STMT-EXPR.html">stmt-expr</a> asg))
+          (item (<a href="C____BLOCK-ITEM-STMT.html">block-item-stmt</a> stmt))
+          ((<a href="ACL2____ER.html">er</a> (<a href="COMMON-LISP____LIST.html">list</a> body-items body-type body-limit))
+           (<a href="C____ATC-GEN-STMT.html">atc-gen-stmt</a> body var-term-alist inscope loop-flag
+                         affect fn prec-fns proofs ctx state))
+          (<a href="C____TYPE.html">type</a> body-type)
+          (limit
+           (<a href="ACL2____PSEUDO-TERM-FNCALL.html">pseudo-term-fncall</a>
+            'binary-+
+            (<a href="COMMON-LISP____LIST.html">list</a>
+                (<a href="ACL2____PSEUDO-TERM-QUOTE.html">pseudo-term-quote</a> 6)
+                (<a href="ACL2____PSEUDO-TERM-FNCALL.html">pseudo-term-fncall</a> 'binary-+
+                                    (<a href="COMMON-LISP____LIST.html">list</a> rhs-limit body-limit))))))
+         (<a href="ACL2____VALUE.html">acl2::value</a> (<a href="COMMON-LISP____LIST.html">list</a> (<a href="COMMON-LISP____CONS.html">cons</a> item body-items)
+                            type limit))))
+       ((unless (<a href="COMMON-LISP____EQ.html">eq</a> wrapper? nil))
+        (<a href="ACL2____PROG2_42.html">prog2$</a> (<a href="ACL2____RAISE.html">raise</a> "Internal error: LET wrapper is ~x0."
+                       wrapper?)
+                (<a href="ACL2____VALUE.html">acl2::value</a> irr)))
+       ((unless (<a href="C____ATC-AFFECTING-TERM-FOR-LET-P.html">atc-affecting-term-for-let-p</a> val prec-fns))
+        (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
+         ctx t irr
+         "When generating C code for the function ~x0, ~
+                         we encountered an unwrapped term ~x1 ~
+                         to which a LET variable is bound ~
+                         that is neither an IF or a loop function call. ~
+                         This is disallowed."
+         fn val))
+       ((<a href="ACL2____ER.html">er</a> (<a href="COMMON-LISP____LIST.html">list</a> xform-items xform-type xform-limit))
+        (<a href="C____ATC-GEN-STMT.html">atc-gen-stmt</a> val
+                      var-term-alist inscope nil (<a href="COMMON-LISP____LIST.html">list</a> var)
+                      fn prec-fns proofs ctx state))
+       ((unless (<a href="C____TYPE-CASE.html">type-case</a> xform-type :void))
+        (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
+         ctx t irr
+         "When generating C code for the function ~x0, ~
+                         a LET has been encountered ~
+                         whose unwrapped term ~x1 ~
+                         to which the variable is bound ~
+                         has the non-void type ~x2, ~
+                         which is disallowed."
+         fn val xform-type))
+       ((<a href="ACL2____ER.html">er</a> (<a href="COMMON-LISP____LIST.html">list</a> body-items body-type body-limit))
+        (<a href="C____ATC-GEN-STMT.html">atc-gen-stmt</a> body
+                      var-term-alist-body inscope loop-flag
+                      affect fn prec-fns proofs ctx state))
+       (items (<a href="COMMON-LISP____APPEND.html">append</a> xform-items body-items))
+       (<a href="C____TYPE.html">type</a> body-type)
+       (limit (<a href="ACL2____PSEUDO-TERM-FNCALL.html">pseudo-term-fncall</a> 'binary-+
+                                  (<a href="COMMON-LISP____LIST.html">list</a> xform-limit body-limit))))
+      (<a href="ACL2____VALUE.html">acl2::value</a> (<a href="COMMON-LISP____LIST.html">list</a> items type limit))))
+    ((when (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____PSEUDO-TERM-CASE.html">pseudo-term-case</a> term :var)
+                (<a href="COMMON-LISP____EQUAL.html">equal</a> affect
+                       (<a href="COMMON-LISP____LIST.html">list</a> (<a href="ACL2____PSEUDO-TERM-VAR-_E3NAME.html">pseudo-term-var-&gt;name</a> term)))))
+     (<a href="COMMON-LISP____IF.html">if</a>
+      loop-flag
+      (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
+       ctx t irr
+       "A loop body must end with ~
+                       a recursive call on every path, ~
+                       but in the fucntion ~x0 it ends with ~x1 instead."
+       fn term)
+      (<a href="ACL2____VALUE.html">acl2::value</a> (<a href="COMMON-LISP____LIST.html">list</a> nil (<a href="C____TYPE-VOID.html">type-void</a>)
+                         (<a href="ACL2____PSEUDO-TERM-QUOTE.html">pseudo-term-quote</a> 1)))))
+    ((<a href="ACL2____MV.html">mv</a> okp terms)
+     (<a href="C____FTY-CHECK-LIST-CALL.html">fty-check-list-call</a> term))
+    ((when okp)
+     (<a href="ACL2____B_A2.html">b*</a>
+      (((unless (<a href="COMMON-LISP_____E3_D3.html">&gt;=</a> (<a href="ACL2____LEN.html">len</a> terms) 2))
+        (<a href="ACL2____RAISE.html">raise</a> "Internal error: MV applied to ~x0."
+               terms)
+        (<a href="ACL2____VALUE.html">acl2::value</a> irr))
+       ((when loop-flag)
+        (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
+         ctx t irr
+         "A loop body must end with ~
+                         a recursive call on every path, ~
+                         but in the fucntion ~x0 ~
+                         it ends with ~x1 instead."
+         fn term)))
+      (<a href="COMMON-LISP____COND.html">cond</a>
+       ((<a href="COMMON-LISP____EQUAL.html">equal</a> terms affect)
+        (<a href="ACL2____VALUE.html">acl2::value</a> (<a href="COMMON-LISP____LIST.html">list</a> nil (<a href="C____TYPE-VOID.html">type-void</a>)
+                           (<a href="ACL2____PSEUDO-TERM-QUOTE.html">pseudo-term-quote</a> 1))))
+       ((<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____CDR.html">cdr</a> terms) affect)
+        (<a href="ACL2____B_A2.html">b*</a>
+         (((<a href="ACL2____MV.html">mv</a> erp (<a href="COMMON-LISP____LIST.html">list</a> expr type eaffect limit)
+               state)
+           (<a href="C____ATC-GEN-EXPR-CVAL.html">atc-gen-expr-cval</a> (<a href="COMMON-LISP____CAR.html">car</a> terms)
+                              var-term-alist
+                              inscope fn prec-fns ctx state))
+          ((when erp) (<a href="ACL2____MV.html">mv</a> erp irr state))
+          ((when (<a href="COMMON-LISP____CONSP.html">consp</a> eaffect))
+           (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
+            ctx t irr
+            "The first argument ~x0 of the term ~x1 ~
+                             in the function ~x2 ~
+                             affects the variables ~x3, which is disallowed."
+            (<a href="COMMON-LISP____CAR.html">car</a> terms)
+            term fn eaffect))
+          (limit
+           (<a href="ACL2____PSEUDO-TERM-FNCALL.html">pseudo-term-fncall</a> 'binary-+
+                               (<a href="COMMON-LISP____LIST.html">list</a> (<a href="ACL2____PSEUDO-TERM-QUOTE.html">pseudo-term-quote</a> 3) limit))))
+         (<a href="ACL2____VALUE.html">acl2::value</a>
+          (<a href="COMMON-LISP____LIST.html">list</a>
+             (<a href="COMMON-LISP____LIST.html">list</a> (<a href="C____BLOCK-ITEM-STMT.html">block-item-stmt</a> (<a href="C____MAKE-STMT-RETURN.html">make-stmt-return</a> :value expr)))
+             type limit))))
+       (t
+        (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
+         ctx t irr
+         "When generating C code for the function ~x0, ~
+                         a term ~x0 has been encountered, ~
+                         which is disallowed."
+         fn term)))))
+    ((<a href="ACL2____MV.html">mv</a> okp loop-fn loop-args in-types
+         loop-affect loop-stmt loop-limit)
+     (<a href="C____ATC-CHECK-LOOP-CALL.html">atc-check-loop-call</a> term var-term-alist prec-fns))
+    ((when okp)
+     (<a href="ACL2____B_A2.html">b*</a>
+      (((when loop-flag)
+        (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
+         ctx t irr
+         "A loop body must end with ~
+                         a recursive call on every path, ~
+                         but in the function ~x0 it ends with ~x1 instead."
+         fn term))
+       (formals (<a href="ACL2____FORMALS_B2.html">formals+</a> loop-fn (<a href="ACL2____W.html">w</a> state)))
+       ((unless (<a href="COMMON-LISP____EQUAL.html">equal</a> formals loop-args))
+        (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
+         ctx t irr
+         "When generating C code for the function ~x0, ~
+                         a call of the recursive function ~x1 ~
+                         has been encountered ~
+                         that is not on its formals, ~
+                         but instead on the arguments ~x2.
+                         This is disallowed; see the ATC user documentation."
+         fn loop-fn loop-args))
+       ((unless (<a href="COMMON-LISP____EQUAL.html">equal</a> affect loop-affect))
+        (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
+         ctx t irr
+         "When generating C code for the function ~x0, ~
+                         a call of the recursive function ~x1 ~
+                         has been encountered
+                         that represents a loop affecting ~x2, ~
+                         which differs from the variables ~x3 ~
+                         being affected here."
+         fn loop-fn loop-affect affect))
+       (types (<a href="C____ATC-GET-VARS.html">atc-get-vars</a> formals inscope))
+       ((when (<a href="ACL2____MEMBER-EQ.html">member-eq</a> nil types))
+        (<a href="ACL2____RAISE.html">raise</a> "Internal error: not all formals ~x0 have types ~x1."
+               formals types)
+        (<a href="ACL2____VALUE.html">acl2::value</a> irr))
+       ((unless (<a href="COMMON-LISP____EQUAL.html">equal</a> types in-types))
+        (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
+         ctx t irr
+         "The loop function ~x0 with input types ~x1 ~
+                         is applied to terms ~x2 returning ~x3. ~
+                         This is indicative of dead code under the guards, ~
+                         given that the code is guard-verified."
+         loop-fn in-types formals types))
+       (limit (<a href="ACL2____PSEUDO-TERM-FNCALL.html">pseudo-term-fncall</a> 'binary-+
+                                  (<a href="COMMON-LISP____LIST.html">list</a> (<a href="ACL2____PSEUDO-TERM-QUOTE.html">pseudo-term-quote</a> 3)
+                                        loop-limit))))
+      (<a href="ACL2____VALUE.html">acl2::value</a> (<a href="COMMON-LISP____LIST.html">list</a> (<a href="COMMON-LISP____LIST.html">list</a> (<a href="C____BLOCK-ITEM-STMT.html">block-item-stmt</a> loop-stmt))
+                         (<a href="C____TYPE-VOID.html">type-void</a>)
+                         limit))))
+    ((when (<a href="COMMON-LISP____EQUAL.html">equal</a> term (<a href="COMMON-LISP____CONS.html">cons</a> fn (<a href="ACL2____FORMALS_B2.html">formals+</a> fn (<a href="ACL2____W.html">w</a> state)))))
+     (<a href="COMMON-LISP____IF.html">if</a>
+      loop-flag
+      (<a href="ACL2____VALUE.html">acl2::value</a> (<a href="COMMON-LISP____LIST.html">list</a> nil (<a href="C____TYPE-VOID.html">type-void</a>)
+                         (<a href="ACL2____PSEUDO-TERM-QUOTE.html">pseudo-term-quote</a> 1)))
+      (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
+       ctx t irr
+       "When generating code for the recursive function ~x0, ~
+                     a recursive call to the loop function occurs ~
+                     not at the end of the computation on some path."
+       fn)))
+    ((<a href="ACL2____MV.html">mv</a> okp called-fn
+         args in-types out-type fn-affect limit)
+     (<a href="C____ATC-CHECK-CFUN-CALL.html">atc-check-cfun-call</a> term var-term-alist prec-fns (<a href="ACL2____W.html">w</a> state)))
+    ((when (<a href="COMMON-LISP____AND.html">and</a> okp (<a href="C____TYPE-CASE.html">type-case</a> out-type :void)))
+     (<a href="ACL2____B_A2.html">b*</a>
+      (((when loop-flag)
+        (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
+         ctx t irr
+         "A loop body must end with ~
+                         a recursive call on every path, ~
+                         but in the function ~x0 it ends with ~x1 instead."
+         fn term))
+       ((unless
+            (<a href="C____ATC-CHECK-CFUN-CALL-ARGS.html">atc-check-cfun-call-args</a> (<a href="ACL2____FORMALS_B2.html">formals+</a> called-fn (<a href="ACL2____W.html">w</a> state))
+                                      in-types args))
+        (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
+         ctx t irr
+         "The call ~x0 does not satisfy the restrictions ~
+                         on array arguments being identical to the formals."
+         term))
+       ((unless (<a href="COMMON-LISP____EQUAL.html">equal</a> affect fn-affect))
+        (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
+         ctx t irr
+         "When generating C code for the function ~x0, ~
+                         a call of the non-recursive function ~x1 ~
+                         has been encountered that affects ~x2, ~
+                         which differs from the variables ~x3 ~
+                         being affected here."
+         fn loop-fn fn-affect affect))
+       ((<a href="ACL2____MV.html">mv</a> erp (<a href="COMMON-LISP____LIST.html">list</a> arg-exprs types) state)
+        (<a href="C____ATC-GEN-EXPR-CVAL-PURE-LIST.html">atc-gen-expr-cval-pure-list</a> args inscope fn ctx state))
+       ((when erp) (<a href="ACL2____MV.html">mv</a> erp irr state))
+       ((unless (<a href="COMMON-LISP____EQUAL.html">equal</a> types in-types))
+        (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
+         ctx t irr
+         "The function ~x0 with input types ~x1 ~
+                         is applied to terms ~x2 returning ~x3. ~
+                         This is indicative of provably dead code, ~
+                         given that the code is guard-verified."
+         called-fn in-types args types))
+       (call-expr
+            (<a href="C____MAKE-EXPR-CALL.html">make-expr-call</a>
+                 :fun (<a href="C____MAKE-IDENT.html">make-ident</a> :name (<a href="COMMON-LISP____SYMBOL-NAME.html">symbol-name</a> called-fn))
+                 :args arg-exprs)))
+      (<a href="ACL2____VALUE.html">acl2::value</a>
+           (<a href="COMMON-LISP____LIST.html">list</a> (<a href="COMMON-LISP____LIST.html">list</a> (<a href="C____BLOCK-ITEM-STMT.html">block-item-stmt</a> (<a href="C____STMT-EXPR.html">stmt-expr</a> call-expr)))
+                 (<a href="C____TYPE-VOID.html">type-void</a>)
+                 (<a href="COMMON-LISP____CONS.html">cons</a> 'binary-+
+                       (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'quote (<a href="COMMON-LISP____CONS.html">cons</a> '5 'nil))
+                             (<a href="COMMON-LISP____CONS.html">cons</a> limit 'nil)))))))
+    ((<a href="ACL2____MV.html">mv</a> erp (<a href="COMMON-LISP____LIST.html">list</a> expr type eaffect limit)
+         state)
+     (<a href="C____ATC-GEN-EXPR-CVAL.html">atc-gen-expr-cval</a> term var-term-alist
+                        inscope fn prec-fns ctx state))
+    ((when erp) (<a href="ACL2____MV.html">mv</a> erp irr state))
+    ((when loop-flag)
+     (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
+      ctx t irr
+      "A loop body must end with ~
+                   a recursive call on every path, ~
+                   but in the fucntion ~x0 it ends with ~x1 instead."
+      fn term))
+    ((unless (<a href="COMMON-LISP____EQUAL.html">equal</a> affect eaffect))
+     (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
+      ctx t irr
+      "When generating code for the non-recursive function ~x0, ~
+                   a term ~x1 was encountered at the end of the computation, ~
+                   that affects the variables ~x2, ~
+                   but ~x0 affects the variables ~x3 instead."
+      fn term eaffect affect))
+    ((when (<a href="C____TYPE-CASE.html">type-case</a> type :void))
+     (<a href="ACL2____RAISE.html">raise</a> "Internal error: return term ~x0 has type void."
+            term)
+     (<a href="ACL2____VALUE.html">acl2::value</a> irr))
+    ((when (<a href="C____TYPE-CASE.html">type-case</a> type :pointer))
+     (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
+      ctx t irr
+      "When generating a return statement for function ~x0, ~
+                   the term ~x1 that represents the return expression ~
+                   has pointer type ~x2, which is disallowed."
+      fn term type))
+    (limit (<a href="ACL2____PSEUDO-TERM-FNCALL.html">pseudo-term-fncall</a> 'binary-+
+                               (<a href="COMMON-LISP____LIST.html">list</a> (<a href="ACL2____PSEUDO-TERM-QUOTE.html">pseudo-term-quote</a> 3) limit))))
+   (<a href="ACL2____VALUE.html">acl2::value</a>
+       (<a href="COMMON-LISP____LIST.html">list</a> (<a href="COMMON-LISP____LIST.html">list</a> (<a href="C____BLOCK-ITEM-STMT.html">block-item-stmt</a> (<a href="C____MAKE-STMT-RETURN.html">make-stmt-return</a> :value expr)))
+             type limit)))))</pre> 
+<p><b>Theorem: </b>return-type-of-atc-gen-stmt.val</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> return-type-of-atc-gen-stmt.val
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?erp ?val acl2::?state)
+              (<a href="C____ATC-GEN-STMT.html">atc-gen-stmt</a> term var-term-alist inscope loop-flag
+                            affect fn prec-fns proofs ctx state)))
+            (tuple (items block-item-listp)
+                   (<a href="C____TYPE.html">type</a> typep)
+                   (limit pseudo-termp)
+                   val))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>cons-true-listp-of-atc-gen-stmt-val</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> cons-true-listp-of-atc-gen-stmt-val
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?erp ?val acl2::?state)
+              (<a href="C____ATC-GEN-STMT.html">atc-gen-stmt</a> term var-term-alist inscope loop-flag
+                            affect fn prec-fns proofs ctx state)))
+            (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____CONSP.html">consp</a> val) (<a href="ACL2____TRUE-LISTP.html">true-listp</a> val)))
+        :rule-classes :type-prescription)</pre> 
+<p><b>Theorem: </b>true-listp-of-atc-gen-stmt.items</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> true-listp-of-atc-gen-stmt.items
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?erp ?val acl2::?state)
+              (<a href="C____ATC-GEN-STMT.html">atc-gen-stmt</a> term var-term-alist inscope loop-flag
+                            affect fn prec-fns proofs ctx state)))
+            (<a href="ACL2____TRUE-LISTP.html">true-listp</a> (<a href="COMMON-LISP____CAR.html">car</a> val)))
+        :rule-classes :type-prescription)</pre> 
+
+</body>
+</html>

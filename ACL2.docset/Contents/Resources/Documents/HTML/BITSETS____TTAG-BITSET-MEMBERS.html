@@ -1,0 +1,120 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Ttag-bitset-members</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=BITSETS____TTAG-BITSET-MEMBERS">Click for Ttag-bitset-members in the Full Manual</a></h3>
+
+<p>Notes about the optimization of <a href="ACL2____BITSET-MEMBERS.html">bitset-members</a>.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(ttag-bitset-members x) → *</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">x</span> — <font color="#606060">Guard <span class="v">(<a href="ACL2____NATP.html">natp</a> x)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>The basic version of <span class="v">bitset-members</span> calls <a href="BITSETS____BITS-BETWEEN.html">bits-between</a>, 
+which repeatedly indexes into the bitset using <a href="COMMON-LISP____LOGBITP.html">logbitp</a>.</p> 
+ 
+<p>We found this wasn't very efficient in 64-bit CCL, and have developed an 
+alternate implementation that uses:</p> 
+ 
+<ol> 
+ 
+<li>
+<a href="BITSETS____BITS-0-31.html">bits-0-31</a>, a partially unrolled version of <a href="BITSETS____BITS-BETWEEN.html">bits-between</a> that 
+is specialized for 32-bit numbers, and</li> 
+ 
+<li>
+<a href="BITSETS____BIGNUM-EXTRACT.html">bignum-extract</a>, a function for extracting a 32-bit chunk from a 
+bignum in a particularly efficient way on 64-bit CCL.</li> 
+ 
+</ol> 
+ 
+<p>Basic performance testing suggests that <span class="v">ttag-bitset-members</span> is almost 
+5x faster than a regular version.  Here's the testing code I used:</p> 
+ 
+<pre class="code">(<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "bitsets")
+(<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "centaur/aig/random-sim" :dir :system)
+(<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "centaur/misc/memory-mgmt" :dir :system)
+(<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "std/util/defconsts" :dir :system)
+
+ (<a href="ACL2____SET-MAX-MEM.html">acl2::set-max-mem</a> ;; newline to fool dependency scanner
+   (<a href="COMMON-LISP_____A2.html">*</a> 30 (<a href="COMMON-LISP____EXPT.html">expt</a> 2 30)))
+
+ (<a href="ACL2____DEFCONSTS.html">acl2::defconsts</a> (*random-data* state)
+   (<a href="ACL2____RANDOM-LIST.html">acl2::random-list</a> 100000 (<a href="COMMON-LISP____ASH.html">ash</a> 1 5000) state))
+
+(<a href="ACL2____DEFUND.html">defund</a> bitset-members-list (x)
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ATOM.html">atom</a> x)
+      nil
+    (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="ACL2____BITSET-MEMBERS.html">bitset-members</a> (<a href="COMMON-LISP____CAR.html">car</a> x))
+          (bitset-members-list (<a href="COMMON-LISP____CDR.html">cdr</a> x)))))
+
+(<a href="ACL2____DEFUND.html">defund</a> ttag-bitset-members-list (x)
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ATOM.html">atom</a> x)
+      nil
+    (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="BITSETS____TTAG-BITSET-MEMBERS.html">ttag-bitset-members</a> (<a href="COMMON-LISP____CAR.html">car</a> x))
+          (ttag-bitset-members-list (<a href="COMMON-LISP____CDR.html">cdr</a> x)))))
+
+(<a href="ACL2____PROGN_42.html">progn$</a>
+ (<a href="ACL2____GC_42.html">gc$</a>)
+ (<a href="ACL2____TIME_42.html">time$</a> (bitset-members-list *random-data*)
+        :msg "Unoptimized Original: ~st sec, ~sa bytes~%")
+ (<a href="ACL2____GC_42.html">gc$</a>)
+ (<a href="ACL2____TIME_42.html">time$</a> (ttag-bitset-members-list *random-data*)
+        :msg "Unoptimized TTAG: ~st sec, ~sa bytes~%")
+ nil)
+
+(<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "bitsets-opt")
+
+(<a href="ACL2____PROGN_42.html">progn$</a>
+ (<a href="ACL2____GC_42.html">gc$</a>)
+ (<a href="ACL2____TIME_42.html">time$</a> (bitset-members-list *random-data*)
+        :msg "Optimized Original: ~st sec, ~sa bytes~%")
+ (<a href="ACL2____GC_42.html">gc$</a>)
+ (<a href="ACL2____TIME_42.html">time$</a> (ttag-bitset-members-list *random-data*)
+        :msg "Optimized TTAG: ~st sec, ~sa bytes~%")
+ nil)</pre> 
+ 
+<p>And the results (on compute-1-3):</p> 
+ 
+<pre class="code">Unoptimized Original: 12.80 sec, 4,001,843,488 bytes
+Unoptimized TTAG: 8.27 sec, 9,118,511,648 bytes
+Optimized Original: 4.05 sec, 4,001,843,488 bytes
+Optimized TTAG: 4.01 sec, 4,001,843,488 bytes</pre> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>ttag-bitset-members-aux</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> ttag-bitset-members-aux (slice x acc)
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____NATP.html">natp</a> slice) (<a href="COMMON-LISP____INTEGERP.html">integerp</a> x))))
+       (<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2____ZP.html">zp</a> slice)
+           (<a href="BITSETS____BITS-0-31.html">bits-0-31</a> (<a href="COMMON-LISP____ASH.html">ash</a> slice 5)
+                      (<a href="BITSETS____BIGNUM-EXTRACT.html">bignum-extract</a> x slice)
+                      acc)
+           (ttag-bitset-members-aux
+                (<a href="COMMON-LISP____THE.html">the</a> (integer 0 *) (<a href="COMMON-LISP____-.html">-</a> (<a href="ACL2____LNFIX.html">lnfix</a> slice) 1))
+                x
+                (<a href="BITSETS____BITS-0-31.html">bits-0-31</a> (<a href="COMMON-LISP____THE.html">the</a> (integer 0 *) (<a href="COMMON-LISP____ASH.html">ash</a> slice 5))
+                           (<a href="BITSETS____BIGNUM-EXTRACT.html">bignum-extract</a> x slice)
+                           acc))))</pre> 
+<p><b>Theorem: </b>ttag-bitset-members-aux-redef</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     ttag-bitset-members-aux-redef
+     (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____NATP.html">natp</a> slice) (<a href="COMMON-LISP____INTEGERP.html">integerp</a> x))
+              (<a href="COMMON-LISP____EQUAL.html">equal</a> (ttag-bitset-members-aux slice x acc)
+                     (<a href="COMMON-LISP____APPEND.html">append</a> (<a href="BITSETS____BITS-BETWEEN.html">bits-between</a> 0 (<a href="COMMON-LISP_____A2.html">*</a> (<a href="COMMON-LISP_____B2.html">+</a> 1 slice) 32) x)
+                             acc))))</pre> 
+<p><b>Function: </b>ttag-bitset-members</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ ttag-bitset-members (x)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____NATP.html">natp</a> x)))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'ttag-bitset-members))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____MBE.html">mbe</a>
+    :logic (<a href="ACL2____BITSET-MEMBERS.html">bitset-members</a> x)
+    :exec (ttag-bitset-members-aux (<a href="COMMON-LISP____THE.html">the</a> (integer 0 *)
+                                        (<a href="COMMON-LISP____ASH.html">ash</a> (<a href="COMMON-LISP____INTEGER-LENGTH.html">integer-length</a> x) -5))
+                                   x nil))))</pre> 
+
+</body>
+</html>

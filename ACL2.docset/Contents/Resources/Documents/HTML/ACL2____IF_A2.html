@@ -1,0 +1,183 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>If*</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____IF_A2">Click for If* in the Full Manual</a></h3>
+
+<p>For conditional rewriting with BDDs</p><p>The function <span class="v">IF*</span> is defined to be <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span>, but it is used 
+ in a special way by ACL2's <a href="ACL2____BDD.html">bdd</a> package.</p> 
+ 
+ <p><b>Function: </b>if*</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> if* (x y z) (<a href="COMMON-LISP____IF.html">if</a> x y z))</pre> 
+ 
+ <p>As explained elsewhere (see <a href="ACL2____BDD-ALGORITHM.html">bdd-algorithm</a>), ACL2's <a href="ACL2____BDD.html">bdd</a> 
+ algorithm gives special treatment to <a href="ACL2____TERM.html">term</a>s of the form <span class="v">(<a href="ACL2____IF_A2.html">IF*</a> TEST TBR
+ FBR)</span>.  In such cases, the algorithm simplifies <span class="v">TEST</span> first, and the 
+ result of that simplification must be a constant (normally <span class="v">t</span> or <span class="v">nil</span>, 
+ but any non-<span class="v">nil</span> explicit value is treated like <span class="v">t</span> here).  Otherwise, 
+ the algorithm aborts.</p> 
+ 
+ <p>Thus, <span class="v">IF*</span> may be used to implement a sort of conditional rewriting for 
+ ACL2's <a href="ACL2____BDD.html">bdd</a> package, even though this package only nominally supports 
+ unconditional rewriting.  The following contrived example should make this 
+ point clear.</p> 
+ 
+ <p>Suppose that we want to prove that <span class="v">(<a href="COMMON-LISP____NTHCDR.html">nthcdr</a> (<a href="COMMON-LISP____LENGTH.html">length</a> x) (<a href="COMMON-LISP____APPEND.html">append</a> x y))</span> is 
+ equal to <span class="v">y</span>, but that we would be happy to prove this only for lists 
+ having length 4.  We can state such a theorem as follows.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____LET.html">let</a> ((x (<a href="COMMON-LISP____LIST.html">list</a> x0 x1 x2 x3)))
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____NTHCDR.html">nthcdr</a> (<a href="COMMON-LISP____LENGTH.html">length</a> x) (<a href="COMMON-LISP____APPEND.html">append</a> x y))
+         y))</pre> 
+ 
+ <p>If we want to prove this formula with a <span class="v">:</span><span class="tt"><a href="ACL2____BDD.html">bdd</a></span> hint, then we 
+ need to have appropriate rewrite rules around.  First, note that <span class="v">LENGTH</span> 
+ is defined as follows (try <span class="v">:</span><span class="tt"><a href="ACL2____PE.html">pe</a></span> <span class="tt"><a href="COMMON-LISP____LENGTH.html">length</a></span>):</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____LENGTH.html">length</a> x)
+ =
+(<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____STRINGP.html">stringp</a> x)
+    (<a href="ACL2____LEN.html">len</a> (<a href="COMMON-LISP____COERCE.html">coerce</a> x 'list))
+    (<a href="ACL2____LEN.html">len</a> x))</pre> 
+ 
+ <p>Since <a href="ACL2____BDD.html">bdd</a>-based rewriting is merely very simple unconditional 
+ rewriting (see <a href="ACL2____BDD-ALGORITHM.html">bdd-algorithm</a>), we expect to have to prove a rule 
+ reducing <span class="tt"><a href="COMMON-LISP____STRINGP.html">stringp</a></span> of a <span class="tt"><a href="COMMON-LISP____CONS.html">cons</a></span>:</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> stringp-cons
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____STRINGP.html">stringp</a> (<a href="COMMON-LISP____CONS.html">cons</a> x y))
+         nil))</pre> 
+ 
+ <p>Now we need a rule to compute the <span class="v">LEN</span> of <span class="v">X</span>, because the 
+ definition of <span class="v">LEN</span> is recursive and hence not used by the <a href="ACL2____BDD.html">bdd</a> 
+ package.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> len-cons
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____LEN.html">len</a> (<a href="COMMON-LISP____CONS.html">cons</a> a x))
+         (<a href="COMMON-LISP____1_B2.html">1+</a> (<a href="ACL2____LEN.html">len</a> x))))</pre> 
+ 
+ <p>We imagine this rule simplifying <span class="v">(<a href="ACL2____LEN.html">LEN</a> (<a href="COMMON-LISP____LIST.html">LIST</a> X0 X1 X2 X3))</span> in terms of 
+ <span class="v">(<a href="ACL2____LEN.html">LEN</a> (<a href="COMMON-LISP____LIST.html">LIST</a> X1 X2 X3))</span>, and so on, and then finally <span class="v">(<a href="ACL2____LEN.html">LEN</a> nil)</span> should 
+ be computed by execution (see <a href="ACL2____BDD-ALGORITHM.html">bdd-algorithm</a>).</p> 
+ 
+ <p>We also need to imagine simplifying <span class="v">(<a href="COMMON-LISP____APPEND.html">APPEND</a> X Y)</span>, where still <span class="v">X</span> 
+ is bound to <span class="v">(<a href="COMMON-LISP____LIST.html">LIST</a> X0 X1 X2 X3)</span>.  The following two rules suffice for this 
+ purpose (but are needed, since <span class="tt"><a href="COMMON-LISP____APPEND.html">append</a></span>, actually <span class="tt"><a href="ACL2____BINARY-APPEND.html">binary-append</a></span>, 
+ is recursive).</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> append-cons
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____APPEND.html">append</a> (<a href="COMMON-LISP____CONS.html">cons</a> a x) y)
+         (<a href="COMMON-LISP____CONS.html">cons</a> a (<a href="COMMON-LISP____APPEND.html">append</a> x y))))
+
+(<a href="ACL2____DEFTHM.html">defthm</a> append-nil
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____APPEND.html">append</a> nil x)
+         x))</pre> 
+ 
+ <p>Finally, we imagine needing to simplify calls of <span class="tt"><a href="COMMON-LISP____NTHCDR.html">nthcdr</a></span>, where the 
+ first argument is a number (initially, the length of <span class="v">(<a href="COMMON-LISP____LIST.html">LIST</a> X0 X1 X2 X3)</span>, 
+ which is 4).  The second lemma below is the traditional way to accomplish that 
+ goal (when not using BDDs), by proving a conditional rewrite rule.  (The first 
+ lemma is only proved in order to assist in the proof of the second lemma.)</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> fold-constants-in-+
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____SYNTAXP.html">syntaxp</a> (<a href="ACL2____QUOTEP.html">quotep</a> x))
+                (<a href="ACL2____SYNTAXP.html">syntaxp</a> (<a href="ACL2____QUOTEP.html">quotep</a> y)))
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP_____B2.html">+</a> x y z)
+                  (<a href="COMMON-LISP_____B2.html">+</a> (<a href="COMMON-LISP_____B2.html">+</a> x y) z))))
+
+(<a href="ACL2____DEFTHM.html">defthm</a> nthcdr-add1-conditional
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____ZP.html">zp</a> (<a href="COMMON-LISP____1_B2.html">1+</a> n)))
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____NTHCDR.html">nthcdr</a> (<a href="COMMON-LISP____1_B2.html">1+</a> n) x)
+                  (<a href="COMMON-LISP____NTHCDR.html">nthcdr</a> n (<a href="COMMON-LISP____CDR.html">cdr</a> x)))))</pre> 
+ 
+ <p>The problem with this rule is that its hypothesis makes it a conditional 
+ <a href="ACL2____REWRITE.html">rewrite</a> rule, and conditional rewrite rules are not used by the <a href="ACL2____BDD.html">bdd</a> package.  (See <a href="ACL2____BDD-ALGORITHM.html">bdd-algorithm</a> for a discussion of ``BDD rules.'') 
+ (Note that the hypothesis cannot simply be removed; the resulting formula 
+ would be false for <span class="v">n = -1</span> and <span class="v">x = '(a)</span>, for example.)  We can solve 
+ this problem by using <span class="v">IF*</span>, as follows; comments follow.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> nthcdr-add1
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____NTHCDR.html">nthcdr</a> (<a href="COMMON-LISP_____B2.html">+</a> 1 n) x)
+         (<a href="ACL2____IF_A2.html">if*</a> (<a href="ACL2____ZP.html">zp</a> (<a href="COMMON-LISP____1_B2.html">1+</a> n))
+              x
+              (<a href="COMMON-LISP____NTHCDR.html">nthcdr</a> n (<a href="COMMON-LISP____CDR.html">cdr</a> x)))))</pre> 
+ 
+ <p>How is <span class="v">nthcdr-add1</span> applied by the <a href="ACL2____BDD.html">bdd</a> package?  Suppose that 
+ the <a href="ACL2____BDD.html">bdd</a> computation encounters a <a href="ACL2____TERM.html">term</a> of the form <span class="v">(<a href="COMMON-LISP____NTHCDR.html">NTHCDR</a> (<a href="COMMON-LISP_____B2.html">+</a>
+ 1 N) X)</span>.  Then the <a href="ACL2____BDD.html">bdd</a> package will apply the <a href="ACL2____REWRITE.html">rewrite</a> rule 
+ <span class="v">nthcdr-add1</span>.  The first thing it will do when attempting to simplify the 
+ right hand side of that rule is to attempt to simplify the term <span class="v">(<a href="ACL2____ZP.html">ZP</a> (<a href="COMMON-LISP____1_B2.html">1+</a>
+ N))</span>.  If <span class="v">N</span> is an explicit number (which is the case in the scenario we 
+ envision), this test will reduce (assuming the executable-counterparts of 
+ <span class="tt"><a href="ACL2____ZP.html">zp</a></span> and <span class="tt"><a href="ACL2____BINARY-_B2.html">binary-+</a></span> are <a href="ACL2____ENABLE.html">enable</a>d) to <span class="v">t</span> or to <span class="v">nil</span>. 
+ In fact, the lemmas above (not including the lemma 
+ <span class="v">nthcdr-add1-conditional</span>) suffice to prove our goal:</p> 
+ 
+ <pre class="code">(<a href="ACL2____THM.html">thm</a> (<a href="COMMON-LISP____LET.html">let</a> ((x (<a href="COMMON-LISP____LIST.html">list</a> x0 x1 x2 x3)))
+       (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____NTHCDR.html">nthcdr</a> (<a href="COMMON-LISP____LENGTH.html">length</a> x) (<a href="COMMON-LISP____APPEND.html">append</a> x y))
+              y))
+     :hints (("Goal" :bdd (:vars nil))))</pre> 
+ 
+ <p>If we execute the following form that disables the definition and 
+ executable-counterpart of the function <span class="tt"><a href="ACL2____ZP.html">zp</a></span></p> 
+ 
+ <pre class="code">(<a href="ACL2____IN-THEORY.html">in-theory</a> (<a href="ACL2____DISABLE.html">disable</a> zp (<a href="ACL2____ZP.html">zp</a>)))</pre> 
+ 
+ <p>before attempting the proof of the theorem above, we can see more clearly 
+ the point of using <span class="v">IF*</span>.  In this case, the prover makes the following 
+ report.</p> 
+ 
+ <pre class="code">ACL2 Error in ( THM ...):  Unable to resolve test of IF* for term
+
+(<a href="ACL2____IF_A2.html">IF*</a> (<a href="ACL2____ZP.html">ZP</a> (<a href="COMMON-LISP_____B2.html">+</a> 1 N)) X (<a href="COMMON-LISP____NTHCDR.html">NTHCDR</a> N (<a href="COMMON-LISP____CDR.html">CDR</a> X)))
+
+under the bindings
+
+((X (<a href="COMMON-LISP____CONS.html">CONS</a> X0 (<a href="COMMON-LISP____CONS.html">CONS</a> X1 (<a href="COMMON-LISP____CONS.html">CONS</a> X2 #)))) (N '3))
+
+-- use SHOW-BDD to see a backtrace.</pre> 
+ 
+ <p>If we follow the advice above, we can see rather clearly what happened. 
+ See <a href="ACL2____SHOW-BDD.html">show-bdd</a>.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____SHOW-BDD.html">show-bdd</a>)
+
+BDD computation on Goal yielded 21 nodes.
+------------------------------
+
+BDD computation was aborted on Goal, and hence there is no
+falsifying assignment that can be constructed.  Here is a backtrace
+of calls, starting with the top-level call and ending with the one
+that led to the abort.  See :DOC show-bdd.
+
+(<a href="COMMON-LISP____LET.html">LET</a> ((X (<a href="COMMON-LISP____LIST.html">LIST</a> X0 X1 X2 X3)))
+     (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (<a href="COMMON-LISP____NTHCDR.html">NTHCDR</a> (<a href="COMMON-LISP____LENGTH.html">LENGTH</a> X) (<a href="COMMON-LISP____APPEND.html">APPEND</a> X Y)) Y))
+  alist: ((Y Y) (X3 X3) (X2 X2) (X1 X1) (X0 X0))
+
+(<a href="COMMON-LISP____NTHCDR.html">NTHCDR</a> (<a href="COMMON-LISP____LENGTH.html">LENGTH</a> X) (<a href="COMMON-LISP____APPEND.html">APPEND</a> X Y))
+  alist: ((X (<a href="COMMON-LISP____LIST.html">LIST</a> X0 X1 X2 X3)) (Y Y))
+
+(<a href="ACL2____IF_A2.html">IF*</a> (<a href="ACL2____ZP.html">ZP</a> (<a href="COMMON-LISP_____B2.html">+</a> 1 N)) X (<a href="COMMON-LISP____NTHCDR.html">NTHCDR</a> N (<a href="COMMON-LISP____CDR.html">CDR</a> X)))
+  alist: ((X (<a href="COMMON-LISP____LIST_A2.html">LIST*</a> X0 X1 X2 X3 Y)) (N 3))
+ACL2 !&gt;</pre> 
+ 
+ <p>Each of these term-alist pairs led to the next, and the test of the last 
+ one, namely <span class="v">(<a href="ACL2____ZP.html">ZP</a> (<a href="COMMON-LISP_____B2.html">+</a> 1 N))</span> where <span class="v">N</span> is bound to <span class="v">3</span>, was not 
+ simplified to <span class="v">t</span> or to <span class="v">nil</span>.</p> 
+ 
+ <p>What would have happened if we had used <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span> in place of <span class="v">IF*</span> in 
+ the rule <span class="v">nthcdr-add1</span>?  In that case, if <span class="v">ZP</span> and its <a href="ACL2____EXECUTABLE-COUNTERPART.html">executable-counterpart</a> were disabled then we would be put into an infinite 
+ loop!  For, each time a term of the form <span class="v">(<a href="COMMON-LISP____NTHCDR.html">NTHCDR</a> k V)</span> is encountered by 
+ the BDD package (where k is an explicit number), it will be rewritten in terms 
+ of <span class="v">(<a href="COMMON-LISP____NTHCDR.html">NTHCDR</a> k-1 (<a href="COMMON-LISP____CDR.html">CDR</a> V))</span>.  We would prefer that if for some reason the 
+ term <span class="v">(<a href="ACL2____ZP.html">ZP</a> (<a href="COMMON-LISP_____B2.html">+</a> 1 N))</span> cannot be decided to be <span class="v">t</span> or to be <span class="v">nil</span>, then 
+ the BDD computation should simply abort.</p> 
+ 
+ <p>Even if there were no infinite loop, this kind of use of <span class="v">IF*</span> is useful 
+ in order to provide feedback of the form shown above whenever the test of an 
+ <span class="v">IF</span> term fails to simplify to <span class="v">t</span> or to <span class="v">nil</span>.</p>
+</body>
+</html>

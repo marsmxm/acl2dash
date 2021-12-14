@@ -1,0 +1,226 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Atc-tutorial-int-programs</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=C____ATC-TUTORIAL-INT-PROGRAMS">Click for Atc-tutorial-int-programs in the Full Manual</a></h3>
+
+<p>ATC tutorial: ACL2 representation and generation of C <span class="v">int</span> programs.</p><p>After describing 
+    our ACL2 representation of the C <span class="v">int</span> type and operations 
+    in <a href="C____ATC-TUTORIAL-INT-REPRESENTATION.html">atc-tutorial-int-representation</a>, 
+    now we describe how that is used to represent and generate 
+    C <span class="v">int</span> programs, i.e. programs that manipulate <span class="v">int</span> values.</p><p>We do that via a simple example, 
+    but present concepts that apply more generally. 
+    However, this page only describes the basics of 
+    representing and generating C <span class="v">int</span> programs: 
+    more advanced features are presented in subsequent tutorial pages.</p><h5>Simple Example</h5><p>Our simple example is a C program consisting of a single function:</p><pre class="code">int f(int x, int y, int z) {
+    return (x + y) * (z - 3);
+}</pre><p>This function takes three <span class="v">int</span> values 
+    and returns an <span class="v">int</span> value resulting from 
+    their combination via <span class="v">int</span> operations. 
+    The function also involves the use of an <span class="v">int</span> constant.</p><h5>Function Correspondence</h5><p>There is a one-to-one representational correspondence 
+    between C and ACL2 functions. 
+    That is, every C function is represented by an ACL2 function, 
+    whose name must be supplied to ATC in order to generate 
+    the corresponding C function definition 
+    (the exact call of ATC is described later in this page).</p><p>Thus, for the example program above, 
+    we need an ACL2 function to represent <span class="v">f</span>. 
+    This generalizes to C programs with multiple functions.</p><h5>Function and Parameter Names</h5><p>The names of the function and its parameters 
+    are represented by ACL2 symbols 
+    whose names are identical to the C identifiers:</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> |f| (|x| |y| |z|)
+  ...)</pre><p>Note that we need the double bar notation because 
+    the names are lowercase, consistently with the C convention. 
+    If we omitted the double bars, 
+    we would be representing a different C function:</p><pre class="code">int F(int X, int Y, int Z) {
+    ...
+}</pre><p>This is because, without the vertical bars, 
+    the names of the symbols are uppercase. 
+    This is a valid C function, 
+    but does not follow the normal C naming conventions.</p><p>Package names are ignored for this purpose, 
+    e.g. both <span class="v">acl2::|f|</span> and <span class="v">c::|f|</span> represent 
+    the C identifier <span class="v">f</span>.</p><p>In the envisioned use of ATC, 
+    the user would write ACL2 functions with more conventional ACL2 names 
+    for both functions and parameters 
+    (i.e. without vertical bars). 
+    The user would then use APT transformations to turn those names 
+    into the form required to represent C names for ATC's purposes.</p><p>More details about the mapping from ACL2 names to C names 
+    are given in <a href="C____ATC-TUTORIAL-IDENTIFIERS.html">atc-tutorial-identifiers</a>.</p><h5>Function Body</h5><p>Given the representation of C <span class="v">int</span> operations (including constants) 
+    described in <a href="C____ATC-TUTORIAL-INT-REPRESENTATION.html">atc-tutorial-int-representation</a>, 
+    it should be easy to see how the body of the C function <span class="v">f</span> above 
+    is represented as follows in ACL2:</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> |f| (|x| |y| |z|)
+  (<a href="C____MUL-SINT-SINT.html">c::mul-sint-sint</a> (<a href="C____ADD-SINT-SINT.html">c::add-sint-sint</a> |x| |y|)
+                    (<a href="C____SUB-SINT-SINT.html">c::sub-sint-sint</a> |z| (<a href="C____SINT-DEC-CONST.html">c::sint-dec-const</a> 3))))</pre><p>We represent the expression of the <span class="v">return</span> statement 
+    that forms the body of the function <span class="v">f</span>. 
+    In ACL2, terms are implicitly returned, 
+    so there is no need to represent the <span class="v">return</span> statement explicitly.</p><p>The <span class="v">c::</span> package prefixes are generally needed 
+    when the function is defined in a different ACL2 package from <span class="v">"C"</span>. 
+    The package of the symbols <span class="v">|f|</span>, <span class="v">|x|</span>, etc. do not matter, 
+    in the sense that they do not represent anything in the C code. 
+    However the functions <span class="tt"><a href="C____SINT-DEC-CONST.html">sint-dec-const</a></span>, <span class="tt"><a href="C____ADD-SINT-SINT.html">add-sint-sint</a></span>, etc. 
+    must be the ones in the <span class="v">"C"</span> package, 
+    from the file <span class="v">[books]/kestrel/c/atc/integers.lisp</span>.</p><p>In the envisioned use of ATC, 
+    the user would not write directly a function body of the form above. 
+    Instead, they would obtain that kind of function body 
+    via suitable APT transformations that turn 
+    (conventional) ACL2 types and operations 
+    into (ACL2 representations of) C types and operations, 
+    under suitable preconditions.</p><h5>Function Input and Ouput Types</h5><p>Given the use of <span class="tt"><a href="C____ADD-SINT-SINT.html">add-sint-sint</a></span> and <span class="tt"><a href="C____SUB-SINT-SINT.html">sub-sint-sint</a></span> 
+    on the ACL2 parameters <span class="v">|x|</span>, <span class="v">|y|</span>, and <span class="v">|z|</span>, 
+    it would not be hard to infer automatically that 
+    these represent <span class="v">int</span> parameters in C. 
+    However, the required guard verification described below 
+    implicitly requires the guard of <span class="v">|f|</span> to express or imply 
+    that <span class="tt"><a href="C____SINTP.html">sintp</a></span> holds on the function parameters. 
+    For clarity, we require those to be expressed, not merely implied.</p><p>That is, the guard must include explicit conjuncts 
+    that spell out the C types of the function's parameters. 
+    For the example function, these are as follows:</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> |f| (|x| |y| |z|)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="C____SINTP.html">c::sintp</a> |x|)
+                              (<a href="C____SINTP.html">c::sintp</a> |y|)
+                              (<a href="C____SINTP.html">c::sintp</a> |z|)
+                              ...))) ; more conjuncts, described below
+  (<a href="C____MUL-SINT-SINT.html">c::mul-sint-sint</a> (<a href="C____ADD-SINT-SINT.html">c::add-sint-sint</a> |x| |y|)
+                    (<a href="C____SUB-SINT-SINT.html">c::sub-sint-sint</a> |z| (<a href="C____SINT-DEC-CONST.html">c::sint-dec-const</a> 3))))</pre><p>When generating C code for <span class="v">|f|</span>, 
+    ATC looks for those conjuncts in the guard. 
+    These may occur anywhere in the guard, 
+    not necessarily in order, 
+    but they must be easily extractable 
+    by looking at the <span class="tt"><a href="COMMON-LISP____AND.html">and</a></span> tree structure of the guard: 
+    the conjuncts of interest must be leaves in that tree, 
+    one for each function parameter. 
+    For instance, the following would be equally acceptable:</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> |f| (|x| |y| |z|)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="C____SINTP.html">c::sintp</a> |z|)
+                                   (<a href="C____SINTP.html">c::sintp</a> |x|))
+                              (<a href="COMMON-LISP____AND.html">and</a> ...
+                                   (<a href="C____SINTP.html">c::sintp</a> |y|))
+                              ...)))
+  ...) ; body as above</pre><p>ATC infers the output type of a function 
+    by performing a C type analysis of the function's body. 
+    For the function <span class="v">|f|</span> above, 
+    the output type is obviously <span class="v">int</span>, 
+    because the body is a call of <span class="tt"><a href="C____MUL-SINT-SINT.html">mul-sint-sint</a></span>, 
+    which is known to return (the ACL2 representation of) an <span class="v">int</span> value. 
+    ATC does not require explicit return type theorems for the ACL2 functions 
+    that are translated to C functions.</p><h5>Guard Verification</h5><p>ATC requires that the ACL2 functions that represent C functions 
+    are guard-verified (which implies that they must be in logic mode). 
+    This ensures that the ACL2 functions that represent C operations 
+    are always applied to values whose result is well-defined 
+    according to [C]. 
+    It also ensures that <span class="tt"><a href="C____SINT-DEC-CONST.html">sint-dec-const</a></span> is always applied 
+    to a natural number representable as an <span class="v">int</span>.</p><p>However, this generally requires guards to have additional conditions, 
+    besides the <span class="tt"><a href="C____SINTP.html">sintp</a></span> conjunts discussed above. 
+    It should be clear that a C function like <span class="v">f</span> 
+    does not yield a well-defined [C] result 
+    for every possible value of its arguments. 
+    For instance, sufficiently large values of <span class="v">x</span> and <span class="v">y</span> 
+    would make the result of <span class="v">x + y</span> not representable as <span class="v">int</span>, 
+    and thus not well-defined according to [C].</p><p>This should not be surprising. 
+    It is fairly normal for programs to be correct 
+    only under certain preconditions. 
+    The example function <span class="v">f</span> above is a simple abstract example, 
+    but in a practical development there must be natural preconditions 
+    for the C functions that form the development; 
+    otherwise, it would be impossible to formally prove correctness.</p><p>In a C program, there may be 
+    functions that receive data from outside the program. 
+    These functions should not assume any precondition on that data, 
+    and diligently validate it before operating on it. 
+    After validation, these C functions may call other C functions, 
+    internal to the C program, in the sense that 
+    they only receive data validated by the calling functions. 
+    The validation provides preconditions 
+    that may be assumed by the internal functions.</p><p>The example function <span class="v">f</span> may be regarded 
+    as an internal function in the sense above. 
+    For simplicity, we assume that every parameter of the function 
+    is fairly small, more precisely not above 10 in absolute value. 
+    The following is the function <span class="v">|f|</span> with the complete guard 
+    and the hints and book inclusion and command to verify the guards:</p><pre class="code">(<a href="ACL2____ENCAPSULATE.html">encapsulate</a> ()
+
+  (<a href="ACL2____LOCAL.html">local</a> (<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "arithmetic-5/top" :dir :system))
+
+  (<a href="ACL2____LOCAL.html">local</a> (<a href="ACL2____SET-DEFAULT-HINTS.html">set-default-hints</a> '((nonlinearp-default-hint
+                               stable-under-simplificationp
+                               hist
+                               pspv))))
+
+  (<a href="COMMON-LISP____DEFUN.html">defun</a> |f| (|x| |y| |z|)
+    (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="C____SINTP.html">c::sintp</a> |x|)
+                                (<a href="C____SINTP.html">c::sintp</a> |y|)
+                                (<a href="C____SINTP.html">c::sintp</a> |z|)
+                                ;; -10 &lt;= x &lt;= 10:
+                                (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> -10 (<a href="C____SINT-_E3GET.html">c::sint-&gt;get</a> |x|))
+                                (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> (<a href="C____SINT-_E3GET.html">c::sint-&gt;get</a> |x|) 10)
+                                ;; -10 &lt;= y &lt;= 10:
+                                (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> -10 (<a href="C____SINT-_E3GET.html">c::sint-&gt;get</a> |y|))
+                                (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> (<a href="C____SINT-_E3GET.html">c::sint-&gt;get</a> |y|) 10)
+                                ;; -10 &lt;= z &lt;= 10:
+                                (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> -10 (<a href="C____SINT-_E3GET.html">c::sint-&gt;get</a> |z|))
+                                (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> (<a href="C____SINT-_E3GET.html">c::sint-&gt;get</a> |z|) 10))
+                    :guard-hints (("Goal"
+                                   :in-theory
+                                   (<a href="ACL2____ENABLE.html">enable</a> c::sint-integerp-alt-def
+                                           c::sintp
+                                           c::add-sint-sint-okp
+                                           c::sub-sint-sint-okp
+                                           c::mul-sint-sint-okp
+                                           c::add-sint-sint
+                                           c::sub-sint-sint)))))
+    (<a href="C____MUL-SINT-SINT.html">c::mul-sint-sint</a> (<a href="C____ADD-SINT-SINT.html">c::add-sint-sint</a> |x| |y|)
+                      (<a href="C____SUB-SINT-SINT.html">c::sub-sint-sint</a> |z| (<a href="C____SINT-DEC-CONST.html">c::sint-dec-const</a> 3)))))</pre><p>The proof is carried out on the ACL2 integers 
+    obtained by unwrapping the C integers; 
+    it uses <span class="v">arithmetic-5</span>, with non-linear arithmetic enabled. 
+    There may be other ways to verify the guards of this function. 
+    ATC does not require any specific approach: 
+    it only requires that guards are verified in some way, 
+    and that the types of the parameters 
+    are explicitly expressed in the guard.</p><p>In the envisioned use of ATC, 
+    the user may verify the guards of <span class="v">|f|</span> not directly, 
+    but by using APT transformations that generate 
+    a guard-verified <span class="v">|f|</span> of the form above. 
+    The fact that the results of those operations 
+    are representable in the range of <span class="v">int</span> given the preconditions, 
+    could have been proved in earlier stages of the derivation, 
+    directly on ACL2 integers. 
+    Then suitable APT transformations may turn those 
+    into <span class="v">int</span> values. 
+    This use of APT in conjunction with ATC may be described 
+    in upcoming tutorial pages.</p><h5>Code Generation</h5><p>Given the guard-verified ACL2 function <span class="v">|f|</span> above, 
+    the C function <span class="v">f</span> can be generated as follows:</p><pre class="code">(<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "kestrel/c/atc/atc" :dir :system)
+(<a href="C____ATC.html">c::atc</a> |f| :output-file "f.c")</pre><p>First, we must include ATC. 
+    To avoid certain trust tag messages, 
+    the <span class="tt"><a href="ACL2____INCLUDE-BOOK.html">include-book</a></span> form could be augmented with a <span class="v">:ttags</span> option; 
+    see the tests in <span class="v">[books]/kestrel/c/atc/tests</span> for examples.</p><p>The ATC tool is invoked on one or more ACL2 function symbols, 
+    in this case just <span class="v">|f|</span>. 
+    The <span class="v">:output-file</span> option says where the generated output file goes, 
+    in this case <span class="v">f.c</span> in the current working directory. 
+    This option is required: there is no default.</p><p>The above invocation of ATC generates the C file, 
+    as conveyed by a message printed on the screen. 
+    The invocation also prints certain event forms on the screen; 
+    these will be described in <a href="C____ATC-TUTORIAL-EVENTS.html">atc-tutorial-events</a> 
+    and can be ignored for now.</p><p>Opening the file <span class="v">f.c</span> reveals exactly the function <span class="v">f</span> above. 
+    ATC generates it from <span class="v">|f|</span>. 
+    It also generates correctness theorems, 
+    but those are examined elsewhere, as mentioned above.</p><p>This example can be found in <span class="v">[books]/kestrel/c/atc/tests/f.lisp</span>.</p><h5>Compilation and Execution</h5><p>On macOS or Linux, the generated file <span class="v">f.c</span> can be compiled via <span class="v">gcc</span>. 
+    In fact, any C compiler, also on Windows, can compile the file. 
+    However, a plain compilation command like <span class="v">gcc f.c</span> may fail 
+    due to the absence of a <span class="v">main</span> function. 
+    This is, of course, easy to add; 
+    it should be added to a separate file, so that it does not get overwritten 
+    if the above call of ATC is run again.</p><p>For instance, one may add a file <span class="v">f-test.c</span> with the following content:</p><pre class="code">#include &lt;stdio.h&gt;
+
+int main(void) {
+    int x = 3;
+    int y = -2;
+    int z = 8;
+    int r = f(x, y, z);
+    printf("f(%d, %d, %d) = %d\n", x, y, z, r);
+}</pre><p>This file calls the generated function on specific values, 
+    and prints inputs and output. 
+    The inclusion of <span class="v">stdio.h</span> is needed because of the use of <span class="v">printf</span>.</p><p>This file is found in <span class="v">[books]/kestrel/c/atc/tests/f-test.c</span>.</p><p>The two files may be compiled as follows on macOS or Linux:</p><pre class="code">gcc -o f f.c f-test.c</pre><p>The <span class="v">-o</span> option overrides the default name <span class="v">a.out</span> for the executable, 
+    calling it <span class="v">f</span> instead. 
+    The two file names are simply supplied to the compiler, 
+    which will generate an executable containing 
+    both the <span class="v">main</span> and the <span class="v">f</span> functions.</p><p>The executable may be run as follows:</p><pre class="code">./f</pre><p>This prints the following on the screen:</p><pre class="code">f(3, -2, 8) = 5</pre><div class="box"></div><p><b>Previous:</b> <a href="C____ATC-TUTORIAL-INT-REPRESENTATION.html">ACL2 representation of the C <span class="v">int</span> type and operations</a></p><p><b>Next:</b> <a href="C____ATC-TUTORIAL-IDENTIFIERS.html">ACL2 representation of C identifiers</a></p>
+</body>
+</html>

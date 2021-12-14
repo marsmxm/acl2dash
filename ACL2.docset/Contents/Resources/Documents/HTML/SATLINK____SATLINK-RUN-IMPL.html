@@ -1,0 +1,122 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Satlink-run-impl</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=SATLINK____SATLINK-RUN-IMPL">Click for Satlink-run-impl in the Full Manual</a></h3>
+
+<p>Core function used to run the SAT solver.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(satlink-run-impl config cnf env$ &amp;key (state 'state)) 
+  → 
+(mv status env$ lrat-proof state)</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">config</span> — Which solver to call, etc.<br>    <font color="#606060">Guard <span class="v">(<a href="SATLINK____CONFIG-P.html">config-p</a> config)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">cnf</span> — The formula to solve.<br>    <font color="#606060">Guard <span class="v">(<a href="SATLINK____LIT-LIST-LISTP.html">lit-list-listp</a> cnf)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">env$</span> — Empty env to populate, will usually be resized.</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">status</span> — :sat, :unsat, or :failed.</dd> 
+<dd>
+<span class="tt">env$</span> — Variable assignment, in the :sat case.</dd> 
+<dd>
+<span class="tt">lrat-proof</span> — LRAT proof, in the :unsat case, if config.lrat-check is set.</dd> 
+<dd>
+<span class="tt">state</span> — <font color="#606060">Type <span class="v">(state-p1 state)</span>, given <span class="v">(state-p1 state)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>This function actually runs the SAT solver: it exports the formula 
+into a <a href="SATLINK____DIMACS.html">dimacs</a> file, invokes the SAT solver on it, and interprets the 
+answer.  This function is typically never used directly; instead see <a href="SATLINK____SATLINK-RUN.html">satlink-run</a>.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>satlink-run-impl-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ satlink-run-impl-fn
+ (<a href="SATLINK____CONFIG.html">config</a> cnf env$ state)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (<a href="SATLINK____ENV_42.html">env$</a> state)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="SATLINK____CONFIG-P.html">config-p</a> config)
+                             (<a href="SATLINK____LIT-LIST-LISTP.html">lit-list-listp</a> cnf))))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'satlink-run-impl))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+   (((<a href="SATLINK____CONFIG.html">config</a> config))
+    ((<a href="ACL2____MV.html">mv</a> filename state)
+     (<a href="OSLIB____TEMPFILE.html">oslib::tempfile</a> "satlink"))
+    ((unless filename)
+     (<a href="ACL2____CW.html">cw</a> "SATLINK: Error generating temporary filename.~%")
+     (<a href="ACL2____MV.html">mv</a> :failed env$ nil state))
+    ((<a href="ACL2____MV.html">mv</a> okp max-index state)
+     (<a href="ACL2____TIME_42.html">time$</a> (<a href="SATLINK____DIMACS-EXPORT.html">dimacs-export</a> cnf :filename filename)
+            :msg "; SATLINK: writing ~s0: ~st sec, ~sa bytes~%"
+            :args (<a href="COMMON-LISP____LIST.html">list</a> filename)
+            :mintime config.mintime))
+    ((unless okp)
+     (<a href="ACL2____CW.html">cw</a> "SATLINK: Error writing dimacs file ~s0~%"
+         filename)
+     (<a href="ACL2____MV.html">mv</a> :failed env$ nil state))
+    ((acl2::fun (cleanup filename config))
+     (<a href="ACL2____B_A2.html">b*</a> (((unless (<a href="SATLINK____CONFIG-_E3REMOVE-TEMPS.html">config-&gt;remove-temps</a> config))
+           nil)
+          ((<a href="ACL2____MV.html">mv</a> &amp; &amp;)
+           (<a href="ACL2____TSHELL-CALL.html">tshell-call</a> (<a href="STR____CAT.html">str::cat</a> "rm " filename))))
+         nil))
+    (cmd (<a href="STR____CAT.html">str::cat</a> config.cmdline " " filename))
+    ((<a href="ACL2____MV.html">mv</a> &amp; lines)
+     (<a href="ACL2____TIME_42.html">time$</a> (<a href="ACL2____TSHELL-CALL.html">tshell-call</a>
+                 cmd
+                 :print (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____AND.html">and</a> config.verbose 'satlink-echo)
+                            (<a href="COMMON-LISP____AND.html">and</a> config.timing 'satlink-echo-time))
+                 :save t)
+            :msg "; SATLINK: `~s0`: ~st sec, ~sa bytes~%"
+            :args (<a href="COMMON-LISP____LIST.html">list</a> cmd)
+            :mintime config.mintime))
+    ((unless (<a href="ACL2____STRING-LISTP.html">string-listp</a> lines))
+     (<a href="ACL2____CW.html">cw</a> "SATLINK: Tshell somehow didn't give us a string list.~%")
+     (cleanup filename config)
+     (<a href="ACL2____MV.html">mv</a> :failed env$ nil state))
+    ((<a href="ACL2____MV.html">mv</a> status env$)
+     (<a href="ACL2____TIME_42.html">time$</a>
+         (<a href="ACL2____B_A2.html">b*</a> ((<a href="SATLINK____ENV_42.html">env$</a> (<a href="ACL2____RESIZE-BITS.html">resize-bits</a> (<a href="COMMON-LISP____1_B2.html">1+</a> max-index) env$))
+              ((<a href="ACL2____MV.html">mv</a> status env$)
+               (<a href="SATLINK____SATLINK-PARSE-OUTPUT.html">satlink-parse-output</a> lines env$)))
+             (<a href="ACL2____MV.html">mv</a> status env$))
+         :msg "; SATLINK: interpreting output: ~st sec, ~sa bytes~%"
+         :mintime config.mintime))
+    (lrat-proof
+     (<a href="COMMON-LISP____IF.html">if</a>
+      (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQ.html">eq</a> status :unsat)
+           config.lrat-check)
+      (<a href="ACL2____B_A2.html">b*</a>
+       ((lrat-proof
+         (<a href="ACL2____TIME_42.html">time$</a>
+              (lrat::lrat-read-file (<a href="STR____CAT.html">str::cat</a> filename ".lrat")
+                                    state)
+              :msg "; SATLINK: read lrat file: ~st sec, ~sa bytes~%"
+              :mintime config.mintime))
+        ((unless (<a href="SATLINK____CONFIG-_E3REMOVE-TEMPS.html">config-&gt;remove-temps</a> config))
+         lrat-proof)
+        ((<a href="ACL2____MV.html">mv</a> &amp; &amp;)
+         (<a href="ACL2____TSHELL-CALL.html">tshell-call</a>
+              (<a href="STR____CAT.html">str::cat</a> "rm " (<a href="STR____CAT.html">str::cat</a> filename ".lrat")))))
+       lrat-proof)
+      nil))
+    (<a href="COMMON-LISP____-.html">-</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____EQ.html">eq</a> status :sat) (<a href="COMMON-LISP____EQ.html">eq</a> status :unsat))
+            (<a href="SATLINK____SATLINK-EXTRA-HOOK.html">satlink-extra-hook</a> cnf filename status env$ state))))
+   (cleanup filename config)
+   (<a href="ACL2____MV.html">mv</a> status env$ lrat-proof state))))</pre> 
+<p><b>Theorem: </b>state-p1-of-satlink-run-impl.state</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> state-p1-of-satlink-run-impl.state
+        (<a href="ACL2____IMPLIES.html">implies</a> (state-p1 state)
+                 (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?status ?env$ ?lrat-proof acl2::?state)
+                       (satlink-run-impl-fn config cnf env$ state)))
+                     (state-p1 state)))
+        :rule-classes :rewrite)</pre> 
+
+</body>
+</html>

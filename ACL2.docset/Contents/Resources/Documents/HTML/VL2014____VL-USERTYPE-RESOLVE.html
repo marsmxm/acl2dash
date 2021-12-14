@@ -1,0 +1,201 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Vl-usertype-resolve</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL2014____VL-USERTYPE-RESOLVE">Click for Vl-usertype-resolve in the Full Manual</a></h3>
+
+<p>Resolves a datatype of usertype kind to a concrete 
+datatype, i.e. anything but a user typename.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(vl-usertype-resolve x ss rec-limit) → (mv warning type scope)</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">x</span> — <font color="#606060">Guard <span class="v">(<a href="VL2014____VL-DATATYPE-P.html">vl-datatype-p</a> x)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">ss</span> — <font color="#606060">Guard <span class="v">(<a href="VL2014____VL-SCOPESTACK-P.html">vl-scopestack-p</a> ss)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">rec-limit</span> — <font color="#606060">Guard <span class="v">(<a href="ACL2____NATP.html">natp</a> rec-limit)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">warning</span> — <font color="#606060">Type <span class="v">(<a href="ACL2____IFF.html">iff</a> (<a href="VL2014____VL-WARNING-P.html">vl-warning-p</a> warning) warning)</span>.</font>
+</dd> 
+<dd>
+<span class="tt">type</span> — <font color="#606060">Type <span class="v">(<a href="VL2014____VL-DATATYPE-P.html">vl-datatype-p</a> type)</span>.</font>
+</dd> 
+<dd>
+<span class="tt">scope</span> — <font color="#606060">Type <span class="v">(<a href="VL2014____VL-SCOPESTACK-P.html">vl-scopestack-p</a> scope)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>The input is guarded to be a usertype.  If it is defined as another 
+usertype (possibly with packed/unpacked dimensions), then we recur until it is 
+defined as something other than a usertype.  However, the final type may still 
+have usertypes within it, i.e. as struct/union member types.</p> 
+ 
+<p>Also returns the scopestack representing the scope in which the 
+final type declaration was found.</p> 
+ 
+<p>This function is strict with respect to packed vs. unpacked dimensions; 
+i.e., if a usertype is defined as having unpacked dimensions, it will warn if 
+any packed dimensions are applied to that type.  Arguably this check should be 
+done elsewhere, in which case this function could ignore the distinction 
+between packed and unpacked dimensions.  However, it is important to preserve 
+the order of dimensions, and it's not clear how to handle cases that mix the 
+two: packed dimensions are always treated as "inner" or "most rapidly 
+varying" dimensions.  So if we have (illegal) nested typedefs that place 
+unpacked dimensions inside of packed dimensions, we have no way to express that 
+as a single, usertype-free datatype, unless we change some packed dimensions 
+into unpacked ones or vice versa:</p> 
+ 
+<pre class="code">typedef logic t1 [5:1];  // unpacked dimension
+typedef t1 [3:0] t2;     // packed dimension applied to unpacked datatype
+
+typedef logic [3:0] t3 [5:1];  // not the same as t2
+
+typedef logic [5:1] [3:0] t4;  // same dimensions as t2, but all dimensions packed
+typedef logic t5 [5:1] [3:0];  // same dimensions as t2, but all dimensions unpacked</pre> 
+ 
+<p>We don't have this problem for the (also illegal) case where packed 
+dimensions are applied to an unpacked structure or union, so we don't warn in 
+this case; this should be checked separately.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>vl-usertype-resolve</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ vl-usertype-resolve (x ss rec-limit)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="VL2014____VL-DATATYPE-P.html">vl-datatype-p</a> x)
+                             (<a href="VL2014____VL-SCOPESTACK-P.html">vl-scopestack-p</a> ss)
+                             (<a href="ACL2____NATP.html">natp</a> rec-limit))))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____EQ.html">eq</a> (<a href="VL2014____VL-DATATYPE-KIND.html">vl-datatype-kind</a> x) :vl-usertype)))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'vl-usertype-resolve))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+   ((ss (<a href="VL2014____VL-SCOPESTACK-FIX.html">vl-scopestack-fix</a> ss))
+    (x (<a href="VL2014____VL-DATATYPE-FIX.html">vl-datatype-fix</a> x))
+    ((<a href="VL2014____VL-USERTYPE.html">vl-usertype</a> x))
+    ((when (<a href="ACL2____ZP.html">zp</a> rec-limit))
+     (<a href="ACL2____MV.html">mv</a>
+      (<a href="VL2014____MAKE-VL-WARNING.html">make-vl-warning</a>
+       :type :vl-resolve-usertypes-fail
+       :msg
+       "Rec-limit ran out: recursively defined ~
+                                       datatype? ~a0"
+       :args (<a href="COMMON-LISP____LIST.html">list</a> x.kind))
+      x ss))
+    ((unless (<a href="COMMON-LISP____AND.html">and</a> (<a href="VL2014____VL-ATOM-P.html">vl-atom-p</a> x.kind)
+                  (<a href="COMMON-LISP____MEMBER.html">member</a> (<a href="ACL2____TAG.html">tag</a> (<a href="VL2014____VL-ATOM-_E3GUTS.html">vl-atom-&gt;guts</a> x.kind))
+                          '(:vl-id :vl-typename))))
+     (<a href="ACL2____MV.html">mv</a>
+      (<a href="VL2014____MAKE-VL-WARNING.html">make-vl-warning</a>
+       :type :vl-resolve-usertypes-fail
+       :msg
+       "We don't yet support usertypes that are ~
+                                   not simple identifiers: ~a0"
+       :args (<a href="COMMON-LISP____LIST.html">list</a> x.kind))
+      x ss))
+    (guts (<a href="VL2014____VL-ATOM-_E3GUTS.html">vl-atom-&gt;guts</a> x.kind))
+    (name (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQ.html">eq</a> (<a href="ACL2____TAG.html">tag</a> guts) :vl-id)
+              (<a href="VL2014____VL-ID-_E3NAME.html">vl-id-&gt;name</a> guts)
+              (<a href="VL2014____VL-TYPENAME-_E3NAME.html">vl-typename-&gt;name</a> guts)))
+    ((<a href="ACL2____MV.html">mv</a> item new-ss)
+     (<a href="VL2014____VL-SCOPESTACK-FIND-ITEM_F2SS.html">vl-scopestack-find-item/ss</a> name ss))
+    ((unless item)
+     (<a href="ACL2____MV.html">mv</a> (<a href="VL2014____MAKE-VL-WARNING.html">make-vl-warning</a> :type :vl-resolve-usertypes-fail
+                          :msg "No typedef found for ~a0"
+                          :args (<a href="COMMON-LISP____LIST.html">list</a> x.kind))
+         x ss))
+    ((unless (<a href="COMMON-LISP____EQ.html">eq</a> (<a href="ACL2____TAG.html">tag</a> item) :vl-typedef))
+     (<a href="ACL2____MV.html">mv</a>
+      (<a href="VL2014____MAKE-VL-WARNING.html">make-vl-warning</a>
+       :type :vl-resolve-usertypes-fail
+       :msg
+       "Didn't find a typedef ~a0, instead ~
+                                       found ~a1"
+       :args (<a href="COMMON-LISP____LIST.html">list</a> x.kind item))
+      x ss))
+    ((<a href="VL2014____VL-TYPEDEF.html">vl-typedef</a> item))
+    ((<a href="ACL2____MV.html">mv</a> warning subtype final-ss)
+     (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQ.html">eq</a> (<a href="VL2014____VL-DATATYPE-KIND.html">vl-datatype-kind</a> item.type)
+             :vl-usertype)
+         (<a href="VL2014____VL-USERTYPE-RESOLVE.html">vl-usertype-resolve</a> item.type new-ss (<a href="COMMON-LISP____1-.html">1-</a> rec-limit))
+         (<a href="ACL2____MV.html">mv</a> nil item.type new-ss)))
+    ((when warning) (<a href="ACL2____MV.html">mv</a> warning x ss))
+    (sub-udims (<a href="VL2014____VL-DATATYPE-_E3UDIMS.html">vl-datatype-&gt;udims</a> subtype))
+    ((when (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x.pdims)
+                (<a href="COMMON-LISP____CONSP.html">consp</a> (<a href="VL2014____VL-DATATYPE-_E3UDIMS.html">vl-datatype-&gt;udims</a> item.type))))
+     (<a href="ACL2____MV.html">mv</a>
+      (<a href="VL2014____MAKE-VL-WARNING.html">make-vl-warning</a>
+       :type :vl-usertype-packed-dims
+       :msg
+       "Usertype ~a0 was declared with packed ~
+                                       dimensions, but its definition ~a1 already ~
+                                       has unpacked dimensions."
+       :args (<a href="COMMON-LISP____LIST.html">list</a> x item.type))
+      x ss))
+    (subtype
+     (<a href="ACL2____MBE.html">mbe</a>
+      :logic
+      (<a href="VL2014____VL-DATATYPE-UPDATE-DIMS.html">vl-datatype-update-dims</a>
+         (<a href="ACL2____APPEND-WITHOUT-GUARD.html">append-without-guard</a> x.pdims (<a href="VL2014____VL-DATATYPE-_E3PDIMS.html">vl-datatype-&gt;pdims</a> subtype))
+         (<a href="ACL2____APPEND-WITHOUT-GUARD.html">append-without-guard</a> x.udims sub-udims)
+         subtype)
+      :exec
+      (<a href="COMMON-LISP____IF.html">if</a>
+       (<a href="COMMON-LISP____OR.html">or</a> x.udims x.pdims)
+       (<a href="VL2014____VL-DATATYPE-UPDATE-DIMS.html">vl-datatype-update-dims</a>
+         (<a href="ACL2____APPEND-WITHOUT-GUARD.html">append-without-guard</a> x.pdims (<a href="VL2014____VL-DATATYPE-_E3PDIMS.html">vl-datatype-&gt;pdims</a> subtype))
+         (<a href="ACL2____APPEND-WITHOUT-GUARD.html">append-without-guard</a> x.udims sub-udims)
+         subtype)
+       subtype))))
+   (<a href="ACL2____MV.html">mv</a> nil subtype final-ss))))</pre> 
+<p><b>Theorem: </b>return-type-of-vl-usertype-resolve.warning</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> return-type-of-vl-usertype-resolve.warning
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> common-lisp::?warning
+                  common-lisp::?type ?scope)
+              (<a href="VL2014____VL-USERTYPE-RESOLVE.html">vl-usertype-resolve</a> x ss rec-limit)))
+            (<a href="ACL2____IFF.html">iff</a> (<a href="VL2014____VL-WARNING-P.html">vl-warning-p</a> warning) warning))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>vl-datatype-p-of-vl-usertype-resolve.type</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-datatype-p-of-vl-usertype-resolve.type
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> common-lisp::?warning
+                  common-lisp::?type ?scope)
+              (<a href="VL2014____VL-USERTYPE-RESOLVE.html">vl-usertype-resolve</a> x ss rec-limit)))
+            (<a href="VL2014____VL-DATATYPE-P.html">vl-datatype-p</a> type))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>vl-scopestack-p-of-vl-usertype-resolve.scope</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-scopestack-p-of-vl-usertype-resolve.scope
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> common-lisp::?warning
+                  common-lisp::?type ?scope)
+              (<a href="VL2014____VL-USERTYPE-RESOLVE.html">vl-usertype-resolve</a> x ss rec-limit)))
+            (<a href="VL2014____VL-SCOPESTACK-P.html">vl-scopestack-p</a> scope))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>vl-usertype-resolve-of-vl-datatype-fix-x</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-usertype-resolve-of-vl-datatype-fix-x
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL2014____VL-USERTYPE-RESOLVE.html">vl-usertype-resolve</a> (<a href="VL2014____VL-DATATYPE-FIX.html">vl-datatype-fix</a> x)
+                                    ss rec-limit)
+               (<a href="VL2014____VL-USERTYPE-RESOLVE.html">vl-usertype-resolve</a> x ss rec-limit)))</pre> 
+<p><b>Theorem: </b>vl-usertype-resolve-vl-datatype-equiv-congruence-on-x</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-usertype-resolve-vl-datatype-equiv-congruence-on-x
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="VL2014____VL-DATATYPE-EQUIV.html">vl-datatype-equiv</a> x x-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL2014____VL-USERTYPE-RESOLVE.html">vl-usertype-resolve</a> x ss rec-limit)
+                        (<a href="VL2014____VL-USERTYPE-RESOLVE.html">vl-usertype-resolve</a> x-equiv ss rec-limit)))
+        :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>vl-usertype-resolve-of-vl-scopestack-fix-ss</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-usertype-resolve-of-vl-scopestack-fix-ss
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL2014____VL-USERTYPE-RESOLVE.html">vl-usertype-resolve</a> x (<a href="VL2014____VL-SCOPESTACK-FIX.html">vl-scopestack-fix</a> ss)
+                                    rec-limit)
+               (<a href="VL2014____VL-USERTYPE-RESOLVE.html">vl-usertype-resolve</a> x ss rec-limit)))</pre> 
+<p><b>Theorem: </b>vl-usertype-resolve-vl-scopestack-equiv-congruence-on-ss</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-usertype-resolve-vl-scopestack-equiv-congruence-on-ss
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="VL2014____VL-SCOPESTACK-EQUIV.html">vl-scopestack-equiv</a> ss ss-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL2014____VL-USERTYPE-RESOLVE.html">vl-usertype-resolve</a> x ss rec-limit)
+                        (<a href="VL2014____VL-USERTYPE-RESOLVE.html">vl-usertype-resolve</a> x ss-equiv rec-limit)))
+        :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>vl-usertype-resolve-of-nfix-rec-limit</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-usertype-resolve-of-nfix-rec-limit
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL2014____VL-USERTYPE-RESOLVE.html">vl-usertype-resolve</a> x ss (<a href="ACL2____NFIX.html">nfix</a> rec-limit))
+               (<a href="VL2014____VL-USERTYPE-RESOLVE.html">vl-usertype-resolve</a> x ss rec-limit)))</pre> 
+<p><b>Theorem: </b>vl-usertype-resolve-nat-equiv-congruence-on-rec-limit</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-usertype-resolve-nat-equiv-congruence-on-rec-limit
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____NAT-EQUIV.html">acl2::nat-equiv</a> rec-limit rec-limit-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL2014____VL-USERTYPE-RESOLVE.html">vl-usertype-resolve</a> x ss rec-limit)
+                        (<a href="VL2014____VL-USERTYPE-RESOLVE.html">vl-usertype-resolve</a> x ss rec-limit-equiv)))
+        :rule-classes :congruence)</pre> 
+
+</body>
+</html>

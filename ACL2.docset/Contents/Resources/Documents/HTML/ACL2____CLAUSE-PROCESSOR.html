@@ -1,0 +1,353 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Clause-processor</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____CLAUSE-PROCESSOR">Click for Clause-processor in the Full Manual</a></h3>
+
+<p>Make or apply a <span class="v">:clause-processor</span> rule (goal-level simplifier)</p><p>See <a href="ACL2____RULE-CLASSES.html">rule-classes</a> for a general discussion of rule classes, 
+ including how they are used to build rules from formulas and a discussion of 
+ the various keywords in a rule class description.</p> 
+ 
+ <p>We will introduce clause-processor rules by way of the following example. 
+ But note that the clause-processor utility is more general than this example 
+ may suggest; for example, the second argument of <span class="v">evl0</span> in the hypothesis 
+ need not be the same as its second argument in the conclusion.</p> 
+ 
+ <pre class="code">; Example (which we'll return to, below):
+(<a href="ACL2____DEFTHM.html">defthm</a> correctness-of-note-fact-clause-processor
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____PSEUDO-TERM-LISTP.html">pseudo-term-listp</a> cl)
+                (<a href="ACL2____ALISTP.html">alistp</a> a)
+                (evl0 (conjoin-clauses
+                       (note-fact-clause-processor cl term))
+                      a))
+           (evl0 (<a href="ACL2____DISJOIN.html">disjoin</a> cl) a))
+  :rule-classes :clause-processor)</pre> 
+ 
+ <p>We begin this documentation with an introduction, focusing on the example 
+ above, and then conclude with a detailed general discussion of 
+ clause-processor rules.  You might find it most useful simply to look at the 
+ examples in community books directory <span class="v">books/clause-processors/</span>; see file 
+ <span class="v">Readme.lsp</span> in that directory.</p> 
+ 
+ <p>Also see <a href="ACL2____DEFINE-TRUSTED-CLAUSE-PROCESSOR.html">define-trusted-clause-processor</a> for documentation of an 
+ analogous utility that does not require the clause-processor to be proved 
+ correct.  But please read the present documentation before reading about that 
+ utility.  Both utilities designate functions as ``clause-processors''.  Such 
+ functions must be executable — hence not constrained by virtue of being 
+ introduced in the <a href="ACL2____SIGNATURE.html">signature</a> of an <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span> — and must 
+ respect <a href="ACL2____STOBJ.html">stobj</a> and output arity restrictions.  For example, something 
+ like <span class="v">(<a href="COMMON-LISP____CAR.html">car</a> (<a href="ACL2____MV.html">mv</a> ...))</span> is illegal; also see <a href="ACL2____SIGNATURE.html">signature</a>.</p> 
+ 
+ <h4>INTRODUCTION</h4> 
+ 
+ <p>A <span class="v">:clause-processor</span> rule installs a simplifier at the level of goals, 
+ where a goal is represented as a <i>clause</i>: a list of <a href="ACL2____TERM.html">term</a>s that is 
+ implicitly viewed as a disjunction (the application of <span class="tt"><a href="COMMON-LISP____OR.html">or</a></span>).  For 
+ example, if ACL2 prints a goal in the form <span class="v">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> p q) r)</span>, then 
+ the clause might be the one-element list containing the internal 
+ representation of this term — <span class="v">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____IF.html">if</a> p q 'nil) r)</span> — but 
+ more likely, the corresponding clause is <span class="v">((<a href="COMMON-LISP____NOT.html">not</a> p) (<a href="COMMON-LISP____NOT.html">not</a> q) r)</span>.  Note that 
+ the members of a clause are <i>translated</i> terms; see <a href="ACL2____TERM.html">term</a> and 
+ <span class="tt"><a href="ACL2____TERMP.html">termp</a></span>.  For example, they do not contain calls of the macro <span class="v">AND</span>, 
+ and constants are quoted.  The result of running a clause-processor must be a 
+ list of legal clauses; see <a href="ACL2____META.html">meta</a> for a discussion of translated terms, 
+ and for related discussion about ``forbidden'' function symbols, <a href="ACL2____SET-SKIP-META-TERMP-CHECKS.html">set-skip-meta-termp-checks</a>.</p> 
+ 
+ <p>The recognizer for a clause is the function <span class="tt"><a href="ACL2____TERM-LISTP.html">term-listp</a></span> and the 
+ recognizer for a list of clauses is <span class="tt"><a href="ACL2____TERM-LIST-LISTP.html">term-list-listp</a></span>.</p> 
+ 
+ <p>Note that clause-processor simplifiers are similar to metafunctions, and 
+ similar efficiency considerations apply.  See <a href="ACL2____META.html">meta</a>, in particular the 
+ discussion on how to ``make a metafunction maximally efficient.''</p> 
+ 
+ <p>Unlike rules of class <span class="v">:</span><span class="tt"><a href="ACL2____META.html">meta</a></span>, rules of class 
+ <span class="v">:clause-processor</span> must be applied by explicit <span class="v">:clause-processor</span> 
+ <a href="ACL2____HINTS.html">hints</a>; they are not applied automatically (unless by way of computed 
+ hints; see <a href="ACL2____COMPUTED-HINTS.html">computed-hints</a>).  But <span class="v">:clause-processor</span> rules can be 
+ useful in situations for which it is more convenient to code a simplifier that 
+ manipulates the entire goal clause rather than individual subterms of terms in 
+ the clause.</p> 
+ 
+ <p>We begin with a simple illustrative example: a clause-processor that 
+ assumes an alleged fact (named <span class="v">term</span> in the example) and creates a 
+ separate goal to prove that fact.  We can extend the hypotheses of the current 
+ goal (named <span class="v">cl</span> in the example) with a term by adding the negation of that 
+ term to the clause (disjunctive) representation of that goal.  So the 
+ following returns a list of two clauses: the result of adding <span class="v">term</span> as a 
+ hypothesis to the input clause, as just described, and a second clause 
+ consisting only of that term.  This list of two clauses can be viewed as the 
+ conjunction of the first clause and the second clause (where again, each 
+ clause is viewed as a disjunction).</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> note-fact-clause-processor (cl term)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t)) ; optional, for better efficiency
+  (<a href="COMMON-LISP____LIST.html">list</a> (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____LIST.html">list</a> 'not term)
+              cl)
+        (<a href="COMMON-LISP____LIST.html">list</a> term)))</pre> 
+ 
+ <p>As with <span class="v">:</span><span class="tt"><a href="ACL2____META.html">meta</a></span> rules, we need to introduce a suitable 
+ evaluator; see <a href="ACL2____DEFEVALUATOR.html">defevaluator</a> if you want details.  Since we expect to 
+ reason about the function <span class="tt"><a href="COMMON-LISP____NOT.html">not</a></span>, because of its role in 
+ <span class="v">note-fact-clause-processor</span> as defined above, we include <span class="v">NOT</span> in the 
+ set of functions known to this evaluator.  We also include <span class="v">IF</span>, as is 
+ often a good idea.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFEVALUATOR.html">defevaluator</a> evl0 evl0-list
+  ((<a href="COMMON-LISP____NOT.html">not</a> x) (<a href="COMMON-LISP____IF.html">if</a> x y z)))</pre> 
+ 
+ <p>ACL2 can now prove the following theorem automatically.  (This is the 
+ example displayed at the outset of this <a href="COMMON-LISP____DOCUMENTATION.html">documentation</a> topic.)  Of 
+ course, <span class="v">:clause-processor</span> rules about clause-processor functions less 
+ trivial than <span class="v">note-fact-clause-processor</span> may require lemmas to be proved 
+ first!  The function <span class="v">disjoin</span> takes a clause and returns its disjunction 
+ (the result of applying <span class="tt"><a href="COMMON-LISP____OR.html">or</a></span> to its members), and <span class="v">conjoin-clauses</span> 
+ applies <span class="v">disjoin</span> to every element of a given list of clauses and then 
+ conjoins (applies <span class="v">AND</span>) to the corresponding list of resulting terms.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> correctness-of-note-fact-clause-processor
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____PSEUDO-TERM-LISTP.html">pseudo-term-listp</a> cl)
+                (<a href="ACL2____ALISTP.html">alistp</a> a)
+                (evl0 (conjoin-clauses
+                       (note-fact-clause-processor cl term))
+                      a))
+           (evl0 (<a href="ACL2____DISJOIN.html">disjoin</a> cl) a))
+  :rule-classes :clause-processor)</pre> 
+ 
+ <p>Now let us submit a silly but illustrative example theorem to ACL2, to show 
+ how a corresponding <span class="v">:clause-processor</span> hint is applied.  The hint says to 
+ apply the clause-processor function, <span class="v">note-fact-clause-processor</span>, to the 
+ current goal clause and a ``user hint'' as the second argument of that 
+ function, in this case <span class="v">(<a href="COMMON-LISP____EQUAL.html">equal</a> a a)</span>.  Thus, a specific variable, 
+ <span class="v">clause</span>, is always bound to the current goal clause for the evaluation of 
+ the <span class="v">:clause-processor</span> hint, to produce a list of clauses.  Since two 
+ subgoals are created below, we know that this list contained two clauses. 
+ Indeed, these are the clauses returned when <span class="v">note-fact-clause-processor</span> is 
+ applied to two arguments: the current clause, which is the one-element list 
+ <span class="v">((<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____CAR.html">car</a> (<a href="COMMON-LISP____CONS.html">cons</a> x y)) x))</span>, and the user hint, <span class="v">(<a href="COMMON-LISP____EQUAL.html">equal</a> a a)</span>.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____THM.html">thm</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____CAR.html">car</a> (<a href="COMMON-LISP____CONS.html">cons</a> x y))
+                   x)
+            :hints
+            (("Goal"
+              :clause-processor
+              (note-fact-clause-processor clause '(<a href="COMMON-LISP____EQUAL.html">equal</a> a a)))))
+
+[Note:  A hint was supplied for our processing of the goal above.
+Thanks!]
+
+We now apply the verified :CLAUSE-PROCESSOR function NOTE-FACT-CLAUSE-
+PROCESSOR to produce two new subgoals.
+
+Subgoal 2
+(<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> A A)
+         (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (<a href="COMMON-LISP____CAR.html">CAR</a> (<a href="COMMON-LISP____CONS.html">CONS</a> X Y)) X)).
+
+But we reduce the conjecture to T, by the :executable-counterpart of
+IF and the simple :rewrite rule CAR-CONS.
+
+Subgoal 1
+(<a href="COMMON-LISP____EQUAL.html">EQUAL</a> A A).
+
+But we reduce the conjecture to T, by primitive type reasoning.
+
+Q.E.D.
+
+Summary
+Form:  ( THM ...)
+Rules: ((:EXECUTABLE-COUNTERPART IF)
+        (:EXECUTABLE-COUNTERPART NOT)
+        (:FAKE-RUNE-FOR-TYPE-SET NIL)
+        (:REWRITE CAR-CONS))
+Warnings:  None
+Time:  0.00 seconds (prove: 0.00, print: 0.00, other: 0.00)
+
+Proof succeeded.
+ACL2 !&gt;</pre> 
+ 
+ <p>That concludes our introduction to clause-processor rules and hints.  We 
+ turn now to detailed documentation.</p> 
+ 
+ <h4>DETAILED DOCUMENTATION</h4> 
+ 
+ <p>The <a href="ACL2____SIGNATURE.html">signature</a> of a clause-processor function, <span class="v">CL-PROC</span>, must 
+ have one of the following forms.  Here, each <span class="v">st_i</span> is a <a href="ACL2____STOBJ.html">stobj</a> 
+ (possibly <span class="tt"><a href="ACL2____STATE.html">state</a></span>) while the other parameters and results are not stobjs 
+ (see <a href="ACL2____STOBJ.html">stobj</a>).  Note that there need not be input stobjs in [3] — 
+ i.e., <span class="v">k</span> can be 0 — and even if there are, there need not be output 
+ stobjs.  In most ways [3] and [3+] are treated similarly; see <a href="ACL2____MAKE-SUMMARY-DATA.html">make-summary-data</a> for a discussion of the form of <span class="v">d</span> in [3+] and, more 
+ generally, for how [3+] differs from [3] by enhancing the <a href="ACL2____SUMMARY.html">summary</a>.</p> 
+ 
+ <pre class="code">[1]  ((CL-PROC cl) =&gt; cl-list)
+
+[2]  ((CL-PROC cl hint) =&gt; cl-list)
+
+[3]  ((CL-PROC cl hint st_1 ... st_k) =&gt; (<a href="ACL2____MV.html">mv</a> erp cl-list st_i1 ... st_in))
+
+[3+] ((CL-PROC cl hint st_1 ... st_k) =&gt; (<a href="ACL2____MV.html">mv</a> erp cl-list st_i1 ... st_in d))</pre> 
+ 
+ <p>We call <span class="v">cl-list</span> the <i>clauses-result</i>.  In [3] and [3+], we think 
+ of the first component of the result as an error flag.  Indeed, a proof will 
+ instantly abort if that error flag is not <span class="v">nil</span>.</p> 
+ 
+ <p>We next discuss the legal forms of <span class="v">:clause-processor</span> rules, followed 
+ below by a discussion of <span class="v">:clause-processor</span> <a href="ACL2____HINTS.html">hints</a>.  In the 
+ discussion below, we use lower-case names to represent specific symbols, for 
+ example <span class="v">implies</span>, and also to represent <a href="ACL2____STOBJ.html">stobj</a> names; and we use 
+ upper-case names to represent arbitrary pieces of syntax (which we will 
+ describe), for example, <span class="v">CL</span>.</p> 
+ 
+ <p>If a <span class="v">:</span><span class="tt"><a href="ACL2____RULE-CLASSES.html">rule-classes</a></span> specification includes 
+ <span class="v">:clause-processor</span>, then the corresponding term must have the following 
+ form.  (Additional ``meta-extract'' hypotheses, not shown or discussed below, 
+ may be included as desired in order to use facts from the logical <span class="tt"><a href="ACL2____WORLD.html">world</a></span> to help prove the rule; see <a href="ACL2____META-EXTRACT.html">meta-extract</a> for explanation of this 
+ advanced feature.)</p> 
+ 
+ <pre class="code">; General Form (omitting possible meta-extract hypotheses)
+(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____PSEUDO-TERM-LISTP.html">pseudo-term-listp</a> CL)
+              (<a href="ACL2____ALISTP.html">alistp</a> A)
+              (EVL (conjoin-clauses &lt;CL-LIST&gt;)
+                    B))
+         (EVL (<a href="ACL2____DISJOIN.html">disjoin</a> CL) A))</pre> 
+ 
+ <p>Here <span class="v">EVL</span> is a known evaluator; <span class="v">CL</span> and <span class="v">A</span> are distinct 
+ non-stobj variables; and <span class="v">&lt;CL-LIST&gt;</span> is an expression representing the 
+ clauses returned by the clause-processor function <span class="v">CL-PROC</span>, whose form 
+ depends on the <a href="ACL2____SIGNATURE.html">signature</a> of that function, as follows.  Typically 
+ <span class="v">B</span> is <span class="v">A</span>, but it can be any term (useful when generalization is 
+ occurring; see the example ``Test generalizing alist'' in community book 
+ <span class="v">books/clause-processors/basic-examples.lisp</span>).  For cases [1] and [2] 
+ above, <span class="v">&lt;CL-LIST&gt;</span> is of the form <span class="v">(CL-PROC CL)</span> or <span class="v">(CL-PROC CL
+ HINT)</span>, respectively, where in the latter case <span class="v">HINT</span> is a non-stobj 
+ variable distinct from the variables <span class="v">CL</span> and <span class="v">A</span>.  For cases [3] and 
+ [3+], <span class="v">&lt;CL-LIST&gt;</span> is the result of wrapping the function 
+ <span class="v">clauses-result</span> around a call of <span class="v">CL-PROC</span>:</p> 
+ 
+ <pre class="code">(clauses-result (CL-PROC CL HINT ...))</pre> 
+ 
+ <p>Logically, <span class="v">clauses-result</span> returns the <span class="tt"><a href="COMMON-LISP____CADR.html">cadr</a></span> if the <span class="tt"><a href="COMMON-LISP____CAR.html">car</a></span> 
+ is <span class="v">NIL</span>, and otherwise (for the error case) returns a list containing the 
+ empty (false) clause.  So in the non-error case, <span class="v">clauses-result</span> picks out 
+ the second result, denoted <span class="v">cl-list</span> in [3] and [3+] above, and in the 
+ error case the implication above trivially holds.</p> 
+ 
+ <p>In the above theorem, we are asked to prove <span class="v">(EVL (<a href="ACL2____DISJOIN.html">disjoin</a> CL) A)</span> 
+ assuming that the conjunction of all clauses produced by the clause processor 
+ evaluates to a non-<span class="v">nil</span> value under some alist <span class="v">B</span>.  In fact, we can 
+ choose <span class="v">B</span> so as to allow us to assume evaluations of the generated clauses 
+ over many different alists.  This technique is discussed in the community book 
+ <span class="v">books/clause-processors/multi-env-trick.lisp</span>, which introduces some 
+ macros that may be helpful in accomplishing proofs of this type.</p> 
+ 
+ <p>The clause-processor function, <span class="v">CL</span>, must have a guard that ACL2 can 
+ trivially prove from the hypotheses that the first argument of <span class="v">CL</span> is 
+ known to be a <span class="v">pseudo-term-listp</span> and any <a href="ACL2____STOBJ.html">stobj</a> arguments are 
+ assumed to satisfy their stobj predicates.</p> 
+ 
+ <p>Next we specify the legal forms for <span class="v">:clause-processor</span> <a href="ACL2____HINTS.html">hints</a>. 
+ The basic form is <span class="v">:clause-processor TERM</span>, such that the translation of 
+ <span class="v">TERM</span> to a legal ACL2 term yields a call of a clause-processor function 
+ <span class="v">(CL-PROC clause)</span> or <span class="v">(CL-PROC clause HINT ...)</span>, where <span class="v">HINT</span> is a 
+ term whose only non-stobj free variable (if any) is the symbol, <span class="v">clause</span>. 
+ Note that the first argument of the call is literally the variable, 
+ <span class="v">clause</span>.  Recall that at the time the :clause-processor hint is applied to 
+ the clausal form <span class="v">CL</span> of the current subgoal, <span class="v">clause</span> is bound to 
+ <span class="v">CL</span>; moreover, any stobj names will be bound to the corresponding 
+ stobjs.</p> 
+ 
+ <p>But there are two additional general forms for <span class="v">:clause-processor</span> 
+ hints, which may viewed as abbreviations for the basic form discussed above. 
+ The first additional general form, which we call the ``<span class="v">:function</span> form'', 
+ includes the following two classes of expressions.</p> 
+ 
+ <pre class="code">:clause-processor (:function F)
+:clause-processor (:function F :hint HINT)</pre> 
+ 
+ <p>The first of these <span class="v">:function</span> forms abbreviates the following hint, 
+ where either <span class="v">F</span> is a macro-alias for the function symbol <span class="v">CL-PROC</span> (see 
+ <a href="ACL2____ADD-MACRO-ALIAS.html">add-macro-alias</a>), and otherwise <span class="v">CL-PROC</span> is just the function 
+ symbol <span class="v">F</span>.</p> 
+ 
+ <pre class="code">:clause-processor (CL-PROC clause)</pre> 
+ 
+ <p>Similarly the second of the <span class="v">:function</span> forms above abbreviates the 
+ following, where <span class="v">CL-PROC</span> is as above and the output signature of 
+ <span class="v">CL-PROC</span> is <span class="v">(nil nil st_1 ... st_k)</span>.</p> 
+ 
+ <pre class="code">:clause-processor (CL-PROC clause HINT st_1 ... st_k)</pre> 
+ 
+ <p>Besides the ``<span class="v">:function</span> form'', there is one more additional general 
+ form for <span class="v">:clause-processor</span> hint: a symbol, as follows.</p> 
+ 
+ <pre class="code">:clause-processor F</pre> 
+ 
+ <p>This expands to a basic form as follows, depending on <span class="v">F</span>.</p> 
+ 
+ <ul> 
+ 
+ <li>If <span class="v">F</span> is a macro with one required argument or a function symbol with 
+ one argument:<br> 
+ <span class="v">:clause-processor (F clause)</span>
+</li> 
+ 
+ <li>If <span class="v">F</span> is a macro with two required arguments or a function symbol with 
+ two arguments:<br> 
+ <span class="v">:clause-processor (F clause nil)</span>
+</li> 
+ 
+ <li>If <span class="v">F</span> is a function symbol with inputs of the form [3] or [3+] above, 
+ that is, with input signature <span class="v">(nil nil st_1 ... st_k)</span>:<br> 
+ <span class="v">:clause-processor (F clause nil st_1 ... st_k)</span>
+</li> 
+ 
+ </ul> 
+ 
+ <p>For examples of these syntactic forms, see community book 
+ <span class="v">books/clause-processors/basic-examples.lisp</span>).  We turn now to discussion 
+ of when a <span class="v">:clause-processor</span> hint causes an abort.</p> 
+ 
+ <p>A <span class="v">:clause-processor</span> hint causes the proof to abort if the 
+ clauses-result is not a list of clauses, i.e., a list of (translated) <a href="ACL2____TERM.html">term</a> lists in the current logical <a href="ACL2____WORLD.html">world</a>.  This test is done explicitly 
+ every time a clause processor is run unless a <span class="v">:</span><span class="tt"><a href="ACL2____WELL-FORMEDNESS-GUARANTEE.html">well-formedness-guarantee</a></span> has been provided with the <span class="v">:clause-processor</span> 
+ rule or <span class="tt"><a href="ACL2____SET-SKIP-META-TERMP-CHECKS.html">set-skip-meta-termp-checks</a></span> has been used with an active trust 
+ tag to skip the check at the user's risk.</p> 
+ 
+ <p>The proof also aborts when the clause-processor function returns at least 
+ two values and the first value returned — the ``<span class="v">erp</span>'' value from 
+ cases [3] and [3+] above — is not <span class="v">nil</span>.  In that case, <span class="v">erp</span> is 
+ used for printing an error message as follows: if it is a string, then that 
+ string is printed; but if it is a non-empty true list whose first element is a 
+ string, then it is printed as though by <span class="v">(<a href="ACL2____FMT.html">fmt</a> ~@0 (<a href="COMMON-LISP____LIST.html">list</a> (<a href="COMMON-LISP____CONS.html">cons</a> #\0 erp))
+ ...)</span> (see <a href="ACL2____FMT.html">fmt</a>).  Otherwise, a non-<span class="v">nil</span> <span class="v">erp</span> value causes a 
+ generic error message to be printed.</p> 
+ 
+ <p>If there is no error as above, but the <span class="v">CL-PROC</span> call returns a clause 
+ list whose single element is equal to the input clause, then the hint is 
+ ignored since we are left with the goal with which we started.  In that case, 
+ the other prover processes are then applied as usual (see <a href="ACL2____HINTS-AND-THE-WATERFALL.html">hints-and-the-waterfall</a>).</p> 
+ 
+ <p>You can see all current <span class="v">:clause-processor</span> rules by issuing the 
+ following command: <span class="v">(print-clause-processor-rules)</span>.</p> 
+ 
+ <p>The following paper discusses ACL2 clause-processors at a high level 
+ suitable for a non-ACL2 audience:</p> 
+ 
+ <blockquote> 
+ 
+ <p>M. Kaufmann, J S. Moore, S. Ray, and E. Reeber, ``Integrating External 
+ Deduction Tools with ACL2.''  <i>Journal of Applied Logic</i> (Special Issue: 
+ Empirically Successful Computerized Reasoning), Volume 7, Issue 1, March 2009, 
+ pp. 3–25.  Also published online (DOI <span class="v">10.1016/j.jal.2007.07.002</span>). 
+ Preliminary version in: Proceedings of the 6th International Workshop on the 
+ Implementation of Logics (IWIL 2006) (C. Benzmueller, B. Fischer, and 
+ G. Sutcliffe, editors), <a href="http://ceur-ws.org/Vol-212/" target="_blank"><nobr>CEUR Workshop 
+ Proceedings Vol. 212<img src="../Icon_External_Link.png" title="External link to http://ceur-ws.org/Vol-212/"></nobr></a>, Phnom Penh, Cambodia, pp. 7–26, November 
+ 2006.</p>
+</blockquote> 
+ 
+ 
+</body>
+</html>

@@ -1,0 +1,237 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Certify-book</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____CERTIFY-BOOK">Click for Certify-book in the Full Manual</a></h3>
+
+<p>How to produce a <a href="ACL2____CERTIFICATE.html">certificate</a> for a book</p><p>Also see <a href="ACL2____CERTIFICATE.html">certificate</a> for information about the 
+ <span class="v">".cert"</span> file produced by <span class="v">certify-book</span>, in particular for 
+ information about the use of <a href="ACL2____BOOK-HASH.html">book-hash</a> values to help ensure that the 
+ corresponding book has not been modified since certification.  See <a href="ACL2____CERTIFY-BOOK-DEBUG.html">certify-book-debug</a> for some potential remedies for failures of 
+ <span class="v">certify-book</span>.</p> 
+ 
+ <pre class="code">Examples:
+(<a href="ACL2____CERTIFY-BOOK.html">certify-book</a> "my-arith")          ; certify in a world with 0 commands
+(<a href="ACL2____CERTIFY-BOOK.html">certify-book</a> "my-arith" 3)        ; ... in a world with 3 commands
+(<a href="ACL2____CERTIFY-BOOK.html">certify-book</a> "my-arith" ?)        ; ... in a world without checking the
+                                   ;     number of commands
+(<a href="ACL2____CERTIFY-BOOK.html">certify-book</a> "my-arith" 0 nil)    ; ... without compilation
+(<a href="ACL2____CERTIFY-BOOK.html">certify-book</a> "my-arith" 0 t)      ; ... with compilation (<a href="ACL2____DEFAULT.html">default</a>)
+(<a href="ACL2____CERTIFY-BOOK.html">certify-book</a> "my-arith" 0 t :ttags (foo))
+                                   ; ... allowing trust tag (<a href="ACL2____TTAG.html">ttag</a>) foo
+(<a href="ACL2____CERTIFY-BOOK.html">certify-book</a> "my-arith" 0 t :ttags :all)
+                                   ; ... allowing all trust tags (ttags)
+(<a href="ACL2____CERTIFY-BOOK.html">certify-book</a> "my-arith" t)        ; ... from world of old certificate
+(<a href="ACL2____CERTIFY-BOOK.html">certify-book</a> "my-arith" 0 nil :acl2x t)
+                                   ; ... writing or reading a .acl2x file
+(<a href="ACL2____CERTIFY-BOOK.html">certify-book</a> "my-arith" 0 t :useless-runes :write)
+                                   ; ... write file to speed up future proofs
+(<a href="ACL2____CERTIFY-BOOK.html">certify-book</a> "my-arith" 0 t :useless-runes :read)
+                                   ; ... read file to speed up future proofs
+
+General Form:
+(<a href="ACL2____CERTIFY-BOOK.html">certify-book</a> book-name
+              k                       ; [default 0]
+              compile-flg             ; [default t]
+              :defaxioms-okp t/nil    ; [default nil]
+              :skip-proofs-okp t/nil  ; [default nil]
+              :ttags ttags            ; [default nil]
+              :acl2x t/nil            ; [default nil]
+              :ttagsx ttags           ; [default nil]
+              :pcert pcert            ; [default nil]
+              :write-port t/nil       ; [default t unless pcert is non-nil]
+              :useless-runes :write/:read/:read?/n/-n/nil
+                                      ; (-100 &lt; n &lt; 0 or 0 &lt; n &lt;= 100)
+                                      ; [default nil]
+              )</pre> 
+ 
+ <p>where <span class="v">book-name</span> is a book name (see <a href="ACL2____BOOK-NAME.html">book-name</a>), <span class="v">k</span> is used 
+ to indicate your approval of the ``certification <a href="ACL2____WORLD.html">world</a>,'' and 
+ <span class="v">compile-flg</span> can control whether the book is to be compiled.  The defaults 
+ for <span class="v">compile-flg</span>, <span class="v">skip-proofs-okp</span>, <span class="v">acl2x</span>, <span class="v">write-port</span>, 
+ <span class="v">pcert</span>, and <span class="v">:useless-runes</span> can be affected by environment variables. 
+ All of these arguments are described in detail below, except for <span class="v">:pcert</span> 
+ and <span class="v">:useless-runes</span>: see <a href="ACL2____PROVISIONAL-CERTIFICATION.html">provisional-certification</a> and <a href="ACL2____USELESS-RUNES.html">useless-runes</a>, respectively, for the effects of these two arguments and their 
+ corresponding environment variables, as we ignore those effects in the present 
+ topic.</p> 
+ 
+ <p>Certification occurs in some logical <a href="ACL2____WORLD.html">world</a>, called the 
+ ``certification <a href="ACL2____WORLD.html">world</a>.''  That <a href="ACL2____WORLD.html">world</a> must contain the <span class="tt"><a href="ACL2____DEFPKG.html">defpkg</a></span>s needed to read and execute the forms in the book.  The <a href="ACL2____COMMAND.html">command</a>s necessary to recreate that <a href="ACL2____WORLD.html">world</a> from the ACL2 initial <a href="ACL2____WORLD.html">world</a> are called the ``<a href="ACL2____PORTCULLIS.html">portcullis</a> commands,'' and will be copied into 
+ the <a href="ACL2____CERTIFICATE.html">certificate</a> created for the book.  Those <a href="ACL2____COMMAND.html">command</a>s will be 
+ re-executed whenever the book is included, to ensure that the appropriate 
+ packages (and all other names used in the certification <a href="ACL2____WORLD.html">world</a>) are 
+ correctly defined.  Note that Step 1 of <span class="v">certify-book</span> will fail if a 
+ package mentioned in the book is not defined before attempting the 
+ certification, i.e., defined by a portcullis command in the certification 
+ world.  For example, suppose that your book contains the symbol <span class="v">FOO::X</span>, 
+ but the package "FOO" is not currently defined.  Then an error message will 
+ likely complain either about a missing package <span class="v">"FOO"</span>, or about a symbol 
+ <span class="v">FOO::X</span> that is ``not in any of the packages known to ACL2.''  A solution 
+ is to define the package "FOO", perhaps directly using <span class="tt"><a href="ACL2____DEFPKG.html">defpkg</a></span> or by 
+ including a book that defines this package, before attempting the 
+ certification.</p> 
+ 
+ <p>The certified book will be more often usable if the certification <a href="ACL2____WORLD.html">world</a> is kept to a minimal extension of the ACL2 initial <a href="ACL2____WORLD.html">world</a> (for 
+ example, to prevent name clashes with functions defined in other books). 
+ Thus, before you call <span class="v">certify-book</span> for the first time on a book, you may 
+ wish to get into the initial ACL2 <a href="ACL2____WORLD.html">world</a> (e.g., with <span class="v">:ubt 1</span> or just 
+ starting a new version of ACL2), <span class="tt"><a href="ACL2____DEFPKG.html">defpkg</a></span> the desired packages, and then 
+ invoke <span class="v">certify-book</span>.</p> 
+ 
+ <p>The <span class="v">k</span> argument to <span class="v">certify-book</span> must be either a nonnegative 
+ integer or else one of the symbols <span class="v">t</span> or <span class="v">?</span> in any package.  If <span class="v">k</span> 
+ is an integer, then it must be the number of <a href="ACL2____COMMAND.html">command</a>s that have been 
+ executed after the initial ACL2 <a href="ACL2____WORLD.html">world</a> to create the <a href="ACL2____WORLD.html">world</a> in 
+ which <span class="v">certify-book</span> was called.  One way to obtain this number is by doing 
+ <span class="v">:pbt :start</span> to see all the <a href="ACL2____COMMAND.html">command</a>s back to the first one.</p> 
+ 
+ <p>If <span class="v">k</span> is <span class="v">t</span> (or any symbol whose <span class="tt"><a href="COMMON-LISP____SYMBOL-NAME.html">symbol-name</a></span> is 
+ <span class="v">"T"</span>), it means that <span class="v">certify-book</span> should use the same <a href="ACL2____WORLD.html">world</a> 
+ used in the last certification of this book.  <span class="v">K</span> may have such a value 
+ only if you call <span class="v">certify-book</span> in the initial ACL2 <a href="ACL2____WORLD.html">world</a> and there 
+ is a <a href="ACL2____CERTIFICATE.html">certificate</a> on file for the book being certified.  (Of course, the 
+ <a href="ACL2____CERTIFICATE.html">certificate</a> is probably invalid.)  In this case, <span class="v">certify-book</span> 
+ reads the old <a href="ACL2____CERTIFICATE.html">certificate</a> to obtain the <a href="ACL2____PORTCULLIS.html">portcullis</a> <a href="ACL2____COMMAND.html">command</a>s and executes them to recreate the certification <a href="ACL2____WORLD.html">world</a>.</p> 
+ 
+ <p>Finally, <span class="v">k</span> may be <span class="v">?</span> (or any symbol whose <span class="tt"><a href="COMMON-LISP____SYMBOL-NAME.html">symbol-name</a></span> is 
+ <span class="v">"?"</span>), in which case there is no check made on the certification world. 
+ That is, if <span class="v">k</span> is such a value then no action related to the preceding two 
+ paragraphs is performed, which can be a nice convenience but at the cost of 
+ eliminating a potentially valuable check that the certification <a href="ACL2____WORLD.html">world</a> 
+ may be as expected.</p> 
+ 
+ <p>We next describe the meaning of <span class="v">compile-flg</span> and how it defaults.  If 
+ explicit compilation has been suppressed by <span class="v">(<a href="ACL2____SET-COMPILER-ENABLED.html">set-compiler-enabled</a> nil
+ state)</span>, then <span class="v">compile-flg</span> is coerced to <span class="v">nil</span>; see <a href="ACL2____COMPILATION.html">compilation</a>.  Otherwise <span class="v">compile-flg</span> may be given the value of <span class="v">t</span> (or 
+ <span class="v">:all</span>, which is equivalent to <span class="v">t</span> except during provisional 
+ certification; see <a href="ACL2____PROVISIONAL-CERTIFICATION.html">provisional-certification</a>), indicating that the book 
+ is to be compiled, or else <span class="v">nil</span>.  (Note that compilation initially creates 
+ a compiled file with a temporary file name, and then moves that temporary file 
+ to the final compiled file name obtained by adding a suitable extension to the 
+ book name.  Thus, a compiled file will appear atomically in its intended 
+ location.)  Finally, suppose that <span class="v">compile-flg</span> is not supplied (or is 
+ <span class="v">:default</span>).  If environment variable <span class="v">ACL2_COMPILE_FLG</span> is defined and 
+ not the empty string, then its value should be <span class="v">T</span>, <span class="v">NIL</span>, or <span class="v">ALL</span> 
+ after converting to upper case, in which case <span class="v">compile-flg</span> is considered 
+ to have value <span class="v">t</span>, <span class="v">nil</span>, or <span class="v">:all</span> (respectively).  Otherwise 
+ <span class="v">compile-flg</span> defaults to <span class="v">t</span>.  Note that the value <span class="v">:all</span> is 
+ equivalent to <span class="v">t</span> except for during the Convert procedure of provisional 
+ certification; see <a href="ACL2____PROVISIONAL-CERTIFICATION.html">provisional-certification</a>.</p> 
+ 
+ <p>Two keyword arguments, <span class="v">:defaxioms-okp</span> and <span class="v">:skip-proofs-okp</span>, 
+ determine how the system handles the inclusion of <span class="tt"><a href="ACL2____DEFAXIOM.html">defaxiom</a></span> events and 
+ <span class="tt"><a href="ACL2____SKIP-PROOFS.html">skip-proofs</a></span> events, respectively, in the book.  The value <span class="v">t</span> 
+ allows such events, but prints a warning message.  The value <span class="v">nil</span> causes 
+ an error if such an event is found.  <span class="v">Nil</span> is the default unless keyword 
+ argument <span class="v">:acl2x t</span> is provided and state global <span class="v">'write-acl2x</span> is a 
+ cons (see <a href="ACL2____SET-WRITE-ACL2X.html">set-write-ACL2x</a>), in which case the default is <span class="v">t</span>.</p> 
+ 
+ <p>The keyword argument <span class="v">:ttags</span> may normally be omitted.  A few 
+ constructs, used for example if you are building your own system based on 
+ ACL2, may require it.  See <a href="ACL2____DEFTTAG.html">defttag</a> for an explanation of this 
+ argument.</p> 
+ 
+ <p>When book <span class="v">B</span> is certified with value <span class="v">t</span> (the default, unless the 
+ value used for <span class="v">pcert</span> is non-<span class="v">nil</span>) for keyword argument 
+ <span class="v">:write-port</span>, a file <span class="v">B.port</span> is written by certification process. 
+ This file contains all of the <a href="ACL2____PORTCULLIS.html">portcullis</a> <a href="ACL2____COMMAND.html">command</a>s for <span class="v">B</span>, 
+ i.e., all user commands present in the ACL2 logical <a href="ACL2____WORLD.html">world</a> at the time 
+ <span class="v">certify-book</span> is called.  If <span class="v">B.lisp</span> later becomes uncertified, say 
+ because <a href="ACL2____EVENTS.html">events</a> from that file or an included book have been edited, 
+ then <span class="v">(<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "B")</span> will consult <span class="v">B.port</span> to evaluate forms in 
+ that file before evaluating the events in <span class="v">B.lisp</span>.  On the other hand, 
+ <span class="v">B.port</span> is ignored when including <span class="v">B</span> if <span class="v">B</span> is certified.</p> 
+ 
+ <p>If you use <a href="ACL2____GUARD.html">guard</a>s, please note <span class="v">certify-book</span> is executed as 
+ though <span class="v">(<a href="ACL2____SET-GUARD-CHECKING.html">set-guard-checking</a> t)</span> has been evaluated; see <a href="ACL2____SET-GUARD-CHECKING.html">set-guard-checking</a>.  If you want to run with different guard-checking, 
+ consider using <span class="v">ld</span> instead, or in addition; see <a href="ACL2____LD.html">ld</a>.</p> 
+ 
+ <p>For a general discussion of books, see <a href="ACL2____BOOKS.html">books</a>.  <span class="v">Certify-book</span> is 
+ akin to what we have historically called a ``proveall'': all the forms in the 
+ book are ``proved'' to guarantee their admissibility.  More precisely, 
+ <span class="v">certify-book</span> (1) reads the forms in the book, confirming that the 
+ appropriate packages are defined in the certification <a href="ACL2____WORLD.html">world</a>; (2) does 
+ the full admissibility checks on each form (proving termination of recursive 
+ functions, proving theorems, etc.), checking as it goes that each form is an 
+ embedded event form (see <a href="ACL2____EMBEDDED-EVENT-FORM.html">embedded-event-form</a>); (3) may roll back the 
+ <a href="ACL2____WORLD.html">world</a> (how far? — see below) and perform an <span class="tt"><a href="ACL2____INCLUDE-BOOK.html">include-book</a></span> 
+ to check for <span class="tt"><a href="ACL2____LOCAL.html">local</a></span> incompatibilities (see <a href="ACL2____LOCAL-INCOMPATIBILITY.html">local-incompatibility</a>); (4) writes a <a href="ACL2____CERTIFICATE.html">certificate</a> recording not only 
+ that the book was certified but also recording the <a href="ACL2____COMMAND.html">command</a>s necessary 
+ to recreate the certification <a href="ACL2____WORLD.html">world</a> (so the appropriate packages can be 
+ defined when the book is included in other <a href="ACL2____WORLD.html">world</a>s) and a <a href="ACL2____BOOK-HASH.html">book-hash</a> for each of the <a href="ACL2____BOOKS.html">books</a> involved (see <a href="ACL2____CERTIFICATE.html">certificate</a>); and 
+ (5) compiles the book if so directed (and then loads the object file in that 
+ case).</p> 
+ 
+ <p><span class="v">Certify-book</span> is a macro that returns an <a href="ACL2____ERROR-TRIPLE.html">error-triple</a>, where 
+ success is indicated by an error component of <span class="v">nil</span> and has the effect of 
+ extending the <a href="ACL2____WORLD.html">world</a> with a corresponding <span class="tt"><a href="ACL2____INCLUDE-BOOK.html">include-book</a></span> event. 
+ If you don't want the included book's <a href="ACL2____EVENTS.html">events</a> in your present <a href="ACL2____WORLD.html">world</a>, simply execute <span class="v">:</span><span class="tt"><a href="ACL2____U.html">u</a></span>.</p> 
+ 
+ <p>Technical Remark.  Step 3 above mentions rolling the logical <a href="ACL2____WORLD.html">world</a> 
+ back to check for local incompatibilities.  For efficiency, this retraction to 
+ an initial segment of the the world is skipped if a local event is not 
+ encountered as described below; otherwise, the world is rolled back to the 
+ point just before the first such event was admitted.  For this purpose, a 
+ relevant local event is one at the top level of the book or under a sequences 
+ of <span class="tt"><a href="COMMON-LISP____PROGN.html">progn</a></span> calls in the book.  Here, we include forms generated by 
+ <span class="tt"><a href="ACL2____MAKE-EVENT.html">make-event</a></span>.  But this category does not include local <a href="ACL2____EVENTS.html">events</a> 
+ within an <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span> event, since those are ignored in the final 
+ processing of the <span class="v">encapsulate</span> event.  We also do not consider local 
+ events within an <span class="tt"><a href="ACL2____INCLUDE-BOOK.html">include-book</a></span> event.  End of Technical Remark.</p> 
+ 
+ <p>A utility is provided to assist in debugging failures of <span class="v">certify-book</span>; 
+ see <a href="ACL2____REDO-FLAT.html">redo-flat</a>.)</p> 
+ 
+ <p><span class="v">Certify-book</span> requires that the default <a href="ACL2____DEFUN-MODE.html">defun-mode</a> (see <a href="ACL2____DEFAULT-DEFUN-MODE.html">default-defun-mode</a>) be <span class="v">:</span><span class="tt"><a href="ACL2____LOGIC.html">logic</a></span> when certification is attempted. 
+ If the mode is not <span class="v">:</span><span class="tt"><a href="ACL2____LOGIC.html">logic</a></span>, an error is signaled.</p> 
+ 
+ <p>An error will occur if <span class="v">certify-book</span> has to deal with any uncertified 
+ book other than the one on which it was called.  For example, if the book 
+ being certified includes another book, that sub-book must already have been 
+ certified; that is, that sub-book must have a valid <a href="ACL2____CERTIFICATE.html">certificate</a> 
+ file.</p> 
+ 
+ <p>If you have a certified book that has remained unchanged for some time you 
+ might well not remember the appropriate <span class="tt"><a href="ACL2____DEFPKG.html">defpkg</a></span>s for it, though they 
+ are stored in the <a href="ACL2____CERTIFICATE.html">certificate</a> file and (by default) also in the 
+ <span class="v">.port</span> file.  If you begin to change the book, don't throw away its <a href="ACL2____CERTIFICATE.html">certificate</a> file just because it has become invalid!  It is an important 
+ historical document until the book is re-certified.  More important, don't 
+ throw away the <span class="v">.port</span> file, as it will provide the <a href="ACL2____PORTCULLIS.html">portcullis</a> 
+ commands when including the book as an uncertified book; see <a href="ACL2____INCLUDE-BOOK.html">include-book</a>.</p> 
+ 
+ <p>When <span class="v">certify-book</span> is directed to produce a compiled file, it calls the 
+ Common Lisp function <span class="v">compile-file</span> on the original source file.  This 
+ creates a compiled file with an extension known to ACL2, e.g., if the book is 
+ named <span class="v">"my-book"</span> then the source file is <span class="v">"my-book.lisp"</span> and the 
+ compiled file under GCL will be <span class="v">"my-book.o"</span> while under SBCL it will be 
+ <span class="v">"my-book.fasl"</span>.  The compiled file is then loaded.  When <span class="tt"><a href="ACL2____INCLUDE-BOOK.html">include-book</a></span> is used later on <span class="v">"my-book"</span> it will automatically load the 
+ compiled file, provided the compiled file has a later write date than the 
+ source file.  The only effect of such <a href="ACL2____COMPILATION.html">compilation</a> and loading is that 
+ the functions defined in the book execute faster.  See <a href="ACL2____GUARD.html">guard</a> for a 
+ discussion of the issues, and if you want more details about <a href="ACL2____BOOKS.html">books</a> and 
+ compilation, see <a href="ACL2____BOOK-COMPILED-FILE.html">book-compiled-file</a>.</p> 
+ 
+ <p>When <span class="v">certify-book</span> is directed not to produce a compiled file, it will 
+ delete any existing compiled file for the book, so as not to mislead <span class="tt"><a href="ACL2____INCLUDE-BOOK.html">include-book</a></span> into loading the now outdated compiled file.  Otherwise, 
+ <span class="v">certify-book</span> will create a temporary ``expansion file'' to compile, 
+ obtained by appending the string "@expansion.lsp" to the end of the book 
+ name.  Remark: Users may ignore that file, which is automatically deleted 
+ unless <a href="ACL2____STATE.html">state</a> global variable <span class="v">'save-expansion-file</span> has been set, 
+ presumably by a system developer, to a non-<span class="v">nil</span> value; see <a href="ACL2____BOOK-COMPILED-FILE.html">book-compiled-file</a> for more information about hit issue, including the role 
+ of environment variable <span class="v">ACL2_SAVE_EXPANSION</span>.</p> 
+ 
+ <p>After execution of a <span class="v">certify-book</span> form, the value of <span class="tt"><a href="ACL2____ACL2-DEFAULTS-TABLE.html">ACL2-defaults-table</a></span> is restored to what it was immediately before that 
+ <span class="v">certify-book</span> form was executed.  See <a href="ACL2____ACL2-DEFAULTS-TABLE.html">ACL2-defaults-table</a>.</p> 
+ 
+ <p>Those who use the relatively advanced features of trust tags (see <a href="ACL2____DEFTTAG.html">defttag</a>) and <span class="tt"><a href="ACL2____MAKE-EVENT.html">make-event</a></span> may wish to know how to create a <a href="ACL2____CERTIFICATE.html">certificate</a> file that avoids dependence on trust tags that are used only 
+ during <span class="tt"><a href="ACL2____MAKE-EVENT.html">make-event</a></span> expansion.  For this, including documentation of the 
+ <span class="v">:acl2x</span> and <span class="v">:ttagsx</span> keyword arguments for <span class="v">certify-book</span>, see 
+ <a href="ACL2____SET-WRITE-ACL2X.html">set-write-ACL2x</a>.</p> 
+ 
+ <p>This completes the tour through the <a href="COMMON-LISP____DOCUMENTATION.html">documentation</a> of <a href="ACL2____BOOKS.html">books</a>.</p>
+</body>
+</html>

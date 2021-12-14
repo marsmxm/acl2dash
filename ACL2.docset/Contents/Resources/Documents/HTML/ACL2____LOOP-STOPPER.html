@@ -1,0 +1,143 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Loop-stopper</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____LOOP-STOPPER">Click for Loop-stopper in the Full Manual</a></h3>
+
+<p>Limit application of permutative rewrite rules</p><p>See <a href="ACL2____RULE-CLASSES.html">rule-classes</a> for a discussion of the syntax of the 
+ <span class="v">:loop-stopper</span> field of <span class="v">:</span><span class="tt"><a href="ACL2____REWRITE.html">rewrite</a></span> rule-classes.  Here we 
+ describe how that field is used, and also how that field is created when the 
+ user does not explicitly supply it.</p> 
+ 
+ <p>For example, the built-in <span class="v">:</span><span class="tt"><a href="ACL2____REWRITE.html">rewrite</a></span> rule 
+ <span class="v">commutativity-of-+</span>,</p> 
+ 
+ <pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____ACL2-NUMBERP.html">acl2-numberp</a> x)
+              (<a href="ACL2____ACL2-NUMBERP.html">acl2-numberp</a> y))
+         (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP_____B2.html">+</a> x y) (<a href="COMMON-LISP_____B2.html">+</a> y x))),</pre> 
+ 
+ <p>creates a rewrite rule with a loop-stopper of <span class="v">((x y binary-+))</span>.  This 
+ means, very roughly, that the term corresponding to <span class="v">y</span> must be ``smaller'' 
+ than the term corresponding to <span class="v">x</span> in order for this rule to apply. 
+ However, the presence of <span class="tt"><a href="ACL2____BINARY-_B2.html">binary-+</a></span> in the list means that certain 
+ functions that are ``invisible'' with respect to <span class="tt"><a href="ACL2____BINARY-_B2.html">binary-+</a></span> (by default, 
+ <span class="tt"><a href="ACL2____UNARY--.html">unary--</a></span> is the only such function) are more or less ignored when 
+ making this ``smaller'' test.  We are much more precise below.</p> 
+ 
+ <p>Our explanation of loop-stopping is in four parts.  First we discuss ACL2's 
+ notion of ``term order.''  Next, we bring in the notion of ``invisibility'', 
+ and use it together with term order to define orderings on terms that are used 
+ in the loop-stopping algorithm.  Third, we describe that algorithm.  These 
+ topics all assume that we have in hand the <span class="v">:loop-stopper</span> field of a given 
+ rewrite rule; the fourth and final topic describes how that field is 
+ calculated when it is not supplied by the user.</p> 
+ 
+ <p>ACL2 must sometimes decide which of two terms is syntactically simpler.  It 
+ uses a total ordering on terms, called the ``term order.''  Under this 
+ ordering constants such as <span class="v">'(a b c)</span> are simpler than terms containing 
+ variables such as <span class="v">x</span> and <span class="v">(<a href="COMMON-LISP_____B2.html">+</a> 1 x)</span>.  Terms containing variables are 
+ ordered according to how many occurrences of variables there are.  Thus <span class="v">x</span> 
+ and <span class="v">(<a href="COMMON-LISP_____B2.html">+</a> 1 x)</span> are both simpler than <span class="v">(<a href="COMMON-LISP____CONS.html">cons</a> x x)</span> and <span class="v">(<a href="COMMON-LISP_____B2.html">+</a> x y)</span>.  If 
+ variable counts do not decide the order, then the number of function 
+ applications are tried.  Thus <span class="v">(<a href="COMMON-LISP____CONS.html">cons</a> x x)</span> is simpler than <span class="v">(<a href="COMMON-LISP_____B2.html">+</a> x (<a href="COMMON-LISP_____B2.html">+</a> 1
+ y))</span> because the latter has one more function application.  Finally, if the 
+ number of function applications do not decide the order, a lexicographic 
+ ordering on Lisp objects is used.  See <a href="ACL2____TERM-ORDER.html">term-order</a> for details.</p> 
+ 
+ <p>When the loop-stopping algorithm is controlling the use of permutative 
+ <span class="v">:</span><span class="tt"><a href="ACL2____REWRITE.html">rewrite</a></span> rules it allows <span class="v">term1</span> to be moved leftward over 
+ <span class="v">term2</span> only if <span class="v">term1</span> is smaller, in a suitable sense.  Note: The 
+ sense used in loop-stopping is <b>not</b> the above explained term order but a 
+ more complicated ordering described below.  The use of a total ordering stops 
+ rules like commutativity from looping indefinitely because it allows <span class="v">(<a href="COMMON-LISP_____B2.html">+</a> b
+ a)</span> to be permuted to <span class="v">(<a href="COMMON-LISP_____B2.html">+</a> a b)</span> but not vice versa, assuming <span class="v">a</span> is 
+ smaller than <span class="v">b</span> in the ordering.  Given a set of permutative rules that 
+ allows arbitrary permutations of the tips of a tree of function calls, this 
+ will normalize the tree so that the smallest argument is leftmost and the 
+ arguments ascend in the order toward the right.  Thus, for example, if the 
+ same argument appears twice in the tree, as <span class="v">x</span> does in the <span class="tt"><a href="ACL2____BINARY-_B2.html">binary-+</a></span> tree denoted by the term <span class="v">(<a href="COMMON-LISP_____B2.html">+</a> a x b x)</span>, then when the allowed 
+ permutations are done, all occurrences of the duplicated argument in the tree 
+ will be adjacent, e.g., the tree above will be normalized to <span class="v">(<a href="COMMON-LISP_____B2.html">+</a> a b x
+ x)</span>.</p> 
+ 
+ <p>Suppose the loop-stopping algorithm used term order, as noted above, and 
+ consider the <span class="tt"><a href="ACL2____BINARY-_B2.html">binary-+</a></span> tree denoted by <span class="v">(<a href="COMMON-LISP_____B2.html">+</a> x y (<a href="COMMON-LISP____-.html">-</a> x))</span>.  The 
+ arguments here are in ascending term order already.  Thus, no permutative 
+ rules are applied.  But because we are inside a <span class="v">+-expression</span> it is very 
+ convenient if <span class="v">x</span> and <span class="v">(<a href="COMMON-LISP____-.html">-</a> x)</span> could be given virtually the same position 
+ in the ordering so that <span class="v">y</span> is not allowed to separate them.  This would 
+ allow such rules as <span class="v">(<a href="COMMON-LISP_____B2.html">+</a> i (<a href="COMMON-LISP____-.html">-</a> i) j) = j</span> to be applied.  In support of this, 
+ the ordering used in the control of permutative rules allows certain unary 
+ functions, e.g., the unary minus function above, to be ``invisible'' with 
+ respect to certain ``surrounding'' functions, e.g., <span class="tt"><a href="COMMON-LISP_____B2.html">+</a></span> function 
+ above.</p> 
+ 
+ <p>Briefly, a unary function symbol <span class="v">fn1</span> is invisible with respect to a 
+ function symbol <span class="v">fn2</span> if <span class="v">fn2</span> belongs to the value of <span class="v">fn1</span> in 
+ <span class="tt"><a href="ACL2____INVISIBLE-FNS-TABLE.html">invisible-fns-table</a></span>; also see <a href="ACL2____SET-INVISIBLE-FNS-TABLE.html">set-invisible-fns-table</a>, which 
+ explains its format and how it can be set by the user.  Roughly speaking, 
+ ``invisible'' function symbols are ignored for the purposes of the term-order 
+ test.</p> 
+ 
+ <p>Consider the example above, <span class="v">(<a href="COMMON-LISP_____B2.html">+</a> x y (<a href="COMMON-LISP____-.html">-</a> x))</span>.  The translated version of 
+ this term is <span class="v">(<a href="ACL2____BINARY-_B2.html">binary-+</a> x (<a href="ACL2____BINARY-_B2.html">binary-+</a> y (<a href="ACL2____UNARY--.html">unary--</a> x)))</span>.  The initial <span class="tt"><a href="ACL2____INVISIBLE-FNS-TABLE.html">invisible-fns-table</a></span> makes <span class="tt"><a href="ACL2____UNARY--.html">unary--</a></span> invisible with respect to <span class="tt"><a href="ACL2____BINARY-_B2.html">binary-+</a></span>.  The commutativity rule for <span class="tt"><a href="ACL2____BINARY-_B2.html">binary-+</a></span> will attempt to swap 
+ <span class="v">y</span> and <span class="v">(<a href="ACL2____UNARY--.html">unary--</a> x)</span> and the loop-stopping algorithm is called to 
+ approve or disapprove.  If term order is used, the swap will be disapproved. 
+ But term order is not used.  While the loop-stopping algorithm is permuting 
+ arguments inside a <span class="tt"><a href="ACL2____BINARY-_B2.html">binary-+</a></span> expression, <span class="tt"><a href="ACL2____UNARY--.html">unary--</a></span> is invisible. 
+ Thus, instead of comparing <span class="v">y</span> with <span class="v">(<a href="ACL2____UNARY--.html">unary--</a> x)</span>, the loop-stopping 
+ algorithm compares <span class="v">y</span> with <span class="v">x</span>, approving the swap because <span class="v">x</span> comes 
+ before <span class="v">y</span>.</p> 
+ 
+ <p>Here is a more precise specification of the total order used for 
+ loop-stopping with respect to a list, <span class="v">fns</span>, of functions that are to be 
+ considered invisible.  Let <span class="v">x</span> and <span class="v">y</span> be distinct terms; we specify 
+ when ``<span class="v">x</span> is smaller than <span class="v">y</span> with respect to <span class="v">fns</span>.''  If <span class="v">x</span> is 
+ the application of a unary function symbol that belongs to <span class="v">fns</span>, replace 
+ <span class="v">x</span> by its argument.  Repeat this process until the result is not the 
+ application of such a function; let us call the result <span class="v">x-guts</span>.  Similarly 
+ obtain <span class="v">y-guts</span> from <span class="v">y</span>.  Now if <span class="v">x-guts</span> is the same term as 
+ <span class="v">y-guts</span>, then <span class="v">x</span> is smaller than <span class="v">y</span> in this order iff <span class="v">x</span> is 
+ smaller than <span class="v">y</span> in the standard term order.  On the other hand, if 
+ <span class="v">x-guts</span> is different than <span class="v">y-guts</span>, then <span class="v">x</span> is smaller than <span class="v">y</span> 
+ in this order iff <span class="v">x-guts</span> is smaller than <span class="v">y-guts</span> in the standard term 
+ order.</p> 
+ 
+ <p>Now we may describe the loop-stopping algorithm.  Consider a rewrite rule 
+ with conclusion <span class="v">(equiv lhs rhs)</span> that applies to a term <span class="v">x</span> in a given 
+ context; see <a href="ACL2____REWRITE.html">rewrite</a>.  Suppose that this rewrite rule has a 
+ loop-stopper field (technically, the <span class="v">:heuristic-info</span> field) of <span class="v">((x1 y1
+ . fns-1) ... (xn yn . fns-n))</span>.  (Note that this field can be observed by 
+ using the command <span class="v">:</span><span class="tt"><a href="ACL2____PR.html">pr</a></span> with the name of the rule; see <a href="ACL2____PR.html">pr</a>.) 
+ We describe when rewriting is permitted.  The simplest case is when the 
+ loop-stopper list is <span class="v">nil</span> (i.e., <span class="v">n</span> is <span class="v">0</span>); in that case, 
+ rewriting is permitted.  Otherwise, for each <span class="v">i</span> from 1 to <span class="v">n</span> let 
+ <span class="v">xi'</span> be the actual term corresponding to the variable <span class="v">xi</span> when 
+ <span class="v">lhs</span> is matched against the term to be rewritten, and similarly correspond 
+ <span class="v">yi'</span> with <span class="v">y</span>.  If <span class="v">xi'</span> and <span class="v">yi'</span> are the same term for all 
+ <span class="v">i</span>, then rewriting is not permitted.  Otherwise, let <span class="v">k</span> be the least 
+ <span class="v">i</span> such that <span class="v">xi'</span> and <span class="v">yi'</span> are distinct.  Let <span class="v">fns</span> be the list 
+ of all functions that are invisible with respect to every function in 
+ <span class="v">fns-k</span>, if <span class="v">fns-k</span> is non-empty; otherwise, let <span class="v">fns</span> be <span class="v">nil</span>. 
+ Then rewriting is permitted if and only if <span class="v">yi'</span> is smaller than <span class="v">xi'</span> 
+ with respect to <span class="v">fns</span>, in the sense defined in the preceding paragraph.</p> 
+ 
+ <p>It remains only to describe how the loop-stopper field is calculated for a 
+ rewrite rule when this field is not supplied by the user.  (On the other hand, 
+ to see how the user may specify the <span class="v">:loop-stopper</span>, see <a href="ACL2____RULE-CLASSES.html">rule-classes</a>.)  Suppose the conclusion of the rule is of the form <span class="v">(equiv
+ lhs rhs)</span>.  First of all, if <span class="v">rhs</span> is not an instance of the left hand 
+ side by a substitution whose range is a list of distinct variables, then the 
+ loop-stopper field is <span class="v">nil</span>.  Otherwise, consider all pairs <span class="v">(<a href="ACL2____U.html">u</a> . v)</span> 
+ from this substitution with the property that the first occurrence of <span class="v">v</span> 
+ appears in front of the first occurrence of <span class="v">u</span> in the print representation 
+ of <span class="v">rhs</span>.  For each such <span class="v">u</span> and <span class="v">v</span>, form a list <span class="v">fns</span> of all 
+ functions <span class="v">fn</span> in <span class="v">lhs</span> with the property that <span class="v">u</span> or <span class="v">v</span> (or 
+ both) appears as a top-level argument of a subterm of <span class="v">lhs</span> with function 
+ symbol <span class="v">fn</span>.  Then the loop-stopper for this rewrite rule is a list of all 
+ lists <span class="v">(<a href="ACL2____U.html">u</a> v . fns)</span>.</p>
+</body>
+</html>

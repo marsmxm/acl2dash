@@ -1,0 +1,164 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Defvisitor-template</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=FTY____DEFVISITOR-TEMPLATE">Click for Defvisitor-template in the Full Manual</a></h3>
+
+<p>Create a template that says how to make visitor functions.</p><p>This is used in combination with <a href="FTY____DEFVISITORS.html">defvisitors</a> and <a href="FTY____DEFVISITOR.html">defvisitor</a> to automatically generate "visitor" functions, i.e. functions 
+that traverse a data structure and do something at specified locations in it. 
+E.g., they can be used to transform all fields of a certain type, or to collect 
+some information about all occurrences of a certain product field, etc.  The 
+types that these visitors may traverse are those defined by <a href="FTY____DEFTYPES.html">deftypes</a> and 
+related macros <a href="FTY____DEFPROD.html">defprod</a>, <a href="FTY____DEFTAGSUM.html">deftagsum</a>, <a href="FTY____DEFLIST.html">deflist</a>, <a href="FTY____DEFALIST.html">defalist</a>, <a href="FTY____DEFOPTION.html">defoption</a>, <a href="FTY____DEFTRANSSUM.html">deftranssum</a>, and <a href="FTY____DEFFLEXSUM.html">defflexsum</a>.</p> 
+ 
+<p>Visitor templates can be used by <a href="FTY____DEFVISITOR.html">defvisitor</a>, <a href="FTY____DEFVISITORS.html">defvisitors</a>, and 
+<a href="FTY____DEFVISITOR-MULTI.html">defvisitor-multi</a> to automatically generate immense amounts of 
+boilerplate code for traversing complicated datatypes, especially when the 
+operation you want to do only really has to do with a few fields or component 
+types.</p> 
+ 
+<p>Here is a simple example from visitor-tests.lisp, annotated:</p> 
+ 
+<pre class="code">(<a href="FTY____DEFVISITOR-TEMPLATE.html">defvisitor-template</a>
+
+  ;; Name of the template.  This gets referred to later when this template is
+  ;; used by defvisitor/defvisitors.
+  collect-strings
+
+  ;; Formals, similar to the formals in std::define.  Here :object stands for
+  ;; the type predicate of whatever kind of object we're currently visiting; we'll
+  ;; typically instantiate this template with several different :object types.
+  ((x :object))
+
+  ;; Return specifiers.  These are also like in std::define, but after each return name
+  ;; is a description of how the return value gets constructed.  The names here are
+  ;; a "join" value, which means they get constructed by combining,
+  ;; pairwise, the corresponding values returned by sub-calls.  In this case, the
+  ;; value (names1) returned from the most recent subcall is appended onto the
+  ;; previous value (names).  The initial value is nil, i.e. this is what a
+  ;; visitor function returns when run on an empty list or an object with no fields.
+  :returns (names (:join (<a href="COMMON-LISP____APPEND.html">append</a> names1 names)
+                   :tmp-var names1
+                   :initial nil)
+                  string-listp)
+
+  ;; Now we describe what is a base case and what we return in base cases.
+  ;; This says, for any string field x, just produce (<a href="COMMON-LISP____LIST.html">list</a> x).  (<a href="COMMON-LISP____THE.html">The</a> value
+  ;; bound in the alist is a lambda or function that gets applied to the
+  ;; formals, in this case just x.)
+  :type-fns ((<a href="COMMON-LISP____STRING.html">string</a> list))
+
+  ;; Describes how the functions we produce should be named.  Here, &lt;type&gt; gets
+  ;; replaced by the type of object each separate visitor function operates on.
+  :fnname-template collect-strings-in-&lt;type&gt;)</pre> 
+ 
+<p>Besides join values, there are two other kinds of visitor return values: 
+accumulators and updaters.  The following example shows how to use an 
+accumulator:</p> 
+ 
+<pre class="code">(<a href="FTY____DEFVISITOR-TEMPLATE.html">defvisitor-template</a> collect-names-acc   ;; template name
+    ;; formals:
+    ((x :object)
+     (names string-listp)) ;; accumulator formal
+
+    ;; Names the return value and declares it to be an accumulator, which
+    ;; corresponds to the formal NAMES.  The :fix is optional but is needed if
+    ;; the return type of your accumulator output is unconditional.
+    :returns  (names-out (:acc names :fix (string-list-fix names))
+                         string-listp)
+
+    ;; Base case specification.  This says that when visiting a
+    ;; simple-tree-leaf product, use the function CONS as the visitor for the
+    ;; NAME field.  That is, instead of recurring on name, use (<a href="COMMON-LISP____CONS.html">cons</a> x names),
+    ;; i.e., add the name to the accumulator.
+    :prod-fns ((simple-tree-leaf  (name cons))))</pre> 
+ 
+<p>This shows how to use an updater return value:</p> 
+ 
+<pre class="code">(<a href="FTY____DEFVISITOR-TEMPLATE.html">defvisitor-template</a> incr-val  ((x :object)
+                                (incr-amount natp))
+
+  ;; In an :update return value, the type is implicitly the same as :object.
+  ;; It can optionally be specified differently.  This means that new-x gets
+  ;; created by updating all the fields that we recurred on (<a href="COMMON-LISP____OR.html">or</a> that were base
+  ;; cases) with the corresponding results.
+  :returns (new-x :update)
+
+  ;; This says that when we visit a simple-tree-leaf, we replace its value field with
+  ;; the field's previous value plus (<a href="ACL2____LNFIX.html">lnfix</a> incr-amount).  (We could just use
+  ;; + here instead of the lambda, but this would violate the fixing convention for
+  ;; incr-amount.)
+  :prod-fns ((simple-tree-leaf  (<a href="ACL2____VALUE.html">value</a> (<a href="COMMON-LISP____LAMBDA.html">lambda</a> (x incr-amount) (<a href="COMMON-LISP_____B2.html">+</a> x (<a href="ACL2____LNFIX.html">lnfix</a> incr-amount)))))))</pre> 
+ 
+<p>The general form of a <span class="v">defvisitor-template</span> call is:</p> 
+<pre class="code">(<a href="FTY____DEFVISITOR-TEMPLATE.html">defvisitor-template</a> template-name formals ... keyword-args)</pre> 
+ 
+<p>where the accepted keywords are as follows:</p> 
+ 
+<ul> 
+ 
+<li>
+<span class="v">:returns</span>, required, describing the values returned by each visitor 
+function and how they are constructed from recursive calls.  The argument to 
+<span class="v">:returns</span> is either a single return tuple or several return tuples inside 
+an <span class="v">(<a href="ACL2____MV.html">mv</a> ...)</span>, and each return tuple is similar to a <a href="ACL2____DEFINE.html">define</a> 
+returnspec except that it has an extra form after the return name and before 
+the rest of the arguments, describing how it is constructed -- either a 
+<span class="v">:join</span>, <span class="v">:acc</span>, or <span class="v">:update</span> form, as in the examples above.</li> 
+ 
+<li>
+<span class="v">:type-fns</span> specify base cases for fields of certain types.  The 
+argument is a list of pairs <span class="v">(<a href="COMMON-LISP____TYPE.html">type</a> function)</span>, where the function applied to 
+the visitor formals gives the visitor values for fields of that type. 
+Alternatively, function may be <span class="v">:skip</span>, meaning that we don't recur on 
+fields of this type. (This is the default for field types that were not defined 
+by <a href="FTY____DEFTYPES.html">deftypes</a>.)  The <span class="v">:type-fns</span> entry is only used if there is no 
+applicable entry in <span class="v">:field-fns</span> or <span class="v">:prod-fns</span>, below.</li> 
+ 
+<li>
+<span class="v">:prod-fns</span> specify base cases for certain fields of certain products. 
+The argument is a list of entries <span class="v">(prod-name (field-name1
+function1) (field-name2 function2) ...)</span>, where the functions work the same 
+way as in <span class="v">:type-fns</span>.  <span class="v">:prod-fns</span> entries override <span class="v">:type-fns</span> and 
+<span class="v">:field-fns</span> entries.</li> 
+ 
+<li>
+<span class="v">:field-fns</span> specify base cases for fields with certain names.  The 
+argument is a list of pairs <span class="v">(field-name function)</span>, where function is as in 
+the <span class="v">:type-fns</span>.  This is similar to using <span class="v">:prod-fns</span>, but applies to 
+fields of the given name inside any product.  <span class="v">:field-fns</span> entries override 
+<span class="v">:type-fns</span> entries, but <span class="v">:prod-fns</span> entries override both.</li> 
+ 
+<li>
+<span class="v">:fnname-template</span> describes how the generated functions should be 
+named. The argument is a symbol containing the substring <span class="v">&lt;TYPE&gt;</span>, and 
+function names are generated by replacing this with the name of the type.</li> 
+ 
+<li>
+<span class="v">:renames</span> allows you to specify function names that differ from the 
+ones described by the <span class="v">:fnname-template</span>.  The argument is a list of pairs 
+<span class="v">(<a href="COMMON-LISP____TYPE.html">type</a> function-name)</span>.  It is also possible to use <span class="v">:skip</span> as the 
+function name, in which case the function won't be generated at all.</li> 
+ 
+<li>
+<span class="v">:fixequivs</span> -- true by default, says whether to prove 
+congruence (deffixequiv) theorems about the generated functions.</li> 
+ 
+<li>
+<span class="v">:reversep</span> -- false by default, says whether to reverse the order in 
+which fields are processed.</li> 
+ 
+<li>
+<span class="v">:wrapper</span> -- <span class="v">:body</span> by default; gives a form in which to wrap the 
+generated body of each function, where <span class="v">:body</span> is replaced by that generated 
+body.  Advanced use.</li> 
+ 
+</ul> 
+ 
+<p>See also <span class="v">defvisitor</span>, <span class="v">defvisitors</span>, and <span class="v">defvisitor-multi</span>.</p>
+</body>
+</html>

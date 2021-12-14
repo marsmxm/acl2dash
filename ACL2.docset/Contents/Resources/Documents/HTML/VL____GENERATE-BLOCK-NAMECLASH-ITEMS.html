@@ -1,0 +1,58 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Generate-block-nameclash-items</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL____GENERATE-BLOCK-NAMECLASH-ITEMS">Click for Generate-block-nameclash-items in the Full Manual</a></h3>
+
+<p>Special detection of name clashes involving generate block names.</p><p>Here we are trying to defend against NOT OK things such as:</p> 
+ 
+<pre class="code">wire foo;
+if (version == 1)
+begin : foo
+  ...
+end</pre> 
+ 
+<p>Note that the above is NOT OK even if <span class="v">version != 1</span>, i.e., even if the 
+block is not going to exist after elaboration.  See failtest/gen1*.v for many 
+informative and related tests.</p> 
+ 
+<p>For everything else, our nameclash handling basically works as follows.  For 
+any arbitrary scope, check for name clashes by:</p> 
+ 
+<ul> 
+<li>collecting up its scopeitem-alist, then</li> 
+<li>checking it for duplicate keys.</li> 
+</ul> 
+ 
+<p>This works for almost everything (wire names, module instance names, port 
+names, etc.), but our scopeitem-alist building code only collects the names 
+from top-level named genblocks and genarrays.  This makes perfect sense in 
+post-elaboration contexts where any conditional generates have been eliminated, 
+but it isn't right for us here because it doesn't get things like <span class="v">foo</span> 
+above.  That is, it doesn't get any named blocks that occur as loop bodies, or 
+under if/case constructs.</p> 
+ 
+<p>That's actually good.  It's needs to be OK to have things like this:</p> 
+ 
+<pre class="code">if (version == 1)
+begin : foo
+  ...
+end
+else if (version == 2)
+begin : foo              &lt;--- no name clash with foo from above
+  ...
+end</pre> 
+ 
+<p>So if scopeitem-alist collection was ``smarter'' and somehow dived down into 
+the if/else blocks, we might think that there was a name clash for <span class="v">foo</span>, 
+which there isn't.</p> 
+ 
+<p>Anyway, our goal here is basically to augment the scopeitem-alist that we 
+would normally produce with a supplemental scopeitem alist that accounts for 
+the named blocks within any if/case/loop generate constructs.</p>
+</body>
+</html>

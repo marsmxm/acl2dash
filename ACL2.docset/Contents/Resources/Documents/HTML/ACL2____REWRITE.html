@@ -1,0 +1,164 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Rewrite</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____REWRITE">Click for Rewrite in the Full Manual</a></h3>
+
+<p>Make some <span class="v">:rewrite</span> rules (possibly conditional ones)</p><p>See <a href="ACL2____RULE-CLASSES.html">rule-classes</a> for a general discussion of rule classes, 
+ including how they are used to build rules from formulas and a discussion of 
+ the various keywords in a rule class description.</p> 
+ 
+ <p>This doc topic discusses the rule-class <span class="v">:rewrite</span>.  If you want a 
+ general discussion of how rewriting works in ACL2 and some guidance on how to 
+ construct effective rewrite rules, see <a href="ACL2____INTRODUCTION-TO-REWRITE-RULES-PART-1.html">introduction-to-rewrite-rules-part-1</a> and then see <a href="ACL2____INTRODUCTION-TO-REWRITE-RULES-PART-2.html">introduction-to-rewrite-rules-part-2</a>.  If you want a flexible, convenient 
+ interface to the ACL2 rewriter that can be called programmatically, see <a href="ACL2____REWRITE_42.html">rewrite$</a>.</p> 
+ 
+ <pre class="code">Examples:
+
+(<a href="ACL2____DEFTHM.html">defthm</a> plus-commutes                 ; Replace (<a href="COMMON-LISP_____B2.html">+</a> a b) by (<a href="COMMON-LISP_____B2.html">+</a> b a) provided
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP_____B2.html">+</a> x y) (<a href="COMMON-LISP_____B2.html">+</a> y x)))            ; certain heuristics approve the
+                                      ; permutation.
+
+(<a href="ACL2____DEFTHM.html">defthm</a> plus-commutes                 ; equivalent to the above
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP_____B2.html">+</a> x y) (<a href="COMMON-LISP_____B2.html">+</a> y x))
+  :rule-classes ((:rewrite :corollary (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP_____B2.html">+</a> x y) (<a href="COMMON-LISP_____B2.html">+</a> y x))
+                           :loop-stopper ((x y binary-+))
+                           :match-free :all)))
+
+(<a href="ACL2____DEFTHM.html">defthm</a> append-nil                    ; Replace (<a href="COMMON-LISP____APPEND.html">append</a> a nil) by a, if
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____TRUE-LISTP.html">true-listp</a> x)             ; (<a href="ACL2____TRUE-LISTP.html">true-listp</a> a) rewrites to t.
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____APPEND.html">append</a> x nil) x)))
+
+(<a href="ACL2____DEFTHM.html">defthm</a> append-nil                    ; as above, but with defaults and
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____TRUE-LISTP.html">true-listp</a> x)             ; a backchain limit
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____APPEND.html">append</a> x nil) x))
+  :rule-classes ((:rewrite :corollary (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____TRUE-LISTP.html">true-listp</a> x)
+                                               (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____APPEND.html">append</a> x nil) x))
+                           :backchain-limit-lst (3) ; or equivalently, 3
+                           :match-free :all)))
+
+(<a href="ACL2____DEFTHM.html">defthm</a> member-append                 ; Replace (<a href="COMMON-LISP____MEMBER.html">member</a> e (<a href="COMMON-LISP____APPEND.html">append</a> b c)) by
+  (<a href="ACL2____IMPLIES.html">implies</a>                            ; (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____MEMBER.html">member</a> e b) (<a href="COMMON-LISP____MEMBER.html">member</a> e c) in
+   (<a href="COMMON-LISP____AND.html">and</a>                               ; contexts in which propositional
+    (<a href="ACL2____TRUE-LISTP.html">true-listp</a> x)                    ; equivalence is sufficient, provided
+    (<a href="ACL2____TRUE-LISTP.html">true-listp</a> y))                   ; b and c are true-lists.
+   (<a href="ACL2____IFF.html">iff</a> (<a href="COMMON-LISP____MEMBER.html">member</a> e (<a href="COMMON-LISP____APPEND.html">append</a> x y))
+        (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____MEMBER.html">member</a> e x) (<a href="COMMON-LISP____MEMBER.html">member</a> e y)))))
+
+General Form:
+(<a href="COMMON-LISP____AND.html">and</a> ...
+     (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> ...hi...)
+              (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> ...hk...)
+                       (<a href="COMMON-LISP____AND.html">and</a> ...
+                            (equiv lhs rhs)
+                            ...)))
+     ...)</pre> 
+ 
+ <p>Note: One <span class="v">:rewrite</span> rule class object might create many rewrite rules 
+ from the <span class="v">:</span><span class="tt"><a href="ACL2____COROLLARY.html">corollary</a></span> formula.  To create the rules, we first 
+ translate the formula, expanding all macros (see <a href="ACL2____TRANS.html">trans</a>) and also 
+ removing <a href="ACL2____GUARD-HOLDERS.html">guard-holders</a>.  Next, we then flatten the <span class="tt"><a href="COMMON-LISP____AND.html">and</a></span> and 
+ <span class="tt"><a href="ACL2____IMPLIES.html">implies</a></span> structure of the formula; for example, if the hypothesis or 
+ conclusion is of the form <span class="v">(<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____AND.html">and</a> term1 term2) term3)</span>, then we replace 
+ that by the ``flat'' term <span class="v">(<a href="COMMON-LISP____AND.html">and</a> term1 term2 term3)</span>.  (The latter is 
+ actually an abbreviation for the right-associated term <span class="v">(<a href="COMMON-LISP____AND.html">and</a> term1 (<a href="COMMON-LISP____AND.html">and</a>
+ term2 term3))</span>.)  During this flattening process, we eliminate <span class="tt"><a href="COMMON-LISP____LAMBDA.html">lambda</a></span>s as necessary in order to continue flattening; one may think of this 
+ step as simply substituting to eliminate <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span>, <span class="tt"><a href="COMMON-LISP____LET_A2.html">let*</a></span>, and <span class="tt"><a href="ACL2____MV-LET.html">mv-let</a></span> in order to expose more calls of <span class="v">implies</span> and <span class="v">and</span>.  The 
+ result is a conjunction of formulas, each of the form</p> 
+ 
+ <pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> h1 ... hn) concl)</pre> 
+ 
+ <p>where no hypothesis is a conjunction and <span class="v">concl</span> is neither a 
+ conjunction nor an implication.  If necessary, the hypothesis of such a 
+ conjunct may be vacuous.  We then further coerce each <span class="v">concl</span> into the form 
+ <span class="v">(equiv lhs rhs)</span>, where we continue to eliminate <span class="v">lambdas</span> until we 
+ reach this form, and then we eliminate <span class="v">lambdas</span> from the first argument of 
+ <span class="v">equiv</span> but not the second argument.  Here <span class="v">equiv</span> is a known <a href="ACL2____EQUIVALENCE.html">equivalence</a> relation.  If we do not reach an equivalence relation, even after 
+ eliminating <span class="v">lamdas</span>, then we replace the resulting term, <span class="v">term</span> by 
+ <span class="v">(<a href="ACL2____IFF.html">iff</a> term t)</span>, except that we replace <span class="v">(<a href="COMMON-LISP____NOT.html">not</a> term)</span> by <span class="v">(<a href="ACL2____IFF.html">iff</a> term
+ nil)</span>.  By these steps we reduce the given <span class="v">:</span><span class="tt"><a href="ACL2____COROLLARY.html">corollary</a></span> to a 
+ sequence of conjuncts, each of which is of the form</p> 
+ 
+ <pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> h1 ... hn)
+         (equiv lhs rhs))</pre> 
+ 
+ <p>where <span class="v">equiv</span> is a known <a href="ACL2____EQUIVALENCE.html">equivalence</a> relation and <span class="v">lhs</span> has no 
+ <span class="v">lambda</span>s.  See <a href="ACL2____EQUIVALENCE.html">equivalence</a> for a general discussion of the 
+ introduction of new <a href="ACL2____EQUIVALENCE.html">equivalence</a> relations.  At this point, we check 
+ whether <span class="v">lhs</span> and <span class="v">rhs</span> are the same term; if so, we cause an error, 
+ since this rule will loop.  (But this is just a basic check; the rule could 
+ loop in other cases, for example if <span class="v">rhs</span> is an instance of <span class="v">lhs</span>; see 
+ <a href="ACL2____LOOP-STOPPER.html">loop-stopper</a>.)</p> 
+ 
+ <p>You can experiment by creating some rewrite rules using <span class="tt"><a href="ACL2____DEFTHM.html">defthm</a></span> and 
+ then using <span class="v">:</span><span class="tt"><a href="ACL2____PR.html">pr</a></span> to see how the rule was stored.</p> 
+ 
+ <p>We create a <span class="v">:rewrite</span> rule for each such conjunct, if possible, and 
+ otherwise cause an error.  It is possible to create a rewrite rule from such a 
+ conjunct provided <span class="v">lhs</span> is not a variable, a quoted constant, a <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span>-expression, or a <span class="v">lambda</span> application.  Although it is legal to create 
+ a rewrite rule from an <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span>-expression <span class="v">(<a href="COMMON-LISP____IF.html">if</a> tst tbr fbr)</span>, note that 
+ the rewriter uses the truth or falsity of the test, <span class="v">tst</span>, when rewriting 
+ the true and false branches <span class="v">tbr</span> and <span class="v">fbr</span>, respectively; so rewrite 
+ rules are most often unnecessary for <span class="v">if</span>-expressions.</p> 
+ 
+ <p>A <span class="v">:rewrite</span> rule is used when any instance of the <span class="v">lhs</span> occurs in a 
+ context in which the <a href="ACL2____EQUIVALENCE.html">equivalence</a> relation is an admissible <a href="ACL2____CONGRUENCE.html">congruence</a> relation.  First, we find a substitution that makes <span class="v">lhs</span> equal 
+ to the target term.  Then we attempt to relieve the instantiated hypotheses of 
+ the rule.  Hypotheses that are fully instantiated are relieved by recursive 
+ rewriting.  Hypotheses that contain ``free variables'' (variables not assigned 
+ by the unifying substitution) are relieved by attempting to guess a suitable 
+ instance so as to make the hypothesis equal to some known assumption in the 
+ context of the target.  If the hypotheses are relieved, and certain 
+ restrictions that prevent some forms of infinite regress are met (see <a href="ACL2____LOOP-STOPPER.html">loop-stopper</a>), the target is replaced by the instantiated <span class="v">rhs</span>, which is 
+ then recursively rewritten.</p> 
+ 
+ <p>ACL2's rewriting process has some optimizations, including the 
+ following.</p> 
+ 
+ <ul> 
+ 
+ <li>The suggestion, above, that the rewriter looks through the goal clause for 
+ ``any instance of the <span class="v">lhs</span>'' is not quite true.  <span class="v">:Rewrite</span> rules are 
+ never applied to quoted constants or any term inside a call of <span class="tt"><a href="ACL2____HIDE.html">hide</a></span>. 
+ If you want to rewrite a quoted constant use a <span class="v">:</span><span class="tt"><a href="ACL2____REWRITE-QUOTED-CONSTANT.html">rewrite-quoted-constant</a></span> rule.</li> 
+ 
+ <li>The notion of ``a substitution that makes <span class="v">lhs</span> equal to the target 
+ term'' is a bit more generous than the most straightforward such notion. 
+ Suppose for example that <span class="v">lhs</span> is <span class="v">(f (<a href="COMMON-LISP_____B2.html">+</a> 3 x))</span> and the target term is 
+ <span class="v">(f (<a href="COMMON-LISP_____B2.html">+</a> 3 (<a href="ACL2____G.html">g</a> y))</span>.  (Aside: ACL2 deals in so-called translated terms, so 
+ since <span class="v">+</span> is a macro, <span class="v">lhs</span> and term would actually be <span class="v">(f (<a href="ACL2____BINARY-_B2.html">binary-+</a>
+ '3 x))</span> and <span class="v">(f (<a href="ACL2____BINARY-_B2.html">binary-+</a> '3 (<a href="ACL2____G.html">g</a> y)))</span>; we will ignore this distinction, 
+ but if you want more information, see <a href="ACL2____TERM.html">term</a>.)  Then of course, that 
+ substitution binds <span class="v">x</span> to <span class="v">(<a href="ACL2____G.html">g</a> y)</span>.  But now suppose that instead the 
+ target term is <span class="v">(f 10)</span>.  You may be surprised to learn that the 
+ substitution binding <span class="v">x</span> to <span class="v">7</span> makes <span class="v">(f (<a href="COMMON-LISP_____B2.html">+</a> 3 x))</span> equal to <span class="v">(f
+ 10)</span>; for example, the rewrite rule <span class="v">(<a href="COMMON-LISP____EQUAL.html">equal</a> (f (<a href="COMMON-LISP_____B2.html">+</a> x 3)) (h x)))</span> would 
+ rewrite <span class="v">(f 10)</span> to <span class="v">(h 7)</span>.  This would also be the case if <span class="v">lhs</span> 
+ were instead <span class="v">(f (<a href="COMMON-LISP_____B2.html">+</a> x 3))</span>.  This sort of optimization occurs when the new 
+ constant has <span class="tt"><a href="ACL2____ACL2-COUNT.html">ACL2-count</a></span> no greater than the old constant.  There are 
+ similar optimizations for <span class="v">*</span>, <span class="v">/</span>, <span class="v">-</span>, strings, symbols, and 
+ conses (for details see ACL2 source function 
+ <span class="v">one-way-unify1-quotep-subproblems</span>).</li> 
+ 
+ <li>When a term <span class="v">t1</span> is rewritten to a new term <span class="v">t2</span>, the rewriter is 
+ then immediately applied to <span class="v">t2</span>.  On rare occasions you may find that you 
+ do not want this behavior, in which case you may wish to use a trick involving 
+ <span class="tt"><a href="ACL2____HIDE.html">hide</a></span>; see <a href="ACL2____META.html">meta</a>, near the end of that documentation.</li> 
+ 
+ <li>When the hypotheses and right-hand side are rewritten, ACL2 does not 
+ really first apply the substitution and then rewrite; instead, as it 
+ rewrites those terms it looks up the <i>already rewritten</i> values of the 
+ bound variables.  Sometimes you may want those bindings rewritten again, e.g., 
+ because the variables occur in slots that admit additional equivalence 
+ relations.  See <a href="ACL2____DOUBLE-REWRITE.html">double-rewrite</a>.</li> 
+ 
+ </ul> 
+ 
+ <p>See <a href="ACL2____INTRODUCTION-TO-REWRITE-RULES-PART-1.html">introduction-to-rewrite-rules-part-1</a> and see <a href="ACL2____INTRODUCTION-TO-REWRITE-RULES-PART-2.html">introduction-to-rewrite-rules-part-2</a> for an extended discussion of how to 
+ create effective rewrite rules.</p>
+</body>
+</html>

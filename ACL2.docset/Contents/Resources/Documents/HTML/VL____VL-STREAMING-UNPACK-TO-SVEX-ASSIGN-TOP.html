@@ -1,0 +1,360 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Vl-streaming-unpack-to-svex-assign-top</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL____VL-STREAMING-UNPACK-TO-SVEX-ASSIGN-TOP">Click for Vl-streaming-unpack-to-svex-assign-top in the Full Manual</a></h3>
+
+<p>Resolve an assignment where the LHS is a streaming concatenation, after 
+          converting the RHS expression to svex (untyped).</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(vl-streaming-unpack-to-svex-assign-top 
+     lhs rhs orig-x rhs-size ss scopes) 
+ 
+  → 
+(mv vttree assigns)</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">lhs</span> — <font color="#606060">Guard <span class="v">(<a href="VL____VL-EXPR-P.html">vl-expr-p</a> lhs)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">rhs</span> — <font color="#606060">Guard <span class="v">(<a href="SV____SVEX-P.html">sv::svex-p</a> rhs)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">orig-x</span> — <font color="#606060">Guard <span class="v">(<a href="VL____VL-ASSIGN-P.html">vl-assign-p</a> orig-x)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">rhs-size</span> — remaining number of least-significant bits in the RHS that 
+                     haven't been used yet.<br>    <font color="#606060">Guard <span class="v">(<a href="ACL2____NATP.html">natp</a> rhs-size)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">ss</span> — <font color="#606060">Guard <span class="v">(<a href="VL____VL-SCOPESTACK-P.html">vl-scopestack-p</a> ss)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">scopes</span> — <font color="#606060">Guard <span class="v">(<a href="VL____VL-ELABSCOPES-P.html">vl-elabscopes-p</a> scopes)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">vttree</span> — <font color="#606060">Type <span class="v">(<a href="COMMON-LISP____AND.html">and</a> (<a href="VL____VTTREE-P.html">vttree-p</a> vttree)
+     (<a href="SV____SVARLIST-ADDR-P.html">sv::svarlist-addr-p</a>
+          (sv::constraintlist-vars (<a href="VL____VTTREE-_E3CONSTRAINTS.html">vttree-&gt;constraints</a> vttree))))
+</span>.</font>
+</dd> 
+<dd>
+<span class="tt">assigns</span> — <font color="#606060">Type <span class="v">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="SV____SVARLIST-ADDR-P.html">sv::svarlist-addr-p</a> (<a href="SV____SVEX-VARS.html">sv::svex-vars</a> rhs))
+         (<a href="COMMON-LISP____AND.html">and</a> (<a href="SV____ASSIGNS-P.html">sv::assigns-p</a> assigns)
+              (<a href="SV____SVARLIST-ADDR-P.html">sv::svarlist-addr-p</a> (<a href="SV____ASSIGNS-VARS.html">sv::assigns-vars</a> assigns))))
+</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>To see how simulators treat streaming concatenations on the LHS, it 
+is most instructive to look at some examples.</p> 
+ 
+<p>First, consider the example in "sv/cosims/stream3/test.sv":</p> 
+ 
+<pre class="code">logic [3:0] in;
+logic [3:0] out;
+assign {&lt;&lt; 3 {out}} = in;</pre> 
+ 
+<p>When <span class="v">{&lt;&lt; 3 {a}}</span> occurs on the RHS of an assignment (and <span class="v">a</span> is 4 
+bits wide), it basically means the same thing as <span class="v">{ a[2:0], a[3] }</span>.  So we 
+might think that we'd get the same results for <span class="v">guess1</span> if we assign it 
+as:</p> 
+ 
+<pre class="code">logic [3:0] guess1;
+assign { guess1[2:0], guess1[3] } = in;</pre> 
+ 
+<p>But this isn't the case, at least in the major commercial simulators, VCS 
+and NCVerilog. Instead, when we run it on the following inputs:</p> 
+ 
+<pre class="code">0001
+0010
+0100
+1000</pre> 
+ 
+<p>we get the following outputs:</p> 
+ 
+<pre class="code">out: 0010, guess1: 1000
+out: 0100, guess1: 0001
+out: 1000, guess1: 0010
+out: 0001, guess1: 0100</pre> 
+ 
+<p>Actually, what this corresponds to is:</p> 
+ 
+<pre class="code">assign out = { in[2:0], in[3] };</pre> 
+<p>or:</p> 
+<pre class="code">assign out = {&lt;&lt; 3 {in}};</pre> 
+ 
+<p>This doesn't make a lot of sense, but the pattern holds generally: if you 
+see a streaming concatenation on the LHS, it means the same as if you put it on 
+the RHS.  (A complication in testing this rule is that the LHS and RHS need to 
+be the same size for both to be allowed.)</p> 
+ 
+<p>This rule is complicated by the fact that streaming concatenations can be 
+nested, and can have more than one expression concatenated together.  It is 
+also not clear how to treat cases where the RHS has more bits than the LHS.  We 
+reverse engineered the behavior of VCS using the example in 
+"sv/cosims/stream4/test.sv". (NCVerilog doesn't fully support multiple 
+streaming expressions inside a concatenation on the LHS.)</p> 
+ 
+<pre class="code">logic [31:0] in;
+logic [8:0] out1;
+logic [6:0] out2;
+assign {&lt;&lt; 5 {{&lt;&lt; 3 {out1}}, out2}} = in[31:0];</pre> 
+ 
+<p>When run on the input pattern</p> 
+<pre class="code">00000000000000000000000000000001
+00000000000000000000000000000010
+00000000000000000000000000000100
+...</pre> 
+<p>this produces the results:</p> 
+ 
+<pre class="code">out1 000010000, out2 0000000
+out1 000100000, out2 0000000
+out1 000000001, out2 0000000
+out1 000000010, out2 0000000
+out1 000000100, out2 0000000
+out1 000000000, out2 1000000
+out1 001000000, out2 0000000
+out1 010000000, out2 0000000
+out1 100000000, out2 0000000
+out1 000001000, out2 0000000
+out1 000000000, out2 0000010
+out1 000000000, out2 0000100
+out1 000000000, out2 0001000
+out1 000000000, out2 0010000
+out1 000000000, out2 0100000
+out1 000000000, out2 0000000
+out1 000000000, out2 0000000
+out1 000000000, out2 0000000
+out1 000000000, out2 0000000
+out1 000000000, out2 0000001</pre> 
+ 
+<p>This turns out to be equivalent to the following:</p> 
+ 
+<pre class="code">logic [31:0] temp1;
+logic [15:0] temp2;
+logic [8:0] temp3;
+logic [6:0] temp4;
+assign temp1 = {&lt;&lt; 5 {in[31:0]}};
+assign temp2 = temp1 &gt;&gt; 16;
+assign {temp3, temp4} = temp2;
+assign out2 = temp4;
+assign out1 = {&lt;&lt; 3 {temp3}};</pre> 
+ 
+<p>It's not clear why we should think this is the correct behavior, but we at 
+least can derive an algorithm from it:</p> 
+ 
+<ol> 
+ 
+<li>Move the outermost streaming concatenation operator to the 
+RHS (obtaining temp1, in the example).</li> 
+ 
+<li>Compute the bit widths of LHS and RHS and right-shift the RHS by 
+<span class="v">rhswidth - lhswidth</span> (obtaining temp2, in this example).</li> 
+ 
+<li>Chop up the RHS into chunks matching the sizes of the concatenated 
+subexpressions of the LHS (obtaining temp3, temp4).</li> 
+ 
+<li>Make a new assignment of each chunk to its corresponding LHS subexpression, 
+and for each assignment created that has a LHS streaming concatenation, repeat 
+this process.  (Thus we assign out2 to temp4 and end up assigning out1 to 
+<span class="v">{&lt;&lt; 3 {temp3}}</span>).</li> 
+ 
+</ol> 
+ 
+<p>Note that when repeating the process for the last step, we can skip step 2, 
+because the sizes match by construction.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>vl-streaming-unpack-to-svex-assign-top</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ vl-streaming-unpack-to-svex-assign-top
+ (lhs rhs orig-x rhs-size ss scopes)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="VL____VL-EXPR-P.html">vl-expr-p</a> lhs)
+                             (<a href="SV____SVEX-P.html">sv::svex-p</a> rhs)
+                             (<a href="VL____VL-ASSIGN-P.html">vl-assign-p</a> orig-x)
+                             (<a href="ACL2____NATP.html">natp</a> rhs-size)
+                             (<a href="VL____VL-SCOPESTACK-P.html">vl-scopestack-p</a> ss)
+                             (<a href="VL____VL-ELABSCOPES-P.html">vl-elabscopes-p</a> scopes))))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL____VL-EXPR-CASE.html">vl-expr-case</a> lhs :vl-stream)))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'vl-streaming-unpack-to-svex-assign-top))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+   (((<a href="VL____VL-STREAM.html">vl-stream</a> lhs) (<a href="VL____VL-EXPR-FIX.html">vl-expr-fix</a> lhs))
+    (rhs-size (<a href="ACL2____LNFIX.html">lnfix</a> rhs-size))
+    (orig-x (<a href="VL____VL-ASSIGN-FIX.html">vl-assign-fix</a> orig-x))
+    (<a href="VL____VTTREE.html">vttree</a> nil)
+    ((vmv vttree ?lhs-svex ?lhs-type lhs-size)
+     (<a href="VL____VL-EXPR-TO-SVEX-UNTYPED.html">vl-expr-to-svex-untyped</a> lhs ss scopes))
+    ((unless lhs-size)
+     (<a href="ACL2____MV.html">mv</a>
+       (vfatal :type :vl-bad-stream-assignment
+               :msg "~a0: couldn't size LHS streaming concatenation"
+               :args (<a href="COMMON-LISP____LIST.html">list</a> orig-x))
+       nil))
+    ((<a href="ACL2____MV.html">mv</a> err slicesize)
+     (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQ.html">eq</a> lhs.dir :left)
+         (<a href="VL____VL-SLICESIZE-RESOLVE.html">vl-slicesize-resolve</a> lhs.size ss scopes)
+         (<a href="ACL2____MV.html">mv</a> nil 1)))
+    ((when err)
+     (<a href="ACL2____MV.html">mv</a>
+      (vfatal
+       :type :vl-expr-to-svex-fail
+       :msg
+       "Failed to resolve slice size of streaming ~
+                               concat expression ~a0: ~@1"
+       :args (<a href="COMMON-LISP____LIST.html">list</a> lhs err))
+      nil))
+    ((<a href="ACL2____MV.html">mv</a> vttree rhs rhs-size)
+     (<a href="COMMON-LISP____COND.html">cond</a>
+      ((<a href="COMMON-LISP_____C3.html">&lt;</a> rhs-size lhs-size)
+       (<a href="ACL2____MV.html">mv</a>
+        (vfatal
+         :type :vl-bad-stream-assignment
+         :msg
+         "~a0: SystemVerilog prohibits streaming assignments
+                                   where a streaming concatenation expression (either
+                                   LHS or RHS) is larger than the other."
+         :args (<a href="COMMON-LISP____LIST.html">list</a> orig-x))
+        (<a href="SV____SVCALL.html">sv::svcall</a> sv::concat
+                    (svex-int (<a href="COMMON-LISP____-.html">-</a> lhs-size rhs-size))
+                    (svex-int 0)
+                    rhs)
+        lhs-size))
+      (t (<a href="ACL2____MV.html">mv</a> vttree rhs rhs-size))))
+    (rhs-bitstream (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQ.html">eq</a> lhs.dir :left)
+                       (<a href="SV____SVCALL.html">sv::svcall</a> sv::blkrev (svex-int rhs-size)
+                                   (svex-int slicesize)
+                                   rhs)
+                       rhs))
+    (rhs-shift
+         (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP_____C3.html">&lt;</a> lhs-size rhs-size)
+             (<a href="SV____SVCALL.html">sv::svcall</a> sv::rsh (svex-int (<a href="COMMON-LISP____-.html">-</a> rhs-size lhs-size))
+                         rhs-bitstream)
+             rhs-bitstream))
+    ((vmv vttree assigns)
+     (vl-streamexprlist-unpack-to-svex-assign
+          lhs.parts
+          rhs-shift lhs-size ss scopes)))
+   (<a href="ACL2____MV.html">mv</a> vttree assigns))))</pre> 
+<p><b>Theorem: </b>return-type-of-vl-streaming-unpack-to-svex-assign-top.vttree</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ return-type-of-vl-streaming-unpack-to-svex-assign-top.vttree
+ (<a href="ACL2____B_A2.html">b*</a>
+  (((<a href="ACL2____MV.html">mv</a> ?vttree ?assigns)
+    (<a href="VL____VL-STREAMING-UNPACK-TO-SVEX-ASSIGN-TOP.html">vl-streaming-unpack-to-svex-assign-top</a>
+         lhs rhs orig-x rhs-size ss scopes)))
+  (<a href="COMMON-LISP____AND.html">and</a>
+      (<a href="VL____VTTREE-P.html">vttree-p</a> vttree)
+      (<a href="SV____SVARLIST-ADDR-P.html">sv::svarlist-addr-p</a>
+           (sv::constraintlist-vars (<a href="VL____VTTREE-_E3CONSTRAINTS.html">vttree-&gt;constraints</a> vttree)))))
+ :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>return-type-of-vl-streaming-unpack-to-svex-assign-top.assigns</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ return-type-of-vl-streaming-unpack-to-svex-assign-top.assigns
+ (<a href="ACL2____B_A2.html">b*</a>
+   (((<a href="ACL2____MV.html">mv</a> ?vttree ?assigns)
+     (<a href="VL____VL-STREAMING-UNPACK-TO-SVEX-ASSIGN-TOP.html">vl-streaming-unpack-to-svex-assign-top</a>
+          lhs rhs orig-x rhs-size ss scopes)))
+   (<a href="ACL2____IMPLIES.html">implies</a> (<a href="SV____SVARLIST-ADDR-P.html">sv::svarlist-addr-p</a> (<a href="SV____SVEX-VARS.html">sv::svex-vars</a> rhs))
+            (<a href="COMMON-LISP____AND.html">and</a> (<a href="SV____ASSIGNS-P.html">sv::assigns-p</a> assigns)
+                 (<a href="SV____SVARLIST-ADDR-P.html">sv::svarlist-addr-p</a> (<a href="SV____ASSIGNS-VARS.html">sv::assigns-vars</a> assigns)))))
+ :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>vl-streaming-unpack-to-svex-assign-top-of-vl-expr-fix-lhs</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-streaming-unpack-to-svex-assign-top-of-vl-expr-fix-lhs
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL____VL-STREAMING-UNPACK-TO-SVEX-ASSIGN-TOP.html">vl-streaming-unpack-to-svex-assign-top</a>
+                    (<a href="VL____VL-EXPR-FIX.html">vl-expr-fix</a> lhs)
+                    rhs orig-x rhs-size ss scopes)
+               (<a href="VL____VL-STREAMING-UNPACK-TO-SVEX-ASSIGN-TOP.html">vl-streaming-unpack-to-svex-assign-top</a>
+                    lhs rhs orig-x rhs-size ss scopes)))</pre> 
+<p><b>Theorem: </b>vl-streaming-unpack-to-svex-assign-top-vl-expr-equiv-congruence-on-lhs</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-streaming-unpack-to-svex-assign-top-vl-expr-equiv-congruence-on-lhs
+ (<a href="ACL2____IMPLIES.html">implies</a> (<a href="VL____VL-EXPR-EQUIV.html">vl-expr-equiv</a> lhs lhs-equiv)
+          (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL____VL-STREAMING-UNPACK-TO-SVEX-ASSIGN-TOP.html">vl-streaming-unpack-to-svex-assign-top</a>
+                      lhs rhs orig-x rhs-size ss scopes)
+                 (<a href="VL____VL-STREAMING-UNPACK-TO-SVEX-ASSIGN-TOP.html">vl-streaming-unpack-to-svex-assign-top</a>
+                      lhs-equiv
+                      rhs orig-x rhs-size ss scopes)))
+ :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>vl-streaming-unpack-to-svex-assign-top-of-svex-fix-rhs</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-streaming-unpack-to-svex-assign-top-of-svex-fix-rhs
+ (<a href="COMMON-LISP____EQUAL.html">equal</a>
+  (<a href="VL____VL-STREAMING-UNPACK-TO-SVEX-ASSIGN-TOP.html">vl-streaming-unpack-to-svex-assign-top</a> lhs (<a href="SV____SVEX-FIX.html">sv::svex-fix</a> rhs)
+                                          orig-x rhs-size ss scopes)
+  (<a href="VL____VL-STREAMING-UNPACK-TO-SVEX-ASSIGN-TOP.html">vl-streaming-unpack-to-svex-assign-top</a>
+       lhs rhs orig-x rhs-size ss scopes)))</pre> 
+<p><b>Theorem: </b>vl-streaming-unpack-to-svex-assign-top-svex-equiv-congruence-on-rhs</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-streaming-unpack-to-svex-assign-top-svex-equiv-congruence-on-rhs
+ (<a href="ACL2____IMPLIES.html">implies</a> (<a href="SV____SVEX-EQUIV.html">sv::svex-equiv</a> rhs rhs-equiv)
+          (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL____VL-STREAMING-UNPACK-TO-SVEX-ASSIGN-TOP.html">vl-streaming-unpack-to-svex-assign-top</a>
+                      lhs rhs orig-x rhs-size ss scopes)
+                 (<a href="VL____VL-STREAMING-UNPACK-TO-SVEX-ASSIGN-TOP.html">vl-streaming-unpack-to-svex-assign-top</a>
+                      lhs
+                      rhs-equiv orig-x rhs-size ss scopes)))
+ :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>vl-streaming-unpack-to-svex-assign-top-of-vl-assign-fix-orig-x</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     vl-streaming-unpack-to-svex-assign-top-of-vl-assign-fix-orig-x
+     (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL____VL-STREAMING-UNPACK-TO-SVEX-ASSIGN-TOP.html">vl-streaming-unpack-to-svex-assign-top</a>
+                 lhs rhs (<a href="VL____VL-ASSIGN-FIX.html">vl-assign-fix</a> orig-x)
+                 rhs-size ss scopes)
+            (<a href="VL____VL-STREAMING-UNPACK-TO-SVEX-ASSIGN-TOP.html">vl-streaming-unpack-to-svex-assign-top</a>
+                 lhs rhs orig-x rhs-size ss scopes)))</pre> 
+<p><b>Theorem: </b>vl-streaming-unpack-to-svex-assign-top-vl-assign-equiv-congruence-on-orig-x</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-streaming-unpack-to-svex-assign-top-vl-assign-equiv-congruence-on-orig-x
+ (<a href="ACL2____IMPLIES.html">implies</a> (<a href="VL____VL-ASSIGN-EQUIV.html">vl-assign-equiv</a> orig-x orig-x-equiv)
+          (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL____VL-STREAMING-UNPACK-TO-SVEX-ASSIGN-TOP.html">vl-streaming-unpack-to-svex-assign-top</a>
+                      lhs rhs orig-x rhs-size ss scopes)
+                 (<a href="VL____VL-STREAMING-UNPACK-TO-SVEX-ASSIGN-TOP.html">vl-streaming-unpack-to-svex-assign-top</a>
+                      lhs
+                      rhs orig-x-equiv rhs-size ss scopes)))
+ :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>vl-streaming-unpack-to-svex-assign-top-of-nfix-rhs-size</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-streaming-unpack-to-svex-assign-top-of-nfix-rhs-size
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL____VL-STREAMING-UNPACK-TO-SVEX-ASSIGN-TOP.html">vl-streaming-unpack-to-svex-assign-top</a>
+                    lhs rhs orig-x (<a href="ACL2____NFIX.html">nfix</a> rhs-size)
+                    ss scopes)
+               (<a href="VL____VL-STREAMING-UNPACK-TO-SVEX-ASSIGN-TOP.html">vl-streaming-unpack-to-svex-assign-top</a>
+                    lhs rhs orig-x rhs-size ss scopes)))</pre> 
+<p><b>Theorem: </b>vl-streaming-unpack-to-svex-assign-top-nat-equiv-congruence-on-rhs-size</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-streaming-unpack-to-svex-assign-top-nat-equiv-congruence-on-rhs-size
+ (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____NAT-EQUIV.html">acl2::nat-equiv</a> rhs-size rhs-size-equiv)
+          (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL____VL-STREAMING-UNPACK-TO-SVEX-ASSIGN-TOP.html">vl-streaming-unpack-to-svex-assign-top</a>
+                      lhs rhs orig-x rhs-size ss scopes)
+                 (<a href="VL____VL-STREAMING-UNPACK-TO-SVEX-ASSIGN-TOP.html">vl-streaming-unpack-to-svex-assign-top</a>
+                      lhs
+                      rhs orig-x rhs-size-equiv ss scopes)))
+ :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>vl-streaming-unpack-to-svex-assign-top-of-vl-scopestack-fix-ss</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     vl-streaming-unpack-to-svex-assign-top-of-vl-scopestack-fix-ss
+     (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL____VL-STREAMING-UNPACK-TO-SVEX-ASSIGN-TOP.html">vl-streaming-unpack-to-svex-assign-top</a>
+                 lhs rhs
+                 orig-x rhs-size (<a href="VL____VL-SCOPESTACK-FIX.html">vl-scopestack-fix</a> ss)
+                 scopes)
+            (<a href="VL____VL-STREAMING-UNPACK-TO-SVEX-ASSIGN-TOP.html">vl-streaming-unpack-to-svex-assign-top</a>
+                 lhs rhs orig-x rhs-size ss scopes)))</pre> 
+<p><b>Theorem: </b>vl-streaming-unpack-to-svex-assign-top-vl-scopestack-equiv-congruence-on-ss</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-streaming-unpack-to-svex-assign-top-vl-scopestack-equiv-congruence-on-ss
+ (<a href="ACL2____IMPLIES.html">implies</a> (<a href="VL____VL-SCOPESTACK-EQUIV.html">vl-scopestack-equiv</a> ss ss-equiv)
+          (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL____VL-STREAMING-UNPACK-TO-SVEX-ASSIGN-TOP.html">vl-streaming-unpack-to-svex-assign-top</a>
+                      lhs rhs orig-x rhs-size ss scopes)
+                 (<a href="VL____VL-STREAMING-UNPACK-TO-SVEX-ASSIGN-TOP.html">vl-streaming-unpack-to-svex-assign-top</a>
+                      lhs
+                      rhs orig-x rhs-size ss-equiv scopes)))
+ :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>vl-streaming-unpack-to-svex-assign-top-of-vl-elabscopes-fix-scopes</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+  vl-streaming-unpack-to-svex-assign-top-of-vl-elabscopes-fix-scopes
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL____VL-STREAMING-UNPACK-TO-SVEX-ASSIGN-TOP.html">vl-streaming-unpack-to-svex-assign-top</a>
+              lhs rhs orig-x
+              rhs-size ss (<a href="VL____VL-ELABSCOPES-FIX.html">vl-elabscopes-fix</a> scopes))
+         (<a href="VL____VL-STREAMING-UNPACK-TO-SVEX-ASSIGN-TOP.html">vl-streaming-unpack-to-svex-assign-top</a>
+              lhs rhs orig-x rhs-size ss scopes)))</pre> 
+<p><b>Theorem: </b>vl-streaming-unpack-to-svex-assign-top-vl-elabscopes-equiv-congruence-on-scopes</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-streaming-unpack-to-svex-assign-top-vl-elabscopes-equiv-congruence-on-scopes
+ (<a href="ACL2____IMPLIES.html">implies</a> (<a href="VL____VL-ELABSCOPES-EQUIV.html">vl-elabscopes-equiv</a> scopes scopes-equiv)
+          (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL____VL-STREAMING-UNPACK-TO-SVEX-ASSIGN-TOP.html">vl-streaming-unpack-to-svex-assign-top</a>
+                      lhs rhs orig-x rhs-size ss scopes)
+                 (<a href="VL____VL-STREAMING-UNPACK-TO-SVEX-ASSIGN-TOP.html">vl-streaming-unpack-to-svex-assign-top</a>
+                      lhs
+                      rhs orig-x rhs-size ss scopes-equiv)))
+ :rule-classes :congruence)</pre> 
+
+</body>
+</html>

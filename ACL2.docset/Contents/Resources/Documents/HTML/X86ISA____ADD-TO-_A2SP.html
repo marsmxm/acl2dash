@@ -1,0 +1,172 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Add-to-*sp</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=X86ISA____ADD-TO-_A2SP">Click for Add-to-*sp in the Full Manual</a></h3>
+
+<p>Add a specified amount to a stack pointer.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(add-to-*sp proc-mode *sp delta x86) → (mv flg *sp+delta)</pre></dt>
+<dt>Returns</dt>
+<dd>
+<span class="tt">*sp+delta</span> — <font color="#606060">Type <span class="v">(<a href="X86ISA____I64P.html">i64p</a> *sp+delta)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p> 
+     The amount may be positive (increment) or negative (decrement). 
+     This just calculates the new stack pointer value, 
+     without storing it into the register RSP, ESP, or SP. 
+     The starting value is the result of <span class="tt"><a href="X86ISA____READ-_A2SP.html">read-*sp</a></span> 
+     or a previous invocation of <span class="tt"><a href="X86ISA____ADD-TO-_A2SP.html">add-to-*sp</a></span>. 
+     </p> 
+     <p> 
+     The increment or decrement is modular: 
+     64 bits in 64-bit mode, 
+     and either 32 or 16 bits in 32-bit mode (depending on the SS.B bit). 
+     Since our model uses signed 64-bit addresses, we use <span class="tt"><a href="X86ISA____I64.html">i64</a></span> for them, 
+     while we use <span class="tt"><a href="X86ISA____N32.html">n32</a></span> or <span class="tt"><a href="X86ISA____N16.html">n16</a></span> for 32-bit and 16-bit addresses. 
+     </p> 
+     <p> 
+     In 64-bit mode, we check whether the result is a canonical address; 
+     in 32-bit mode, we check whether the result is within the segment limit. 
+     If these checks are not satisfied, 
+     this function returns an error flag (and 0 as new pointer), 
+     which causes the x86 model to stop execution with an error. 
+     It is not clear whether these checks should be performed 
+     when the stack pointer is updated, 
+     or when the stack is eventually accessed through the updated pointer; 
+     the Intel and AMD manuals seem unclear in this respect. 
+     But since the failure of these checks stops execution with an error, 
+     and it is in a way always ``safe'' to stop execution with an error 
+     (in the sense that the model provides no guarantees when this happens), 
+     for now we choose to perform these checks here. 
+     </p> 
+     <p> 
+     Note that a stack segment may be expand-down or expand-up 
+     (see Intel manual, Mar'17, Vol. 3, Sec. 3.4.5.1), 
+     so the checks need to cover these two cases. 
+     See <span class="tt"><a href="X86ISA____SEGMENT-BASE-AND-BOUNDS.html">segment-base-and-bounds</a></span> and <span class="tt"><a href="X86ISA____EA-TO-LA.html">ea-to-la</a></span>. 
+     </p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>add-to-*sp$inline</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ add-to-*sp$inline
+ (proc-mode *sp delta x86)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (x86)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____TYPE.html">type</a> (integer 0 4) proc-mode)
+          (<a href="COMMON-LISP____TYPE.html">type</a> (signed-byte 64) *sp)
+          (<a href="COMMON-LISP____TYPE.html">type</a> (signed-byte 64) delta))
+ (<a href="ACL2____B_A2.html">b*</a>
+  ((*sp+delta (<a href="COMMON-LISP____THE.html">the</a> (signed-byte 65) (<a href="COMMON-LISP_____B2.html">+</a> *sp delta))))
+  (<a href="COMMON-LISP____CASE.html">case</a>
+   proc-mode
+   (0 (<a href="COMMON-LISP____LET.html">let</a> ((*sp+delta (<a href="X86ISA____I64.html">i64</a> *sp+delta)))
+           (<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2____MBE.html">mbe</a> :logic (<a href="X86ISA____CANONICAL-ADDRESS-P.html">canonical-address-p</a> *sp+delta)
+                    :exec (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> -140737488355328 *sp+delta)
+                               (<a href="COMMON-LISP_____C3.html">&lt;</a> *sp+delta 140737488355328)))
+               (<a href="ACL2____MV.html">mv</a> nil *sp+delta)
+               (<a href="ACL2____MV.html">mv</a> (<a href="COMMON-LISP____LIST.html">list</a> :non-canonical-stack-address *sp+delta)
+                   0))))
+   (1
+    (<a href="ACL2____B_A2.html">b*</a>
+       (((<a href="COMMON-LISP____THE.html">the</a> (unsigned-byte 32) ss.limit)
+         (seg-hidden-limiti 2 x86))
+        ((<a href="COMMON-LISP____THE.html">the</a> (unsigned-byte 16) ss-attr)
+         (seg-hidden-attri 2 x86))
+        (ss.b (<a href="X86ISA____DATA-SEGMENT-DESCRIPTOR-ATTRIBUTESBITS-_E3D_F2B.html">data-segment-descriptor-attributesbits-&gt;d/b</a> ss-attr))
+        (ss.e (<a href="X86ISA____DATA-SEGMENT-DESCRIPTOR-ATTRIBUTESBITS-_E3E.html">data-segment-descriptor-attributesbits-&gt;e</a> ss-attr))
+        (ss-lower (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP_____D3.html">=</a> ss.e 1) (<a href="COMMON-LISP____1_B2.html">1+</a> ss.limit) 0))
+        (ss-upper (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP_____D3.html">=</a> ss.e 1)
+                      (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP_____D3.html">=</a> ss.b 1) 4294967295 65535)
+                      ss.limit))
+        (*sp+delta (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP_____D3.html">=</a> ss.b 1)
+                       (<a href="X86ISA____N32.html">n32</a> *sp+delta)
+                       (<a href="X86ISA____N16.html">n16</a> *sp+delta)))
+        ((unless (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> ss-lower *sp+delta)
+                      (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> *sp+delta ss-upper)))
+         (<a href="ACL2____MV.html">mv</a> (<a href="COMMON-LISP____LIST.html">list</a> :out-of-segment-stack-address
+                   *sp+delta ss-lower ss-upper)
+             0)))
+       (<a href="ACL2____MV.html">mv</a> nil *sp+delta)))
+   (otherwise (<a href="ACL2____MV.html">mv</a> (<a href="COMMON-LISP____LIST.html">list</a> :unimplemented-proc-mode proc-mode)
+                  0)))))</pre> 
+<p><b>Theorem: </b>i64p-of-add-to-*sp.*sp+delta</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> i64p-of-add-to-*sp.*sp+delta
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?flg ?*sp+delta)
+              (add-to-*sp$inline proc-mode *sp delta x86)))
+            (<a href="X86ISA____I64P.html">i64p</a> *sp+delta))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>add-to-*sp-is-i64p</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ add-to-*sp-is-i64p
+ (<a href="ACL2____SIGNED-BYTE-P.html">signed-byte-p</a> 48
+                (<a href="ACL2____MV-NTH.html">mv-nth</a> 1 (<a href="X86ISA____ADD-TO-_A2SP.html">add-to-*sp</a> proc-mode *sp delta x86)))
+ :rule-classes
+ (:rewrite
+  (:type-prescription
+      :corollary
+      (<a href="COMMON-LISP____INTEGERP.html">integerp</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 1 (<a href="X86ISA____ADD-TO-_A2SP.html">add-to-*sp</a> proc-mode *sp delta x86)))
+      :hints (("Goal" :in-theory '(<a href="ACL2____SIGNED-BYTE-P.html">signed-byte-p</a> integer-range-p))))
+  (:linear
+    :corollary
+    (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> -140737488355328
+             (<a href="ACL2____MV-NTH.html">mv-nth</a> 1 (<a href="X86ISA____ADD-TO-_A2SP.html">add-to-*sp</a> proc-mode *sp delta x86)))
+         (<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 1 (<a href="X86ISA____ADD-TO-_A2SP.html">add-to-*sp</a> proc-mode *sp delta x86))
+            140737488355328))
+    :hints
+    (("Goal"
+          :in-theory '(<a href="ACL2____SIGNED-BYTE-P.html">signed-byte-p</a> integer-range-p (:e expt)))))))</pre> 
+<p><b>Theorem: </b>mv-nth-0-of-add-to-*sp-when-64-bit-modep</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ mv-nth-0-of-add-to-*sp-when-64-bit-modep
+ (<a href="COMMON-LISP____EQUAL.html">equal</a>
+      (<a href="ACL2____MV-NTH.html">mv-nth</a> 0 (<a href="X86ISA____ADD-TO-_A2SP.html">add-to-*sp</a> 0 *sp delta x86))
+      (<a href="COMMON-LISP____IF.html">if</a> (<a href="X86ISA____CANONICAL-ADDRESS-P.html">canonical-address-p</a> (<a href="X86ISA____I64.html">i64</a> (<a href="COMMON-LISP_____B2.html">+</a> *sp delta)))
+          nil
+          (<a href="COMMON-LISP____LIST.html">list</a> :non-canonical-stack-address (<a href="X86ISA____I64.html">i64</a> (<a href="COMMON-LISP_____B2.html">+</a> *sp delta))))))</pre> 
+<p><b>Theorem: </b>mv-nth-1-of-add-to-*sp-when-64-bit-modep</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> mv-nth-1-of-add-to-*sp-when-64-bit-modep
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 1 (<a href="X86ISA____ADD-TO-_A2SP.html">add-to-*sp</a> 0 *sp delta x86))
+               (<a href="COMMON-LISP____IF.html">if</a> (<a href="X86ISA____CANONICAL-ADDRESS-P.html">canonical-address-p</a> (<a href="X86ISA____I64.html">i64</a> (<a href="COMMON-LISP_____B2.html">+</a> *sp delta)))
+                   (<a href="X86ISA____I64.html">i64</a> (<a href="COMMON-LISP_____B2.html">+</a> *sp delta))
+                   0)))</pre> 
+<p><b>Theorem: </b>mv-nth-1-of-add-to-*sp-when-compatibility-modep</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ mv-nth-1-of-add-to-*sp-when-compatibility-modep
+ (<a href="ACL2____IMPLIES.html">implies</a>
+    (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> proc-mode 0))
+         (<a href="COMMON-LISP____INTEGERP.html">integerp</a> (<a href="COMMON-LISP_____B2.html">+</a> *sp delta))
+         (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 0
+                      (<a href="X86ISA____ADD-TO-_A2SP.html">add-to-*sp</a> proc-mode *sp delta x86))))
+    (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 32
+                     (<a href="ACL2____MV-NTH.html">mv-nth</a> 1
+                             (<a href="X86ISA____ADD-TO-_A2SP.html">add-to-*sp</a> proc-mode *sp delta x86))))
+ :rule-classes
+ (:rewrite
+  (:type-prescription
+      :corollary
+      (<a href="ACL2____IMPLIES.html">implies</a>
+           (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> proc-mode 0))
+                (<a href="COMMON-LISP____INTEGERP.html">integerp</a> (<a href="COMMON-LISP_____B2.html">+</a> *sp delta))
+                (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 0
+                             (<a href="X86ISA____ADD-TO-_A2SP.html">add-to-*sp</a> proc-mode *sp delta x86))))
+           (<a href="ACL2____NATP.html">natp</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 1
+                         (<a href="X86ISA____ADD-TO-_A2SP.html">add-to-*sp</a> proc-mode *sp delta x86))))
+      :hints
+      (("Goal" :in-theory '(<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> integer-range-p natp))))
+  (:linear
+   :corollary
+   (<a href="ACL2____IMPLIES.html">implies</a>
+        (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> proc-mode 0))
+             (<a href="COMMON-LISP____INTEGERP.html">integerp</a> (<a href="COMMON-LISP_____B2.html">+</a> *sp delta))
+             (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 0
+                          (<a href="X86ISA____ADD-TO-_A2SP.html">add-to-*sp</a> proc-mode *sp delta x86))))
+        (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> 0
+                 (<a href="ACL2____MV-NTH.html">mv-nth</a> 1 (<a href="X86ISA____ADD-TO-_A2SP.html">add-to-*sp</a> proc-mode *sp delta x86)))
+             (<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 1 (<a href="X86ISA____ADD-TO-_A2SP.html">add-to-*sp</a> proc-mode *sp delta x86))
+                4294967296)))
+   :hints
+   (("Goal"
+        :in-theory '(<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> integer-range-p (:e expt)))))))</pre> 
+
+</body>
+</html>

@@ -1,0 +1,286 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Step-from-trans</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2PL____STEP-FROM-TRANS">Click for Step-from-trans in the Full Manual</a></h3>
+
+<p>Evaluation step from a transitional state.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(step-from-trans stack program) → estate</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">stack</span> — <font color="#606060">Guard <span class="v">(<a href="ACL2PL____STACKP.html">stackp</a> stack)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">program</span> — <font color="#606060">Guard <span class="v">(<a href="ACL2PL____PROGRAMP.html">programp</a> program)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">estate</span> — <font color="#606060">Type <span class="v">(<a href="ACL2PL____EVAL-STATE-P.html">eval-state-p</a> estate)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>If the stack of frames is empty, we go into an error state. 
+     It should be an invariant that the stack is never empty 
+     during an evaluation that starts from a suitably well-formed initial state. 
+     This will be proved formally eventually.</p><p>If the stack is not empty, we pick the top frame, 
+     which is the <span class="tt"><a href="COMMON-LISP____CAR.html">car</a></span> in our formalization. 
+     We look at the term in the frame, which tells us what must be done next.</p><p>If the term is a variable, we look it up in the binding of the frame. 
+     If the variable is unbounded, we go into an error state; 
+     this should never happen in well-formed evaluations, 
+     as we plan to prove formally. 
+     If it is bounded, we quote the value it is bound to 
+     and replace the variable with that quoted constant in the frame. 
+     Note that no frame is pushed or popped 
+     in this evaluation step in this case.</p><p>If the term is not a variable, 
+     it is either a quoted constant 
+     or a call of a named function or lambda expression. 
+     We explain the case of the call first, 
+     and then the case of a quoted constant.</p><p>If the term is a call of any function other than <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span> 
+     (whose treatment is explained later), 
+     there are two subcases to consider. 
+     The first subcase is that not all the argument terms of the call 
+     are quoted constants. 
+     In this subcase, we push a new frame with 
+     the leftmost argument term that is not a quoted constant; 
+     the binding is copied. 
+     This is because that, in the left-to-right order of evaluation, 
+     that argument is the one that needs to be evaluated next, 
+     while the ones that precede it are fully evaluated 
+     (i.e. they are quoted constants where no further evaluation is possible). 
+     The second subcase is that all the argument terms are quoted constants. 
+     In this subcase, all the arguments of the call are fully evaluated 
+     (i.e. they are quoted constants where no further evaluation is possible), 
+     and so we need to proceed to evaluate the call itself, 
+     which we do as follows. 
+     If the function is a primitive one, 
+     we run it in one step: 
+     we use <span class="tt"><a href="ACL2PL____CALL-PRIMITIVE-FUNCTION.html">call-primitive-function</a></span>, 
+     and if it returns <span class="v">nil</span> we go into the error state, 
+     otherwise we replace the term in the curren frame 
+     with the quoted result of the primitive function call. 
+     Note that, in this case, the primitive function is never <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span>, 
+     because that case would have already been handled non-strictly. 
+     If instead the function is a named one that is not primitive, 
+     we look up its definition in the program. 
+     If no definition is found, we go into the error state; 
+     this will never happen in well-formed evaluations, 
+     as we plan to prove formally. 
+     If a definition is found, we push a new frame 
+     with the body of the definition as term, 
+     and with a binding that binds 
+     the values of the quoted constant arguments to the formal parameters. 
+     If instead the function being called is a lambda expression, 
+     then we push a new frame 
+     with the body of the lambda expression as term 
+     and with a binding that extends the current one with 
+     the values of the quoted constant arguments bound to the formal parameters. 
+     Thus the treatment of the lambda expression is not very different 
+     from the treatment of a named function, 
+     except that for the latter we need to look up the definition in the program 
+     while for the former we already have the ``definition'' right there. 
+     Another difference is in the binding in the pushed frame: 
+     for a named function, it is a fresh binding, 
+     while for a lambda expression, it is an update of the current one. 
+     Lambda expressions are closed in ACL2 translated terms, 
+     but here we want to be more general, and allow the well-formed evaluation 
+     of lambda expressions that are not necessarily closed, 
+     as may result, for instance, from transformations of ACL2 terms.</p><p>Note that, as just explained, a frame with a call 
+     always pushes a new frame, 
+     whether it is for the leftmost non-quoted-constant argument of the call, 
+     or for the body of the named function or lambda expression called. 
+     Successive evaluation steps will operate on the new frame, 
+     possibly pushing further frames, and so on, 
+     until the originally pushed frame (if the computation terminates) 
+     ends up with a quoted constant in it, 
+     which is the final result of evaluating 
+     the term in the originally pushed frame. 
+     This is where a frame with just a quoted constant comes into play, 
+     whose treatment we describe next 
+     (recall that, above, we had deferred this explanation).</p><p>If the term in a frame is a quoted constant, 
+     we pop the frame, and incorporate the quoted constant 
+     into the frame just below, if any. 
+     If there is no frame just below, 
+     i.e. the frame with the quoted constant, just popped, was the only one, 
+     then we go into the final evaluation state, 
+     which only contains a value, namely the value of the quoted constant. 
+     This means that the overall computation, 
+     which started from an initial evaluation state, 
+     has terminated, and this value is the result. 
+     If instead there is a frame below, we proceed as follows. 
+     If the term in the frame below is a variable or quoted constant, 
+     we go into the error state: 
+     this will never happen in well-formed evaluations; 
+     we will prove this formally eventually. 
+     If instead the term is a call, there are two subcases, 
+     the same that were described above for pushing a new frame. 
+     In the first subcase, the call in the frame has a leftmost argument term 
+     that is not a quoted constant: 
+     then the frame just popped must have derived from that argument term, 
+     and thus we replace that argument term with the quoted constant. 
+     In the second subcase, 
+     the call in the frame has all quoted constants as arguments: 
+     the the frame just popped must have derived from the body of the function, 
+     and thus we replace the whole call with the quoted constant.</p><p>A call of <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span> is treated non-strictly. 
+     If the call has a number of arguments different from 3, 
+     we go into an error state; 
+     this will never happen in well-formed evaluations, 
+     as will be proved eventually. 
+     If the first argument (i.e. the test) is not a quoted constant, 
+     it is pushed into a new frame, like any other function argument. 
+     If instead it is a quoted constant, 
+     it means that it has been already evaluated, 
+     or that it does not need to be evaluated. 
+     Based on whether its value is <span class="v">nil</span> or not, 
+     we replace the whole <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span> call with the second or third argument, 
+     which we then proceed to evaluate as any other term, 
+     in subsequent evaluation steps. 
+     Thus, the other branch is completely ignored, not evaluated, 
+     realizing the non-strictness of <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span>.</p><p>Note that the arguments of functions are evaluated left-to-right. 
+     This is consistent with <a href="https://www.cs.cmu.edu/Groups/AI/html/cltl/clm/node61.html#SECTION00915000000000000000" target="_blank"><nobr>Section 5.1.5 of ``Common Lisp the Language,  2nd Edition''<img src="../Icon_External_Link.png" title="External link to https://www.cs.cmu.edu/Groups/AI/html/cltl/clm/node61.html#SECTION00915000000000000000"></nobr></a>.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>step-from-trans</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ step-from-trans (<a href="ACL2PL____STACK.html">stack</a> program)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2PL____STACKP.html">stackp</a> stack)
+                             (<a href="ACL2PL____PROGRAMP.html">programp</a> program))))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'step-from-trans))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+   (((when (<a href="COMMON-LISP____ENDP.html">endp</a> stack)) (<a href="ACL2PL____EVAL-STATE-ERROR.html">eval-state-error</a>))
+    (<a href="ACL2PL____FRAME.html">frame</a> (<a href="COMMON-LISP____CAR.html">car</a> stack))
+    ((<a href="ACL2PL____FRAME.html">frame</a> frame) frame))
+   (<a href="ACL2PL____TTERM-CASE.html">tterm-case</a>
+    frame.term
+    :variable
+    (<a href="ACL2____B_A2.html">b*</a> ((var-val (<a href="OMAP____IN.html">omap::in</a> frame.term.name frame.binding))
+         ((unless (<a href="COMMON-LISP____CONSP.html">consp</a> var-val))
+          (<a href="ACL2PL____EVAL-STATE-ERROR.html">eval-state-error</a>))
+         (val (<a href="COMMON-LISP____CDR.html">cdr</a> var-val))
+         (new-frame (<a href="ACL2PL____CHANGE-FRAME.html">change-frame</a> frame
+                                  :term (<a href="ACL2PL____TTERM-CONSTANT.html">tterm-constant</a> val)))
+         (new-stack (<a href="COMMON-LISP____CONS.html">cons</a> new-frame (<a href="COMMON-LISP____CDR.html">cdr</a> stack))))
+        (<a href="ACL2PL____EVAL-STATE-TRANS.html">eval-state-trans</a> new-stack))
+    :constant
+    (<a href="ACL2____B_A2.html">b*</a>
+     ((<a href="ACL2PL____VALUE.html">value</a> frame.term.value)
+      (<a href="ACL2PL____STACK.html">stack</a> (<a href="COMMON-LISP____CDR.html">cdr</a> stack))
+      ((when (<a href="COMMON-LISP____ENDP.html">endp</a> stack))
+       (<a href="ACL2PL____EVAL-STATE-FINAL.html">eval-state-final</a> value))
+      (<a href="ACL2PL____FRAME.html">frame</a> (<a href="COMMON-LISP____CAR.html">car</a> stack))
+      ((<a href="ACL2PL____FRAME.html">frame</a> frame) frame))
+     (<a href="ACL2PL____TTERM-CASE.html">tterm-case</a>
+       frame.term
+       :variable (<a href="ACL2PL____EVAL-STATE-ERROR.html">eval-state-error</a>)
+       :constant (<a href="ACL2PL____EVAL-STATE-ERROR.html">eval-state-error</a>)
+       :call
+       (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> foundp arguments)
+             (<a href="ACL2PL____PUT-LEFTMOST-NONCONST.html">put-leftmost-nonconst</a> frame.term.arguments value))
+            (term (<a href="COMMON-LISP____IF.html">if</a> foundp
+                      (<a href="ACL2PL____MAKE-TTERM-CALL.html">make-tterm-call</a> :function frame.term.function
+                                       :arguments arguments)
+                      (<a href="ACL2PL____TTERM-CONSTANT.html">tterm-constant</a> value)))
+            (<a href="ACL2PL____FRAME.html">frame</a> (<a href="ACL2PL____CHANGE-FRAME.html">change-frame</a> frame :term term))
+            (<a href="ACL2PL____STACK.html">stack</a> (<a href="COMMON-LISP____CONS.html">cons</a> frame (<a href="COMMON-LISP____CDR.html">cdr</a> stack))))
+           (<a href="ACL2PL____EVAL-STATE-TRANS.html">eval-state-trans</a> stack))))
+    :call
+    (<a href="COMMON-LISP____IF.html">if</a>
+     (<a href="ACL2PL____TFUNCTION-EQUIV.html">tfunction-equiv</a> frame.term.function
+                      (<a href="ACL2PL____TFUNCTION-NAMED.html">tfunction-named</a> (<a href="ACL2PL____LIFT-SYMBOL.html">lift-symbol</a> 'if)))
+     (<a href="ACL2____B_A2.html">b*</a>
+      (((unless (<a href="COMMON-LISP_____D3.html">=</a> (<a href="ACL2____LEN.html">len</a> frame.term.arguments) 3))
+        (<a href="ACL2PL____EVAL-STATE-ERROR.html">eval-state-error</a>))
+       (test (<a href="COMMON-LISP____FIRST.html">first</a> frame.term.arguments)))
+      (<a href="COMMON-LISP____IF.html">if</a>
+         (<a href="ACL2PL____TTERM-CASE.html">tterm-case</a> test :constant)
+         (<a href="ACL2____B_A2.html">b*</a> ((branch (<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2PL____VALUE-EQUIV.html">value-equiv</a> (<a href="ACL2PL____TTERM-CONSTANT-_E3VALUE.html">tterm-constant-&gt;value</a> test)
+                                       (<a href="ACL2PL____VALUE-NIL.html">value-nil</a>))
+                          (<a href="COMMON-LISP____THIRD.html">third</a> frame.term.arguments)
+                          (<a href="COMMON-LISP____SECOND.html">second</a> frame.term.arguments)))
+              (new-frame (<a href="ACL2PL____CHANGE-FRAME.html">change-frame</a> frame :term branch))
+              (new-stack (<a href="COMMON-LISP____CONS.html">cons</a> new-frame (<a href="COMMON-LISP____CDR.html">cdr</a> stack))))
+             (<a href="ACL2PL____EVAL-STATE-TRANS.html">eval-state-trans</a> new-stack))
+         (<a href="ACL2PL____EVAL-STATE-TRANS.html">eval-state-trans</a> (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="ACL2PL____MAKE-FRAME.html">make-frame</a> :term test
+                                             :binding frame.binding)
+                                 stack))))
+     (<a href="ACL2____B_A2.html">b*</a>
+      ((arg? (<a href="ACL2PL____GET-LEFTMOST-NONCONST.html">get-leftmost-nonconst</a> frame.term.arguments)))
+      (<a href="COMMON-LISP____IF.html">if</a>
+       (<a href="ACL2PL____TTERMP.html">ttermp</a> arg?)
+       (<a href="ACL2PL____EVAL-STATE-TRANS.html">eval-state-trans</a> (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="ACL2PL____MAKE-FRAME.html">make-frame</a> :term arg?
+                                           :binding frame.binding)
+                               stack))
+       (<a href="ACL2PL____TFUNCTION-CASE.html">tfunction-case</a>
+        frame.term.function
+        :named
+        (<a href="COMMON-LISP____IF.html">if</a>
+         (<a href="ACL2PL____PRIMITIVE-FUNCTION-NAMEP.html">primitive-function-namep</a> frame.term.function.name)
+         (<a href="ACL2____B_A2.html">b*</a>
+          ((<a href="ACL2____ARGS.html">args</a>
+             (<a href="ACL2PL____TTERM-CONSTANT-LIST-_E3VALUE-LIST.html">tterm-constant-list-&gt;value-list</a> frame.term.arguments))
+           (value? (<a href="ACL2PL____CALL-PRIMITIVE-FUNCTION.html">call-primitive-function</a>
+                        frame.term.function.name args program)))
+          (<a href="COMMON-LISP____IF.html">if</a>
+             (<a href="ACL2PL____VALUEP.html">valuep</a> value?)
+             (<a href="ACL2PL____EVAL-STATE-TRANS.html">eval-state-trans</a>
+                  (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="ACL2PL____CHANGE-FRAME.html">change-frame</a> frame
+                                      :term (<a href="ACL2PL____TTERM-CONSTANT.html">tterm-constant</a> value?))
+                        (<a href="COMMON-LISP____CDR.html">cdr</a> stack)))
+             (<a href="ACL2PL____EVAL-STATE-ERROR.html">eval-state-error</a>)))
+         (<a href="ACL2____B_A2.html">b*</a>
+          ((function?
+                (<a href="ACL2PL____FUNCTION-LOOKUP.html">function-lookup</a> frame.term.function.name
+                                 (<a href="ACL2PL____PROGRAM-_E3FUNCTIONS.html">program-&gt;functions</a> program)))
+           ((unless (<a href="ACL2PL____FUNCTIONP.html">functionp</a> function?))
+            (<a href="ACL2PL____EVAL-STATE-ERROR.html">eval-state-error</a>))
+           (params (<a href="ACL2PL____FUNCTION-_E3PARAMS.html">function-&gt;params</a> function?))
+           (body (<a href="ACL2PL____FUNCTION-_E3BODY.html">function-&gt;body</a> function?))
+           ((unless (<a href="COMMON-LISP_____D3.html">=</a> (<a href="ACL2____LEN.html">len</a> params)
+                       (<a href="ACL2____LEN.html">len</a> frame.term.arguments)))
+            (<a href="ACL2PL____EVAL-STATE-ERROR.html">eval-state-error</a>))
+           (<a href="ACL2____ARGS.html">args</a>
+             (<a href="ACL2PL____TTERM-CONSTANT-LIST-_E3VALUE-LIST.html">tterm-constant-list-&gt;value-list</a> frame.term.arguments))
+           (<a href="ACL2PL____BINDING.html">binding</a> (<a href="OMAP____FROM-LISTS.html">omap::from-lists</a> params args)))
+          (<a href="ACL2PL____EVAL-STATE-TRANS.html">eval-state-trans</a>
+               (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="ACL2PL____MAKE-FRAME.html">make-frame</a> :term body :binding binding)
+                     stack))))
+        :lambda
+        (<a href="ACL2____B_A2.html">b*</a>
+         ((params frame.term.function.parameters)
+          (body frame.term.function.body)
+          ((unless (<a href="COMMON-LISP_____D3.html">=</a> (<a href="ACL2____LEN.html">len</a> params)
+                      (<a href="ACL2____LEN.html">len</a> frame.term.arguments)))
+           (<a href="ACL2PL____EVAL-STATE-ERROR.html">eval-state-error</a>))
+          (<a href="ACL2____ARGS.html">args</a>
+             (<a href="ACL2PL____TTERM-CONSTANT-LIST-_E3VALUE-LIST.html">tterm-constant-list-&gt;value-list</a> frame.term.arguments))
+          (<a href="ACL2PL____BINDING.html">binding</a> (<a href="OMAP____UPDATE_A2.html">omap::update*</a> (<a href="OMAP____FROM-LISTS.html">omap::from-lists</a> params args)
+                                  frame.binding)))
+         (<a href="ACL2PL____EVAL-STATE-TRANS.html">eval-state-trans</a>
+              (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="ACL2PL____MAKE-FRAME.html">make-frame</a> :term body :binding binding)
+                    stack)))))))))))</pre> 
+<p><b>Theorem: </b>eval-state-p-of-step-from-trans</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> eval-state-p-of-step-from-trans
+        (<a href="ACL2____B_A2.html">b*</a> ((estate (<a href="ACL2PL____STEP-FROM-TRANS.html">step-from-trans</a> stack program)))
+            (<a href="ACL2PL____EVAL-STATE-P.html">eval-state-p</a> estate))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>step-from-trans-of-stack-fix-stack</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> step-from-trans-of-stack-fix-stack
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2PL____STEP-FROM-TRANS.html">step-from-trans</a> (<a href="ACL2PL____STACK-FIX.html">stack-fix</a> stack)
+                                program)
+               (<a href="ACL2PL____STEP-FROM-TRANS.html">step-from-trans</a> stack program)))</pre> 
+<p><b>Theorem: </b>step-from-trans-stack-equiv-congruence-on-stack</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> step-from-trans-stack-equiv-congruence-on-stack
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2PL____STACK-EQUIV.html">stack-equiv</a> stack stack-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2PL____STEP-FROM-TRANS.html">step-from-trans</a> stack program)
+                        (<a href="ACL2PL____STEP-FROM-TRANS.html">step-from-trans</a> stack-equiv program)))
+        :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>step-from-trans-of-program-fix-program</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> step-from-trans-of-program-fix-program
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2PL____STEP-FROM-TRANS.html">step-from-trans</a> stack (<a href="ACL2PL____PROGRAM-FIX.html">program-fix</a> program))
+               (<a href="ACL2PL____STEP-FROM-TRANS.html">step-from-trans</a> stack program)))</pre> 
+<p><b>Theorem: </b>step-from-trans-program-equiv-congruence-on-program</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> step-from-trans-program-equiv-congruence-on-program
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2PL____PROGRAM-EQUIV.html">program-equiv</a> program program-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2PL____STEP-FROM-TRANS.html">step-from-trans</a> stack program)
+                        (<a href="ACL2PL____STEP-FROM-TRANS.html">step-from-trans</a> stack program-equiv)))
+        :rule-classes :congruence)</pre> 
+
+</body>
+</html>

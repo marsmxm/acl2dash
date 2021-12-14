@@ -1,0 +1,109 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Ignored-attachment</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____IGNORED-ATTACHMENT">Click for Ignored-attachment in the Full Manual</a></h3>
+
+<p>Why attachments are sometimes not used</p><p>Attachments provide a way to execute constrained functions.  But in 
+ some cases, ACL2 will not permit such execution.  We discuss this issue 
+ briefly here.  For more information about attachments, see <a href="ACL2____DEFATTACH.html">defattach</a>.</p> 
+ 
+ <p>We illustrate this issue with the following example, discussed below.</p> 
+ 
+ <pre class="code">(<a href="ACL2____ENCAPSULATE.html">encapsulate</a>
+ ()
+ (<a href="ACL2____DEFSTUB.html">defstub</a> foo () t)
+ (<a href="ACL2____DEFN.html">defn</a> foo-impl-1 () t)
+ (<a href="ACL2____DEFATTACH.html">defattach</a> foo foo-impl-1)
+ (<a href="ACL2____DEFN.html">defn</a> foo-impl-2 () nil)
+ (<a href="ACL2____LOCAL.html">local</a> (<a href="ACL2____DEFATTACH.html">defattach</a> foo foo-impl-2))
+ (<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> mac () (foo)) ; nil in the first pass, t in the second pass
+ (<a href="COMMON-LISP____DEFUN.html">defun</a> bar () (mac))    ; nil in the first pass, t in the second pass
+ (<a href="ACL2____DEFTHM.html">defthm</a> bar-is-nil
+   (<a href="COMMON-LISP____EQUAL.html">equal</a> (bar) nil))
+ )</pre> 
+ 
+ <p>Here, a non-executable function <span class="v">foo</span> is introduced with no constraints, 
+ and is provided two contradictory implementations, <span class="v">foo-impl-1</span> and 
+ <span class="v">foo-impl-2</span>.  A function, <span class="v">bar</span>, is defined using a macro, <span class="v">mac</span>, 
+ whose expansion depends on which of <span class="v">foo-impl-1</span> or <span class="v">foo-impl-2</span> is 
+ attached to <span class="v">foo</span>.  If ACL2 were to allow this, then as indicated by the 
+ comments above, <span class="v">(bar)</span> would be defined to be <span class="v">nil</span> on the first pass 
+ of the <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span> form, where <span class="v">foo</span> is attached to 
+ <span class="v">foo-impl-2</span>; but <span class="v">(bar)</span> would be defined to be <span class="v">t</span> on the second 
+ pass, where <span class="v">foo</span> is attached to <span class="v">foo-impl-1</span> because the second <span class="tt"><a href="ACL2____DEFATTACH.html">defattach</a></span> call is <span class="tt"><a href="ACL2____LOCAL.html">local</a></span>.  Thus, after execution of the 
+ <span class="v">encapsulate</span> form, <span class="v">(bar)</span> would be provably equal to <span class="v">t</span> even 
+ though there would be a theorem, <span class="v">bar-is-nil</span> — proved during the 
+ first pass of the <span class="v">encapsulate</span> — saying that <span class="v">(bar)</span> is 
+ <span class="v">nil</span>!</p> 
+ 
+ <p>Fortunately, ACL2 does not permit this to happen.  The example above 
+ produces the following output.</p> 
+ 
+ <pre class="code">ACL2 !&gt;&gt;(<a href="COMMON-LISP____DEFUN.html">DEFUN</a> BAR NIL (MAC))
+
+ACL2 Error in ( DEFUN BAR ...):  In the attempt to macroexpand the
+form (MAC), evaluation of the macro body caused the following error:
+
+ACL2 cannot ev the call of undefined function FOO on argument list:
+
+NIL
+
+Note that because of logical considerations, attachments (including
+FOO-IMPL-2) must not be called in this context.</pre> 
+ 
+ <p>We see, then, the importance of disallowing evaluation using attachments 
+ during macroexpansion.  ACL2 is careful to avoid attachments in situations, 
+ like this one, where using attachments could be unsound.</p> 
+ 
+ <p>We conclude with an example illustrating how <span class="tt"><a href="ACL2____MAKE-EVENT.html">make-event</a></span> can be used 
+ to work around the refusal of ACL2 to use attachments during macroexpansion. 
+ The idea is that <span class="tt"><a href="ACL2____MAKE-EVENT.html">make-event</a></span> expansions are stored, and this avoids the 
+ issue of <span class="tt"><a href="ACL2____LOCAL.html">local</a></span> attachments.  In particular, for the example below, the 
+ second <span class="tt"><a href="ACL2____DEFATTACH.html">defattach</a></span> affects the body of <span class="v">f2</span> even though that <span class="tt"><a href="ACL2____DEFATTACH.html">defattach</a></span> is <span class="tt"><a href="ACL2____LOCAL.html">local</a></span>, because the expansion of the corresponding <span class="tt"><a href="ACL2____MAKE-EVENT.html">make-event</a></span> is saved during the first pass of <span class="tt"><a href="ACL2____CERTIFY-BOOK.html">certify-book</a></span>, when full 
+ admissibility checks are done.  Then even after including the book, the 
+ definition of <span class="v">f2</span> will be based on the second (<span class="tt"><a href="ACL2____LOCAL.html">local</a></span>) <span class="tt"><a href="ACL2____DEFATTACH.html">defattach</a></span> form below.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____IN-PACKAGE.html">in-package</a> "ACL2")
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> body-1 (<a href="ACL2____NAME.html">name</a> formals body)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORE.html">ignore</a> name))
+  `(<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____CONSP.html">consp</a> ,(<a href="COMMON-LISP____CAR.html">car</a> formals))
+       ,body
+     nil))
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> body-2 (<a href="ACL2____NAME.html">name</a> formals body)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORE.html">ignore</a> name))
+  `(<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2____ACL2-NUMBERP.html">acl2-numberp</a> ,(<a href="COMMON-LISP____CAR.html">car</a> formals))
+       ,body
+     t))
+
+(<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> defun+ (<a href="ACL2____NAME.html">name</a> formals body)
+  `(<a href="ACL2____MAKE-EVENT.html">make-event</a>
+    (<a href="COMMON-LISP____IF.html">if</a> (foo) ; attachable stub
+        '(<a href="COMMON-LISP____DEFUN.html">defun</a> ,name ,formals ,(body-1 name formals body))
+      '(<a href="COMMON-LISP____DEFUN.html">defun</a> ,name ,formals ,(body-2 name formals body)))))
+
+;;; (defun+ f1 (x y) (<a href="COMMON-LISP____CONS.html">cons</a> x y)) ; fails because foo has no attachment
+
+(<a href="ACL2____DEFSTUB.html">defstub</a> foo () t)
+(<a href="ACL2____DEFN.html">defn</a> foo-true () t)
+(<a href="ACL2____DEFN.html">defn</a> foo-false () nil)
+
+(<a href="ACL2____DEFATTACH.html">defattach</a> foo foo-true)
+
+(defun+ f1 (x y) (<a href="COMMON-LISP____CONS.html">cons</a> x y))
+
+(<a href="ACL2____LOCAL.html">local</a> (<a href="ACL2____DEFATTACH.html">defattach</a> foo foo-false))
+
+(defun+ f2 (x y) (<a href="COMMON-LISP____CONS.html">cons</a> x y))
+
+(<a href="ACL2____ASSERT-EVENT.html">assert-event</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (f1 3 t) nil))
+
+(<a href="ACL2____ASSERT-EVENT.html">assert-event</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (f2 3 t) (<a href="COMMON-LISP____CONS.html">cons</a> 3 t)))</pre>
+</body>
+</html>

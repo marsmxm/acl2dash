@@ -1,0 +1,206 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Vl-load-file</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL____VL-LOAD-FILE">Click for Vl-load-file in the Full Manual</a></h3>
+
+<p>Main function for loading a single Verilog file.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(vl-load-file filename st state) → (mv st state)</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">filename</span> — <font color="#606060">Guard <span class="v">(<a href="COMMON-LISP____STRINGP.html">stringp</a> filename)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">st</span> — <font color="#606060">Guard <span class="v">(<a href="VL____VL-LOADSTATE-P.html">vl-loadstate-p</a> st)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">st</span> — <font color="#606060">Type <span class="v">(<a href="VL____VL-LOADSTATE-P.html">vl-loadstate-p</a> st)</span>.</font>
+</dd> 
+<dd>
+<span class="tt">state</span> — <font color="#606060">Type <span class="v">(state-p1 state)</span>, given <span class="v">(<a href="ACL2____FORCE.html">force</a> (state-p1 state))</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>Even loading a single file is a multi-step process:</p> 
+ 
+<ul> 
+ 
+<li>The contents of the file are loaded via <a href="VL____VL-READ-FILE.html">vl-read-file</a> into a list of 
+<a href="VL____EXTENDED-CHARACTERS.html">extended-characters</a> in memory.</li> 
+ 
+<li>The <a href="VL____PREPROCESSOR.html">preprocessor</a> then expands away compiler directives like 
+<span class="v">`define</span>s, producing a new list of extended characters.</li> 
+ 
+<li>The <a href="VL____LEXER.html">lexer</a> converts the preprocessed character list into a list of 
+<a href="VL____VL-TOKEN-P.html">tokens</a>.</li> 
+ 
+<li>The <a href="VL____PARSER.html">parser</a> transforms the token list into a list of 
+descriptions.</li> 
+ 
+<li>We merge these newly loaded descriptions into the loader's state.</li> 
+ 
+</ul> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>vl-load-file</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ vl-load-file (filename st state)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (<a href="ACL2____STATE.html">state</a>)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____STRINGP.html">stringp</a> filename)
+                             (<a href="VL____VL-LOADSTATE-P.html">vl-loadstate-p</a> st))))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'vl-load-file))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+   (((<a href="VL____VL-LOADSTATE.html">vl-loadstate</a> st) st)
+    ((<a href="VL____VL-LOADCONFIG.html">vl-loadconfig</a> st.config) st.config)
+    (pad (<a href="VL____VL-LOADSTATE-PAD.html">vl-loadstate-pad</a> st))
+    (<a href="COMMON-LISP____-.html">-</a> (cw-unformatted (<a href="STR____CAT.html">cat</a> pad filename *nls*)))
+    ((<a href="ACL2____MV.html">mv</a> okp contents len state)
+     (<a href="ACL2____TIME_42.html">time$</a> (<a href="VL____VL-READ-FILE.html">vl-read-file</a> (<a href="VL____STRING-FIX.html">string-fix</a> filename))
+            :msg "~s0 (read: ~st sec, ~sa bytes)~%"
+            :args (<a href="COMMON-LISP____LIST.html">list</a> pad)
+            :mintime st.config.mintime))
+    ((unless okp)
+     (<a href="ACL2____MV.html">mv</a> (<a href="VL____VL-LOADSTATE-FATAL.html">vl-loadstate-fatal</a> :type :vl-read-failed
+                             :msg "Error reading file ~s0."
+                             :args (<a href="COMMON-LISP____LIST.html">list</a> filename)
+                             :st st)
+         state))
+    (new-bytes (<a href="COMMON-LISP_____B2.html">+</a> len st.bytes))
+    (st (<a href="VL____CHANGE-VL-LOADSTATE.html">change-vl-loadstate</a> st
+                             :bytes new-bytes))
+    (pad (<a href="VL____VL-LOADSTATE-PAD.html">vl-loadstate-pad</a> st))
+    (filemap
+         (<a href="ACL2____TIME_42.html">time$</a> (<a href="COMMON-LISP____AND.html">and</a> st.config.filemapp
+                     (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> filename
+                                 (<a href="VL____VL-ECHARLIST-_E3STRING.html">vl-echarlist-&gt;string</a> contents))
+                           st.filemap))
+                :msg "~s0 (filemap: ~st sec, ~sa bytes)~%"
+                :args (<a href="COMMON-LISP____LIST.html">list</a> pad)
+                :mintime st.config.mintime))
+    ((<a href="ACL2____MV.html">mv</a> successp
+         defines filemap iskips ifdefmap defmap
+         bytes warnings preprocessed state)
+     (<a href="ACL2____TIME_42.html">time$</a> (<a href="VL____VL-PREPROCESS.html">vl-preprocess</a> contents
+                           :defines st.defines
+                           :filemap filemap
+                           :iskips st.iskips
+                           :ifdefmap st.ifdefmap
+                           :defmap st.defmap
+                           :bytes new-bytes
+                           :config st.config
+                           :idcache st.idcache
+                           :warnings (<a href="VL____VL-LOADSTATE-_E3WARNINGS.html">vl-loadstate-&gt;warnings</a> st))
+            :msg "~s0 (preprocess: ~st sec, ~sa bytes)~%"
+            :args (<a href="COMMON-LISP____LIST.html">list</a> pad)
+            :mintime st.config.mintime))
+    (st (<a href="VL____VL-LOADSTATE-SET-WARNINGS.html">vl-loadstate-set-warnings</a> warnings))
+    (st (<a href="VL____CHANGE-VL-LOADSTATE.html">change-vl-loadstate</a> st
+                             :iskips iskips
+                             :ifdefmap ifdefmap
+                             :defmap defmap
+                             :bytes bytes))
+    ((unless successp)
+     (<a href="ACL2____MV.html">mv</a> (<a href="VL____VL-LOADSTATE-FATAL.html">vl-loadstate-fatal</a> :type :vl-preprocess-failed
+                             :msg "Preprocessing failed for ~s0."
+                             :args (<a href="COMMON-LISP____LIST.html">list</a> filename)
+                             :st st)
+         state))
+    ((<a href="ACL2____MV.html">mv</a> preprocessed state)
+     (<a href="VL____VL-PREPROCESS-DEBUG.html">vl-preprocess-debug</a> filename preprocessed st state))
+    ((<a href="ACL2____MV.html">mv</a> successp lexed warnings)
+     (<a href="ACL2____TIME_42.html">time$</a> (<a href="VL____VL-LEX.html">vl-lex</a> preprocessed
+                    :config st.config
+                    :warnings (<a href="VL____VL-LOADSTATE-_E3WARNINGS.html">vl-loadstate-&gt;warnings</a> st))
+            :msg "~s0 (lex: ~st sec, ~sa bytes)~%"
+            :args (<a href="COMMON-LISP____LIST.html">list</a> pad)
+            :mintime st.config.mintime))
+    (st (<a href="VL____VL-LOADSTATE-SET-WARNINGS.html">vl-loadstate-set-warnings</a> warnings))
+    ((unless successp)
+     (<a href="ACL2____MV.html">mv</a> (<a href="VL____VL-LOADSTATE-FATAL.html">vl-loadstate-fatal</a> :type :vl-lex-failed
+                             :msg "Lexing failed for ~s0."
+                             :args (<a href="COMMON-LISP____LIST.html">list</a> filename)
+                             :st st)
+         state))
+    ((<a href="ACL2____MV.html">mv</a> cleaned comment-map)
+     (<a href="ACL2____TIME_42.html">time$</a> (<a href="VL____VL-KILL-WHITESPACE-AND-COMMENTS.html">vl-kill-whitespace-and-comments</a> lexed)
+            :msg "~s0 (whitespace: ~st sec, ~sa bytes)~%"
+            :args (<a href="COMMON-LISP____LIST.html">list</a> pad)
+            :mintime st.config.mintime))
+    (pstate (<a href="VL____VL-LOADSTATE-_E3PSTATE.html">vl-loadstate-&gt;pstate</a> st))
+    (pstate-backup pstate)
+    ((<a href="ACL2____MV.html">mv</a> successp descs pstate)
+     (<a href="ACL2____TIME_42.html">time$</a> (<a href="VL____VL-PARSE.html">vl-parse</a> cleaned pstate st.config)
+            :msg "; ~s0: parse: ~st sec, ~sa bytes~%"
+            :args (<a href="COMMON-LISP____LIST.html">list</a> filename)
+            :mintime st.config.mintime))
+    ((unless successp)
+     (<a href="ACL2____B_A2.html">b*</a> ((new-warnings (<a href="VL____VL-PARSESTATE-_E3WARNINGS.html">vl-parsestate-&gt;warnings</a> pstate))
+          (st (<a href="VL____CHANGE-VL-LOADSTATE.html">change-vl-loadstate</a> st
+                                   :pstate pstate-backup))
+          (st (<a href="VL____VL-LOADSTATE-SET-WARNINGS.html">vl-loadstate-set-warnings</a> new-warnings))
+          (st (<a href="VL____VL-LOADSTATE-FATAL.html">vl-loadstate-fatal</a> :type :vl-parse-failed
+                                  :msg "Parsing failed for ~s0."
+                                  :args (<a href="COMMON-LISP____LIST.html">list</a> filename)
+                                  :st st)))
+         (<a href="ACL2____MV.html">mv</a> st state)))
+    (descs
+       (<a href="ACL2____TIME_42.html">time$</a> (<a href="VL____VL-DESCRIPTIONLIST-INJECT-COMMENTS.html">vl-descriptionlist-inject-comments</a> descs comment-map)
+              :msg "~s0 (comment: ~st sec, ~sa bytes)~%"
+              :args (<a href="COMMON-LISP____LIST.html">list</a> pad)
+              :mintime st.config.mintime))
+    ((<a href="ACL2____MV.html">mv</a> descs pstate)
+     (<a href="ACL2____TIME_42.html">time$</a>
+          (<a href="ACL2____B_A2.html">b*</a> ((<a href="VL____WARNINGS.html">warnings</a> (<a href="VL____VL-PARSESTATE-_E3WARNINGS.html">vl-parsestate-&gt;warnings</a> pstate))
+               (<a href="VL____WARNINGS.html">warnings</a> (<a href="VL____VL-COMMENTMAP-TRANSLATE-OFF-WARNINGS.html">vl-commentmap-translate-off-warnings</a>
+                              comment-map warnings))
+               ((<a href="ACL2____MV.html">mv</a> descs warnings)
+                (<a href="VL____VL-DESCRIPTIONLIST-INJECT-WARNINGS.html">vl-descriptionlist-inject-warnings</a> descs warnings))
+               (pstate (<a href="VL____CHANGE-VL-PARSESTATE.html">change-vl-parsestate</a> pstate
+                                             :warnings warnings)))
+              (<a href="ACL2____MV.html">mv</a> descs pstate))
+          :msg "~s0 (warnings: ~st sec, ~sa bytes)~%"
+          :args (<a href="COMMON-LISP____LIST.html">list</a> pad)
+          :mintime st.config.mintime))
+    ((<a href="ACL2____MV.html">mv</a> descs descalist reportcard)
+     (<a href="ACL2____TIME_42.html">time$</a> (<a href="VL____VL-LOAD-MERGE-DESCRIPTIONS.html">vl-load-merge-descriptions</a>
+                 descs
+                 st.descs st.descalist st.reportcard)
+            :msg "~s0 (merge: ~st sec, ~sa bytes)"
+            :args (<a href="COMMON-LISP____LIST.html">list</a> pad)
+            :mintime st.config.mintime))
+    (st (<a href="VL____CHANGE-VL-LOADSTATE.html">change-vl-loadstate</a> st
+                             :pstate pstate
+                             :defines defines
+                             :filemap filemap
+                             :iskips iskips
+                             :descs descs
+                             :descalist descalist
+                             :reportcard reportcard)))
+   (<a href="ACL2____MV.html">mv</a> st state))))</pre> 
+<p><b>Theorem: </b>vl-loadstate-p-of-vl-load-file.st</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-loadstate-p-of-vl-load-file.st
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?st acl2::?state)
+              (<a href="VL____VL-LOAD-FILE.html">vl-load-file</a> filename st state)))
+            (<a href="VL____VL-LOADSTATE-P.html">vl-loadstate-p</a> st))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>state-p1-of-vl-load-file.state</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> state-p1-of-vl-load-file.state
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____FORCE.html">force</a> (state-p1 state))
+                 (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?st acl2::?state)
+                       (<a href="VL____VL-LOAD-FILE.html">vl-load-file</a> filename st state)))
+                     (state-p1 state)))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>unique-names-after-vl-load-file</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ unique-names-after-vl-load-file
+ (<a href="ACL2____B_A2.html">b*</a>
+  (((<a href="ACL2____MV.html">mv</a> new-st &amp;)
+    (<a href="VL____VL-LOAD-FILE.html">vl-load-file</a> filename st state)))
+  (<a href="ACL2____IMPLIES.html">implies</a>
+   (<a href="ACL2____UNIQUEP.html">uniquep</a> (<a href="VL____VL-DESCRIPTIONLIST-_E3NAMES.html">vl-descriptionlist-&gt;names</a> (<a href="VL____VL-LOADSTATE-_E3DESCS.html">vl-loadstate-&gt;descs</a> st)))
+   (<a href="ACL2____NO-DUPLICATESP.html">no-duplicatesp</a>
+        (<a href="VL____VL-DESCRIPTIONLIST-_E3NAMES.html">vl-descriptionlist-&gt;names</a> (<a href="VL____VL-LOADSTATE-_E3DESCS.html">vl-loadstate-&gt;descs</a> new-st))))))</pre> 
+
+</body>
+</html>

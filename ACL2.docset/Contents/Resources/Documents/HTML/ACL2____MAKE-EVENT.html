@@ -1,0 +1,783 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Make-event</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____MAKE-EVENT">Click for Make-event in the Full Manual</a></h3>
+
+<p>Evaluate (expand) a given form and then evaluate the result</p><p><span class="v">Make-event</span> is a utility for generating <a href="ACL2____EVENTS.html">events</a>.  It 
+ provides a capability not offered by Lisp macros (see <a href="COMMON-LISP____DEFMACRO.html">defmacro</a>), as it 
+ allows access to the ACL2 <a href="ACL2____STATE.html">state</a> and logical <a href="ACL2____WORLD.html">world</a>.  In essence, 
+ the expression <span class="v">(<a href="ACL2____MAKE-EVENT.html">make-event</a> form)</span> replaces itself with the result of 
+ evaluating <span class="v">form</span> — let's call that result <span class="v">ev</span> — as though 
+ one had submitted <span class="v">ev</span> instead of the <span class="v">make-event</span> call.  For example, 
+ <span class="v">(<a href="ACL2____MAKE-EVENT.html">make-event</a> (<a href="COMMON-LISP____QUOTE.html">quote</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> f (x) x)))</span> is equivalent to the event <span class="v">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ f (x) x)</span>.</p> 
+ 
+ <p>We assume basic familiarity with the ACL2 <i>state</i>.  For relevant 
+ background, see <a href="ACL2____STATE.html">state</a> and perhaps see <a href="ACL2____PROGRAMMING-WITH-STATE.html">programming-with-state</a>.</p> 
+ 
+ <p>There are several simple examples below.  For examples that can give 
+ additional insight into the use of <span class="v">make-event</span> for tool development, see 
+ <a href="ACL2____MAKE-EVENT-EXAMPLE-1.html">make-event-example-1</a> and <a href="ACL2____MAKE-EVENT-EXAMPLE-2.html">make-event-example-2</a>.  Also see the 
+ <span class="v">make-event/</span> subdirectory of the ACL2 <a href="ACL2____COMMUNITY-BOOKS.html">community-books</a> for more 
+ examples, for example, <span class="v">books/make-event/search-generation.lisp</span>.</p> 
+ 
+ <p>We break this documentation into the following sections.</p> 
+ 
+ <ul> 
+ 
+ <li><b>Introduction</b></li> 
+ 
+ <li><b>Detailed Documentation</b></li> 
+ 
+ <li><b>Error Reporting</b></li> 
+ 
+ <li><b>Restriction to Event Contexts</b></li> 
+ 
+ <li><b>Examples Illustrating How to Access State</b></li> 
+ 
+ <li><b>Advanced Expansion Control</b></li> 
+ 
+ </ul> 
+ 
+ <p>We begin with an introduction, which focuses on examples and introduces the 
+ key notion of ``expansion phase''.</p> 
+ 
+ <h3>Introduction</h3> 
+ 
+ <p><span class="v">Make-event</span> is particularly useful for those who program using the ACL2 
+ <span class="tt"><a href="ACL2____STATE.html">state</a></span>; see <a href="ACL2____PROGRAMMING-WITH-STATE.html">programming-with-state</a>.  That is because the 
+ evaluation of <span class="v">form</span> may read and even modify the ACL2 <span class="tt"><a href="ACL2____STATE.html">state</a></span>.</p> 
+ 
+ <p>Suppose for example that we want to define a constant <span class="v">*world-length*</span>, 
+ that is the length of the current ACL2 <a href="ACL2____WORLD.html">world</a>.  A <span class="v">make-event</span> form 
+ can accomplish this task, as follows.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="COMMON-LISP____LENGTH.html">length</a> (<a href="ACL2____W.html">w</a> state))
+98883
+ACL2 !&gt;(<a href="ACL2____MAKE-EVENT.html">make-event</a>
+        (<a href="COMMON-LISP____LIST.html">list</a> 'defconst '*world-length* (<a href="COMMON-LISP____LENGTH.html">length</a> (<a href="ACL2____W.html">w</a> state))))
+
+Summary
+Form:  ( DEFCONST *WORLD-LENGTH* ...)
+Rules: NIL
+Time:  0.00 seconds (prove: 0.00, print: 0.00, other: 0.00)
+
+Summary
+Form:  ( MAKE-EVENT (<a href="COMMON-LISP____LIST.html">LIST</a> ...))
+Rules: NIL
+Time:  0.01 seconds (prove: 0.00, print: 0.00, other: 0.01)
+ *WORLD-LENGTH*
+ACL2 !&gt;*world-length*
+98883
+ACL2 !&gt;(<a href="COMMON-LISP____LENGTH.html">length</a> (<a href="ACL2____W.html">w</a> state))
+98890
+ACL2 !&gt;</pre> 
+ 
+ <p>How did this work?  First, evaluation of the form <span class="v">(<a href="COMMON-LISP____LIST.html">list</a> 'defconst
+ '*world-length* (<a href="COMMON-LISP____LENGTH.html">length</a> (<a href="ACL2____W.html">w</a> state)))</span> returned the event form <span class="v">(<a href="ACL2____DEFCONST.html">defconst</a>
+ *world-length* 98883)</span>.  Then that event form was automatically submitted to 
+ ACL2.  Of course, that changed the ACL2 logical <a href="ACL2____WORLD.html">world</a>, which is why the 
+ final value of <span class="v">(<a href="COMMON-LISP____LENGTH.html">length</a> (<a href="ACL2____W.html">w</a> state))</span> is greater than its initial value.</p> 
+ 
+ <p>The example above illustrates how the evaluation of a <span class="v">make-event</span> call 
+ takes place in two phases.  The first phase evaluates the argument of the 
+ call, in this case <span class="v">(<a href="COMMON-LISP____LIST.html">list</a> 'defconst '*world-length* (<a href="COMMON-LISP____LENGTH.html">length</a> (<a href="ACL2____W.html">w</a> state)))</span>, 
+ to compute an event form, in this case <span class="v">(<a href="ACL2____DEFCONST.html">defconst</a> *world-length* 98883)</span>. 
+ We call this evaluation the ``expansion'' phase.  Then the resulting event 
+ form is evaluated, which in this case defines the constant 
+ <span class="v">*world-length*</span>.</p> 
+ 
+ <p>Now suppose we would like to introduce such a <span class="tt"><a href="ACL2____DEFCONST.html">defconst</a></span> form any 
+ time we like.  It is common practice to define macros to automate such tasks. 
+ Now we might be tempted simply to make the following definition.</p> 
+ 
+ <pre class="code">; WRONG!
+(<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> define-world-length-constant (<a href="ACL2____NAME.html">name</a> state)
+  (<a href="COMMON-LISP____LIST.html">list</a> 'defconst name (<a href="COMMON-LISP____LENGTH.html">length</a> (<a href="ACL2____W.html">w</a> state))))</pre> 
+ 
+ <p>But ACL2 rejects such a definition, because the formal parameter 
+ <span class="v">"STATE"</span> is bound to the syntactic object in the macro call, not to the 
+ actual ACL2 <a href="ACL2____STATE.html">state</a>; see <a href="COMMON-LISP____DEFMACRO.html">defmacro</a>.  You can try to experiment with 
+ other such direct methods to define a macro that accesses the ACL2 state, but 
+ they won't work.</p> 
+ 
+ <p>Instead, however, you can use the approach illustrated by the 
+ <span class="v">make-event</span> example above to define the desired macro, as follows.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> define-world-length-constant (<a href="ACL2____NAME.html">name</a>)
+  `(<a href="ACL2____MAKE-EVENT.html">make-event</a> (<a href="COMMON-LISP____LIST.html">list</a> 'defconst ',name (<a href="COMMON-LISP____LENGTH.html">length</a> (<a href="ACL2____W.html">w</a> state)))))</pre> 
+ 
+ <p>Here is a log that may help to explain this macro, assuming it has been 
+ defined as displayed just above.</p> 
+ 
+ <pre class="code">ACL2 !&gt;:trans1 (define-world-length-constant *foo*)
+ (<a href="ACL2____MAKE-EVENT.html">MAKE-EVENT</a> (<a href="COMMON-LISP____LIST.html">LIST</a> 'DEFCONST
+                   '*FOO*
+                   (<a href="COMMON-LISP____LENGTH.html">LENGTH</a> (<a href="ACL2____W.html">W</a> STATE))))
+ACL2 !&gt;(<a href="COMMON-LISP____LIST.html">LIST</a> 'DEFCONST
+             '*FOO*
+             (<a href="COMMON-LISP____LENGTH.html">LENGTH</a> (<a href="ACL2____W.html">W</a> STATE)))
+(<a href="ACL2____DEFCONST.html">DEFCONST</a> *FOO* 109707)
+ACL2 !&gt;
+ACL2 !&gt;(define-world-length-constant *foo*)
+
+Summary
+Form:  ( DEFCONST *FOO* ...)
+Rules: NIL
+Time:  0.00 seconds (prove: 0.00, print: 0.00, other: 0.00)
+
+Summary
+Form:  ( MAKE-EVENT (<a href="COMMON-LISP____LIST.html">LIST</a> ...))
+Rules: NIL
+Time:  0.01 seconds (prove: 0.00, print: 0.00, other: 0.01)
+ *FOO*
+ACL2 !&gt;*foo*
+109707
+ACL2 !&gt;:pe *foo*
+           2:x(DEFINE-WORLD-LENGTH-CONSTANT *FOO*)
+              
+&gt;              (<a href="ACL2____DEFCONST.html">DEFCONST</a> *FOO* 109707)
+ACL2 !&gt;(<a href="COMMON-LISP____LENGTH.html">length</a> (<a href="ACL2____W.html">w</a> state))
+109713
+ACL2 !&gt;(define-world-length-constant *bar*)
+
+Summary
+Form:  ( DEFCONST *BAR* ...)
+Rules: NIL
+Time:  0.00 seconds (prove: 0.00, print: 0.00, other: 0.00)
+
+Summary
+Form:  ( MAKE-EVENT (<a href="COMMON-LISP____LIST.html">LIST</a> ...))
+Rules: NIL
+Time:  0.01 seconds (prove: 0.00, print: 0.00, other: 0.01)
+ *BAR*
+ACL2 !&gt;*bar*
+109713
+ACL2 !&gt;:pe *bar*
+           3:x(DEFINE-WORLD-LENGTH-CONSTANT *BAR*)
+              
+&gt;              (<a href="ACL2____DEFCONST.html">DEFCONST</a> *BAR* 109713)
+ACL2 !&gt;(<a href="COMMON-LISP____LENGTH.html">length</a> (<a href="ACL2____W.html">w</a> state))
+109719
+ACL2 !&gt;</pre> 
+ 
+ <p>The expansion phase can be used for computation that has side effects, 
+ generally by modifying state.  Here is a modification of the above example 
+ that does not change the ACL2 world at all, but instead saves the length of the 
+ world into a state global variable (see <a href="ACL2____ASSIGN.html">assign</a>).</p> 
+ 
+ <pre class="code">(<a href="ACL2____MAKE-EVENT.html">make-event</a>
+ (<a href="ACL2____ER-PROGN.html">er-progn</a> (<a href="ACL2____ASSIGN.html">assign</a> my-world-length (<a href="COMMON-LISP____LENGTH.html">length</a> (<a href="ACL2____W.html">w</a> state)))
+           (<a href="ACL2____VALUE.html">value</a> '(<a href="ACL2____VALUE-TRIPLE.html">value-triple</a> nil))))</pre> 
+ 
+ <p>Notice that this time, the value returned by the expansion phase is not a 
+ single value; rather, it is an <a href="ACL2____ERROR-TRIPLE.html">error-triple</a> whose value component is an 
+ event form, namely, the event form <span class="v">(<a href="ACL2____VALUE-TRIPLE.html">value-triple</a> nil)</span>.  Evaluation of 
+ that event form does not change the ACL2 world (see <a href="ACL2____VALUE-TRIPLE.html">value-triple</a>). 
+ Thus, the sole purpose of the <span class="v">make-event</span> call above is to change the 
+ <a href="ACL2____STATE.html">state</a> by associating the length of the current logical world with the 
+ state global, <span class="v">my-world-length</span>.  After evaluating this form, <span class="v">(<a href="ACL2_____04.html">@</a>
+ my-world-length)</span> provides the length of the ACL2 world, as illustrated by 
+ the following transcript.</p> 
+ 
+ <pre class="code">ACL2 !&gt;:pbt 0
+           0:x(<a href="ACL2____EXIT-BOOT-STRAP-MODE.html">EXIT-BOOT-STRAP-MODE</a>)
+ACL2 !&gt;(<a href="COMMON-LISP____LENGTH.html">length</a> (<a href="ACL2____W.html">w</a> state))
+109700
+ACL2 !&gt;(<a href="ACL2____MAKE-EVENT.html">make-event</a>
+            (<a href="ACL2____ER-PROGN.html">er-progn</a> (<a href="ACL2____ASSIGN.html">assign</a> my-world-length (<a href="COMMON-LISP____LENGTH.html">length</a> (<a href="ACL2____W.html">w</a> state)))
+                      (<a href="ACL2____VALUE.html">value</a> '(<a href="ACL2____VALUE-TRIPLE.html">value-triple</a> nil))))
+
+Summary
+Form:  ( MAKE-EVENT (<a href="ACL2____ER-PROGN.html">ER-PROGN</a> ...))
+Rules: NIL
+Time:  0.01 seconds (prove: 0.00, print: 0.00, other: 0.01)
+ NIL
+ACL2 !&gt;(<a href="COMMON-LISP____LENGTH.html">length</a> (<a href="ACL2____W.html">w</a> state))
+109700
+ACL2 !&gt;:pbt 0
+           0:x(<a href="ACL2____EXIT-BOOT-STRAP-MODE.html">EXIT-BOOT-STRAP-MODE</a>)
+ACL2 !&gt;</pre> 
+ 
+ <p>When <span class="v">make-event</span> is invoked by a book, it is expanded during book 
+ certification but not, by default, when the book is included.  Consider again 
+ the example <span class="v">(define-world-length-constant *foo*)</span> given above.  If that 
+ form is in a book, then the value of <span class="v">*foo*</span> will be the length of the 
+ world at the time this form was invoked during book certification, regardless 
+ of world length at <span class="tt"><a href="ACL2____INCLUDE-BOOK.html">include-book</a></span> time.  That is because the expansion, 
+ <span class="v">(<a href="ACL2____DEFCONST.html">DEFCONST</a> *FOO* 109700)</span>, is recorded in the book's <a href="ACL2____CERTIFICATE.html">certificate</a> and 
+ re-used during a subsequent <span class="tt"><a href="ACL2____INCLUDE-BOOK.html">include-book</a></span>.</p> 
+ 
+ <p>However, the keyword <span class="v">:check-expansion</span> may be given the value <span class="v">t</span> so 
+ that the expansion is done even during <span class="v">include-book</span>, which comes with a 
+ check that the result is the same as it was during book certification.  This 
+ keyword can be useful for side effects.  For example, if you insert the 
+ following form in a book, then the length of the world will be printed when 
+ the form is encountered, whether during <span class="tt"><a href="ACL2____CERTIFY-BOOK.html">certify-book</a></span> or during <span class="tt"><a href="ACL2____INCLUDE-BOOK.html">include-book</a></span>.</p> 
+ 
+ <pre class="code">(<a href="ACL2____MAKE-EVENT.html">make-event</a>
+ (<a href="ACL2____PPROGN.html">pprogn</a> (<a href="ACL2____FMS.html">fms</a> "Length of current world: ~x0~|"
+              (<a href="COMMON-LISP____LIST.html">list</a> (<a href="COMMON-LISP____CONS.html">cons</a> #\0 (<a href="COMMON-LISP____LENGTH.html">length</a> (<a href="ACL2____W.html">w</a> state))))
+              *standard-co* state nil)
+         (<a href="ACL2____VALUE.html">value</a> '(<a href="ACL2____VALUE-TRIPLE.html">value-triple</a> nil)))
+ :check-expansion t)</pre> 
+ 
+ <h3>Detailed Documentation</h3> 
+ 
+ <pre class="code">Examples:
+
+; Trivial example: evaluate (<a href="COMMON-LISP____QUOTE.html">quote</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> foo (x) x)) to obtain
+; (<a href="COMMON-LISP____DEFUN.html">defun</a> foo (x) x), which is then evaluated.
+(<a href="ACL2____MAKE-EVENT.html">make-event</a> (<a href="COMMON-LISP____QUOTE.html">quote</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> foo (x) x)))
+
+; Evaluate (generate-form state) to obtain (<a href="ACL2____MV.html">mv</a> nil val state), and
+; then evaluate val.  (Generate-form is not specified here, but
+; imagine for example that it explores the state and then generates
+; some desired definition or theorem.)
+(<a href="ACL2____MAKE-EVENT.html">make-event</a> (generate-form state))
+
+; As above, but make sure that if this form is in a book, then when
+; we include the book, the evaluation of (generate-form state)
+; should return the same value as it did when the book was
+; certified.
+(<a href="ACL2____MAKE-EVENT.html">make-event</a> (generate-form state)
+            :CHECK-EXPANSION t)
+
+General Form:
+(<a href="ACL2____MAKE-EVENT.html">make-event</a> form :CHECK-EXPANSION chk :ON-BEHALF-OF obj :EXPANSION? form)</pre> 
+ 
+ <p>where <span class="v">chk</span> is <span class="v">nil</span> (the default), <span class="v">t</span>, or the intended 
+ ``expansion result'' from the evaluation of <span class="v">form</span> (as explained below); 
+ and if supplied, <span class="v">obj</span> is an arbitrary ACL2 object, used only in reporting 
+ errors in expansion, i.e., in the evaluation of form.  The <span class="v">:EXPANSION?</span> 
+ keyword is discussed in the final section, on Advanced Expansion Control. See 
+ <a href="ACL2____MAKE-EVENT-DETAILS.html">make-event-details</a> for discussion of the <span class="v">:ON-BEHALF-OF</span> 
+ keyword.</p> 
+ 
+ <p>We strongly recommend that you browse some <span class="v">.lisp</span> files in the 
+ community books directory <span class="v">books/make-event/</span>.  You may even find it 
+ helpful, in order to understand <span class="v">make-event</span>, to do so before continuing to 
+ read this documentation.  You may also find it useful to browse community book 
+ <span class="v">books/std/testing/eval.lisp</span>, which contains definitions of macros 
+ <span class="v">must-succeed</span> and <span class="v">must-fail</span> that are useful for testing and are used 
+ in many books in the <span class="v">books/make-event/</span> directory, especially 
+ <span class="v">eval-tests.lisp</span>.  Another example, <span class="v">books/make-event/defrule.lisp</span>, 
+ shows how to use macros whose calls expand to <span class="v">make-event</span> forms, which in 
+ turn can generate <a href="ACL2____EVENTS.html">events</a>.  For more examples, see file 
+ <span class="v">books/make-event/Readme.lsp</span>.  Other than the examples, the explanations 
+ here should suffice for most users.  If you want explanations of subtler 
+ details, see <a href="ACL2____MAKE-EVENT-DETAILS.html">make-event-details</a>.</p> 
+ 
+ <p>Note that <span class="v">make-event</span> is generally legal only where an embedded event 
+ form is expected: essentially, at the top level of a book or the 
+ read-eval-print loop, possibly within surrounding calls of <span class="v">make-event</span> or 
+ of event constructors such as <span class="tt"><a href="COMMON-LISP____PROGN.html">progn</a></span> and <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span>.  For 
+ details see the section ``Restriction to Event Contexts'', below.</p> 
+ 
+ <p><span class="v">Make-event</span> is related to Lisp macroexpansion in the sense that its 
+ argument is evaluated to obtain an expansion result, which is evaluated again. 
+ Let us elaborate on each of these notions in turn: ``is evaluated,'' 
+ ``expansion result'', and ``evaluated again.''  The final section, on Advanced 
+ Expansion Control, will generalize these processes in a way that we ignore for 
+ now.</p> 
+ 
+ <blockquote> 
+ 
+ <p>``is evaluated'' — The argument can be any expression, which is 
+ evaluated as would be any expression submitted to ACL2's top level loop. 
+ Thus, <span class="tt"><a href="ACL2____STATE.html">state</a></span> and user-defined <span class="tt"><a href="ACL2____STOBJ.html">stobj</a></span>s may appear in the form 
+ supplied to <span class="v">make-event</span>.  Henceforth, we will refer to this evaluation as 
+ ``expansion.''  Expansion is actually done in a way that restores ACL2's 
+ built-in <span class="tt"><a href="ACL2____STATE.html">state</a></span> global variables, including the logical <a href="ACL2____WORLD.html">world</a>, 
+ to their pre-expansion values (with a few exceptions — see <a href="ACL2____MAKE-EVENT-DETAILS.html">make-event-details</a> — and where we note that changes to user-defined 
+ <span class="tt"><a href="ACL2____STATE.html">state</a></span> global variables (see <a href="ACL2____ASSIGN.html">assign</a>) are preserved).  So, for 
+ example, events might be evaluated during expansion, but they will disappear 
+ from the logical <a href="ACL2____WORLD.html">world</a> after expansion returns its result.  Moreover, 
+ proofs are enabled by default at the start of expansion (see <a href="ACL2____LD-SKIP-PROOFSP.html">ld-skip-proofsp</a>) if keyword <span class="v">:CHECK-EXPANSION</span> is supplied and has a 
+ non-<span class="v">nil</span> value.</p> 
+ 
+ <p>``expansion result'' — The above expansion may result in an ordinary 
+ (non-<span class="tt"><a href="ACL2____STATE.html">state</a></span>, non-<span class="tt"><a href="ACL2____STOBJ.html">stobj</a></span>) value, which we call the ``expansion 
+ result.''  Or, expansion may result in a multiple value of the form <span class="v">(<a href="ACL2____MV.html">mv</a> erp
+ val state)</span>, or, more generally, <span class="v">(<a href="ACL2____MV.html">mv</a> erp val state stobj-1 ... stobj-k)</span> 
+ where each <span class="v">stobj-i</span> is a <a href="ACL2____STOBJ.html">stobj</a>; then the expansion result is 
+ <span class="v">val</span> unless <span class="v">erp</span> is not <span class="v">nil</span>, in which case there is no expansion 
+ result, and the original <span class="v">make-event</span> evaluates to a soft error.  In either 
+ case (single or multiple value), either <span class="v">val</span> is an embedded event form 
+ (see <a href="ACL2____EMBEDDED-EVENT-FORM.html">embedded-event-form</a>), or else the original <span class="v">make-event</span> 
+ evaluates to a soft error, printed as described under ``Error Reporting'' 
+ below.<br> 
+ (<i>Technical remark</i>: The expansion result described above may be modified 
+ for <span class="tt"><a href="ACL2____INCLUDE-BOOK.html">include-book</a></span>, <span class="tt"><a href="ACL2____ADD-INCLUDE-BOOK-DIR.html">add-include-book-dir</a></span>, and <span class="tt"><a href="ACL2____ADD-INCLUDE-BOOK-DIR_12.html">add-include-book-dir!</a></span>, replacing book names by full pathnames, using syntax 
+ <span class="v">(:system . relative-pathname)</span> for <a href="ACL2____COMMUNITY-BOOKS.html">community-books</a> (i.e., system 
+ books); see <a href="ACL2____FULL-BOOK-NAME.html">full-book-name</a>, and for further details see comments in 
+ source function <span class="v">make-include-books-absolute</span>.  End of technical 
+ remark.)</p> 
+ 
+ <p>``evaluated again'' — the expansion result is evaluated in place of 
+ the original <span class="v">make-event</span>.</p> 
+ 
+ </blockquote> 
+ 
+ <p>The expansion process can invoke subsidiary calls of <span class="v">make-event</span>, and 
+ the expansion result can (perhaps after macroexpansion) be a call of 
+ <span class="v">make-event</span>.  It can be useful to track all these <span class="v">make-event</span> calls. 
+ The <a href="ACL2____STATE.html">state</a> global variable <span class="v">make-event-debug</span> may be set to a 
+ non-<span class="v">nil</span> value, for example <span class="v">(<a href="ACL2____ASSIGN.html">assign</a> make-event-debug t)</span>, in order to 
+ see a trace of the expansion process, where a level is displayed (as in 
+ ``<span class="v">3&gt;</span>'') to indicate the depth of subsidiary expansions.</p> 
+ 
+ <p>Expansion of a <span class="v">make-event</span> call will yield an event that replaces the 
+ original <span class="v">make-event</span> call.  In particular, if you put a <span class="v">make-event</span> 
+ form in a book, then in essence it is replaced by its expansion result, 
+ created during the proof pass of the <span class="tt"><a href="ACL2____CERTIFY-BOOK.html">certify-book</a></span> process.  We now 
+ elaborate on this idea of keeping the original expansion.</p> 
+ 
+ <p>A <span class="v">make-event</span> call generates a ``<span class="v">make-event</span> replacement'' that may 
+ be stored by the system.  In the simplest case, this replacement is the 
+ expansion result.  When a book is certified, these replacements are stored in 
+ a book's certificate (technically, in the <span class="v">:EXPANSION-ALIST</span> field).  Thus, 
+ although the book is not textually altered during certification, one may 
+ imagine a ``book expansion'' corresponding to the original book, in which 
+ events are substituted by replacements that were generated during the proof 
+ phase of certification.  A subsequent <span class="tt"><a href="ACL2____INCLUDE-BOOK.html">include-book</a></span> will then include 
+ the book expansion corresponding to the indicated book.  When a book is 
+ compiled during <span class="tt"><a href="ACL2____CERTIFY-BOOK.html">certify-book</a></span>, it is actually the corresponding book 
+ expansion, stored as a temporary file, that is compiled instead.  That 
+ temporary file is deleted after compilation unless one first evaluates the 
+ form <span class="v">(<a href="ACL2____ASSIGN.html">assign</a> keep-tmp-files t)</span>.  Note however that all of the original 
+ forms must still be legal <a href="ACL2____EVENTS.html">events</a>; see <a href="ACL2____EMBEDDED-EVENT-FORM.html">embedded-event-form</a>.  So 
+ for example, if the first event in a book is <span class="v">(<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> my-id (x)
+ x))</span>, and is followed by <span class="v">(my-id (<a href="ACL2____MAKE-EVENT.html">make-event</a> ...))</span>, the final 
+ ``<span class="v">include-book</span>'' pass of <span class="tt"><a href="ACL2____CERTIFY-BOOK.html">certify-book</a></span> will fail because 
+ <span class="v">my-id</span> is not defined when the <span class="v">my-id</span> call is encountered.</p> 
+ 
+ <p>A <span class="v">make-event</span> replacement might not be the expansion when either of the 
+ keyword arguments <span class="v">:CHECK-EXPANSION</span> or <span class="v">:EXPANSION?</span> is supplied.  We 
+ deal with the latter in the final section, on Advanced Expansion Control.  If 
+ <span class="v">:CHECK-EXPANSION t</span> is supplied and the expansion is <span class="v">exp</span>, then the 
+ replacement is obtained from the original <span class="v">make-event</span> call, by 
+ substituting <span class="v">exp</span> for <span class="v">t</span> as the value of keyword 
+ <span class="v">:CHECK-EXPANSION</span>.  Such a <span class="v">make-event</span> call — during the second 
+ pass of an <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span>, or during event processing on behalf of <span class="tt"><a href="ACL2____INCLUDE-BOOK.html">include-book</a></span> other than when including a book near the end of its 
+ certification process — will do the expansion again and check that the 
+ expansion result is equal to the original expansion result, <span class="v">exp</span>.  In the 
+ unusual case that you know the expected expansion result, <span class="v">res</span>, you can 
+ specify <span class="v">:CHECK-EXPANSION res</span> in the first place, so that the check is 
+ also done during the initial evaluation of the <span class="v">make-event</span> form. 
+ IMPORTANT BUT OBSCURE DETAIL: That expansion check is only done when 
+ processing events, not during a preliminary load of a book's compiled file. 
+ The following paragraph elaborates.</p> 
+ 
+ <p>(Here are details on the point made just above, for those who use the 
+ <span class="v">:CHECK-EXPANSION</span> argument to perform side-effects on the <a href="ACL2____STATE.html">state</a>. 
+ When you include a book, ACL2 generally loads a compiled file before 
+ processing the events in the book; see <a href="ACL2____BOOK-COMPILED-FILE.html">book-compiled-file</a>.  While it is 
+ true that a non-<span class="v">nil</span> <span class="v">:CHECK-EXPANSION</span> argument causes <span class="tt"><a href="ACL2____INCLUDE-BOOK.html">include-book</a></span> to perform expansion of the <span class="v">make-event</span> form during event 
+ processing it does <i>not</i> perform expansion when the compiled file (or 
+ expansion file; again, see <a href="ACL2____BOOK-COMPILED-FILE.html">book-compiled-file</a>) is loaded.)</p> 
+ 
+ <p>ACL2 performs the following space-saving optimization: when the expansion 
+ result is a <span class="tt"><a href="ACL2____LOCAL.html">local</a></span> event, then the <span class="v">make-event</span> replacement is 
+ <span class="v">(<a href="ACL2____LOCAL.html">local</a> (<a href="ACL2____VALUE-TRIPLE.html">value-triple</a> :ELIDED))</span>.</p> 
+ 
+ <p>The notion of ``expansion'' and ``replacement'' extend to the case that a 
+ call of <span class="v">make-event</span> is found in the course of macroexpansion.  The 
+ following example illustrates this point.</p> 
+ 
+ <pre class="code">(<a href="ACL2____ENCAPSULATE.html">encapsulate</a>
+ ()
+ (<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> my-mac ()
+   '(<a href="ACL2____MAKE-EVENT.html">make-event</a> '(<a href="COMMON-LISP____DEFUN.html">defun</a> foo (x) x)))
+ (my-mac))
+:pe :here</pre> 
+ 
+ <p>The above call of <span class="tt"><a href="ACL2____PE.html">pe</a></span> shows that the form <span class="v">(my-mac)</span> has a 
+ <span class="v">make-event</span> expansion (and replacement) of <span class="v">(<a href="COMMON-LISP____DEFUN.html">DEFUN</a> FOO (X) X)</span>:</p> 
+ 
+ <pre class="code">(<a href="ACL2____ENCAPSULATE.html">ENCAPSULATE</a> NIL
+             (<a href="COMMON-LISP____DEFMACRO.html">DEFMACRO</a> MY-MAC
+                       NIL
+                       '(<a href="ACL2____MAKE-EVENT.html">MAKE-EVENT</a> '(<a href="COMMON-LISP____DEFUN.html">DEFUN</a> FOO (X) X)))
+             (<a href="COMMON-LISP____DEFUN.html">DEFUN</a> FOO (X) X))</pre> 
+ 
+ <h3>Error Reporting</h3> 
+ 
+ <p>Suppose that expansion produces a soft error as described above.  That is, 
+ suppose that the argument of a <span class="v">make-event</span> call evaluates to a multiple 
+ value <span class="v">(<a href="ACL2____MV.html">mv</a> erp val state ...)</span> where <span class="v">erp</span> is not <span class="v">nil</span>.  If <span class="v">erp</span> 
+ is a string, then that string is printed in the error message.  If <span class="v">erp</span> is 
+ a <span class="tt"><a href="COMMON-LISP____CONS.html">cons</a></span> pair whose <span class="tt"><a href="COMMON-LISP____CAR.html">car</a></span> is a string, then the error prints 
+ <span class="v">"~@0"</span> with <span class="v">#\0</span> bound to that <span class="v">cons</span> pair; see <a href="ACL2____FMT.html">fmt</a>.  Any 
+ other non-<span class="v">nil</span> value of <span class="v">erp</span> causes a generic error message to be 
+ printed.</p> 
+ 
+ <h3>Restriction to Event Contexts</h3> 
+ 
+ <p>A <span class="v">make-event</span> call must occur either at the top level, or during 
+ <span class="v">make-event</span> expansion, or as an argument of an event constructor.  We 
+ explain in more detail below.  This restriction is imposed to enable ACL2 to 
+ track expansions produced by <span class="v">make-event</span>.</p> 
+ 
+ <p>The following examples illustrate this restriction.</p> 
+ 
+ <pre class="code">; Legal:
+(<a href="COMMON-LISP____PROGN.html">progn</a> (<a href="ACL2____WITH-OUTPUT.html">with-output</a>
+        :on summary
+        (<a href="ACL2____MAKE-EVENT.html">make-event</a> '(<a href="COMMON-LISP____DEFUN.html">defun</a> foo (x) x))))
+
+; Illegal:
+(<a href="ACL2____MV-LET.html">mv-let</a> (erp val state)
+        (<a href="ACL2____MAKE-EVENT.html">make-event</a> '(<a href="COMMON-LISP____DEFUN.html">defun</a> foo (x) x))
+        (<a href="ACL2____MV.html">mv</a> erp val state))</pre> 
+ 
+ <p>More precisely: a <span class="v">make-event</span> call that is not itself evaluated during 
+ <span class="v">make-event</span> expansion is subject to the following requirement.  After 
+ macroexpansion has taken place, such a <span class="v">make-event</span> call must be in an 
+ ``event context'', defined recursively as follows.  (All but the first two 
+ cases below correspond to similar cases for constructing events; see <a href="ACL2____EMBEDDED-EVENT-FORM.html">embedded-event-form</a>.)</p> 
+ 
+ <ul> 
+ 
+ <li>A form submitted at the top level, or more generally, supplied to a call 
+ of <span class="tt"><a href="ACL2____LD.html">ld</a></span>, is in an event context.</li> 
+ 
+ <li>A form occurring at the top level of a book is in an event context.</li> 
+ 
+ <li>If <span class="v">(</span><span class="tt"><a href="ACL2____LOCAL.html">local</a></span><span class="v"> x1)</span> is in an event context, then so is 
+ <span class="v">x1</span>.</li> 
+ 
+ <li>If <span class="v">(</span><span class="tt"><a href="ACL2____SKIP-PROOFS.html">skip-proofs</a></span><span class="v"> x1)</span> is in an event context, then so is 
+ <span class="v">x1</span>.</li> 
+ 
+ <li>If <span class="v">(</span><span class="tt"><a href="ACL2____MAKE-EVENT.html">make-event</a></span><span class="v"> x ...)</span> is in an event context and its 
+ expansion <span class="v">x1</span> is an embedded event form, then <span class="v">x1</span> is in an event 
+ context.</li> 
+ 
+ <li>If <span class="v">(</span><span class="tt"><a href="ACL2____WITH-OUTPUT.html">with-output</a></span><span class="v"> ... x1)</span>, <span class="v">(</span><span class="tt"><a href="ACL2____WITH-PROVER-STEP-LIMIT.html">with-prover-step-limit</a></span><span class="v"> ... x1 ...)</span>, or <span class="v">(</span><span class="tt"><a href="ACL2____WITH-PROVER-TIME-LIMIT.html">with-prover-time-limit</a></span><span class="v"> ... x1)</span> is in an event context, then so is 
+ <span class="v">x1</span>.</li> 
+ 
+ <li>For any call of <span class="tt"><a href="COMMON-LISP____PROGN.html">progn</a></span> or <span class="tt"><a href="ACL2____PROGN_12.html">progn!</a></span>, each of its arguments is 
+ in an event context.</li> 
+ 
+ <li>For any call of <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span>, each of its arguments except the 
+ first (the signature list) is in an event context.</li> 
+ 
+ <li>If <span class="v">(RECORD-EXPANSION x1 x2)</span> is in an event context, then <span class="v">x1</span> and 
+ <span class="v">x2</span> are in event contexts.  Note: <span class="v">record-expansion</span> is intended for 
+ use only by the implementation.</li> 
+ 
+ </ul> 
+ 
+ <p>Low-level remark, for system implementors.  There is the one exception to 
+ the above restriction: a single <span class="tt"><a href="ACL2____STATE-GLOBAL-LET_A2.html">state-global-let*</a></span> form immediately 
+ under a <span class="v">progn!</span> call.  For example:</p> 
+ 
+ <pre class="code">(<a href="ACL2____PROGN_12.html">progn!</a> (<a href="ACL2____STATE-GLOBAL-LET_A2.html">state-global-let*</a> &lt;bindings&gt; (<a href="ACL2____MAKE-EVENT.html">make-event</a> ...)))</pre> 
+ 
+ <p>However, the following form may be preferable (see <a href="ACL2____PROGN_12.html">progn!</a>):</p> 
+ 
+ <pre class="code">(<a href="ACL2____PROGN_12.html">progn!</a> :STATE-GLOBAL-BINDINGS &lt;bindings&gt; (<a href="ACL2____MAKE-EVENT.html">make-event</a> ...))</pre> 
+ 
+ <p>Also see <a href="ACL2____REMOVE-UNTOUCHABLE.html">remove-untouchable</a> for an interesting use of this 
+ exception.</p> 
+ 
+ <h3>Avoiding large <span class="v">make-event</span> forms in <a href="ACL2____CERTIFICATE.html">certificate</a> files</h3> 
+ 
+ <p>The <a href="ACL2____CERTIFICATE.html">certificate</a> file for a book contains expansions of 
+ <span class="v">make-event</span> forms from the book.  (Those interested may find details about 
+ this in an Implementation Note about ``The book expansion'' in the 
+ documentation topic, <a href="ACL2____MAKE-EVENT-DETAILS.html">make-event-details</a>.)  Those expansions can be very 
+ large if one is not careful.  Consider the difference between the following 
+ two events.</p> 
+ 
+ <pre class="code">(<a href="ACL2____MAKE-EVENT.html">make-event</a>
+ `(<a href="ACL2____DEFCONST.html">defconst</a> *foo* ,(<a href="COMMON-LISP____LENGTH.html">length</a> (<a href="ACL2____W.html">w</a> state))))
+
+(<a href="ACL2____MAKE-EVENT.html">make-event</a>
+ `(<a href="ACL2____DEFCONST.html">defconst</a> *foo* (<a href="COMMON-LISP____LENGTH.html">length</a> ',(<a href="ACL2____W.html">w</a> state))))</pre> 
+ 
+ <p>The first generates an expansion such as <span class="v">(<a href="ACL2____DEFCONST.html">defconst</a> *foo* 122700)</span> 
+ (where the numeric value depends on the <a href="ACL2____WORLD.html">world</a> in which the 
+ <span class="v">make-event</span> form is evaluated).  The second, however, generates an 
+ expansion of the form <span class="v">(<a href="ACL2____DEFCONST.html">defconst</a> *foo* (<a href="COMMON-LISP____LENGTH.html">length</a> '&lt;wrld&gt;))</span>, where <span class="v">&lt;wrld</span> 
+ is an ACL2 world — a very large structure.  The <span class="v">.cert</span> file for a 
+ book containing the second form will therefore contain many megabytes. 
+ Moreover, with the second form the length of that world will need to be 
+ computed when the book is included (which may be fast, but could be slow for a 
+ different such computation).</p> 
+ 
+ <h3>Examples Illustrating How to Access State</h3> 
+ 
+ <p>You can modify the ACL2 <a href="ACL2____STATE.html">state</a> by doing your state-changing 
+ computation during the expansion phase, before expansion returns the event 
+ that is submitted.  Let us look at some examples and then consider a 
+ restriction for many built-in state globals.</p> 
+ 
+ <p>First consider the following.  Notice that expansion modifies a state 
+ global, <span class="v">my-global</span>, during <span class="v">make-event</span> expansion (see <a href="ACL2____ASSIGN.html">assign</a>); 
+ and then, expansion returns a <span class="tt"><a href="COMMON-LISP____DEFUN.html">defun</a></span> event to be evaluated.</p> 
+ 
+ <pre class="code">(<a href="ACL2____MAKE-EVENT.html">make-event</a>
+  (<a href="ACL2____ER-PROGN.html">er-progn</a> (<a href="ACL2____ASSIGN.html">assign</a> my-global (<a href="COMMON-LISP____LENGTH.html">length</a> (<a href="ACL2____W.html">w</a> state)))
+            (<a href="ACL2____VALUE.html">value</a> '(<a href="COMMON-LISP____DEFUN.html">defun</a> foo (x) (<a href="COMMON-LISP____CONS.html">cons</a> x x)))))</pre> 
+ 
+ <p>Then we get:</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2_____04.html">@</a> my-global)
+72271
+ACL2 !&gt;:pe foo
+ L        1:x(<a href="ACL2____MAKE-EVENT.html">MAKE-EVENT</a> (<a href="ACL2____ER-PROGN.html">ER-PROGN</a> # #))
+
+&gt;L            (<a href="COMMON-LISP____DEFUN.html">DEFUN</a> FOO (X) (<a href="COMMON-LISP____CONS.html">CONS</a> X X))
+ACL2 !&gt;</pre> 
+ 
+ <p>Here's a slightly fancier example, where the computation affects the <span class="tt"><a href="COMMON-LISP____DEFUN.html">defun</a></span>.  In a new session, execute:</p> 
+ 
+ <pre class="code">(<a href="ACL2____MAKE-EVENT.html">make-event</a>
+  (<a href="ACL2____ER-PROGN.html">er-progn</a> (<a href="ACL2____ASSIGN.html">assign</a> my-global (<a href="COMMON-LISP____LENGTH.html">length</a> (<a href="ACL2____W.html">w</a> state)))
+            (<a href="ACL2____VALUE.html">value</a> `(<a href="COMMON-LISP____DEFUN.html">defun</a> foo (x) (<a href="COMMON-LISP____CONS.html">cons</a> x ,(<a href="ACL2_____04.html">@</a> my-global))))))</pre> 
+ 
+ <p>Then:</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2_____04.html">@</a> my-global)
+72271
+ACL2 !&gt;:pe foo
+ L        1:x(<a href="ACL2____MAKE-EVENT.html">MAKE-EVENT</a> (<a href="ACL2____ER-PROGN.html">ER-PROGN</a> # #))
+
+&gt;L            (<a href="COMMON-LISP____DEFUN.html">DEFUN</a> FOO (X) (<a href="COMMON-LISP____CONS.html">CONS</a> X 72271))
+ACL2 !&gt;</pre> 
+ 
+ <p>Note that ACL2 <a href="ACL2____TABLE.html">table</a> <a href="ACL2____EVENTS.html">events</a> may avoid the need to use <a href="ACL2____STATE.html">state</a> globals.  For example, instead of the example above, consider this 
+ example in a new session.</p> 
+ 
+ <pre class="code">(<a href="ACL2____MAKE-EVENT.html">make-event</a>
+  (<a href="COMMON-LISP____LET.html">let</a> ((world-len (<a href="COMMON-LISP____LENGTH.html">length</a> (<a href="ACL2____W.html">w</a> state))))
+    `(<a href="COMMON-LISP____PROGN.html">progn</a> (<a href="ACL2____TABLE.html">table</a> my-table :STORED-WORLD-LENGTH ,world-len)
+            (<a href="COMMON-LISP____DEFUN.html">defun</a> foo (x) (<a href="COMMON-LISP____CONS.html">cons</a> x ,world-len)))))</pre> 
+ 
+ <p>Then:</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____TABLE.html">table</a> my-table)
+ ((:STORED-WORLD-LENGTH . 72271))
+ACL2 !&gt;:pe foo
+          1:x(<a href="ACL2____MAKE-EVENT.html">MAKE-EVENT</a> (<a href="COMMON-LISP____LET.html">LET</a> # #))
+
+&gt;L            (<a href="COMMON-LISP____DEFUN.html">DEFUN</a> FOO (X) (<a href="COMMON-LISP____CONS.html">CONS</a> X 72271))
+ACL2 !&gt;</pre> 
+ 
+ <p>Many built-in <a href="ACL2____STATE.html">state</a> globals revert after expansion.  If your own 
+ state global (like <span class="v">my-global</span> above) can be set during expansion, then the 
+ new value will persist.  But that persistence will fail for many state 
+ globals, specifically, those that are stored in the list, 
+ <span class="v">*protected-system-state-globals*</span>.  We advice users <b>not</b> to assume 
+ that system state modifications, such as the state of guard-checking, will 
+ persist after executing a <span class="v">make-event</span> form.</p> 
+ 
+ <p>That advice may suffice for most users.  But if you want to understand the 
+ point above more deeply, then consider the following example.</p> 
+ 
+ <pre class="code">(<a href="ACL2____MAKE-EVENT.html">make-event</a>
+ (<a href="ACL2____ER-PROGN.html">er-progn</a> (<a href="ACL2____SET-GUARD-CHECKING.html">set-guard-checking</a> :none) ; sets state global 'guard-checking-on
+           (<a href="ACL2____ASSIGN.html">assign</a> my-global (<a href="COMMON-LISP____CAR.html">car</a> 3))
+           (<a href="ACL2____VALUE.html">value</a> (<a href="COMMON-LISP____LIST.html">list</a> 'value-triple (<a href="ACL2_____04.html">@</a> my-global)))))</pre> 
+ 
+ <p>This <span class="v">make-event</span> form succeeds and afterwards, the value of <span class="v">(<a href="ACL2_____04.html">@</a>
+ my-global)</span> is <span class="v">nil</span>, which of course is the value expected after the call 
+ above of <span class="tt"><a href="ACL2____ASSIGN.html">assign</a></span>.  However, the value of <span class="v">(<a href="ACL2_____04.html">@</a> guard-checking-on)</span> 
+ after executing this <span class="v">make-event</span> form is <span class="v">t</span>, not <span class="v">:none</span>.  That is 
+ because the symbol <span class="v">guard-checking-on</span> belongs to the list of symbols 
+ stored in the constant, <span class="v">*protected-system-state-globals*</span>, and thus the 
+ value of the state global <span class="v">guard-checking-on</span> is reverted to its initial 
+ value (which was assume here is the default, <span class="v">t</span>) after the <span class="v">make-event</span> 
+ form completes execution.</p> 
+ 
+ <p><b>Remarks on <span class="v">*Protected-system-state-globals*</span> for advanced 
+ users.</b></p> 
+ 
+ <ul> 
+ 
+ <li>The constant <span class="v">*protected-system-state-globals*</span> is defined to include 
+ all built-in state globals, <i>except</i> for those that the ACL2 implementors 
+ have decided can safely retain values set during <span class="v">make-event</span> expansion. 
+ If you find state globals that you would like to be added to this list of 
+ exceptions, please contact the ACL2 implementors.  Note for example that it 
+ would not be safe to allow <span class="v">guard-checking-on</span> as an exception, since ACL2 
+ relies on the persistence of this state global's value after each event 
+ (for explanation, see the Essay on Guard Checking in the ACL2 sources).</li> 
+ 
+ <li>As noted in a comment in the example above, the macro <span class="tt"><a href="ACL2____SET-GUARD-CHECKING.html">set-guard-checking</a></span> sets the state global, <span class="v">'guard-checking-on</span>.  A natural 
+ question is how one might know this.  For most ACL2 users (one might say, 
+ traditional ACL2 users), it should suffice simply not to expect system state 
+ modifications (like the state of guard-checking) to persist after executing a 
+ <span class="v">make-event</span> form.  For system implementors, one however needs to work with 
+ the ACL2 system by looking at the definition of the utility — in this 
+ example, <span class="v">set-guard-checking</span> — or at the least, get a sense of its 
+ expansion by using macroexpansion (for example see <a href="ACL2____TRANS1.html">trans1</a>).</li> 
+ 
+ </ul> 
+ 
+ <h3>Advanced Expansion Control</h3> 
+ 
+ <p>We conclude this <a href="COMMON-LISP____DOCUMENTATION.html">documentation</a> section by discussing three kinds of 
+ additional control over <span class="v">make-event</span> expansion.  These are all illustrated 
+ in community book <span class="v">books/make-event/make-event-keywords-or-exp.lisp</span>.  The 
+ discussion below is split into the following three parts.</p> 
+ 
+ <p>(1) The value produced by expansion may have the form <span class="v">(:DO-PROOFS
+ exp)</span>, which specifies <span class="v">exp</span> as the expansion result, to be evaluated 
+ without skipping proofs even when including a book.</p> 
+ 
+ <p>(2) The value produced by expansion may have the form <span class="v">(:OR exp-1
+ ... exp-k)</span>, which specifies that the first form <span class="v">exp-i</span> to evaluate 
+ without error is the expansion result.</p> 
+ 
+ <p>(3) The keyword argument <span class="v">:EXPANSION?</span> can serve to eliminate the 
+ storing of <span class="v">make-event</span> replacements, as described above for the ``book 
+ expansion'' of a book.</p> 
+ 
+ <p>We now elaborate on each of these.</p> 
+ 
+ <p>(1) <span class="v">:DO-PROOFS</span> ``call'' produced by expansion.</p> 
+ 
+ <p>We have discussed the expansion result produced by the expansion phase of 
+ evaluating a <span class="v">make-event</span> call.  However, if the expansion phase produces 
+ an expression of the form <span class="v">(:DO-PROOFS exp)</span>, then the expansion result is 
+ actually <span class="v">exp</span>.  The <span class="v">:DO-PROOFS</span> wrapper indicates that even if proofs 
+ are currently being skipped (see <a href="ACL2____LD-SKIP-PROOFSP.html">ld-skip-proofsp</a>), then evaluation of 
+ <span class="v">exp</span> should take place with proofs not skipped.  For example, proofs will 
+ be performed when evaluating the <span class="v">make-event</span> expansion, namely the 
+ indicated <span class="v">defthm</span> event, in the following example.</p> 
+ 
+ <pre class="code">(<a href="ACL2____SET-LD-SKIP-PROOFSP.html">set-ld-skip-proofsp</a> t state)
+(<a href="ACL2____MAKE-EVENT.html">make-event</a> '(:DO-PROOFS
+              (<a href="ACL2____DEFTHM.html">defthm</a> app-assoc (<a href="COMMON-LISP____EQUAL.html">equal</a>
+                                 (<a href="COMMON-LISP____APPEND.html">append</a> (<a href="COMMON-LISP____APPEND.html">append</a> x y) z)
+                                 (<a href="COMMON-LISP____APPEND.html">append</a> x y z)))))</pre> 
+ 
+ <p>Note that such use of <span class="v">:DO-PROOFS</span> causes proofs to be performed when 
+ evaluating the expansion while including an uncertified book.  But when 
+ including a certified book, then unless <span class="v">:CHECK-EXPANSION</span> is supplied a 
+ non-<span class="v">nil</span> value, the <span class="v">make-event</span> replacement will just be the 
+ expansion, which does not include the <span class="v">:DO-PROOFS</span> wrapper and hence will 
+ be evaluated with proofs skipped.</p> 
+ 
+ <p>(2) <span class="v">:OR</span> ``call'' produced by expansion.</p> 
+ 
+ <p>There may be times where you want to try different expansions.  For 
+ example, the community book <span class="v">books/make-event/proof-by-arith.lisp</span> attempts 
+ to admit a given event, which we'll denote <span class="v">EV</span>, by trying events of the 
+ following form as <span class="v">BOOK</span> varies over different community books.</p> 
+ 
+ <pre class="code">(<a href="ACL2____ENCAPSULATE.html">encapsulate</a>
+ ()
+ (<a href="ACL2____LOCAL.html">local</a> (<a href="ACL2____INCLUDE-BOOK.html">include-book</a> BOOK :DIR :SYSTEM))
+ EV)</pre> 
+ 
+ <p>A naive implementation of this macro would evaluate all such <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span> events until one succeeds, and then return that successful event 
+ as the expansion.  Then that event would need to be evaluated again!  With 
+ some hacking one could avoid that re-evaluation by using <span class="tt"><a href="ACL2____SKIP-PROOFS.html">skip-proofs</a></span>, 
+ but that won't work if you are trying to create a certified book without 
+ skipped proofs.  Instead, the implementation creates an expansion of the form 
+ <span class="v">(:OR ev-1 ev-2 ... ev-k)</span>, where the list <span class="v">(ev-1 ev-2 ... ev-k)</span> 
+ enumerates the generated encapsulate events.  In general, for this 
+ ``disjunctive case'' of a result from expansion, each <span class="v">ev-i</span> is evaluated 
+ in sequence, and the first that succeeds without error is considered to be the 
+ expansion result — and a repeat evaluation is avoided.  If evaluation of 
+ each <span class="v">ev-i</span> results in an error, then so does the <span class="v">make-event</span> call.</p> 
+ 
+ <p>This special use of <span class="v">:OR</span> in a value produced by expansion is only 
+ supported at the top level.  That is, the result can be <span class="v">(:OR ev-1 ev-2
+ ... ev-k)</span> but then each <span class="v">ev-i</span> must be a legal expansion result, without 
+ such further use of <span class="v">:OR</span> — except, <span class="v">ev-i</span> may be <span class="tt">(:DO-PROOFS 
+ ev-i')</span>, where <span class="v">ev-i'</span> then would serve as the expansion rather than 
+ <span class="v">ev-i</span>.</p> 
+ 
+ <p>(3) The <span class="v">:EXPANSION?</span> keyword argument.</p> 
+ 
+ <p>If keyword argument <span class="v">:EXPANSION?</span> has a non<span class="v">nil</span> value, then the 
+ <span class="v">:CHECK-EXPANSION</span> keyword must be omitted or have value <span class="v">nil</span> or 
+ <span class="v">t</span>, hence not a cons pair.</p> 
+ 
+ <p>The idea of the <span class="v">:EXPANSION?</span> keyword is to give you a way to avoid 
+ storing expansion results in a book's <a href="ACL2____CERTIFICATE.html">certificate</a>.  Roughly speaking, 
+ when the expansion result matches the value of <span class="v">:EXPANSION?</span>, then no 
+ expansion result is stored for the event by book certification; then when the 
+ book is later included, the value of <span class="v">:EXPANSION?</span> is used as the 
+ expansion, thus bypassing the expansion phase.  One could say that the event 
+ is its own make-event replacement, but it is more accurate to say that there 
+ is no make-event replacement at all, since nothing is stored in the 
+ certificate for this event.  Below, we elaborate on make-event replacements 
+ when <span class="v">:EXPANSION?</span> is used and also discuss other properties of this 
+ keyword.</p> 
+ 
+ <p>We modify the notion of ``expansion result'' for <span class="v">make-event</span> forms to 
+ comprehend the use of the <span class="v">:EXPANSION?</span> keyword.  For that purpose, let's 
+ consider a call of <span class="v">make-event</span> to be ``reducible'' if it has an 
+ <span class="v">:EXPANSION?</span> keyword with non-<span class="v">nil</span> value, <span class="v">exp</span>, and its 
+ <span class="v">:CHECK-EXPANSION</span> keyword is missing or has value <span class="v">nil</span>, in which case 
+ the ``reduction'' of this <span class="v">make-event</span> call is defined to be <span class="v">exp</span>.  The 
+ expansion result as originally defined is modified by the following 
+ ``recursive reduction'' process: recur through the original expansion, passing 
+ through calls of <span class="tt"><a href="ACL2____LOCAL.html">local</a></span>, <span class="tt"><a href="ACL2____SKIP-PROOFS.html">skip-proofs</a></span>, <span class="tt"><a href="ACL2____WITH-OUTPUT.html">with-output</a></span>, 
+ <span class="tt"><a href="ACL2____WITH-PROVER-STEP-LIMIT.html">with-prover-step-limit</a></span>, and <span class="tt"><a href="ACL2____WITH-PROVER-TIME-LIMIT.html">with-prover-time-limit</a></span>, and 
+ replacing (recursively) any reducible call of <span class="v">make-event</span> by its 
+ reduction.  Furthermore, we refer to two forms as ``reduction equivalent'' if 
+ their recursive reductions are equal.  Note that the recursive reduction 
+ process does not pass through <span class="tt"><a href="COMMON-LISP____PROGN.html">progn</a></span> or <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span>, but that 
+ process is applied to the computation of expansions for their subsidiary 
+ <span class="tt"><a href="ACL2____MAKE-EVENT.html">make-event</a></span> calls.</p> 
+ 
+ <p>To explain further the effect of <span class="v">:EXPANSION? exp</span>, we split into the 
+ following two cases.</p> 
+ 
+ <p><b>Case 1</b>: Evaluation is not taking place when including a book or 
+ evaluating the second pass of an <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span> event; more precisely, 
+ the value of <span class="v">(<a href="ACL2____LD-SKIP-PROOFSP.html">ld-skip-proofsp</a> state)</span> is not the symbol <span class="v">INCLUDE-BOOK</span>. 
+ There are two subcases.</p> 
+ 
+ <ul> 
+ 
+ <li>Case 1a: The expansion result is not reduction-equivalent to <span class="v">exp</span>. 
+ Then the <span class="v">make-event</span> call is processed as though the <span class="v">:EXPANSION?</span> 
+ keyword had been omitted.</li> 
+ 
+ <li>Case 2a: The expansion result is reduction-equivalent to <span class="v">exp</span>.  Then 
+ there is no <span class="v">make-event</span> replacement for this call of <span class="v">make-event</span>; no 
+ replacement will be put into the <a href="ACL2____CERTIFICATE.html">certificate</a> file for a book containing 
+ this <span class="v">make-event</span> call.  When that book is subsequently included, the 
+ original form will be evaluated in the manner described in the next 
+ case.</li> 
+ 
+ </ul> 
+ 
+ <p><b>Case 2</b>: Evaluation is taking place when including a book or evaluating 
+ the second pass of an <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span> event; more precisely, the value of 
+ <span class="v">(<a href="ACL2____LD-SKIP-PROOFSP.html">ld-skip-proofsp</a> state)</span> is the symbol <span class="v">INCLUDE-BOOK</span>.  Then the 
+ expansion is <span class="v">exp</span>.  The expansion phase is skipped unless 
+ <span class="v">:CHECK-EXPANSION</span> is <span class="v">t</span>.</p> 
+ 
+ <p>The <span class="v">:EXPANSION?</span> keyword can be particularly useful in concert with the 
+ disjunctive (``<span class="v">:OR</span>'') case (2) discussed above.  Suppose that expansion 
+ produces a value as discussed in (2) above, <span class="v">(:OR exp-1 ... exp-k)</span>.  If 
+ one of these expressions <span class="v">exp-i</span> is more likely than the others to be the 
+ expansion, then you may wish to specify <span class="v">:EXPANSION? exp-i</span>, as this will 
+ avoid storing a <span class="v">make-event</span> replacement in that common case.  This could 
+ be useful if the expressions are large, to avoid enlarging the <a href="ACL2____CERTIFICATE.html">certificate</a> file for a book containing the <span class="v">make-event</span> call.</p> 
+ 
+ <p>It is legal to specify both <span class="v">:EXPANSION? exp</span> and <span class="v">:CHECK-EXPANSION
+ t</span>.  When either <span class="v">(<a href="ACL2____LD-SKIP-PROOFSP.html">ld-skip-proofsp</a> state)</span> is the symbol 
+ <span class="v">INCLUDE-BOOK</span>, or evaluation is taking place in raw Lisp, then this 
+ combination is treated the same as if <span class="v">:EXPANSION?</span> is omitted and the 
+ value of <span class="v">:CHECK-EXPANSION</span> is <span class="v">exp</span>.  Otherwise, this combination is 
+ treated the same as <span class="v">:CHECK-EXPANSION t</span>, modified to accommodate the 
+ effect of <span class="v">:EXPANSION?</span>  as discussed above: if the expansion is indeed the 
+ value of <span class="v">:EXPANSION?</span>, then no <span class="v">make-event</span> replacement is 
+ generated.</p>
+</body>
+</html>

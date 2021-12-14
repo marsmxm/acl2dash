@@ -1,0 +1,279 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Parallelism-tutorial</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____PARALLELISM-TUTORIAL">Click for Parallelism-tutorial in the Full Manual</a></h3>
+
+<p>A tutorial on how to use the parallelism library.</p><p>This <a href="COMMON-LISP____DOCUMENTATION.html">documentation</a> topic relates to the experimental 
+ extension of ACL2 supporting parallel execution and proof; see <a href="ACL2____PARALLELISM.html">parallelism</a>.</p> 
+ 
+ <p>In this topic we introduce the ACL2 parallelism primitives using the 
+ example of a doubly-recursive Fibonacci function, whose basic definition is as 
+ follows.  See <a href="ACL2____PARALLELISM.html">parallelism</a> for a very high-level summary of the 
+ parallelism capability described here, and see <a href="ACL2____COMPILING-ACL2P.html">compiling-ACL2p</a> for how 
+ to build an executable image that supports parallel execution.  Here, we 
+ assume that such an executable is being used.</p> 
+ 
+ <p><b>Serial Fibonacci</b></p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> fib (x)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____NATP.html">natp</a> x)))
+  (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____OR.html">or</a> (<a href="ACL2____ZP.html">zp</a> x) (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> x 0)) 0)
+        ((<a href="COMMON-LISP_____D3.html">=</a> x 1) 1)
+        (t (<a href="COMMON-LISP_____B2.html">+</a> (fib (<a href="COMMON-LISP____-.html">-</a> x 1)) (fib (<a href="COMMON-LISP____-.html">-</a> x 2))))))</pre> 
+ 
+ <p><b>Introducing</b> <span class="tt"><a href="ACL2____PARGS.html">Pargs</a></span></p> 
+ 
+ <p>A simple way to introduce parallelism into this function definition is to 
+ wrap the addition expression with a call of <span class="tt"><a href="ACL2____PARGS.html">pargs</a></span>, and the arguments 
+ to the addition will be computed in parallel whenever resources are available. 
+ As a result, we end up with a very similar and thus intuitive function 
+ definition.  Note that we replaced <span class="tt"><a href="COMMON-LISP_____B2.html">+</a></span> by <span class="tt"><a href="ACL2____BINARY-_B2.html">binary-+</a></span>, since <span class="tt"><a href="ACL2____PARGS.html">pargs</a></span> expects a function call, not a macro call.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> pfib (x)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____NATP.html">natp</a> x)))
+  (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____OR.html">or</a> (<a href="ACL2____ZP.html">zp</a> x) (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> x 0)) 0)
+        ((<a href="COMMON-LISP_____D3.html">=</a> x 1) 1)
+        (t (<a href="ACL2____PARGS.html">pargs</a> (<a href="ACL2____BINARY-_B2.html">binary-+</a> (pfib (<a href="COMMON-LISP____-.html">-</a> x 1))
+                            (pfib (<a href="COMMON-LISP____-.html">-</a> x 2)))))))</pre> 
+ 
+ <p><b>Introducing the Granularity Problem</b></p> 
+ 
+ <p>After you submit the above two versions of the Fibonacci function, test 
+ them with the following forms.</p> 
+ 
+ <pre class="code">(<a href="ACL2____TIME_42.html">time$</a> (fib 10))
+(<a href="ACL2____TIME_42.html">time$</a> (pfib 10))</pre> 
+ 
+ <p>Now increase the argument by increments of 5 to 10 until you find your 
+ curiosity satisfied or your patience wearing thin.  You can interrupt 
+ evaluation if necessary and return to the ACL2 loop.  You will immediately 
+ notice that you have not increased execution speed, at least not by much, by 
+ introducing parallelism.</p> 
+ 
+ <p>First, consider the computation of <span class="v">(pfib 4)</span>.  Assuming resources are 
+ available, <span class="v">(pfib 4)</span> will create a thread for computing <span class="v">(pfib 3)</span> and 
+ another thread for <span class="v">(pfib 2)</span>.  It is easy to imagine that setting up each 
+ thread takes much longer than the entire computation of <span class="v">(fib 4)</span>.</p> 
+ 
+ <p>Second, we must realize that if we have two threads available for computing 
+ <span class="v">(fib 10)</span>, then the evaluation of <span class="v">(fib 8)</span> will probably complete 
+ before the evaluation of <span class="v">(fib 9)</span>.  Once <span class="v">(fib 8)</span> finishes, 
+ parallelism resources will become available for the next recursive call made 
+ on behalf of <span class="v">(fib 9)</span>.  If for example that call is <span class="v">(fib 3)</span>, we will 
+ waste a lot of cycles just handing work to the thread that does this 
+ relatively small computation.  We need a way to ensure that parallelism 
+ resources are only used on problems of a "large" size.  Ensuring that only 
+ "large" problems are spawned is called the ``granularity problem.''</p> 
+ 
+ <p>In summary: We want to tell ACL2 that it can evaluate the arguments of 
+ <span class="tt"><a href="ACL2____PARGS.html">pargs</a></span> in parallel only when the parameter of <span class="v">pfib</span> is greater than 
+ some threshold.  Our tests using CCL have suggested that 27 is a reasonable 
+ threshold.</p> 
+ 
+ <p><b>Explicit Programming for the Granularity Problem</b></p> 
+ 
+ <p>One way to avoid the granularity problem is to duplicate code as 
+ follows.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> pfib (x)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____NATP.html">natp</a> x)))
+  (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____OR.html">or</a> (<a href="ACL2____ZP.html">zp</a> x) (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> x 0)) 0)
+        ((<a href="COMMON-LISP_____D3.html">=</a> x 1) 1)
+        (t (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP_____E3.html">&gt;</a> x 27) ; the granularity test
+               (<a href="ACL2____PARGS.html">pargs</a> (<a href="ACL2____BINARY-_B2.html">binary-+</a> (pfib (<a href="COMMON-LISP____-.html">-</a> x 1))
+                                (pfib (<a href="COMMON-LISP____-.html">-</a> x 2))))
+             (<a href="ACL2____BINARY-_B2.html">binary-+</a> (pfib (<a href="COMMON-LISP____-.html">-</a> x 1))
+                       (pfib (<a href="COMMON-LISP____-.html">-</a> x 2)))))))</pre> 
+ 
+ <p>Duplicating code is fundamentally a bad design principle, because it can 
+ double the work for future maintenance.  A ``granularity form'' is an 
+ expression</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____GRANULARITY.html">granularity</a> &lt;form&gt;))</pre> 
+ 
+ <p>that can allow threads to be spawned (without duplicating code) whenever 
+ the evaluation of <span class="v">&lt;form&gt;</span> results in a non-<span class="v">nil</span> value.  It may be 
+ placed inside any call of a parallelism primitive, in a position documented 
+ separately for each primitive.  Here is a definition of <span class="v">pfib</span> using this 
+ feature for a call of the parallelism primitive <span class="tt"><a href="ACL2____PARGS.html">pargs</a></span>.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> pfib (x)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____NATP.html">natp</a> x)))
+  (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____OR.html">or</a> (<a href="ACL2____ZP.html">zp</a> x) (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> x 0)) 0)
+        ((<a href="COMMON-LISP_____D3.html">=</a> x 1) 1)
+        (t (<a href="ACL2____PARGS.html">pargs</a>
+            (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____GRANULARITY.html">granularity</a> (<a href="COMMON-LISP_____E3.html">&gt;</a> x 27)))
+            (<a href="ACL2____BINARY-_B2.html">binary-+</a> (pfib (<a href="COMMON-LISP____-.html">-</a> x 1))
+                      (pfib (<a href="COMMON-LISP____-.html">-</a> x 2)))))))</pre> 
+ 
+ <p>Test each version as follows (or substitute your own natural number for 
+ 33).</p> 
+ 
+ <pre class="code">(<a href="ACL2____TIME_42.html">time$</a> (fib 33))
+(<a href="ACL2____TIME_42.html">time$</a> (pfib 33))</pre> 
+ 
+ <p><b>Another Granularity Issue Related to Thread Limitations</b></p> 
+ 
+ <p>Our implementation of parallelism primitives has the property that once a 
+ thread is assigned a computation, that assignment stays in effect until the 
+ computation is complete.  In particular, if a thread encounters a parallelism 
+ primitive that spawns child threads, the parent thread stays assigned, waiting 
+ until the child computations complete before it can continue its own 
+ computation.  In the meantime, the parent thread reduces the number of 
+ additional threads that Lisp can provide by 1, rather than being reassigned to 
+ do other work.</p> 
+ 
+ <p>How can this lack of reassignment affect the user?  Consider, for example, 
+ the application of a recursive function to a long list.  Imagine that this 
+ function is written so that the body contains a recursive call, for example as 
+ <span class="v">(<a href="ACL2____PARGS.html">pargs</a> (process (<a href="COMMON-LISP____CAR.html">car</a> x)) (recur (<a href="COMMON-LISP____CDR.html">cdr</a> x)))</span>.  Each such <span class="tt"><a href="ACL2____PARGS.html">pargs</a></span> call 
+ that spawns child work must wait for its children, one of which is the work of 
+ evaluating <span class="v">(recur (<a href="COMMON-LISP____CDR.html">cdr</a> x))</span>, to complete.  There is an ACL2 limit on how 
+ much pending work can be in the system, limiting the number of <span class="tt"><a href="ACL2____PARGS.html">pargs</a></span> 
+ calls that can result in parallel execution.  For example, if the ACL2 limit 
+ is k and each call of <span class="tt"><a href="ACL2____PARGS.html">pargs</a></span> actually spawns threads for evaluating its 
+ arguments, then after k <span class="v">cdr</span>s there will be no further parallel 
+ execution.</p> 
+ 
+ <p>Possible solutions may include reworking of algorithms (for example to be 
+ tree-based rather than list-based) or using appropriate granularity forms.  We 
+ hope that future implementations will allow thread ``re-deployment'' in order 
+ to mitigate this problem.  This problem applies to <span class="tt"><a href="ACL2____PLET.html">plet</a></span>, <span class="tt"><a href="ACL2____PARGS.html">pargs</a></span>, <span class="tt"><a href="ACL2____PAND.html">pand</a></span>, <span class="tt"><a href="ACL2____POR.html">por</a></span>, and <span class="tt"><a href="ACL2____SPEC-MV-LET.html">spec-mv-let</a></span>.</p> 
+ 
+ <p><b>Introducing</b> <span class="tt"><a href="ACL2____PLET.html">Plet</a></span></p> 
+ 
+ <p>We can use a <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span> binding to compute the recursive calls of <span class="v">fib</span> 
+ and then add the bound variables together, as follows.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> fib (x)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____NATP.html">natp</a> x)))
+  (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____OR.html">or</a> (<a href="ACL2____ZP.html">zp</a> x) (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> x 0)) 0)
+        ((<a href="COMMON-LISP_____D3.html">=</a> x 1) 1)
+        (t (<a href="COMMON-LISP____LET.html">let</a> ((a (fib (<a href="COMMON-LISP____-.html">-</a> x 1)))
+                 (b (fib (<a href="COMMON-LISP____-.html">-</a> x 2))))
+             (<a href="COMMON-LISP_____B2.html">+</a> a b)))))</pre> 
+ 
+ <p>By using the parallelism primitive <span class="tt"><a href="ACL2____PLET.html">plet</a></span>, we can introduce 
+ parallelism much as we did using <span class="tt"><a href="ACL2____PARGS.html">pargs</a></span>, with an optional granularity 
+ form, as follows.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> pfib (x)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____NATP.html">natp</a> x)))
+  (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____OR.html">or</a> (<a href="ACL2____ZP.html">zp</a> x) (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> x 0)) 0)
+        ((<a href="COMMON-LISP_____D3.html">=</a> x 1) 1)
+        (t (<a href="ACL2____PLET.html">plet</a>
+            (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____GRANULARITY.html">granularity</a> (<a href="COMMON-LISP_____E3.html">&gt;</a> x 27)))
+            ((a (pfib (<a href="COMMON-LISP____-.html">-</a> x 1)))
+             (b (pfib (<a href="COMMON-LISP____-.html">-</a> x 2))))
+            (<a href="COMMON-LISP_____B2.html">+</a> a b)))))</pre> 
+ 
+ <p>Notice that this time, we were able to use <span class="v">+</span> rather than being forced 
+ to use <span class="v">binary-+</span>.  Unlike <span class="tt"><a href="ACL2____PARGS.html">pargs</a></span>, which expects a function call 
+ (not a macro call), <span class="tt"><a href="ACL2____PLET.html">plet</a></span> allows macros at the top level of its 
+ body.</p> 
+ 
+ <p><b>Introducing</b> <span class="tt"><a href="ACL2____PAND.html">Pand</a></span> (By Way of a Tree Validation Example)</p> 
+ 
+ <p>Consider ``genetic trees'' that contains leaves of DNA elements, in the 
+ sense that each tip is one of the symbols <span class="v">A</span>, <span class="v">G</span>, <span class="v">C</span>, or <span class="v">T</span>. 
+ First we define the function <span class="v">valid-tip</span> which recognizes whether a tip 
+ contains one of these symbols.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> valid-tip (tip)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t))
+  (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____EQ.html">eq</a> tip 'A)
+      (<a href="COMMON-LISP____EQ.html">eq</a> tip 'G)
+      (<a href="COMMON-LISP____EQ.html">eq</a> tip 'C)
+      (<a href="COMMON-LISP____EQ.html">eq</a> tip 'T)))</pre> 
+ 
+ <p>Now we define a function that traverses the tree, checking that every tip 
+ is valid.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> valid-tree-serial (tree)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t))
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ATOM.html">atom</a> tree)
+      (valid-tip tree)
+    (<a href="COMMON-LISP____AND.html">and</a> (valid-tree-serial (<a href="COMMON-LISP____CAR.html">car</a> tree))
+         (valid-tree-serial (<a href="COMMON-LISP____CDR.html">cdr</a> tree)))))</pre> 
+ 
+ <p>We also define a parallel version.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> valid-tree-parallel (tree)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t))
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ATOM.html">atom</a> tree)
+      (valid-tip tree)
+    (<a href="ACL2____PAND.html">pand</a> (valid-tree-parallel (<a href="COMMON-LISP____CAR.html">car</a> tree))
+          (valid-tree-parallel (<a href="COMMON-LISP____CDR.html">cdr</a> tree)))))</pre> 
+ 
+ <p>Before we can time the functions, we need to create test trees.  We have 
+ found that test trees need to be approximately 1 gigabyte before we clearly 
+ see speedup, and we make them asymmetric to demonstrate the ability of our 
+ implementation to adapt to asymmetric data.  We can create the trees with the 
+ execution of the following forms.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> make-valid-binary-tree (x)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :mode :program))
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP_____C3.html">&lt;</a> x 0)
+      (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'C 'G) (<a href="COMMON-LISP____CONS.html">cons</a> 'A 'T))
+    (<a href="COMMON-LISP____CONS.html">cons</a> (make-valid-binary-tree (<a href="COMMON-LISP____-.html">-</a> x 2)) ; 2 to make asymmetric
+          (make-valid-binary-tree (<a href="COMMON-LISP____-.html">-</a> x 1)))))
+
+(<a href="ACL2____DEFCONST.html">defconst</a> *valid-tree* (make-valid-binary-tree 30)) ; takes awhile
+(<a href="ACL2____DEFCONST.html">defconst</a> *invalid-tree* (<a href="COMMON-LISP____CONS.html">cons</a> *valid-tree* nil)) ; nil is invalid tip</pre> 
+ 
+ <p>We can time our functions with the forms:</p> 
+ 
+ <pre class="code">(<a href="ACL2____TIME_42.html">time$</a> (valid-tree-serial *valid-tree*))
+(<a href="ACL2____TIME_42.html">time$</a> (valid-tree-parallel *valid-tree*))</pre> 
+ 
+ <p>Unfortunately, the serial version runs faster than the parallelism version; 
+ however, there is more to this story.</p> 
+ 
+ <p><b>Demonstrating Early Termination with an Invalid Tree</b></p> 
+ 
+ <p>Now observe this magic:</p> 
+ 
+ <pre class="code">(<a href="ACL2____TIME_42.html">time$</a> (valid-tree-serial   *invalid-tree*))
+(<a href="ACL2____TIME_42.html">time$</a> (valid-tree-parallel *invalid-tree*))</pre> 
+ 
+ <p>The serial version took awhile, while the parallel version finished almost 
+ immediately.  The test for validation was split into testing the <span class="tt"><a href="COMMON-LISP____CAR.html">car</a></span> 
+ and the <span class="tt"><a href="COMMON-LISP____CDR.html">cdr</a></span> of the <span class="v">*invalid-tree*</span> root, and since the <span class="v">cdr</span> 
+ was equal to <span class="v">nil</span>, its test returned immediately.  This immediate return 
+ quickly interrupted the computation associated with the <span class="v">car</span>, and returned 
+ the result.</p> 
+ 
+ <p><b>Granularity with</b> <span class="tt"><a href="ACL2____PAND.html">Pand</a></span></p> 
+ 
+ <p>We can also define a parallel version with a granularity form:</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> valid-tree-parallel (tree depth)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____NATP.html">natp</a> depth)))
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ATOM.html">atom</a> tree)
+      (valid-tip tree)
+    (<a href="ACL2____PAND.html">pand</a>
+     (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____GRANULARITY.html">granularity</a> (<a href="COMMON-LISP_____C3.html">&lt;</a> depth 5)))
+     (valid-tree-parallel (<a href="COMMON-LISP____CAR.html">car</a> tree) (<a href="COMMON-LISP____1_B2.html">1+</a> depth))
+     (valid-tree-parallel (<a href="COMMON-LISP____CDR.html">cdr</a> tree) (<a href="COMMON-LISP____1_B2.html">1+</a> depth)))))</pre> 
+ 
+ <p>We can test this form by executing our previous forms.  You will probably 
+ find some speedup on a machine with several cores available, but more speedup 
+ can likely be obtained with an expensive test on the leaves in place of 
+ <span class="v">valid-tip</span>.</p> 
+ 
+ <pre class="code">(<a href="ACL2____TIME_42.html">time$</a> (valid-tree-serial   *valid-tree*))
+(<a href="ACL2____TIME_42.html">time$</a> (valid-tree-parallel *valid-tree* 0))</pre> 
+ 
+ <p><b>Introducing</b> <span class="tt"><a href="ACL2____POR.html">Por</a></span></p> 
+ 
+ <p><span class="tt"><a href="ACL2____POR.html">Por</a></span> can be used in the same way as <span class="tt"><a href="ACL2____PAND.html">pand</a></span>, but with early 
+ termination occurring when an argument evaluates to a non-<span class="v">nil</span> value, in 
+ which case the value returned is <span class="v">t</span>.  Finally, <span class="tt"><a href="ACL2____POR.html">por</a></span> also supports 
+ the use of a <a href="ACL2____GRANULARITY.html">granularity</a> form.</p>
+</body>
+</html>

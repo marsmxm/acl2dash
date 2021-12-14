@@ -1,0 +1,228 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Defoptions</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____DEFOPTIONS">Click for Defoptions in the Full Manual</a></h3>
+
+<p>Define a structure for representing command line options, and a 
+command-line parser that creates this structure.</p><p><span class="v">defoptions</span> is the main command provided by <a href="ACL2____GETOPT.html">getopt</a> 
+library.  It is really a thin wrapper around <a href="STD____DEFAGGREGATE.html">defaggregate</a>, where each 
+field can have some additional keywords that have certain effects.</p> 
+ 
+ 
+<h3>A Basic Example</h3> 
+ 
+<pre class="code">(<a href="ACL2____DEFOPTIONS.html">defoptions</a> myopts
+  :parents (myprogram)
+  :short "Command line options for my program."
+  :tag :myopts
+  ((help    booleanp
+            "Print a help message and exit with status 0.")
+   (outfile stringp
+            "Where to write the output."
+            :default "a.out")))</pre> 
+ 
+<p>So far, this is identical to <span class="v">defaggregate</span> except that we use 
+<span class="v">defoptions</span> instead.  Indeed, the first thing the above <span class="v">defoptions</span> 
+form expands into is an ordinary <span class="v">defaggregate</span> call.  The <span class="v">defaggregate</span> 
+introduces a <span class="v">myopts-p</span> structure as usual, complete with the usual 
+accessors like <span class="v">myopts-&gt;help</span>, a <span class="v">make-myopts</span> macro, etc.</p> 
+ 
+<p>But in addition to introducing an aggregate, <span class="v">defoptions</span> introduces a 
+usage message and a command-line parsing function.</p> 
+ 
+<p>For <span class="v">myopts</span> above, the usage message, <span class="v">*myopts-usage*</span>, will just 
+be:</p> 
+ 
+<pre class="code">--help                Print a help message and exit with status 0.
+--outfile=ARG         Where to write the output.</pre> 
+ 
+<p>So that's handy, and below we'll see how to customize this message a bit. 
+You can probably easily imagine incorporating this into your program's 
+<span class="v">--help</span> message.</p> 
+ 
+<p>Meanwhile, the parsing function, <span class="v">parse-myopts</span>, allows you to parse a 
+<a href="ACL2____STRING-LISTP.html">string-listp</a> into a <span class="v">myopts-p</span> structure.  The signature of 
+<span class="v">parse-myopts</span> is:</p> 
+ 
+<pre class="code">(parse-myopts args &amp;key (init '*default-myopts*))
+ --&gt;
+(<a href="ACL2____MV.html">mv</a> errmsg result extra)</pre> 
+ 
+<p>The <span class="v">args</span> here are just a string list.  Normally, if you were writing a 
+real command-line program with ACL2, you would normally get the <span class="v">args</span> to 
+process by calling <a href="OSLIB____ARGV.html">oslib::argv</a>.  But for testing and development, we can 
+just use any old string list we want.</p> 
+ 
+<p>Usually you won't care about the optional <span class="v">:init</span> argument: it just lets 
+you use a custom <span class="v">myopts</span> structure as the starting point, instead of 
+starting from the default structure (which has the <span class="v">:default</span> value for each 
+field.)</p> 
+ 
+<p>Command-line parsing can fail because the user might type in something 
+crazy.  For instance, they might try to run <span class="v">myprogram --hlep</span> instead of 
+<span class="v">myprogram --help</span>.  The <span class="v">errmsg</span> will be NIL if everything is okay, or 
+else will be an error message produced by <a href="ACL2____MSG.html">msg</a>, which is suitable for 
+printing with the <a href="ACL2____FMT.html">fmt</a> directive <span class="v">~@</span>.  For example:</p> 
+ 
+<pre class="code">(<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> errmsg result extra)
+       (parse-myopts '("--hlep")))
+      ((when errmsg)
+       (<a href="ACL2____CW.html">cw</a> "Error processing options!~%")
+       (<a href="ACL2____CW.html">cw</a> "~@0~%" errmsg)
+       nil))
+   result)</pre> 
+ 
+<p>Will print out:</p> 
+ 
+<pre class="code">Error processing options!
+Unrecognized option --hlep</pre> 
+ 
+<p>When command-line processing is successful, the main return value, 
+<span class="v">result</span>, is a valid <span class="v">myopts-p</span> structure that contains the various 
+settings, and the <span class="v">extra</span> return value is a list of any command-line options 
+that we skipped because they didn't look like options.  For example:</p> 
+ 
+<pre class="code">(<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?errmsg result extra)
+      (parse-myopts
+       '("foo.java" "--outfile" "report.txt" "bar.java"))))
+  (<a href="COMMON-LISP____LIST.html">list</a> :result result
+        :extra extra))</pre> 
+ 
+<p>Will return:</p> 
+ 
+<pre class="code">(:RESULT (:MYOPTS (HELP)
+                  (OUTFILE . "report.txt"))
+ :EXTRA ("foo.java" "bar.java"))</pre> 
+ 
+ 
+<h3>Adding Short Aliases (-h, -o, ...)</h3> 
+ 
+<p>Ordinarily a program that takes options like <span class="v">--help</span> and <span class="v">--outfile</span> 
+will also have shorter ways to give these options, e.g., <span class="v">-h</span> and <span class="v">-o</span>. 
+You can set up these short names by just adding an <span class="v">:alias</span> to your fields, 
+like this:</p> 
+ 
+<pre class="code">(<a href="ACL2____DEFOPTIONS.html">defoptions</a> myopts
+  :parents (myprogram)
+  :short "Command line options for my program."
+  :tag :myopts
+  ((help    booleanp
+            "Print a help message and exit with status 0."
+            :alias #\h)
+   (outfile stringp
+            "Where to write the output."
+            :default "a.out"
+            :alias #\o)))</pre> 
+ 
+<p>Note that the usage message gets automatically extended to take these 
+into account.  <span class="v">*myopts-usage*</span> becomes:</p> 
+ 
+<pre class="code">-h,--help             Print a help message and exit with status 0.
+-o,--outfile=ARG      Where to write the output.</pre> 
+ 
+ 
+<h3>Custom Option Types</h3> 
+ 
+<p>The <span class="v">myopts-p</span> structure is especially simple in that it only contains 
+<a href="ACL2____BOOLEANP.html">booleanp</a> and <a href="COMMON-LISP____STRINGP.html">stringp</a> fields.  Getopt has built-in <a href="GETOPT____PARSERS.html">parsers</a> 
+for these types, as well as for <a href="ACL2____NATP.html">natp</a> and <a href="ACL2____POSP.html">posp</a>.  But in some cases 
+these may not be sufficient.</p> 
+ 
+<p>If you need something fancier, you can write your own parser.  See <a href="GETOPT____CUSTOM-PARSER.html">custom-parser</a> for details.  After writing your own <span class="v">parse-foo</span> function, you can 
+either register it as the default for all <span class="v">foo-p</span> fields, or you can install 
+it just as the parser for a particular field using the <span class="v">:parser</span> option. 
+For instance:</p> 
+ 
+<pre class="code">(outfile stringp
+         "Where to write the output."
+         :default "a.out"
+         :alias #\o
+         ;; redundant, but acceptable, to explicitly say to use the
+         ;; default stringp parser
+         :parser getopt::parse-string)</pre> 
+ 
+ 
+<h3>Changing Option Names</h3> 
+ 
+<p>By default the option name is just automatically inferred from the field 
+name.  In rare cases you might want to change this, e.g., perhaps you prefer to 
+use field-names like <span class="v">verbosep</span> instead of <span class="v">verbose</span>.  You can accomplish 
+this with a custom <span class="v">:longname</span> for the field, e.g.,</p> 
+ 
+<pre class="code">(<a href="ACL2____DEFOPTIONS.html">defoptions</a> myopts
+  :parents (myprogram)
+  :short "Command line options for my program."
+  :tag :myopts
+  ((verbosep booleanp
+             :longname "verbose"
+             "Print excessive debugging information.")
+   (help    booleanp
+            "Print a help message and exit with status 0."
+            :alias #\h)
+   (outfile stringp
+            "Where to write the output."
+            :default "a.out"
+            :alias #\o)))</pre> 
+ 
+ 
+<h3>List Types</h3> 
+ 
+<p>By default options are <i>unmergeable</i>, meaning that it is an error to 
+try to specify them more than once.  This is generally sensible behavior, e.g., 
+you probably don't want to support things like:</p> 
+ 
+<pre class="code">myprog --username jared --username sol ...</pre> 
+ 
+<p>But occasionally you want to have an option that "stacks" with other 
+options.  For instance, in our Verilog parsing stuff we often want a "search 
+path" that is a list of directories.</p> 
+ 
+<p>To facilitate this, the <span class="v">:merge</span> option can be used to specify a custom 
+"merging function" (typically <a href="COMMON-LISP____CONS.html">cons</a>) that can extend a field with a new 
+value.  For instance, here's basically the canonical way to have an option that 
+lets the user write:</p> 
+ 
+<pre class="code">myprog --dir /dir1 --dir /dir2 ...</pre> 
+ 
+<p>And turns them into a <span class="v">dirs</span> field:</p> 
+ 
+<pre class="code">(dirs string-listp
+      :longname "dir"
+      :parser getopt::parse-string
+      :merge cons)</pre> 
+ 
+<p>Note that this will actually accumulate the options in the reverse 
+order (because <a href="COMMON-LISP____CONS.html">cons</a> extends the front of a list).  This is easily 
+corrected for by using some kind of <span class="v">push</span> function instead of <span class="v">cons</span>, or 
+by reversing the list at the end.  See <a href="GETOPT-DEMO____DEMO-P.html">getopt-demo::demo-p</a> for an 
+example.</p> 
+ 
+ 
+<h3>Customizing Usage Messages</h3> 
+ 
+<p>By default we reuse the <a href="ACL2____XDOC.html">xdoc</a> documentation for a field as its usage 
+message.  If you want to have a separate usage message instead, you can just 
+add one, e.g., via <span class="v">:usage "blah blah"</span>.</p> 
+ 
+<p>For options that take arguments, you may occasionally want to name the 
+argument.  That is, by default, we will produce usage messages like:</p> 
+ 
+<pre class="code">--port ARG      The port to connect to.
+--out ARG       Where to write the output.</pre> 
+ 
+<p>But maybe you'd rather have this print as:</p> 
+ 
+<pre class="code">--port PORT     The port to connect to.
+--out FILE      Where to write the output.</pre> 
+ 
+<p>You can do this by adding, e.g., <span class="v">:argname "PORT"</span> and <span class="v">:argname
+"FILE"</span> to the port/out fields.</p> 
+ 
+
+</body>
+</html>

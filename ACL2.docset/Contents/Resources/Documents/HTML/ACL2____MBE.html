@@ -1,0 +1,144 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Mbe</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____MBE">Click for Mbe in the Full Manual</a></h3>
+
+<p>Attach code for execution</p><p>The macro <span class="v">mbe</span> (``must be equal'') can be used in function 
+ definitions in order to cause evaluation to use alternate code to that 
+ provided for the logic.  An example is given below.  However, the use of 
+ <span class="v">mbe</span> can lead to non-terminating computations.  See <a href="ACL2____DEFEXEC.html">defexec</a>, 
+ perhaps after reading the present documentation, for a way to prove 
+ termination.</p> 
+ 
+ <p>In the ACL2 logic, <span class="v">(<a href="ACL2____MBE.html">mbe</a> :exec exec-code :logic logic-code)</span> equals 
+ <span class="v">logic-code</span>; the value of <span class="v">exec-code</span> is ignored.  However, in raw Lisp 
+ it is the other way around: this form macroexpands simply to <span class="v">exec-code</span>. 
+ ACL2's <a href="ACL2____GUARD.html">guard</a> verification mechanism ensures that the raw Lisp code is 
+ only evaluated when appropriate, since the guard proof obligations generated 
+ for (the macroexpansion of) this call of <span class="v">mbe</span> include not only the guard 
+ proof obligations from <span class="v">exec-code</span>, but also, under suitable contextual 
+ assumptions, the term <span class="v">(<a href="COMMON-LISP____EQUAL.html">equal</a> exec-code logic-code)</span>.  See <a href="ACL2____VERIFY-GUARDS.html">verify-guards</a> (in particular, for discussion of the contextual assumptions 
+ from the <span class="v">:guard</span> and <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span>-tests) and, for general discussion of 
+ guards, see <a href="ACL2____GUARD.html">guard</a>.</p> 
+ 
+ <p>Normally, during evaluation of an <span class="v">mbe</span> call, only the <span class="v">:logic</span> code 
+ is evaluated unless the call is in the body of a <a href="ACL2____GUARD.html">guard</a>-verified 
+ function or under a call of a <span class="v">:</span><span class="tt"><a href="ACL2____PROGRAM.html">program</a></span> mode function; in those 
+ cases only the <span class="v">:exec</span> code is evaluated.  This implies that equality of 
+ <span class="v">:exec</span> and <span class="v">:logic</span> code is never checked at runtime. (Rather, such 
+ equality is proved when verifying guards.)  We qualified with ``normally'' 
+ above because there are two exceptions.  During a ``safe mode'', which is used 
+ in macroexpansion and evaluation of <span class="tt"><a href="ACL2____DEFCONST.html">defconst</a></span> forms, the <span class="v">:logic</span> 
+ and <span class="v">:exec</span> code are both evaluated and their equality is checked.  Second, 
+ when guard-checking is set to <span class="v">:all</span> or <span class="v">:none</span>, then for any <span class="v">mbe</span> 
+ call in the body of a <span class="v">:logic</span> mode definition, only the <span class="v">:logic</span> code 
+ will be evaluated.</p> 
+ 
+ <p>Note that the <span class="v">:exec</span> and the <span class="v">:logic</span> code in an <span class="v">mbe</span> call must 
+ have the same output signature.  For example, one cannot return <span class="v">(</span><span class="tt"><a href="ACL2____MV.html">mv</a></span><span class="v"> * *)</span> while the other returns just a single value.</p> 
+ 
+ <p>Also see <a href="ACL2____MBT.html">mbt</a>, which stands for ``must be true.''  You may find it 
+ more natural to use <span class="tt"><a href="ACL2____MBT.html">mbt</a></span> for certain applications, as described in its 
+ <a href="COMMON-LISP____DOCUMENTATION.html">documentation</a>.</p> 
+ 
+ <p>Here is an example of the use of <span class="v">mbe</span>.  Suppose that you want to define 
+ factorial in the usual recursive manner, as follows.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> fact (n)
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2____ZP.html">zp</a> n)
+      1
+    (<a href="COMMON-LISP_____A2.html">*</a> n (fact (<a href="COMMON-LISP____1-.html">1-</a> n)))))</pre> 
+ 
+ <p>But perhaps you want to be able to execute calls of <span class="v">fact</span> on large 
+ arguments that cause stack overflows, perhaps during proofs.  (This isn't a 
+ particularly realistic example, but it should serve.)  So, instead you can 
+ define this tail-recursive version of factorial:</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> fact1 (n acc)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> n) (<a href="COMMON-LISP_____E3_D3.html">&gt;=</a> n 0) (<a href="COMMON-LISP____INTEGERP.html">integerp</a> acc))))
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2____ZP.html">zp</a> n)
+      acc
+    (fact1 (<a href="COMMON-LISP____1-.html">1-</a> n) (<a href="COMMON-LISP_____A2.html">*</a> n acc))))</pre> 
+ 
+ <p>We are now ready to define <span class="v">fact</span> using <span class="v">mbe</span>.  Our intention is that 
+ logically, <span class="v">fact</span> is as shown in the first definition above, but that 
+ <span class="v">fact</span> should be executed by calling <span class="v">fact1</span>.  Notice that we defer 
+ <a href="ACL2____GUARD.html">guard</a> verification, since we are not ready to prove the correspondence 
+ between <span class="v">fact1</span> and <span class="v">fact</span>.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> fact (n)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> n) (<a href="COMMON-LISP_____E3_D3.html">&gt;=</a> n 0))
+                  :verify-guards nil))
+  (<a href="ACL2____MBE.html">mbe</a> :exec  (fact1 n 1)
+       :logic (<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2____ZP.html">zp</a> n)
+                  1
+                (<a href="COMMON-LISP_____A2.html">*</a> n (fact (<a href="COMMON-LISP____1-.html">1-</a> n))))))</pre> 
+ 
+ <p>Next, we prove the necessary correspondence lemmas.  Notice the inclusion 
+ of a community book to help with the arithmetic reasoning.</p> 
+ 
+ <pre class="code">(<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "arithmetic/top-with-meta" :dir :system)
+
+(<a href="ACL2____DEFTHM.html">defthm</a> fact1-fact
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> acc)
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (fact1 n acc)
+                  (<a href="COMMON-LISP_____A2.html">*</a> acc (fact n)))))</pre> 
+ 
+ <p>We may now do guard verification for <span class="v">fact</span>, which will allow the 
+ execution of the raw Lisp <span class="v">fact</span> function, where the above <span class="v">mbe</span> call 
+ expands simply to <span class="v">(fact1 n 1)</span>.</p> 
+ 
+ <pre class="code">(<a href="ACL2____VERIFY-GUARDS.html">verify-guards</a> fact)</pre> 
+ 
+ <p>Now that guards have been verified, a trace of function calls illustrates 
+ that the evaluation of calls of <span class="v">fact</span> is passed to evaluation of calls of 
+ <span class="v">fact1</span>.  The outermost call below is of the logical function stored for 
+ the definition of <span class="v">fact</span>; all the others are of actual raw Common Lisp 
+ functions.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____TRACE_42.html">trace$</a> fact fact1)
+NIL
+ACL2 !&gt;(fact 3)
+1&gt; (ACL2_*1*_ACL2::FACT 3)
+  2&gt; (FACT 3)
+    3&gt; (FACT1 3 1)
+      4&gt; (FACT1 2 3)
+        5&gt; (FACT1 1 6)
+          6&gt; (FACT1 0 6)
+          &lt;6 (FACT1 6)
+        &lt;5 (FACT1 6)
+      &lt;4 (FACT1 6)
+    &lt;3 (FACT1 6)
+  &lt;2 (FACT 6)
+&lt;1 (ACL2_*1*_ACL2::FACT 6)
+6
+ACL2 !&gt;</pre> 
+ 
+ <p>You may occasionally get warnings when you compile functions defined using 
+ <span class="v">mbe</span>.  (For commands that invoke the compiler, see <a href="ACL2____COMPILATION.html">compilation</a>.) 
+ These can be inhibited by using an <span class="v">ignorable</span> <span class="tt"><a href="COMMON-LISP____DECLARE.html">declare</a></span> form.  Here 
+ is a simple but illustrative example.  Note that the declarations can 
+ optionally be separated into two <span class="tt"><a href="COMMON-LISP____DECLARE.html">declare</a></span> forms.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> foo (x y)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> x)
+           (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____EQUAL.html">equal</a> x y)))
+  (<a href="ACL2____MBE.html">mbe</a> :logic x :exec y))</pre> 
+ 
+ <p>Finally, we observe that when the body of a function contains a term of the 
+ form <span class="v">(<a href="ACL2____MBE.html">mbe</a> :exec exec-code :logic logic-code)</span>, the user would be unlikely 
+ to notice any difference in the theorem prover if this term were replaced by 
+ <span class="v">logic-code</span>.  ACL2 takes various steps to ensure this.  For example, the 
+ proof obligations generated for admitting a function treat the above <span class="v">mbe</span> 
+ term simply as <span class="v">logic-code</span>.  Function expansion, <span class="v">:use</span> <a href="ACL2____HINTS.html">hints</a>, 
+ <span class="v">:</span><span class="tt"><a href="ACL2____DEFINITION.html">definition</a></span> rules, generation of <a href="ACL2____CONSTRAINT.html">constraint</a>s for 
+ functional instantiation, and creation of rules of class <span class="v">:</span><span class="tt"><a href="ACL2____REWRITE.html">rewrite</a></span> 
+ and <span class="v">:</span><span class="tt"><a href="ACL2____FORWARD-CHAINING.html">forward-chaining</a></span> also treat <span class="v">mbe</span> calls as their 
+ <span class="v">:logic</span> code.</p>
+</body>
+</html>

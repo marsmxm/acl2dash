@@ -1,0 +1,135 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Mmp-write</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ETHEREUM____MMP-WRITE">Click for Mmp-write in the Full Manual</a></h3>
+
+<p>Write a value for a key in an MMP tree.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(mmp-write key value root database) 
+  → 
+(mv error? new-root new-database)</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">key</span> — <font color="#606060">Guard <span class="v">(<a href="ACL2____BYTE-LISTP.html">byte-listp</a> key)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">value</span> — <font color="#606060">Guard <span class="v">(<a href="ACL2____BYTE-LISTP.html">byte-listp</a> value)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">root</span> — <font color="#606060">Guard <span class="v">(<a href="ACL2____BYTE-LISTP.html">byte-listp</a> root)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">database</span> — <font color="#606060">Guard <span class="v">(<a href="ETHEREUM____DATABASEP.html">databasep</a> database)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">error?</span> — <font color="#606060">Type <span class="v">(<a href="ACL2____MEMBER-EQ.html">member-eq</a> error? '(nil :collision :rlp))</span>.</font>
+</dd> 
+<dd>
+<span class="tt">new-root</span> — <font color="#606060">Type <span class="v">(<a href="ACL2____BYTE-LISTP.html">byte-listp</a> new-root)</span>.</font>
+</dd> 
+<dd>
+<span class="tt">new-database</span> — <font color="#606060">Type <span class="v">(<a href="ETHEREUM____DATABASEP.html">databasep</a> new-database)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>We require (in the guard) that the MMP tree is valid, 
+     i.e. it encodes a finite map.</p><p>We provide a high-level definition here. 
+     We decode the MMP tree, we update the key, 
+     and we re-encode the map. 
+     The key may already be present, in which case the old value is overwritten. 
+     If the key is not present, it is added to the map.</p><p>The <span class="v">database</span> argument of this function represents the global database. 
+     Thus, we return not just the database needed to encode the updated map, 
+     but the union of that with the input database. 
+     Thus, the resulting database may include more than needed 
+     to simply encode the new finite map. 
+     If we view the hashes in the database 
+     as implementation-independent pointers, 
+     updating the MMP tree may lead to 
+     ``garbage'' in the sense of garbage collection, 
+     i.e. portions of the database that are no longer referenced, 
+     directly or indirectly, starting from the ``roots'' in the Ethereum state. 
+     Presumably an Ethereum implementation 
+     could perform some garbage collection, 
+     but here we conservatively assume that it does not.</p><p>If the re-encoding of the new finite map causes a collision 
+     or produces some non-RLP-encodable data, 
+     we forward the error flag returned by <span class="tt"><a href="ETHEREUM____MMP-ENCODE.html">mmp-encode</a></span>. 
+     We also check for collision when taking the union of 
+     the initial database and the one returned by <span class="tt"><a href="ETHEREUM____MMP-ENCODE.html">mmp-encode</a></span>, 
+     returning <span class="v">:collision</span> if such a collision happens.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>mmp-write</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> mmp-write (key value root database)
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____BYTE-LISTP.html">byte-listp</a> key)
+                                   (<a href="ACL2____BYTE-LISTP.html">byte-listp</a> value)
+                                   (<a href="ACL2____BYTE-LISTP.html">byte-listp</a> root)
+                                   (<a href="ETHEREUM____DATABASEP.html">databasep</a> database))))
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ETHEREUM____MMP-ENCODING-P.html">mmp-encoding-p</a> root database)))
+       (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> &amp; map) (<a href="ETHEREUM____MMP-DECODE.html">mmp-decode</a> root database))
+            (new-map (<a href="OMAP____UPDATE.html">omap::update</a> (<a href="ACL2____BYTE-LIST-FIX.html">byte-list-fix</a> key)
+                                   (<a href="ACL2____BYTE-LIST-FIX.html">byte-list-fix</a> value)
+                                   map))
+            ((<a href="ACL2____MV.html">mv</a> error? new-root new-database-min)
+             (<a href="ETHEREUM____MMP-ENCODE.html">mmp-encode</a> new-map))
+            ((when error?) (<a href="ACL2____MV.html">mv</a> error? nil nil))
+            ((unless (<a href="OMAP____COMPATIBLEP.html">omap::compatiblep</a> new-database-min
+                                        (<a href="ETHEREUM____DATABASE-FIX.html">database-fix</a> database)))
+             (<a href="ACL2____MV.html">mv</a> :collision nil nil))
+            (new-database (<a href="OMAP____UPDATE_A2.html">omap::update*</a> new-database-min
+                                         (<a href="ETHEREUM____DATABASE-FIX.html">database-fix</a> database))))
+           (<a href="ACL2____MV.html">mv</a> nil new-root new-database)))</pre> 
+<p><b>Theorem: </b>return-type-of-mmp-write.error?</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> return-type-of-mmp-write.error?
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?error? ?new-root ?new-database)
+              (<a href="ETHEREUM____MMP-WRITE.html">mmp-write</a> key value root database)))
+            (<a href="ACL2____MEMBER-EQ.html">member-eq</a> error? '(nil :collision :rlp)))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>byte-listp-of-mmp-write.new-root</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> byte-listp-of-mmp-write.new-root
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?error? ?new-root ?new-database)
+              (<a href="ETHEREUM____MMP-WRITE.html">mmp-write</a> key value root database)))
+            (<a href="ACL2____BYTE-LISTP.html">byte-listp</a> new-root))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>databasep-of-mmp-write.new-database</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> databasep-of-mmp-write.new-database
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?error? ?new-root ?new-database)
+              (<a href="ETHEREUM____MMP-WRITE.html">mmp-write</a> key value root database)))
+            (<a href="ETHEREUM____DATABASEP.html">databasep</a> new-database))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>mmp-write-of-byte-list-fix-key</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> mmp-write-of-byte-list-fix-key
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ETHEREUM____MMP-WRITE.html">mmp-write</a> (<a href="ACL2____BYTE-LIST-FIX.html">byte-list-fix</a> key)
+                          value root database)
+               (<a href="ETHEREUM____MMP-WRITE.html">mmp-write</a> key value root database)))</pre> 
+<p><b>Theorem: </b>mmp-write-byte-list-equiv-congruence-on-key</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> mmp-write-byte-list-equiv-congruence-on-key
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____BYTE-LIST-EQUIV.html">byte-list-equiv</a> key key-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ETHEREUM____MMP-WRITE.html">mmp-write</a> key value root database)
+                        (<a href="ETHEREUM____MMP-WRITE.html">mmp-write</a> key-equiv value root database)))
+        :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>mmp-write-of-byte-list-fix-value</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> mmp-write-of-byte-list-fix-value
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ETHEREUM____MMP-WRITE.html">mmp-write</a> key (<a href="ACL2____BYTE-LIST-FIX.html">byte-list-fix</a> value)
+                          root database)
+               (<a href="ETHEREUM____MMP-WRITE.html">mmp-write</a> key value root database)))</pre> 
+<p><b>Theorem: </b>mmp-write-byte-list-equiv-congruence-on-value</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> mmp-write-byte-list-equiv-congruence-on-value
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____BYTE-LIST-EQUIV.html">byte-list-equiv</a> value value-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ETHEREUM____MMP-WRITE.html">mmp-write</a> key value root database)
+                        (<a href="ETHEREUM____MMP-WRITE.html">mmp-write</a> key value-equiv root database)))
+        :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>mmp-write-of-byte-list-fix-root</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> mmp-write-of-byte-list-fix-root
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ETHEREUM____MMP-WRITE.html">mmp-write</a> key value (<a href="ACL2____BYTE-LIST-FIX.html">byte-list-fix</a> root)
+                          database)
+               (<a href="ETHEREUM____MMP-WRITE.html">mmp-write</a> key value root database)))</pre> 
+<p><b>Theorem: </b>mmp-write-byte-list-equiv-congruence-on-root</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> mmp-write-byte-list-equiv-congruence-on-root
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____BYTE-LIST-EQUIV.html">byte-list-equiv</a> root root-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ETHEREUM____MMP-WRITE.html">mmp-write</a> key value root database)
+                        (<a href="ETHEREUM____MMP-WRITE.html">mmp-write</a> key value root-equiv database)))
+        :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>mmp-write-of-database-fix-database</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> mmp-write-of-database-fix-database
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ETHEREUM____MMP-WRITE.html">mmp-write</a> key value root (<a href="ETHEREUM____DATABASE-FIX.html">database-fix</a> database))
+               (<a href="ETHEREUM____MMP-WRITE.html">mmp-write</a> key value root database)))</pre> 
+<p><b>Theorem: </b>mmp-write-database-equiv-congruence-on-database</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> mmp-write-database-equiv-congruence-on-database
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ETHEREUM____DATABASE-EQUIV.html">database-equiv</a> database database-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ETHEREUM____MMP-WRITE.html">mmp-write</a> key value root database)
+                        (<a href="ETHEREUM____MMP-WRITE.html">mmp-write</a> key value root database-equiv)))
+        :rule-classes :congruence)</pre> 
+
+</body>
+</html>

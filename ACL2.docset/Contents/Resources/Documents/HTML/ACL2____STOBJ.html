@@ -1,0 +1,114 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Stobj</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____STOBJ">Click for Stobj in the Full Manual</a></h3>
+
+<p>Single-threaded objects or ``von Neumann bottlenecks''</p><p>In ACL2, a ``single-threaded object'' is a data structure whose use 
+ is so syntactically restricted that only one instance of the object need ever 
+ exist and its fields can be updated by destructive assignments.</p> 
+ 
+ <p>Note: Novices are advised to avoid using single-threaded objects, perhaps 
+ instead using <a href="STD____DEFAGGREGATE.html">std::defaggregate</a> or community book 
+ <span class="v">books/data-structures/structures.lisp</span>.  At the least, consider using 
+ <span class="v">(</span><span class="tt"><a href="ACL2____SET-VERIFY-GUARDS-EAGERNESS.html">set-verify-guards-eagerness</a></span><span class="v"> 0)</span> to avoid <a href="ACL2____GUARD.html">guard</a> 
+ verification.</p> 
+ 
+ <p>This topic introduces the notion of a ``stobj'', or single-threaded object. 
+ It concludes with a link to a tour that introduces the use of stobjs by way of 
+ examples.  We recommend that you follow that link the first time you read 
+ about stobjs.  Detailed reference documentation about stobjs may be found in 
+ the subtopics listed at the end below; in particular see <a href="ACL2____DEFSTOBJ.html">defstobj</a> and, 
+ for so-called abstract stobjs, see <a href="ACL2____DEFABSSTOBJ.html">defabsstobj</a>.</p> 
+ 
+ <p>As noted, a ``single-threaded object'' is a data structure whose use is so 
+ syntactically restricted that only one instance of the object need ever exist. 
+ Updates to the object must be sequentialized.  This allows us to update its 
+ fields with destructive assignments without wrecking the axiomatic semantics 
+ of update-by-copy.  For this reason, single-threaded objects are sometimes 
+ called ``von Neumann bottlenecks.''</p> 
+ 
+ <p>From the logical perspective, a single-threaded object is an ordinary ACL2 
+ object, e.g., composed of integers and conses.  Logically speaking, ordinary 
+ ACL2 functions are defined to allow the user to ``access'' and ``update'' its 
+ fields.  Logically speaking, when fields in the object, obj, are ``updated'' 
+ with new values, a new object, obj', is constructed.</p> 
+ 
+ <p>But suppose that by syntactic means we could ensure that there were no more 
+ references to the ``old'' object, obj.  Then we could create obj' by 
+ destructively modifying the memory locations involved in the representation of 
+ obj.  The syntactic means is pretty simple but draconian: the only reference 
+ to obj is in the variable named <span class="v">OBJ</span>.</p> 
+ 
+ <p>The consequences of this simple rule are far-reaching and require some 
+ getting used to.  For example, if <span class="v">OBJ</span> has been declared as a 
+ single-threaded object name, then the following consequences ensue (but see 
+ the discussion of congruent stobjs below for a slight relaxation).</p> 
+ 
+ <ul> 
+ 
+ <li>
+<span class="v">OBJ</span> is a top-level global variable that contains the current object, 
+ obj.</li> 
+ 
+ <li>If a function uses the formal parameter <span class="v">OBJ</span> that is declared as a 
+ stobj, the only ``actual expression'' that can be passed into that slot is the 
+ variable <span class="v">OBJ</span>, not merely a term that ``evaluates to an obj''; thus, such 
+ functions can only operate on the current object.  So for example, instead of 
+ <span class="v">(FOO (UPDATE-FIELD1 3 ST))</span> write <span class="v">(<a href="COMMON-LISP____LET.html">LET</a> ((ST (UPDATE-FIELD1 3 ST))) (FOO
+ ST))</span>.</li> 
+ 
+ <li>The accessors and updaters have a formal parameter named <span class="v">OBJ</span>, so by 
+ the rule just above, those functions can only be applied to the current 
+ object.  The recognizer is the one exception to the rule: it may be applied 
+ either the <span class="v">OBJ</span> or to an ordinary (non-stobj) object.</li> 
+ 
+ <li>The ACL2 primitives, such as <span class="v">CONS</span>, <span class="v">CAR</span> and <span class="v">CDR</span>, may not be 
+ applied to the variable <span class="v">OBJ</span>.  Thus, for example, obj may not be consed 
+ into a list (which would create another pointer to it) or accessed or copied 
+ via ``unapproved'' means.</li> 
+ 
+ <li>The updaters return a ``new <span class="v">OBJ</span> object'', i.e., obj'; thus, when an 
+ updater is called, the only variable which can hold its result is 
+ <span class="v">OBJ</span>.</li> 
+ 
+ <li>If a function calls an <span class="v">OBJ</span> updater, it must return an <span class="v">OBJ</span> 
+ object (either as the sole value returned, or in <span class="v">(<a href="ACL2____MV.html">mv</a> ... OBJ ...)</span>; see 
+ <a href="ACL2____MV.html">mv</a>).</li> 
+ 
+ <li>When a top-level expression involving <span class="v">OBJ</span> returns an <span class="v">OBJ</span> 
+ object, that object becomes the new current value of <span class="v">OBJ</span>.</li> 
+ 
+ </ul> 
+ 
+ <p>There are other functional languages supporting single-threadedness, for 
+ example Haskell's ``monads'' and Clean's ``uniqueness type system''.  Of 
+ course, ACL2 provides a theorem prover that can prove theorems that involve 
+ such constructs.</p> 
+ 
+ <p>Note that the syntactic restrictions noted above are enforced only when 
+ single-threaded objects are encountered directly in the top-level loop or are 
+ used in function definitions; the accessor and update functions for 
+ single-threaded objects may be used without restriction in formulas to be 
+ proved.  Since function evaluation is sometimes necessary during proofs, ACL2 
+ must be able to evaluate these functions on logical constants representing the 
+ object, even when the constant is not ``the current object.''  Thus, ACL2 
+ supports both the efficient von Neumann semantics and the clean applicative 
+ semantics, and uses the first in contexts where execution speed is paramount 
+ and the second during proofs.</p> 
+ 
+ <p><span class="tt"><a href="ACL2____DEFSTOBJ.html">Defstobj</a></span> and <span class="tt"><a href="ACL2____DEFABSSTOBJ.html">defabsstobj</a></span> <a href="ACL2____EVENTS.html">events</a> introduce stobjs. 
+ See <a href="ACL2____DEFSTOBJ.html">defstobj</a> for more details about stobjs.  In particular, a 
+ relatively advanced notion of ``congruent stobjs'' is discussed there.  The 
+ idea is to allow a stobj, <span class="v">st2</span>, of the same ``shape'' as a given stobj, 
+ <span class="v">st1</span>, to be used in place of <span class="v">st1</span>.  Other <span class="tt"><a href="ACL2____DEFSTOBJ.html">defstobj</a></span> keywords 
+ allow inlining and renaming of stobj accessors and updaters.</p> 
+ 
+ <p>But we are getting ahead of ourselves.  To start the stobj tour recommended 
+ earlier in this topic, see <a href="ACL2____STOBJ-EXAMPLE-1.html">stobj-example-1</a>.</p>
+</body>
+</html>

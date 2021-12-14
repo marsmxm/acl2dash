@@ -1,0 +1,121 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Argv</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=OSLIB____ARGV">Click for Argv in the Full Manual</a></h3>
+
+<p>Get the "application level" command line arguments passed to ACL2.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(argv &amp;optional (state 'state)) → (mv arguments state)</pre></dt>
+<dt>Returns</dt>
+<dd>
+<span class="tt">arguments</span> — <font color="#606060">Type <span class="v">(<a href="ACL2____STRING-LISTP.html">string-listp</a> arguments)</span>.</font>
+</dd> 
+<dd>
+<span class="tt">state</span> — <font color="#606060">Type <span class="v">(state-p1 state)</span>, given <span class="v">(<a href="ACL2____FORCE.html">force</a> (state-p1 state))</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>Typically, <span class="v">(<a href="OSLIB____ARGV.html">argv</a>)</span> is useful for writing command-line programs 
+atop ACL2, e.g., using <a href="ACL2____SAVE-EXEC.html">save-exec</a>.</p> 
+ 
+<p>In the logic, this function reads from the ACL2 oracle and coerces 
+whatever it finds into a <a href="ACL2____STRING-LISTP.html">string-listp</a>.  In the execution, we use 
+whatever mechanism the host Lisp provides for reading the command line 
+arguments that were given to ACL2.</p> 
+ 
+<p>Dead simple, right?  Well, not really.</p> 
+ 
+<p>Usually ACL2 itself, or any custom program you build atop ACL2 using <a href="ACL2____SAVE-EXEC.html">save-exec</a>, is really just an <i>image</i> that is executed by the 
+<i>runtime</i> for the host Lisp.  For instance, when you build ACL2 on CCL, 
+you get:</p> 
+ 
+<ul> 
+ 
+<li>An ACL2 image named <span class="v">saved_acl2.lx86cl64</span> or similar</li> 
+ 
+<li>A script named <span class="v">saved_acl2</span> that is something like this: 
+ 
+<pre class="code">#!/bin/sh
+export CCL_DEFAULT_DIRECTORY=/path/to/ccl
+exec /path/to/ccl/lx86cl64 
+  -I /path/to/saved_acl2.lx86cl64 
+  -K ISO-8859-1 
+  -e "(acl2::acl2-default-restart)"
+  -- "$@"</pre>
+</li> 
+ 
+</ul> 
+ 
+<p>So this script is invoking the Lisp runtime, named <span class="v">lx86cl64</span>, and 
+telling it to execute the ACL2 image, <span class="v">saved_acl2.lx86cl64</span>.</p> 
+ 
+<p>The important thing to note here is that command-line options like <span class="v">-I</span>, 
+<span class="v">-K</span>, and <span class="v">-e</span>, are arguments <b>to the runtime</b>, not to ACL2.  These 
+runtime options vary wildly from Lisp to Lisp.  So for <span class="v">argv</span> to be portable 
+and make any sense at all, we really want to exclude these Lisp-runtime 
+options, and only give you the "real", application-level options for this 
+invocation of your program.</p> 
+ 
+<p>Fortunately, most Lisps have a special mechanism to separate their runtime 
+options from the application options.  In Allegro, CCL, CLISP, and CMUCL, this 
+is done with a special <span class="v">--</span> option.  SBCL uses a slightly more elaborate 
+syntax but it's the same basic idea.</p> 
+ 
+<p>So on these Lisps, as long as you are running ACL2 or your save-image using 
+a "proper" shell script, <span class="v">(<a href="OSLIB____ARGV.html">argv</a>)</span> will work perfectly and give you exactly 
+the arguments to your program, no matter what options you are using, and no 
+matter whether the host Lisp runtime takes options with the same names.  For 
+details about what a "proper" script means, see the comments for your 
+particular Lisp in <span class="v">oslib/argv-raw.lsp</span>.</p> 
+ 
+<p>Unfortunately, GCL and LispWorks do not have such an option, so on these 
+Lisps we do something very half-assed:</p> 
+ 
+<ul> 
+<li>We still expect that a "proper" shell script will put in a <span class="v">--</span> option 
+to separate the runtime options from the program options.</li> 
+<li>
+<span class="v">(<a href="OSLIB____ARGV.html">argv</a>)</span> just excludes will everything before the <span class="v">--</span>.</li> 
+</ul> 
+ 
+<p>So even though the Lisp doesn't know about <span class="v">--</span> in this case, we can at 
+least keep the Lisp specific options out of your program.</p> 
+ 
+<p>But this isn't perfect.  Since the Lisp doesn't know to stop processing 
+options when it sees <span class="v">--</span>, there is a possibility of conflict if your 
+program happens to use the same options as the Lisp.  I don't know how to do 
+any better, so that's just how it is.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>argv-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> argv-fn (<a href="ACL2____STATE.html">state</a>)
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (<a href="ACL2____STATE.html">state</a>)))
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t))
+       (<a href="COMMON-LISP____LET.html">let</a> ((__function__ 'argv))
+            (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+            (<a href="ACL2____B_A2.html">b*</a> ((<a href="COMMON-LISP____-.html">-</a> (<a href="ACL2____RAISE.html">raise</a> "Raw Lisp definition not installed?"))
+                 ((<a href="ACL2____MV.html">mv</a> err val state)
+                  (<a href="ACL2____READ-ACL2-ORACLE.html">read-acl2-oracle</a> state)))
+                (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____NOT.html">not</a> err) (<a href="ACL2____STRING-LISTP.html">string-listp</a> val))
+                    (<a href="ACL2____MV.html">mv</a> val state)
+                    (<a href="ACL2____MV.html">mv</a> nil state)))))</pre> 
+<p><b>Theorem: </b>string-listp-of-argv.arguments</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> string-listp-of-argv.arguments
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?arguments acl2::?state)
+              (argv-fn state)))
+            (<a href="ACL2____STRING-LISTP.html">string-listp</a> arguments))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>state-p1-of-argv.state</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> state-p1-of-argv.state
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____FORCE.html">force</a> (state-p1 state))
+                 (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?arguments acl2::?state)
+                       (argv-fn state)))
+                     (state-p1 state)))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>true-listp-of-argv</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> true-listp-of-argv
+        (<a href="ACL2____TRUE-LISTP.html">true-listp</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 0 (<a href="OSLIB____ARGV.html">argv</a>)))
+        :rule-classes :type-prescription)</pre> 
+
+</body>
+</html>

@@ -1,0 +1,464 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Constraint</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____CONSTRAINT">Click for Constraint in the Full Manual</a></h3>
+
+<p>Restrictions on certain functions introduced in <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span> <a href="ACL2____EVENTS.html">events</a></p><p>Suppose that a given theorem, <span class="v">thm</span>, is to be functionally 
+ instantiated using a given functional substitution, <span class="v">alist</span>.  (See <a href="ACL2____LEMMA-INSTANCE.html">lemma-instance</a>, or for an example, see <a href="ACL2____FUNCTIONAL-INSTANTIATION-EXAMPLE.html">functional-instantiation-example</a>.)  What is the set of proof obligations 
+ generated?  It is the set obtained by applying <span class="v">alist</span> to all terms, 
+ <span class="v">tm</span>, such that (a) <span class="v">tm</span> mentions some function symbol in the domain of 
+ <span class="v">alist</span>, and (b) either (i) <span class="v">tm</span> is the ``constraint'' (see below) on a 
+ function symbol ancestral in <span class="v">thm</span> or in some <span class="tt"><a href="ACL2____DEFAXIOM.html">defaxiom</a></span> or (ii) 
+ <span class="v">tm</span> is the body of a <span class="tt"><a href="ACL2____DEFAXIOM.html">defaxiom</a></span>.  Here, a function symbol is 
+ ``ancestral'' in <span class="v">thm</span> if either it occurs in <span class="v">thm</span>, or it occurs in the 
+ definition of some function symbol that occurs in <span class="v">thm</span>, and so on.</p> 
+ 
+ <p>The remainder of this note explains what we mean by ``constraint'' in the 
+ words above.  For a utility that obtains the constraint for a given function 
+ symbol, see <a href="ACL2____CONSTRAINT-INFO.html">constraint-info</a>.</p> 
+ 
+ <p>In a certain sense, function symbols are introduced in essentially two 
+ ways.  The most common way is to use <span class="tt"><a href="COMMON-LISP____DEFUN.html">defun</a></span> (or when there is mutual 
+ recursion, <span class="tt"><a href="ACL2____MUTUAL-RECURSION.html">mutual-recursion</a></span> or <span class="tt"><a href="ACL2____DEFUNS.html">defuns</a></span>).  There is also a 
+ mechanism for introducing ``witness functions''; see <a href="ACL2____DEFCHOOSE.html">defchoose</a>.  The 
+ documentation for these <a href="ACL2____EVENTS.html">events</a> describes the axioms they introduce, 
+ which we will call here their ``definitional axioms.''  These definitional 
+ axioms are generally the constraints on the function symbols that these axioms 
+ introduce.</p> 
+ 
+ <p>However, when a function symbol is introduced in the scope of an <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span> event, its constraints may differ from the definitional axioms 
+ introduced for it.  For example, suppose that a function's definition is 
+ <span class="tt"><a href="ACL2____LOCAL.html">local</a></span> to the <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span>; that is, suppose the function is 
+ introduced in the <a href="ACL2____SIGNATURE.html">signature</a> of the <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span>.  Then its 
+ constraints include, at the least, those non-<span class="tt"><a href="ACL2____LOCAL.html">local</a></span> theorems and 
+ definitions in the <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span> that mention the function symbol.</p> 
+ 
+ <p>Actually, it will follow from the discussion below that if the <a href="ACL2____SIGNATURE.html">signature</a> is empty for an <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span>, then the constraint on each of 
+ its new function symbols is exactly the definitional axiom introduced for it. 
+ Intuitively, we view such <span class="v">encapsulates</span> just as we view <span class="tt"><a href="ACL2____INCLUDE-BOOK.html">include-book</a></span> <a href="ACL2____EVENTS.html">events</a>.  But the general case, where the <a href="ACL2____SIGNATURE.html">signature</a> 
+ is not empty, is more complicated.</p> 
+ 
+ <p>In the discussion that follows we describe in detail exactly which 
+ constraints are associated with which function symbols that are introduced in 
+ the scope of an <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span> event.  In order to simplify the 
+ exposition we make two cuts at it.  In the first cut we present an 
+ over-simplified explanation that nevertheless captures the main ideas.  In the 
+ second cut we complete our explanation by explaining how we view certain <a href="ACL2____EVENTS.html">events</a> as being ``lifted'' out of the <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span>, resulting in a 
+ possibly smaller <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span>, which becomes the target of the 
+ algorithm described in the first cut.</p> 
+ 
+ <p>At the end of this note we present an example showing why a more naive 
+ approach is unsound.</p> 
+ 
+ <p>Finally, before we start our ``first cut,'' we note that any information 
+ you want ``exported'' outside an <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span> event must be there as an 
+ explicit definition or theorem.  For example, even if a function <span class="v">foo</span> has 
+ output type <span class="v">(<a href="ACL2____MV.html">mv</a> t t)</span> in its <a href="ACL2____SIGNATURE.html">signature</a>, the system will not know 
+ <span class="v">(<a href="ACL2____TRUE-LISTP.html">true-listp</a> (foo x))</span> merely on account of this information.  Thus, if you 
+ are using functions like <span class="v">foo</span> (constrained <span class="tt"><a href="ACL2____MV.html">mv</a></span> functions), then you 
+ may find it useful to prove (inside the <span class="v">encapsulate</span>, to be exported) a 
+ <span class="v">:</span><span class="tt"><a href="ACL2____TYPE-PRESCRIPTION.html">type-prescription</a></span> rule for the constrained function, for 
+ example, the <span class="v">:</span><span class="tt"><a href="ACL2____TYPE-PRESCRIPTION.html">type-prescription</a></span> rule <span class="v">(<a href="ACL2____TRUE-LISTP.html">true-listp</a> (foo
+ x))</span>.</p> 
+ 
+ <p><i>First cut at constraint-assigning algorithm.</i> Consider the set of 
+ formulas introduced by all <a href="ACL2____EVENTS.html">events</a> in the scope of an <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span>:</p> 
+ 
+ <ul> 
+ 
+ <li>for every <span class="tt"><a href="ACL2____DEFTHM.html">defthm</a></span> and <span class="tt"><a href="ACL2____DEFAXIOM.html">defaxiom</a></span> event, include its formula 
+ as well as the formulas of all its corollaries;</li> 
+ 
+ <li>for every <span class="tt"><a href="COMMON-LISP____DEFUN.html">defun</a></span> event, include the formula that equates the body 
+ with the application of the function applied to the formals;</li> 
+ 
+ <li>for every <span class="v">defchoose</span> event, include the axiom that it adds (see <a href="ACL2____DEFCHOOSE.html">defchoose</a>);</li> 
+ 
+ <li>and so on, including axioms added by <span class="tt"><a href="ACL2____DEFPKG.html">defpkg</a></span> and (recursively) any 
+ subsidiary <span class="v">encapsulate</span> events.</li> 
+ 
+ </ul> 
+ 
+ <p>Then quite simply, all such formulas are conjoined, and each function 
+ symbol introduced by the <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span> is assigned that conjunction as 
+ its constraint.</p> 
+ 
+ <p>Clearly this is a rather severe algorithm.  Let us consider two possible 
+ optimizations in an informal manner before presenting our second cut.</p> 
+ 
+ <p>Consider the (rather artificial) event below.  The function <span class="v">before1</span> 
+ does not refer at all, even indirectly, to the locally-introduced function 
+ <span class="v">sig-fn</span>, so it is unfortunate to saddle it with constraints about 
+ <span class="v">sig-fn</span>.</p> 
+ 
+ <pre class="code">(<a href="ACL2____ENCAPSULATE.html">encapsulate</a>
+ (((sig-fn *) =&gt; *))
+
+ (<a href="COMMON-LISP____DEFUN.html">defun</a> before1 (x)
+   (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x)
+       (before1 (<a href="COMMON-LISP____CDR.html">cdr</a> x))
+     x))
+
+ (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> sig-fn (x) (<a href="COMMON-LISP____CONS.html">cons</a> x x)))
+
+ (<a href="ACL2____DEFTHM.html">defthm</a> sig-fn-prop
+   (<a href="COMMON-LISP____CONSP.html">consp</a> (sig-fn x)))
+ )</pre> 
+ 
+ <p>We would like to imagine moving the definition of <span class="v">before1</span> to just in 
+ front of this <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span>, as follows.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> before1 (x)
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x)
+      (before1 (<a href="COMMON-LISP____CDR.html">cdr</a> x))
+    x))
+
+(<a href="ACL2____ENCAPSULATE.html">encapsulate</a>
+ (((sig-fn *) =&gt; *))
+
+ (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> sig-fn (x) (<a href="COMMON-LISP____CONS.html">cons</a> x x)))
+
+ (<a href="ACL2____DEFTHM.html">defthm</a> sig-fn-prop
+   (<a href="COMMON-LISP____CONSP.html">consp</a> (sig-fn x)))
+ )</pre> 
+ 
+ <p>Thus, we will only assign the constraint <span class="v">(<a href="COMMON-LISP____CONSP.html">consp</a> (sig-fn x))</span>, from the 
+ theorem <span class="v">sig-fn-prop</span>, to the function <span class="v">sig-fn</span>, not to the function 
+ <span class="v">before1</span>.</p> 
+ 
+ <p>More generally, suppose an event in an <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span> event does not 
+ mention any function symbol in the <a href="ACL2____SIGNATURE.html">signature</a> of the <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span>, nor any function symbol that mentions any such function symbol, 
+ and so on.  (We might say that no function symbol from the <a href="ACL2____SIGNATURE.html">signature</a> is 
+ an ``ancestor'' of any function symbol occurring in the event.)  Then we 
+ imagine moving the event, so that it appears in front of the <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span>.  We don't actually move it, but we pretend we do when it comes 
+ time to assign constraints.  Thus, such definitions only introduce 
+ definitional axioms as the constraints on the function symbols being defined. 
+ In the example above, the event <span class="v">sig-fn-prop</span> introduces no constraints on 
+ function <span class="v">before1</span>.</p> 
+ 
+ <p>Once this first optimization is performed, we have in mind a set of 
+ ``constrained functions.''  These are the functions introduced in the <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span> that would remain after moving some of them in front, as 
+ indicated above.  Consider the collection of all formulas introduced by the 
+ <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span>, except the definitional axioms, that mention these 
+ constrained functions.  So for example, in the event below, no such formula 
+ mentions the function symbol <span class="v">after1</span>.</p> 
+ 
+ <pre class="code">(<a href="ACL2____ENCAPSULATE.html">encapsulate</a>
+ (((sig-fn *) =&gt; *))
+
+ (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> sig-fn (x) (<a href="COMMON-LISP____CONS.html">cons</a> x x)))
+
+ (<a href="ACL2____DEFTHM.html">defthm</a> sig-fn-prop
+   (<a href="COMMON-LISP____CONSP.html">consp</a> (sig-fn x)))
+
+ (<a href="COMMON-LISP____DEFUN.html">defun</a> after1 (x)
+   (sig-fn x))
+ )</pre> 
+ 
+ <p>We can see that there is really no harm in imagining that we move the 
+ definition of <span class="v">after1</span> out of the <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span>, to just after the 
+ <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span>.</p> 
+ 
+ <p>Many subtle aspects of this rearrangement process have been omitted.  For 
+ example, suppose the function <span class="v">fn</span> uses <span class="v">sig-fn</span>, the latter being a 
+ function in the signature of the encapsulation.  Suppose a formula about 
+ <span class="v">fn</span> is proved in the encapsulation.  Then from the discussion above 
+ <span class="v">fn</span> is among the constrained functions of the encapsulate: it cannot be 
+ moved before the encapsulate and it cannot be moved after the encapsulation. 
+ But why is <span class="v">fn</span> constrained?  The reason is that the theorem proved about 
+ <span class="v">fn</span> may impose or express constraints on <span class="v">sig-fn</span>.  That is, the 
+ theorem proved about <span class="v">fn</span> may depend upon properties of the witness used 
+ for <span class="v">sig-fn</span>.  Here is a simple example:</p> 
+ 
+ <pre class="code">(<a href="ACL2____ENCAPSULATE.html">encapsulate</a>
+ (((sig-fn *) =&gt; *))
+
+ (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> sig-fn (x) (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORE.html">ignore</a> x)) 0))
+
+ (<a href="COMMON-LISP____DEFUN.html">defun</a> fn (lst)
+   (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ENDP.html">endp</a> lst)
+       t
+       (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> (sig-fn (<a href="COMMON-LISP____CAR.html">car</a> lst)))
+            (fn (<a href="COMMON-LISP____CDR.html">cdr</a> lst)))))
+
+ (<a href="ACL2____DEFTHM.html">defthm</a> fn-always-true
+   (fn lst)))</pre> 
+ 
+ <p>In this example, there are no <span class="tt"><a href="ACL2____DEFTHM.html">defthm</a></span> events that mention 
+ <span class="v">sig-fn</span> explicitly.  One might therefore conclude that it is completely 
+ unconstrained.  But the witness we chose for it always returns an integer. 
+ The function <span class="v">fn</span> uses <span class="v">sig-fn</span> and we prove that <span class="v">fn</span> always returns 
+ true.  Of course, the proof of this theorem depends upon the properties of the 
+ witness for <span class="v">sig-fn</span>, even though those properties were not explicitly 
+ ``called out'' in theorems proved about <span class="v">sig-fn</span>.  It would be unsound to 
+ move <span class="v">fn-always-true</span> after the encapsulate.  It would also be unsound to 
+ constrain <span class="v">sig-fn</span> to satisfy just <span class="v">fn-always-true</span> without including in 
+ the constraint the relation between <span class="v">sig-fn</span> and <span class="v">fn</span>.  Hence both 
+ <span class="v">sig-fn</span> and <span class="v">fn</span> are constrained by this encapsulation and the 
+ constraint imposed on each is the same and states the relation between the two 
+ as characterized by the equation defining <span class="v">fn</span> as well as the property that 
+ <span class="v">fn</span> always returns true.  Suppose, later, one proved a theorem about 
+ <span class="v">sig-fn</span> and wished to functionally instantiate it.  Then one must also 
+ functionally instantiate <span class="v">fn</span>, even if it is not involved in the theorem, 
+ because it is only through <span class="v">fn</span> that <span class="v">sig-fn</span> inherits its constrained 
+ properties.</p> 
+ 
+ <p>This is a pathological example that illustrate a trap into which one may 
+ easily fall: rather than identify the key properties of the constrained 
+ function the user has foreshadowed its intended application and constrained 
+ those notions.  Clearly, the user wishing to introduce the <span class="v">sig-fn</span> above 
+ would be well-advised to use the following instead:</p> 
+ 
+ <pre class="code">(<a href="ACL2____ENCAPSULATE.html">encapsulate</a>
+ (((sig-fn *) =&gt; *))
+ (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> sig-fn (x) (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORE.html">ignore</a> x)) 0))
+ (<a href="ACL2____DEFTHM.html">defthm</a> integerp-sig-fn
+   (<a href="COMMON-LISP____INTEGERP.html">integerp</a> (sig-fn x))))
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> fn (lst)
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ENDP.html">endp</a> lst)
+      t
+    (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> (sig-fn (<a href="COMMON-LISP____CAR.html">car</a> lst)))
+         (fn (<a href="COMMON-LISP____CDR.html">cdr</a> lst)))))
+
+(<a href="ACL2____DEFTHM.html">defthm</a> fn-always-true
+   (fn lst)))</pre> 
+ 
+ <p>Note that <span class="v">sig-fn</span> is constrained merely to be an integer.  It is the 
+ only constrained function.  Now <span class="v">fn</span> is introduced after the encapsulation, 
+ as a simple function that uses <span class="v">sig-fn</span>.  We prove that <span class="v">fn</span> always 
+ returns true, but this fact does not constrain <span class="v">sig-fn</span>.  Future uses of 
+ <span class="v">sig-fn</span> do not have to consider <span class="v">fn</span> at all.</p> 
+ 
+ <p>Sometimes it is necessary to introduce a function such as <span class="v">fn</span> within 
+ the <span class="v">encapsulate</span> merely to state the key properties of the undefined 
+ function <span class="v">sig-fn</span>.  But that is unusual and the user should understand that 
+ both functions are being constrained.</p> 
+ 
+ <p>Another subtle aspect of encapsulation that has been brushed over so far 
+ has to do with exactly how functions defined within the encapsulation use the 
+ signature functions.  For example, above we say ``Consider the collection of 
+ all formulas introduced by the encapsulate, <i>except the definitional 
+ axioms</i>, that mention these constrained functions.''  We seem to suggest 
+ that a definitional axiom which mentions a constrained function can be moved 
+ out of the encapsulation and considered part of the ``post-encapsulation'' 
+ extension of the logical <a href="ACL2____WORLD.html">world</a>, if the defined function is not used in 
+ any non-definitional formula proved in the encapsulation.  For example, in the 
+ encapsulation above that constrained <span class="v">sig-fn</span> and introduced <span class="v">fn</span> within 
+ the encapsulation, <span class="v">fn</span> was constrained because we proved the formula 
+ <span class="v">fn-always-true</span> within the encapsulation.  Had we not proved 
+ <span class="v">fn-always-true</span> within the encapsulation, <span class="v">fn</span> could have been moved 
+ after the encapsulation.  But this suggests an unsound rule because whether 
+ such a function can be moved after the encapsulate depend on whether its 
+ <i>admission</i> used properties of the witnesses!  In particular, we say a 
+ function is ``subversive'' if any of its governing tests or the actuals in any 
+ recursive call involve a function in which the signature functions are 
+ ancestral.  See <a href="ACL2____INFECTED-CONSTRAINTS.html">infected-constraints</a> and see <a href="ACL2____SUBVERSIVE-RECURSIONS.html">subversive-recursions</a>.</p> 
+ 
+ <p>(Aside: The definition of <span class="v">fn</span> in the first encapsulation above that 
+ defines <span class="v">fn</span>, i.e., the encapsulation with <span class="v">fn-always-true</span> inside, is 
+ subversive because the call of the macro <span class="tt"><a href="COMMON-LISP____AND.html">and</a></span> expands to a call of 
+ <span class="v">IF</span> that governs a recursive call of <span class="v">fn</span>, in this case:</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> fn (lst)
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ENDP.html">endp</a> lst)
+      t
+      (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> (sig-fn (<a href="COMMON-LISP____CAR.html">car</a> lst)))
+          (fn (<a href="COMMON-LISP____CDR.html">cdr</a> lst))
+        nil))).</pre> 
+ 
+ <p>If we switch the order of conjuncts in <span class="v">fn</span>, then the definition of 
+ <span class="v">fn</span> is no longer subversive, but it still ``infects'' the constraint 
+ generated for the encapsulation, hence for <span class="v">sig-fn</span>, because 
+ <span class="v">fn-always-true</span> blocks the definition of <span class="v">fn</span> from being moved back (to 
+ after the encapsulation).  Also see <a href="ACL2____INFECTED-CONSTRAINTS.html">infected-constraints</a>.  If we both 
+ switch the order of conjuncts and drop <span class="v">fn-always-true</span> from the 
+ encapsulation, then the definition of <span class="v">fn</span> is in essence moved back to 
+ after the encapsulation, and the constraint for <span class="v">sig-fn</span> no longer includes 
+ the definition of <span class="v">fn</span>.  End of aside.)</p> 
+ 
+ <p>Another aspect we have not discussed is what happens to nested 
+ encapsulations when each introduces constrained functions.  We say an 
+ <span class="v">encapsulate</span> event is ``trivial'' if it introduces no constrained 
+ functions, i.e., if its signatures is <span class="v">nil</span>.  Trivial encapsulations are 
+ just a way to wrap up a collection of events into a single event.</p> 
+ 
+ <p>From the foregoing discussion we see we are interested in exactly how we 
+ can ``rearrange'' the events in a non-trivial encapsulation — moving 
+ some ``before'' the encapsulation and others ``after'' the encapsulation.  We 
+ are also interested in which functions introduced by the encapsulation are 
+ ``constrained'' and what the ``constraints'' on each are.  We may summarize 
+ the observations above as follows, after which we conclude with a more 
+ elaborate example.</p> 
+ 
+ <p><i>Second cut at constraint-assigning algorithm.</i> First, we focus only 
+ on non-trivial encapsulations that neither contain nor are contained in 
+ non-trivial encapsulations.  (Nested non-trivial encapsulations are not 
+ rearranged at all: do not put anything in such a nest unless you mean for it 
+ to become part of the constraints generated.)  Second, in what follows we only 
+ consider the non-<span class="v">local</span> events of such an <span class="v">encapsulate</span>, assuming that 
+ they satisfy the restriction of using no locally defined function symbols 
+ other than the signature functions.  Given such an <span class="v">encapsulate</span> event, 
+ move, to just in front of it and in the same order, all definitions and 
+ theorems for which none of the signature functions is ancestral.  Now collect 
+ up all formulas (theorems) introduced in the <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span> other than 
+ definitional axioms.  Add to this set any of those definitional equations that 
+ is either subversive or defines a function used in a formula in the set.  The 
+ conjunction of the resulting set of formulas is called the ``constraint'' and 
+ the set of all the signature functions of the <span class="v">encapsulate</span> together with 
+ all function symbols defined in the <span class="v">encapsulate</span> and mentioned in the 
+ constraint is called the ``constrained functions.''  Assign the constraint to 
+ each of the constrained functions.  Move, to just after the <span class="v">encapsulate</span>, 
+ the definitions of all function symbols defined in the <span class="v">encapsulate</span> that 
+ have been omitted from the constraint.</p> 
+ 
+ <p>Implementation note.  In the implementation we do not actually move <a href="ACL2____EVENTS.html">events</a>, but we create constraints that pretend that we did.</p> 
+ 
+ <p>Here is an example illustrating our constraint-assigning algorithm.  It 
+ builds on the preceding examples.</p> 
+ 
+ <pre class="code">(<a href="ACL2____ENCAPSULATE.html">encapsulate</a>
+ (((sig-fn *) =&gt; *))
+
+ (<a href="COMMON-LISP____DEFUN.html">defun</a> before1 (x)
+   (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x)
+       (before1 (<a href="COMMON-LISP____CDR.html">cdr</a> x))
+     x))
+
+ (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> sig-fn (x) (<a href="COMMON-LISP____CONS.html">cons</a> x x)))
+
+ (<a href="ACL2____DEFTHM.html">defthm</a> sig-fn-prop
+   (<a href="COMMON-LISP____CONSP.html">consp</a> (sig-fn x)))
+
+ (<a href="COMMON-LISP____DEFUN.html">defun</a> during (x)
+   (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x)
+       x
+     (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CAR.html">car</a> (sig-fn x))
+           17)))
+
+ (<a href="COMMON-LISP____DEFUN.html">defun</a> before2 (x)
+   (before1 x))
+
+ (<a href="ACL2____DEFTHM.html">defthm</a> before2-prop
+   (<a href="COMMON-LISP____ATOM.html">atom</a> (before2 x)))
+
+ (<a href="ACL2____DEFTHM.html">defthm</a> during-prop
+   (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____ATOM.html">atom</a> x)
+                 (before2 x))
+            (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____CAR.html">car</a> (during x))
+                   (<a href="COMMON-LISP____CAR.html">car</a> (sig-fn x)))))
+
+ (<a href="COMMON-LISP____DEFUN.html">defun</a> after1 (x)
+   (sig-fn x))
+
+ (<a href="ACL2____DEFCHOOSE.html">defchoose</a> after2 (x) (<a href="ACL2____U.html">u</a>)
+   (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP_____C3.html">&lt;</a> u x) (during x)))
+ )</pre> 
+ 
+ <p>Only the functions <span class="v">sig-fn</span> and <span class="v">during</span> receive extra constraints. 
+ The functions <span class="v">before1</span> and <span class="v">before2</span> are viewed as moving in front of 
+ the <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span>, as is the theorem <span class="v">before2-prop</span>.  The functions 
+ <span class="v">after1</span> and <span class="v">after2</span> are viewed as being moved past the <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span>.  The implementation reports the following.</p> 
+ 
+ <pre class="code">In addition to SIG-FN, we export AFTER2, AFTER1, BEFORE2, DURING and
+BEFORE1.
+
+The following constraint is associated with both of the functions DURING and
+SIG-FN:
+
+(<a href="COMMON-LISP____AND.html">AND</a> (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (DURING X)
+            (<a href="COMMON-LISP____IF.html">IF</a> (<a href="COMMON-LISP____CONSP.html">CONSP</a> X)
+                X (<a href="COMMON-LISP____CONS.html">CONS</a> (<a href="COMMON-LISP____CAR.html">CAR</a> (SIG-FN X)) 17)))
+     (<a href="COMMON-LISP____CONSP.html">CONSP</a> (SIG-FN X))
+     (<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____AND.html">AND</a> (<a href="COMMON-LISP____ATOM.html">ATOM</a> X) (BEFORE2 X))
+              (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (<a href="COMMON-LISP____CAR.html">CAR</a> (DURING X))
+                     (<a href="COMMON-LISP____CAR.html">CAR</a> (SIG-FN X)))))</pre> 
+ 
+ <p>Notice that the formula <span class="v">(<a href="COMMON-LISP____CONSP.html">consp</a> (during x))</span> is not a conjunct of the 
+ constraint.  During the first pass of the <span class="v">encapsulate</span>, this formula is 
+ stored as a <span class="v">:</span><span class="tt"><a href="ACL2____TYPE-PRESCRIPTION.html">type-prescription</a></span> rule deduced during the definition 
+ of the function <span class="v">during</span>.  However, the rule is not exported because of a 
+ rather subtle soundness issue.  (If you are interested in details, see the 
+ comments in source function <span class="v">putprop-type-prescription-lst</span>.)</p> 
+ 
+ <p>We conclude by asking (and to a certain extent, answering) the following 
+ question: Isn't there an approach to assigning constraints that avoids 
+ over-constraining more simply than our ``second cut'' above?  Perhaps it seems 
+ that given an <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span>, we should simply assign to each locally 
+ defined function the theorems exported about that function.  If we adopted 
+ that simple approach the events below would be admissible.</p> 
+ 
+ <pre class="code">(<a href="ACL2____ENCAPSULATE.html">encapsulate</a>
+ (((foo *) =&gt; *))
+ (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> foo (x) x))
+ (<a href="COMMON-LISP____DEFUN.html">defun</a> bar (x)
+   (foo x))
+ (<a href="ACL2____DEFTHM.html">defthm</a> bar-prop
+   (<a href="COMMON-LISP____EQUAL.html">equal</a> (bar x) x)
+   :rule-classes nil))
+
+(<a href="ACL2____DEFTHM.html">defthm</a> foo-id
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> (foo x) x)
+  :hints (("Goal" :use bar-prop)))
+
+; The following event is not admissible in ACL2.
+
+(<a href="ACL2____DEFTHM.html">defthm</a> ouch!
+  nil
+  :rule-classes nil
+  :hints
+  (("Goal" :use
+    ((:functional-instance foo-id
+                           (foo (<a href="COMMON-LISP____LAMBDA.html">lambda</a> (x) (<a href="COMMON-LISP____CONS.html">cons</a> x x))))))))</pre> 
+ 
+ <p>Under the simple approach we have in mind, <span class="v">bar</span> is constrained to 
+ satisfy both its definition and <span class="v">bar-prop</span> because <span class="v">bar</span> mentions a 
+ function declared in the signature list of the encapsulation.  In fact, 
+ <span class="v">bar</span> is so-constrained in the ACL2 semantics of encapsulation and the 
+ first two events above (the <span class="v">encapsulate</span> and the consequence that <span class="v">foo</span> 
+ must be the identity function) are actually admissible.  But under the simple 
+ approach to assigning constraints, <span class="v">foo</span> is unconstrained because no 
+ theorem about it is exported.  Under that approach, <span class="v">ouch!</span> is provable 
+ because <span class="v">foo</span> can be instantiated in <span class="v">foo-id</span> to a function other than 
+ the identity function.</p> 
+ 
+ <p>It's tempting to think we can fix this by including definitions, not just 
+ theorems, in constraints.  But consider the following slightly more elaborate 
+ example.  The problem is that we need to include as a constraint on <span class="v">foo</span> 
+ not only the definition of <span class="v">bar</span>, which mentions <span class="v">foo</span> explicitly, but 
+ also <span class="v">abc</span>, which has <span class="v">foo</span> as an ancestor.</p> 
+ 
+ <pre class="code">(<a href="ACL2____ENCAPSULATE.html">encapsulate</a>
+ (((foo *) =&gt; *))
+ (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> foo (x) x))
+ (<a href="ACL2____LOCAL.html">local</a> (<a href="ACL2____DEFTHM.html">defthm</a> foo-prop
+          (<a href="COMMON-LISP____EQUAL.html">equal</a> (foo x) x)))
+ (<a href="COMMON-LISP____DEFUN.html">defun</a> bar (x)
+   (foo x))
+ (<a href="COMMON-LISP____DEFUN.html">defun</a> abc (x)
+   (bar x))
+ (<a href="ACL2____DEFTHM.html">defthm</a> abc-prop
+   (<a href="COMMON-LISP____EQUAL.html">equal</a> (abc x) x)
+   :rule-classes nil))
+
+(<a href="ACL2____DEFTHM.html">defthm</a> foo-id
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> (foo x) x)
+  :hints (("Goal" :use abc-prop)))
+
+; The following event is not admissible in ACL2.
+
+(<a href="ACL2____DEFTHM.html">defthm</a> ouch!
+  nil
+  :rule-classes nil
+  :hints
+  (("Goal" :use
+    ((:functional-instance foo-id
+                           (foo (<a href="COMMON-LISP____LAMBDA.html">lambda</a> (x) (<a href="COMMON-LISP____CONS.html">cons</a> x x)))
+                           (bar (<a href="COMMON-LISP____LAMBDA.html">lambda</a> (x) (<a href="COMMON-LISP____CONS.html">cons</a> x x))))))))</pre>
+</body>
+</html>

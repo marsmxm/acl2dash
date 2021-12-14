@@ -1,0 +1,115 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Fgl-getting-bits-from-objects</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=FGL____FGL-GETTING-BITS-FROM-OBJECTS">Click for Fgl-getting-bits-from-objects in the Full Manual</a></h3>
+
+<p>How to ensure that FGL can reduce your conjecture to a Boolean formula</p> <p>FGL is intended to reduce ACL2 conjectures to Boolean formulas 
+that can be solved with a SAT solver.  The first step in this process is to 
+reduce the variables of the theorem -- which could represent any object at all 
+-- into a bit-blasted representation of some sort.  In GL, this was typically 
+done by providing a shape specifier for each variable, and providing a coverage 
+proof to show that the shape specifier was sufficient to cover all the values 
+of the variable that satisfy the hypotheses of the theorem.  In FGL, shape 
+specifiers are not supported (yet); instead, theorem variables are just 
+variables, but rewrite rules can be used to extract a Boolean representation 
+from them.</p> 
+ 
+<h3>Generating Boolean variables</h3> 
+ 
+<p>When the FGL interpreter process an IF term, it interprets the test of the 
+IF, resulting in a symbolic object.  If that symbolic object is a function call 
+or variable object, then we check the Boolean variable database of the 
+interpreter state to see whether that object has already been bound to a 
+Boolean variable.  If not, we add a new Boolean variable representing that 
+object's truth value.  This is the only way that Boolean variables are 
+generated in FGL.  An example of how this can be used can be seen in the 
+following rule (from "fgl/bitops.lisp") for expanding the <span class="v">loghead</span> of 
+some object:</p> 
+ 
+<pre class="code">(<a href="FGL____DEF-FGL-REWRITE.html">def-fgl-rewrite</a> loghead-const-width
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____SYNTAXP.html">syntaxp</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> n))
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____LOGHEAD.html">loghead</a> n x)
+                  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____OR.html">or</a> (<a href="ACL2____ZP.html">zp</a> n)
+                          (<a href="COMMON-LISP____AND.html">and</a> (<a href="FGL____CHECK-INT-ENDP.html">check-int-endp</a> x (<a href="FGL____SYNTAX-BIND.html">syntax-bind</a> xsyn (<a href="FGL____G-CONCRETE.html">g-concrete</a> x)))
+                               (<a href="COMMON-LISP____NOT.html">not</a> (intcar x))))
+                      0
+                    (intcons (<a href="COMMON-LISP____AND.html">and</a> (intcar x) t)
+                             (<a href="ACL2____LOGHEAD.html">loghead</a> (<a href="COMMON-LISP____1-.html">1-</a> n) (intcdr x)))))))</pre> 
+ 
+<p>Applying this rule to <span class="v">(<a href="ACL2____LOGHEAD.html">loghead</a> 3 z)</span> results in three new Boolean 
+variables being generated due to the subterm <span class="v">(<a href="COMMON-LISP____AND.html">and</a> (intcar x) t)</span>, which is 
+really <span class="v">(<a href="COMMON-LISP____IF.html">if</a> (intcar x) t nil)</span>.  The full expression reduces to a 
+<span class="v">g-integer</span> form whose bits are the variables generated from <span class="v">(intcar
+z)</span>, <span class="v">(intcar (intcdr z))</span>, and <span class="v">(intcar (intcdr (intcdr z)))</span>.</p> 
+ 
+<p>So one way of getting from free variables to Boolean formulas that FGL can 
+use is to access them through functions like <span class="v">loghead</span>, and to have rules 
+like <span class="v">loghead-const-width</span> that rewrite those in a way that expose the 
+Boolean variables that we want to reason about.</p> 
+ 
+<h3>Normalizing Variables to Bit-blasted Objects</h3> 
+ 
+<p>Often instead of accessing a variable only through accessors like 
+<span class="v">loghead</span>, we'll have a hyp that describes the type of the variable.  We can 
+use such hyps to reduce the variables to bit-blasted objects.  For example, we 
+have the following rule in "fgl/bitops.lisp":</p> 
+<pre class="code">(<a href="FGL____DEF-FGL-REWRITE.html">def-fgl-rewrite</a> unsigned-byte-p-const-width
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____SYNTAXP.html">syntaxp</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> n))
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> n x)
+                  (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____NATP.html">natp</a> n)
+                       (<a href="COMMON-LISP____EQUAL.html">equal</a> x (<a href="ACL2____LOGHEAD.html">loghead</a> n x))
+                       t))))</pre> 
+ 
+<p>When we assume <span class="v">(<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 3 z)</span>, we end up with the formula 
+<span class="v">(<a href="COMMON-LISP____EQUAL.html">equal</a> z (<a href="ACL2____LOGHEAD.html">loghead</a> 3 z))</span>, but <span class="v">(<a href="ACL2____LOGHEAD.html">loghead</a> 3 z)</span> gets rewritten to a 
+symbolic integer as described above.  Since this <span class="v">equal</span> term is in an IF 
+test <span class="v">(<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> z ...) t)</span>, we add a Boolean variable for it.  When we add 
+a Boolean variable for an <span class="v">equal</span> term, we also can add an entry in a 
+database that maps terms to Boolean variables that equate them to other terms. 
+Whenever the FGL interpreter produces a symbolic object that has an entry in 
+this database, we check whether any of those Boolean variables are currently 
+assumed to be true, and replace that symbolic object with the object it is 
+equated to.  In this case, we create an entry for <span class="v">z</span> in the database 
+mapping it to the Boolean variable representing the <span class="v">equal</span> term.  Since 
+this occurred as a hypothesis in the theorem, we're going to be assuming that 
+to be true in the conclusion, so whenever we see the variable <span class="v">z</span> there 
+we'll then replace it with the symbolic integer generated from the 
+<span class="v">loghead</span>.</p> 
+ 
+<h3>Pitfalls and Suggestions</h3> 
+ 
+<p>Make sure the terms that are assigned Boolean variables don't alias each 
+other -- otherwise proofs may end up having false counterexamples.  For 
+example, if you generate a Boolean variable for both <span class="v">(intcar (intcdr x))</span> 
+and <span class="v">(<a href="COMMON-LISP____LOGBITP.html">logbitp</a> 1 x)</span>, then you're likely to have false counterexamples where 
+these two variables are assigned opposite values.  Choose a single normal form 
+and rewrite other accessors to that -- e.g., use a rule like 
+<span class="v">logbitp-const-index</span> to ensure that <span class="v">logbitp</span> calls are normalized 
+correctly to <span class="v">(intcar (intcdr ...))</span> form.</p> 
+ 
+<p>When taking the approach of normalizing typed variables to bit-blasted 
+objects, it is important that the variable's correct type be assumed at each 
+use of the variable.  That is, the assumption should be in a top-level 
+hypothesis or else an <span class="v">if</span> test guarding each use of the variable (aside 
+from the type assumption itself).  For example, the following probably 
+works (depending what rules are installed):</p> 
+ <pre class="code">(fgl-thm
+ (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 3 x) (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 3 y))
+     (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP_____B2.html">+</a> x y) (<a href="COMMON-LISP_____B2.html">+</a> y x))
+    t))</pre> 
+<p>But the following probably doesn't, or at least not by bitblasting:</p> 
+<pre class="code">(fgl-thm
+ (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP_____B2.html">+</a> x y) (<a href="COMMON-LISP_____B2.html">+</a> y x)))
+     (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 3 x) (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 3 y)))
+    t))</pre> 
+ 
+ 
+ 
+
+</body>
+</html>

@@ -1,0 +1,482 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Return-last</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____RETURN-LAST">Click for Return-last in the Full Manual</a></h3>
+
+<p>Return the last argument, perhaps with side effects</p><p><span class="v">Return-last</span> is an ACL2 function that returns its last 
+ argument.  It is used to implement common utilities such as <span class="tt"><a href="ACL2____PROG2_42.html">prog2$</a></span> and 
+ <span class="tt"><a href="ACL2____TIME_42.html">time$</a></span>.  For most users, this may already be more than one needs to 
+ know about <span class="v">return-last</span>; for example, ACL2 tends to avoid printing calls 
+ of <span class="v">return-last</span> in its output, printing calls of <span class="tt"><a href="ACL2____PROG2_42.html">prog2$</a></span> or <span class="tt"><a href="ACL2____TIME_42.html">time$</a></span> (or other such utilities) instead.</p> 
+ 
+ <p>If you encounter a call of <span class="v">return-last</span> during a proof, then you may 
+ find it most useful to consider <span class="v">return-last</span> simply as a function defined 
+ by the following equation.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____RETURN-LAST.html">return-last</a> x y z) z)</pre> 
+ 
+ <p>It may also be useful to know that unlike other ACL2 functions, 
+ <span class="v">return-last</span> can take a multiple value as its last argument, in which case 
+ this multiple value is returned.  The following contrived definition 
+ illustrates this point.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="COMMON-LISP____DEFUN.html">defun</a> foo (fn x y z)
+         (<a href="ACL2____RETURN-LAST.html">return-last</a> fn x (<a href="ACL2____MV.html">mv</a> y z)))
+
+Since FOO is non-recursive, its admission is trivial.  We observe that
+the type of FOO is described by the theorem
+(<a href="COMMON-LISP____AND.html">AND</a> (<a href="COMMON-LISP____CONSP.html">CONSP</a> (FOO FN X Y Z)) (<a href="ACL2____TRUE-LISTP.html">TRUE-LISTP</a> (FOO FN X Y Z))).  We used
+primitive type reasoning.
+
+(FOO * * * *) =&gt; (<a href="ACL2____MV.html">MV</a> * *).
+
+Summary
+Form:  ( DEFUN FOO ...)
+Rules: ((:FAKE-RUNE-FOR-TYPE-SET NIL))
+Time:  0.01 seconds (prove: 0.00, print: 0.00, other: 0.01)
+ FOO
+ACL2 !&gt;(foo 'bar 3 4 5)
+(4 5)
+ACL2 !&gt;(<a href="ACL2____MV-LET.html">mv-let</a> (a b)
+               (foo 'bar 3 4 5)
+               (<a href="COMMON-LISP____CONS.html">cons</a> b a))
+(5 . 4)
+ACL2 !&gt;</pre> 
+ 
+ <p>Most readers would be well served to avoid reading the rest of this 
+ documentation of <span class="v">return-last</span>.  For reference, however, below we document 
+ it in some detail.  We include some discussion of its evaluation, in 
+ particular its behavior in raw Lisp, because we expect that most who read 
+ further are working with raw Lisp code (and trust tags).</p> 
+ 
+ <p><span class="v">Return-last</span> is an ACL2 function that can arise from macroexpansion of 
+ certain utilities that return their last argument, which may be a multiple 
+ value.  Consider for example the simplest of these, <span class="tt"><a href="ACL2____PROG2_42.html">prog2$</a></span>:</p> 
+ 
+ <pre class="code">ACL2 !&gt;:trans1 (<a href="ACL2____PROG2_42.html">prog2$</a> (<a href="ACL2____CW.html">cw</a> "Some CW printing...~%") (<a href="COMMON-LISP_____B2.html">+</a> 3 4))
+ (<a href="ACL2____RETURN-LAST.html">RETURN-LAST</a> 'PROGN
+              (<a href="ACL2____CW.html">CW</a> "Some CW printing...~%")
+              (<a href="COMMON-LISP_____B2.html">+</a> 3 4))
+ACL2 !&gt;</pre> 
+ 
+ <p>Notice that a call of <span class="v">prog2$</span> macroexpands to a call of 
+ <span class="v">return-last</span> in which the first argument is <span class="v">(<a href="COMMON-LISP____QUOTE.html">quote</a> progn)</span>.  Although 
+ <span class="v">return-last</span> is a function in the ACL2 world, it is implemented ``under 
+ the hood'' as a macro in raw Lisp, as the following log (continuing the 
+ example above) illustrates.</p> 
+ 
+ <pre class="code">ACL2 !&gt;:q
+
+Exiting the ACL2 read-eval-print loop.  To re-enter, execute (<a href="ACL2____LP.html">LP</a>).
+? (macroexpand-1 '(<a href="ACL2____RETURN-LAST.html">RETURN-LAST</a> 'PROGN
+                                (<a href="ACL2____CW.html">CW</a> "Some CW printing...~%")
+                                (<a href="COMMON-LISP_____B2.html">+</a> 3 4)))
+(<a href="COMMON-LISP____PROGN.html">PROGN</a> (<a href="COMMON-LISP____LET.html">LET</a> ((*AOKP* T)) (<a href="ACL2____CW.html">CW</a> "Some CW printing...~%")) (<a href="COMMON-LISP_____B2.html">+</a> 3 4))
+T
+?</pre> 
+ 
+ <p>Thus, the original <span class="v">prog2$</span> call generates a corresponding call of 
+ <span class="v">progn</span> in raw Lisp, which in turn causes evaluation of each argument and 
+ returns whatever is returned by evaluation of the last (second) argument.</p> 
+ 
+ <p>Remark for those who use <span class="tt"><a href="ACL2____DEFATTACH.html">defattach</a></span>.  The binding of <span class="v">*aokp*</span> to 
+ <span class="v">t</span> is included for the second argument as shown in most cases.  That 
+ binding is avoided only when the first argument is of the form <span class="v">(<a href="COMMON-LISP____QUOTE.html">QUOTE</a> S)</span> 
+ for <span class="v">S</span> a macro name and the second argument is a symbol or of the form 
+ <span class="v">(<a href="COMMON-LISP____QUOTE.html">QUOTE</a> X)</span> for any <span class="v">X</span>.  By binding <span class="v">*aokp*</span> to <span class="v">t</span>, ACL2 is 
+ permitted to use attachments when evaluating the second argument of 
+ <span class="v">return-last</span> (hence, in the first argument of <span class="tt"><a href="ACL2____PROG2_42.html">prog2$</a></span>), even in 
+ contexts such as proofs in which attachments are normally not allowed.</p> 
+ 
+ <p>In general, a form <span class="v">(<a href="ACL2____RETURN-LAST.html">return-last</a> (<a href="COMMON-LISP____QUOTE.html">quote</a> F) X Y)</span> macroexpands to <span class="v">(F X
+ Y)</span>, where <span class="v">F</span> is a symbol defined in raw Lisp to return its last 
+ argument.  The case that <span class="v">F</span> is <span class="v">progn</span> is a bit misleading, because it 
+ is so simple.  More commonly, macroexpansion produces a call of a macro 
+ defined in raw Lisp that may produce side effects.  Consider for example the 
+ ACL2 utility <span class="tt"><a href="ACL2____WITH-GUARD-CHECKING.html">with-guard-checking</a></span>, which is intended to change the 
+ <a href="ACL2____GUARD.html">guard</a>-checking mode to the indicated value (see <a href="ACL2____WITH-GUARD-CHECKING.html">with-guard-checking</a>).</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____WITH-GUARD-CHECKING.html">with-guard-checking</a> :none (<a href="COMMON-LISP____CAR.html">car</a> 3)) ; no guard violation
+NIL
+ACL2 !&gt;:trans1 (<a href="ACL2____WITH-GUARD-CHECKING.html">with-guard-checking</a> :none (<a href="COMMON-LISP____CAR.html">car</a> 3))
+ (WITH-GUARD-CHECKING1 (CHK-WITH-GUARD-CHECKING-ARG :NONE)
+                       (<a href="COMMON-LISP____CAR.html">CAR</a> 3))
+ACL2 !&gt;:trans1 (WITH-GUARD-CHECKING1 (CHK-WITH-GUARD-CHECKING-ARG :NONE)
+                                     (<a href="COMMON-LISP____CAR.html">CAR</a> 3))
+ (<a href="ACL2____RETURN-LAST.html">RETURN-LAST</a> 'WITH-GUARD-CHECKING1-RAW
+              (CHK-WITH-GUARD-CHECKING-ARG :NONE)
+              (<a href="COMMON-LISP____CAR.html">CAR</a> 3))
+ACL2 !&gt;:q
+
+Exiting the ACL2 read-eval-print loop.  To re-enter, execute (<a href="ACL2____LP.html">LP</a>).
+? [RAW LISP] (macroexpand-1
+              '(<a href="ACL2____RETURN-LAST.html">RETURN-LAST</a> 'WITH-GUARD-CHECKING1-RAW
+                             (CHK-WITH-GUARD-CHECKING-ARG :NONE)
+                             (<a href="COMMON-LISP____CAR.html">CAR</a> 3)))
+(WITH-GUARD-CHECKING1-RAW (CHK-WITH-GUARD-CHECKING-ARG :NONE) (<a href="COMMON-LISP____CAR.html">CAR</a> 3))
+T
+? [RAW LISP] (pprint
+              (macroexpand-1
+               '(WITH-GUARD-CHECKING1-RAW
+                 (CHK-WITH-GUARD-CHECKING-ARG :NONE)
+                 (<a href="COMMON-LISP____CAR.html">CAR</a> 3))))
+
+(<a href="COMMON-LISP____LET.html">LET</a> ((ACL2_GLOBAL_ACL2::GUARD-CHECKING-ON
+       (CHK-WITH-GUARD-CHECKING-ARG :NONE)))
+  (<a href="COMMON-LISP____DECLARE.html">DECLARE</a> (SPECIAL ACL2_GLOBAL_ACL2::GUARD-CHECKING-ON))
+  (<a href="COMMON-LISP____CAR.html">CAR</a> 3))
+? [RAW LISP]</pre> 
+ 
+ <p>The above raw Lisp code binds the state global variable 
+ <span class="v">guard-checking-on</span> to <span class="v">:none</span>, as <span class="v">chk-with-guard-checking-arg</span> is 
+ just the identity function except for causing a hard error for an illegal 
+ input.</p> 
+ 
+ <p>The intended use of <span class="v">return-last</span> is that the second argument is 
+ evaluated first in a normal manner, and then the third argument is evaluated 
+ in an environment that may depend on the value of the second argument.  (For 
+ example, the macro <span class="tt"><a href="ACL2____WITH-PROVER-TIME-LIMIT.html">with-prover-time-limit</a></span> macroexpands to a call of 
+ <span class="v">return-last</span> with a first argument of <span class="v">'WITH-PROVER-TIME-LIMIT1-RAW</span>, a 
+ second argument that evaluates to a numeric time limit, and a third argument 
+ that is evaluated in an environment where the theorem prover is restricted to 
+ avoid running longer than that time limit.)  Although this intended usage 
+ model is not strictly enforced, it is useful to keep in mind in the following 
+ description of how calls of <span class="v">return-last</span> are handled by the ACL2 
+ evaluator.</p> 
+ 
+ <p>When a form is submitted in the top-level loop, it is handled by ACL2's 
+ custom evaluator.  That evaluator is specified to respect the semantics of the 
+ expression supplied to it: briefly put, if an expression <span class="v">E</span> evaluates to a 
+ value <span class="v">V</span>, then the equality <span class="v">(<a href="COMMON-LISP____EQUAL.html">equal</a> E (<a href="COMMON-LISP____QUOTE.html">quote</a> V))</span> should be a theorem. 
+ Notice that this specification does not discuss the side-effects that may 
+ occur when evaluating a call of <span class="v">return-last</span>, so we discuss that now. 
+ Suppose that the ACL2 evaluator encounters the call <span class="v">(<a href="ACL2____RETURN-LAST.html">return-last</a> 'fn expr1
+ expr2)</span>.  First it evaluates <span class="v">expr1</span>.  If this evaluation succeeds without 
+ error, then it constructs an expression of the form <span class="v">(fn *x* ev-form)</span>, 
+ where *x* is a Lisp variable bound to the result of evaluating <span class="v">expr1</span> and 
+ <span class="v">ev-form</span> is a call of the evaluator for <span class="v">expr2</span>.  (Those who want 
+ implementation details are invited to look at function <span class="v">ev-rec-return-last</span> 
+ in ACL2 source file <span class="v">translate.lisp</span>.)  There are exceptions if <span class="v">fn</span> is 
+ <span class="v">progn</span>, <span class="v">ec-call1-raw</span>, <span class="v">with-guard-checking1-raw</span>, or 
+ <span class="v">mbe1-raw</span>, but the main idea is the same: do a reasonable job emulating 
+ the behavior of a raw-Lisp call of <span class="v">return-last</span>.</p> 
+ 
+ <p>The following log shows how a <span class="tt"><a href="ACL2____TIME_42.html">time$</a></span> call can generate a call of the 
+ evaluator for the last argument of <span class="v">return-last</span> (argument <span class="v">expr2</span>, 
+ above).  We use <span class="v">:</span><span class="tt"><a href="ACL2____TRANS1.html">trans1</a></span> to show single-step macroexpansions, 
+ which indicate how a call of <span class="tt"><a href="ACL2____TIME_42.html">time$</a></span> expands to a call of 
+ <span class="v">return-last</span>.  The implementation actually binds the Lisp variable 
+ <span class="v">*RETURN-LAST-ARG3*</span> to <span class="v">expr2</span> before calling the ACL2 evaluator, 
+ <span class="v">ev-rec</span>.</p> 
+ 
+ <pre class="code">ACL2 !&gt;:trans1 (<a href="ACL2____TIME_42.html">time$</a> (<a href="COMMON-LISP_____B2.html">+</a> 3 4))
+ (TIME$1 (<a href="COMMON-LISP____LIST.html">LIST</a> 0 NIL NIL NIL NIL)
+         (<a href="COMMON-LISP_____B2.html">+</a> 3 4))
+ACL2 !&gt;:trans1 (TIME$1 (<a href="COMMON-LISP____LIST.html">LIST</a> 0 NIL NIL NIL NIL)
+                       (<a href="COMMON-LISP_____B2.html">+</a> 3 4))
+ (<a href="ACL2____RETURN-LAST.html">RETURN-LAST</a> 'TIME$1-RAW
+              (<a href="COMMON-LISP____LIST.html">LIST</a> 0 NIL NIL NIL NIL)
+              (<a href="COMMON-LISP_____B2.html">+</a> 3 4))
+ACL2 !&gt;(<a href="ACL2____TIME_42.html">time$</a> (<a href="COMMON-LISP_____B2.html">+</a> 3 4))
+; (EV-REC *RETURN-LAST-ARG3* ...) took
+; 0.00 seconds realtime, 0.00 seconds runtime
+; (1,120 bytes allocated).
+7
+ACL2 !&gt;</pre> 
+ 
+ <p>We now show how things can go wrong in other than the ``intended use'' case 
+ described above.  In the example below, the macro <span class="v">mac-raw</span> is operating 
+ directly on the syntactic representation of its first argument, which it 
+ obtains of course as the second argument of a <span class="v">return-last</span> call.  Again 
+ this ``intended use'' of <span class="v">return-last</span> requires that argument to be 
+ evaluated and then only its result is relevant; its syntax is not supposed to 
+ matter.  We emphasize that only top-level evaluation depends on this 
+ ``intended use''; once evaluation is passed to Lisp, the issue disappears.  We 
+ illustrate below how to use the <span class="tt"><a href="ACL2____TOP-LEVEL.html">top-level</a></span> utility to avoid this issue; 
+ see <a href="ACL2____TOP-LEVEL.html">top-level</a>.  The example uses the utility <span class="v">defmacro-last</span> to 
+ ``install'' special handling of the raw-Lisp macro <span class="v">mac-raw</span> by 
+ <span class="v">return-last</span>; later below we discuss <span class="v">defmacro-last</span>.</p> 
+ 
+ <pre class="code"> ACL2 !&gt;(<a href="ACL2____DEFTTAG.html">defttag</a> t)
+
+ TTAG NOTE: Adding ttag :T from the top level loop.
+  T
+ ACL2 !&gt;(<a href="ACL2____PROGN_12.html">progn!</a>
+          (<a href="ACL2____SET-RAW-MODE.html">set-raw-mode</a> t)
+          (<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> mac-raw (x y)
+            `(<a href="COMMON-LISP____PROGN.html">progn</a> (print (<a href="COMMON-LISP____QUOTE.html">quote</a> ,(<a href="COMMON-LISP____CADR.html">cadr</a> x)))
+                    (terpri) ; newline
+                    ,y)))
+
+ Summary
+ Form:  ( PROGN! (<a href="ACL2____SET-RAW-MODE.html">SET-RAW-MODE</a> T) ...)
+ Rules: NIL
+ Time:  0.01 seconds (prove: 0.00, print: 0.00, other: 0.01)
+  NIL
+ ACL2 !&gt;(<a href="ACL2____DEFMACRO-LAST.html">defmacro-last</a> mac)
+ [[ ... output omitted ... ]]
+  RETURN-LAST-TABLE
+ ACL2 !&gt;(<a href="ACL2____RETURN-LAST.html">return-last</a> 'mac-raw '3 nil)
+
+ ***********************************************
+ ************ ABORTING from raw Lisp ***********
+********** (see :DOC raw-lisp-error) **********
+ Error:  Fault during read of memory address #x120000300006
+ ***********************************************
+
+ If you didn't cause an explicit interrupt (Control-C),
+ then the root cause may be call of a :program mode
+ function that has the wrong guard specified, or even no
+ guard specified (i.e., an implicit guard of t).
+ See :DOC guards.
+
+ To enable breaks into the debugger (also see :DOC acl2-customization):
+ (<a href="ACL2____SET-DEBUGGER-ENABLE.html">SET-DEBUGGER-ENABLE</a> T)
+ ACL2 !&gt;(<a href="ACL2____TOP-LEVEL.html">top-level</a> (<a href="ACL2____RETURN-LAST.html">return-last</a> 'mac-raw '3 nil))
+
+ 3
+ NIL
+ ACL2 !&gt;</pre> 
+ 
+ <p>We next describe how to extend the behavior of <span class="v">return-last</span>.  This 
+ requires an active trust tag (see <a href="ACL2____DEFTTAG.html">defttag</a>), and is accomplished by 
+ extending a <a href="ACL2____TABLE.html">table</a> provided by ACL2, see <a href="ACL2____RETURN-LAST-TABLE.html">return-last-table</a>. 
+ Rather than using <span class="tt"><a href="ACL2____TABLE.html">table</a></span> <a href="ACL2____EVENTS.html">events</a> directly for this purpose, it is 
+ probably more convenient to use a macro, <span class="v">defmacro-last</span>.  We describe the 
+ community book <span class="v">books/misc/profiling.lisp</span> in order to illustrate how this 
+ works.  The events in that book include the following, which are described 
+ below.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTTAG.html">defttag</a> :profiling)
+
+(<a href="ACL2____PROGN_12.html">progn!</a>
+ (<a href="ACL2____SET-RAW-MODE.html">set-raw-mode</a> t)
+ (load (<a href="COMMON-LISP____CONCATENATE.html">concatenate</a> 'string (<a href="ACL2____CBD.html">cbd</a>) "profiling-raw.lsp")))
+
+(<a href="ACL2____DEFMACRO-LAST.html">defmacro-last</a> with-profiling)</pre> 
+ 
+ <p>The first event introduces a trust tag.  The second loads a file into raw 
+ Lisp that defines a macro, <span class="v">with-profiling-raw</span>, which can do profiling for 
+ the form to be evaluated.  The third introduces an ACL2 macro 
+ <span class="v">with-profiling</span>, whose calls expand into calls of the form <span class="v">(<a href="ACL2____RETURN-LAST.html">return-last</a>
+ (<a href="COMMON-LISP____QUOTE.html">quote</a> with-profiling-raw) &amp; &amp;)</span>.  The third event also extends <span class="tt"><a href="ACL2____RETURN-LAST-TABLE.html">return-last-table</a></span> so that these calls will expand in raw Lisp to calls of 
+ <span class="v">with-profiling-raw</span>.</p> 
+ 
+ <p>The example above illustrates the following methodology for introducing a 
+ macro that returns its last argument but produces useful side-effects with raw 
+ Lisp code.</p> 
+ 
+ <blockquote>
+<p>(1) Introduce a trust tag (see <a href="ACL2____DEFTTAG.html">defttag</a>).</p> 
+ 
+ <p>(2) Using <span class="tt"><a href="ACL2____PROGN_12.html">progn!</a></span>, load into raw Lisp a file defining a macro, 
+ <span class="v">RAW-NAME</span>, that takes two arguments, returning its last (second) argument 
+ but using the first argument to produce desired side effects during evaluation 
+ of that last argument.</p> 
+ 
+ <p>(3) Evaluate the form <span class="v">(<a href="ACL2____DEFMACRO-LAST.html">defmacro-last</a> NAME :raw RAW-NAME)</span>.  This will 
+ introduce <span class="v">NAME</span> as an ACL2 macro that expands to a corresponding call of 
+ <span class="v">RAW-NAME</span> (see (2) above) in raw Lisp.  The specification of keyword value 
+ of <span class="v">:raw</span> as <span class="v">RAW-NAME</span> may be omitted if <span class="v">RAW-NAME</span> is the result of 
+ modifying the symbol <span class="v">NAME</span> by suffixing the string <span class="v">"-RAW"</span> to the 
+ <span class="tt"><a href="COMMON-LISP____SYMBOL-NAME.html">symbol-name</a></span> of <span class="v">NAME</span>.</p>
+</blockquote> 
+ 
+ <p>WARNING: Not every use of <span class="v">return-last</span> can be soundly evaluated outside 
+ a function body.  The reason is that ACL2's evaluator, <span class="v">ev-rec</span>, recurs 
+ through terms that are presented in the top-level loop, and handles 
+ <span class="v">return-last</span> calls in a special manner: basically, the call of <span class="v">ev-rec</span> 
+ on the form <span class="v">(<a href="ACL2____RETURN-LAST.html">return-last</a> 'mac-raw x y)</span> leads to evaluation of a macro 
+ call of the form <span class="v">(mac-raw *return-last-arg2* (ev-rec ...))</span>, where 
+ *return-last-arg2* is a global variable bound to the result of evaluating 
+ <span class="v">x</span> with <span class="v">ev-rec</span>.  Consider the following example.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTTAG.html">defttag</a> t)
+(<a href="ACL2____SET-RAW-MODE-ON.html">set-raw-mode-on</a> state)
+(<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> mac-raw (str y) ; print message is an atom
+ `(<a href="COMMON-LISP____LET.html">let</a> ((result (<a href="COMMON-LISP____CONSP.html">consp</a> ,y))
+        (str ,str))
+    (<a href="COMMON-LISP____OR.html">or</a> result
+        (<a href="ACL2____PROG2_42.html">prog2$</a> (<a href="ACL2____FMX.html">fmx</a> ,str ',y)
+                nil))))
+(set-raw-mode-off state)
+(<a href="ACL2____DEFMACRO-LAST.html">defmacro-last</a> mac)
+; Horrible error:
+(mac "Not a cons: ~x0~%" 17)
+; Works, but probably many would consider it awkward to use top-level:
+(<a href="ACL2____TOP-LEVEL.html">top-level</a> (mac "Not a cons: ~x0~%" 17))</pre> 
+ 
+ <p>In such cases we suggest supplying keyword <span class="v">:top-level-ok nil</span> to the 
+ call of <span class="v">defmacro-last</span>, for example:</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFMACRO-LAST.html">defmacro-last</a> mac :top-level-ok nil)</pre> 
+ 
+ <p>Then any attempt to call <span class="v">mac</span> at the top level, as opposed to inside a 
+ function body, will cause a clean error before evaluation begins.</p> 
+ 
+ <p>It is useful to explore what is done by <span class="v">defmacro-last</span>.</p> 
+ 
+ <pre class="code">ACL2 !&gt;:trans1 (<a href="ACL2____DEFMACRO-LAST.html">defmacro-last</a> with-profiling)
+ (<a href="COMMON-LISP____PROGN.html">PROGN</a> (<a href="COMMON-LISP____DEFMACRO.html">DEFMACRO</a> WITH-PROFILING (X Y)
+                  (<a href="COMMON-LISP____LIST.html">LIST</a> 'RETURN-LAST
+                        (<a href="COMMON-LISP____LIST.html">LIST</a> 'QUOTE 'WITH-PROFILING-RAW)
+                        X Y))
+        (<a href="ACL2____TABLE.html">TABLE</a> RETURN-LAST-TABLE 'WITH-PROFILING-RAW
+               'WITH-PROFILING))
+ACL2 !&gt;:trans1 (with-profiling '(<a href="ACL2____ASSOC-EQ.html">assoc-eq</a> fgetprop rewrite) (mini-proveall))
+ (<a href="ACL2____RETURN-LAST.html">RETURN-LAST</a> 'WITH-PROFILING-RAW
+              '(<a href="ACL2____ASSOC-EQ.html">ASSOC-EQ</a> FGETPROP REWRITE)
+              (MINI-PROVEALL))
+ACL2 !&gt;:q
+
+Exiting the ACL2 read-eval-print loop.  To re-enter, execute (<a href="ACL2____LP.html">LP</a>).
+? [RAW LISP] (macroexpand-1
+              '(<a href="ACL2____RETURN-LAST.html">RETURN-LAST</a> 'WITH-PROFILING-RAW
+                             '(<a href="ACL2____ASSOC-EQ.html">ASSOC-EQ</a> FGETPROP REWRITE)
+                             (MINI-PROVEALL)))
+(WITH-PROFILING-RAW '(<a href="ACL2____ASSOC-EQ.html">ASSOC-EQ</a> FGETPROP REWRITE) (MINI-PROVEALL))
+T
+? [RAW LISP]</pre> 
+ 
+ <p>To understand the macro <span class="v">with-profiling-raw</span> you could look at the 
+ community book loaded above: <span class="v">books/misc/profiling-raw.lsp</span>.</p> 
+ 
+ <p>We mentioned above that ACL2 tends to print calls of <span class="tt"><a href="ACL2____PROG2_42.html">prog2$</a></span> or 
+ <span class="tt"><a href="ACL2____TIME_42.html">time$</a></span> (or other such utilities) instead of calls of <span class="v">return-last</span>. 
+ Here we elaborate that point.  ACL2's `<span class="v">untranslate</span>' utility treats 
+ <span class="v">(<a href="ACL2____RETURN-LAST.html">return-last</a> (<a href="COMMON-LISP____QUOTE.html">quote</a> F) X Y)</span> as <span class="v">(<a href="ACL2____G.html">G</a> X Y)</span> if <span class="v">F</span> corresponds to the 
+ symbol <span class="v">G</span> in <span class="v">return-last-table</span>.  However, it is generally rare to 
+ encounter such a term during a proof, since calls of <span class="v">return-last</span> are 
+ generally expanded away early during a proof.</p> 
+ 
+ <p>Calls of <span class="v">return-last</span> that occur in code — forms submitted in the 
+ top-level ACL2 loop, and definition bodies other than those marked as <span class="tt"><a href="ACL2____NON-EXECUTABLE.html">non-executable</a></span> (see <a href="ACL2____DEFUN-NX.html">defun-nx</a>) — have the following restriction: 
+ if the first argument is of the form <span class="v">(<a href="COMMON-LISP____QUOTE.html">quote</a> F)</span> where <span class="v">F</span> is a 
+ non-<span class="v">nil</span> symbol, then <span class="v">F</span> must be an entry in <span class="v">return-last-table</span>. 
+ There are however four exceptions: the following symbols are considered to be 
+ keys of <span class="v">return-last-table</span> even if they are no longer associated with 
+ non-<span class="v">nil</span> values, say because of a <span class="tt"><a href="ACL2____TABLE.html">table</a></span> event with keyword 
+ <span class="v">:clear</span>.</p> 
+ 
+ <blockquote><p>* <span class="v">progn</span>, associated with <span class="tt"><a href="ACL2____PROG2_42.html">prog2$</a></span><br> 
+ 
+ * <span class="v">mbe1-raw</span>, associated with <span class="v">mbe1</span>, a version of <span class="v">mbe</span><br> 
+ 
+ * <span class="v">ec-call1-raw</span>, associated with <span class="v">ec-call1</span> (a variant of <span class="tt"><a href="ACL2____EC-CALL.html">ec-call</a></span>)<br> 
+ 
+ * <span class="v">with-guard-checking1-raw</span>, associated with <span class="v">with-guard-checking1</span> (a 
+ variant of <span class="tt"><a href="ACL2____WITH-GUARD-CHECKING.html">with-guard-checking</a></span>)</p></blockquote> 
+ 
+ <p>Note that because of its special status, it is illegal to trace 
+ <span class="v">return-last</span>.</p> 
+ 
+ <p>For any object <span class="v">x</span> that is not of the form <span class="v">(<a href="COMMON-LISP____QUOTE.html">quote</a> S)</span> where <span class="v">S</span> 
+ is a symbol, the call <span class="v">(<a href="ACL2____RETURN-LAST.html">return-last</a> x y z)</span> is legal, even in code, if 
+ <span class="v">y</span> and <span class="v">z</span> are legal.  Such terms are evaluated as though <span class="v">x</span> is 
+ <span class="v">(<a href="COMMON-LISP____QUOTE.html">QUOTE</a> PROGN)</span>, that is, as though they arose from a call of <span class="tt"><a href="ACL2____PROG2_42.html">prog2$</a></span>.  In particular, you are welcome to write terms of the form 
+ <span class="v">(<a href="ACL2____RETURN-LAST.html">return-last</a> '(&lt;some-annotation&gt;) y z)</span>.</p> 
+ 
+ <p>We conclude by warning that as a user, you take responsibility for not 
+ compromising the soundness or error handling of ACL2 when you define a macro 
+ in raw Lisp and especially when you install it as a key of <span class="tt"><a href="ACL2____RETURN-LAST-TABLE.html">return-last-table</a></span>, either directly or (more likely) using <span class="v">defmacro-last</span>. 
+ In particular, be sure that you are defining a macro of two arguments that 
+ always returns the value of its last argument, returning the complete multiple 
+ value if that last argument evaluates to a multiple value.</p> 
+ 
+ <p>The following is correct, and illustrates care taken to return multiple 
+ values.</p> 
+ 
+ <pre class="code">:q
+(<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> my-time1-raw (val form)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORE.html">ignore</a> val))
+  `(<a href="COMMON-LISP____LET.html">let</a>  ((start-time (get-internal-run-time))
+          (result (multiple-value-list ,form))
+          (end-time (get-internal-run-time)))
+     (format t "Total time: ~s~%"
+             (float (<a href="COMMON-LISP_____F2.html">/</a> (<a href="COMMON-LISP____-.html">-</a> end-time start-time)
+                       internal-time-units-per-second)))
+     (values-list result)))
+(<a href="ACL2____LP.html">lp</a>)
+(<a href="ACL2____DEFTTAG.html">defttag</a> t)
+(<a href="ACL2____DEFMACRO-LAST.html">defmacro-last</a> my-time1)
+(<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> my-time (form)
+  `(my-time1 nil ,form))</pre> 
+ 
+ <p>Then for example:</p> 
+ 
+ <pre class="code">ACL2 !&gt;(my-time (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____MAKE-LIST.html">make-list</a> 1000000) (<a href="COMMON-LISP____MAKE-LIST.html">make-list</a> 1000000)))
+Total time: 0.12
+T
+ACL2 !&gt;</pre> 
+ 
+ <p>But if instead we provide the following more naive implementation, of the 
+ above raw Lisp macro, the above evaluation can produce an error, for example 
+ if the host Lisp is CCL.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> my-time1-raw (val form)
+    (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORE.html">ignore</a> val))
+    `(<a href="COMMON-LISP____LET.html">let</a>  ((start-time (get-internal-run-time))
+            (result ,form)
+            (end-time (get-internal-run-time)))
+       (format t "Total time: ~s~%"
+               (float (<a href="COMMON-LISP_____F2.html">/</a> (<a href="COMMON-LISP____-.html">-</a> end-time start-time)
+                         internal-time-units-per-second)))
+       result)) ; WRONG -- need multiple values returned!</pre> 
+ 
+ <p>Here is a second, similar example.  This time we'll start with the error; 
+ can you spot it?</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTTAG.html">defttag</a> t)
+(<a href="ACL2____PROGN_12.html">progn!</a>
+ (<a href="ACL2____SET-RAW-MODE.html">set-raw-mode</a> t)
+ (<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> foo-raw (x y)
+   `(prog1
+        ,y
+      (<a href="ACL2____CW.html">cw</a> "Message showing argument 1: ~x0~%" ,x))))
+(<a href="ACL2____DEFMACRO-LAST.html">defmacro-last</a> foo)</pre> 
+ 
+ <p>We then can wind up with a hard Lisp error:</p> 
+ 
+ <pre class="code">ACL2 !&gt;(foo 3 (<a href="ACL2____MV.html">mv</a> 4 5))
+Message showing argument 1: 3
+
+***********************************************
+************ ABORTING from raw Lisp ***********
+********** (see :DOC raw-lisp-error) **********
+Error:  value NIL is not of the expected type REAL.
+***********************************************
+
+If you didn't cause an explicit interrupt (Control-C),
+then the root cause may be call of a :program mode
+function that has the wrong guard specified, or even no
+guard specified (i.e., an implicit guard of t).
+See :DOC guards.
+
+To enable breaks into the debugger (also see :DOC acl2-customization):
+(<a href="ACL2____SET-DEBUGGER-ENABLE.html">SET-DEBUGGER-ENABLE</a> T)
+ACL2 !&gt;</pre> 
+ 
+ <p>Here is a corrected version of the above macro.  The point here is that 
+ <span class="v">prog1</span> returns a single value, while <span class="v">our-multiple-value-prog1</span> returns 
+ all the values that are returned by its first argument.</p> 
+ 
+ <pre class="code">(<a href="ACL2____PROGN_12.html">progn!</a>
+ (<a href="ACL2____SET-RAW-MODE.html">set-raw-mode</a> t)
+ (<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> foo-raw (x y)
+   `(our-multiple-value-prog1 ;; better
+     ,y
+     (<a href="ACL2____CW.html">cw</a> "Message showing argument 1: ~x0~%" ,x))))</pre> 
+ 
+ <p><b>Function: </b>return-last</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> return-last (fn eager-arg last-arg)
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORE.html">ignore</a> fn eager-arg)
+                (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> fn 'mbe1-raw)
+                                  (<a href="COMMON-LISP____EQUAL.html">equal</a> last-arg eager-arg)
+                                  t)))
+       last-arg)</pre>
+</body>
+</html>

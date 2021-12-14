@@ -1,0 +1,120 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Mv-let</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____MV-LET">Click for Mv-let in the Full Manual</a></h3>
+
+<p>Calling multi-valued ACL2 functions</p><pre class="code">Example Form:
+(<a href="ACL2____MV-LET.html">mv-let</a> (x y z)              ; local variables
+        (<a href="ACL2____MV.html">mv</a> 1 2 3)           ; multi-valued expression
+        (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORE.html">ignore</a> y)) ; optional declarations
+        (<a href="COMMON-LISP____CONS.html">cons</a> x z))          ; body</pre> 
+ 
+ <p>The form above binds the three ``local variables,'' <span class="v">x</span>, <span class="v">y</span>, and 
+ <span class="v">z</span>, to the three results returned by the multi-valued expression and then 
+ evaluates the body.  The result is <span class="v">'(1 . 3)</span>.  The second local, <span class="v">y</span>, 
+ is <a href="COMMON-LISP____DECLARE.html">declare</a>d <span class="v">ignore</span>d.  The multi-valued expression can be any ACL2 
+ expression that returns <span class="v">k</span> results, where <span class="v">k</span> is the number of local 
+ variables listed.  Often however it is simply the application of a 
+ <span class="v">k</span>-valued function.  <span class="v">Mv-let</span> is the standard way to invoke a 
+ multi-valued function when the caller must manipulate the vector of results 
+ returned.</p> 
+ 
+ <pre class="code">General Form:
+(<a href="ACL2____MV-LET.html">mv-let</a> (var1 ... vark)
+        term
+        body)
+or
+(<a href="ACL2____MV-LET.html">mv-let</a> (var1 ... vark)
+        term
+        (<a href="COMMON-LISP____DECLARE.html">declare</a> ...) ... (<a href="COMMON-LISP____DECLARE.html">declare</a> ...)
+        body)</pre> 
+ 
+ <p>where the <span class="v">vari</span> are distinct variables, <span class="v">term</span> is a term that 
+ returns <span class="v">k</span> results and mentions only variables bound in the environment 
+ containing the <span class="v">mv-let</span> expression, and <span class="v">body</span> is a term mentioning only 
+ the <span class="v">vari</span> and variables bound in the environment containing the 
+ <span class="v">mv-let</span>.  Each <span class="v">vari</span> must occur in <span class="v">body</span> unless it is <a href="COMMON-LISP____DECLARE.html">declare</a>d <span class="v">ignore</span>d or <span class="v">ignorable</span> in one of the optional <span class="tt"><a href="COMMON-LISP____DECLARE.html">declare</a></span> forms, unless this requirement is turned off; see <a href="ACL2____SET-IGNORE-OK.html">set-ignore-ok</a>.  The value of the <span class="v">mv-let</span> term is the result of evaluating 
+ <span class="v">body</span> in an environment in which the <span class="v">vari</span> are bound, in order, to the 
+ <span class="v">k</span> results obtained by evaluating <span class="v">term</span> in the environment containing 
+ the <span class="v">mv-let</span>.</p> 
+ 
+ <p>Here is an extended example that illustrates both the definition of a 
+ multi-valued function and the use of <span class="v">mv-let</span> to call it.  Consider a 
+ simple binary tree whose interior nodes are <span class="tt"><a href="COMMON-LISP____CONS.html">cons</a></span>es and whose leaves 
+ are non-<span class="tt"><a href="COMMON-LISP____CONS.html">cons</a></span>es.  Suppose we often need to know the number, <span class="v">n</span>, of 
+ interior nodes of such a tree; the list, <span class="v">syms</span>, of symbols that occur as 
+ leaves; and the list, <span class="v">ints</span>, of integers that occur as leaves.  (Observe 
+ that there may be leaves that are neither symbols nor integers.)  Using a 
+ multi-valued function we can collect all three results in one pass.</p> 
+ 
+ <p>Here is the first of two definitions of the desired function.  This 
+ definition is ``primitive recursive'' in that it has only one argument and 
+ that argument is reduced in size on every recursion.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> count-and-collect (x)
+
+; We return three results, (<a href="ACL2____MV.html">mv</a> n syms ints) as described above.
+
+  (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____ATOM.html">atom</a> x)
+
+; X is a leaf.  Thus, there are 0 interior nodes, and depending on
+; whether x is a symbol, an integer, or something else, we return
+; the list containing x in as the appropriate result.
+
+         (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> x) (<a href="ACL2____MV.html">mv</a> 0 (<a href="COMMON-LISP____LIST.html">list</a> x) nil))
+               ((<a href="COMMON-LISP____INTEGERP.html">integerp</a> x)(<a href="ACL2____MV.html">mv</a> 0 nil      (<a href="COMMON-LISP____LIST.html">list</a> x)))
+               (t           (<a href="ACL2____MV.html">mv</a> 0 nil      nil))))
+        (t
+
+; X is an interior node.  First we process the car, binding n1, syms1, and
+; ints1 to the answers.
+
+           (<a href="ACL2____MV-LET.html">mv-let</a> (n1 syms1 ints1)
+                   (count-and-collect (<a href="COMMON-LISP____CAR.html">car</a> x))
+
+; Next we process the cdr, binding n2, syms2, and ints2.
+
+                   (<a href="ACL2____MV-LET.html">mv-let</a> (n2 syms2 ints2)
+                           (count-and-collect (<a href="COMMON-LISP____CAR.html">car</a> x))
+
+; Finally, we compute the answer for x from those obtained for its car
+; and cdr, remembering to increment the node count by one for x itself.
+
+                           (<a href="ACL2____MV.html">mv</a> (<a href="COMMON-LISP____1_B2.html">1+</a> (<a href="COMMON-LISP_____B2.html">+</a> n1 n2))
+                               (<a href="COMMON-LISP____APPEND.html">append</a> syms1 syms2)
+                               (<a href="COMMON-LISP____APPEND.html">append</a> ints1 ints2)))))))</pre> 
+ 
+ <p>This use of a multiple value to ``do several things at once'' is very 
+ common in ACL2.  However, the function above is inefficient because it <a href="COMMON-LISP____APPEND.html">append</a>s <span class="v">syms1</span> to <span class="v">syms2</span> and <span class="v">ints1</span> to <span class="v">ints2</span>, copying the 
+ list structures of <span class="v">syms1</span> and <span class="v">ints1</span> in the process.  By adding 
+ ``accumulators'' to the function, we can make the code more efficient.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> count-and-collect1 (x n syms ints)
+  (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____ATOM.html">atom</a> x)
+         (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> x) (<a href="ACL2____MV.html">mv</a> n (<a href="COMMON-LISP____CONS.html">cons</a> x syms) ints))
+               ((<a href="COMMON-LISP____INTEGERP.html">integerp</a> x) (<a href="ACL2____MV.html">mv</a> n syms (<a href="COMMON-LISP____CONS.html">cons</a> x ints)))
+               (t (<a href="ACL2____MV.html">mv</a> n syms ints))))
+        (t (<a href="ACL2____MV-LET.html">mv-let</a> (n2 syms2 ints2)
+                   (count-and-collect1 (<a href="COMMON-LISP____CDR.html">cdr</a> x) (<a href="COMMON-LISP____1_B2.html">1+</a> n) syms ints)
+                   (count-and-collect1 (<a href="COMMON-LISP____CAR.html">car</a> x) n2 syms2 ints2)))))</pre> 
+ 
+ <p>We claim that <span class="v">(count-and-collect x)</span> returns the same triple of results 
+ as <span class="v">(count-and-collect1 x 0 nil nil)</span>.  The reader is urged to study this 
+ claim until convinced that it is true and that the latter method of computing 
+ the results is more efficient.  One might try proving the theorem</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> count-and-collect-theorem
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> (count-and-collect1 x 0 nil nil) (count-and-collect x))).</pre> 
+ 
+ <p>Hint: the inductive proof requires attacking a more general theorem.</p> 
+ 
+ <p>ACL2 does not support the Common Lisp construct <span class="v">multiple-value-bind</span>, 
+ whose logical meaning seems difficult to characterize.  <span class="v">Mv-let</span> is the 
+ ACL2 analogue of that construct.  Also see <a href="ACL2____MV.html">mv</a> and see <a href="ACL2____MV-LIST.html">mv-list</a>.</p>
+</body>
+</html>

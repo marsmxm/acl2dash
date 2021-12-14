@@ -1,0 +1,661 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Defabsstobj</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____DEFABSSTOBJ">Click for Defabsstobj in the Full Manual</a></h3>
+
+<p>Define a new abstract single-threaded object</p><p>We assume familiarity with single-threaded objects; see <a href="ACL2____STOBJ.html">stobj</a> and see <a href="ACL2____DEFSTOBJ.html">defstobj</a>.  The event <span class="v">defabsstobj</span> defines a 
+ so-called ``abstract stobj'', a notion we introduce briefly now and then 
+ explain in more depth below.</p> 
+ 
+ <p>Recall that a <a href="ACL2____DEFSTOBJ.html">defstobj</a> event produces logical definitions for 
+ several functions: a recognizer, which characterizes the <a href="ACL2____STOBJ.html">stobj</a> in terms 
+ of lists; a creator, which produces an initial suitable list structure; and 
+ field accessors and updaters, defined in terms of <span class="tt"><a href="COMMON-LISP____NTH.html">nth</a></span> and <span class="tt"><a href="ACL2____UPDATE-NTH.html">update-nth</a></span>.  <span class="v">Defabsstobj</span> provides a way to define alternate definitions 
+ for ``stobj primitives'' for a corresponding single-threaded object.  These 
+ stobj primitives include a recognizer, a creator, and other ``exported'' 
+ functions.  In essence, <span class="v">defabsstobj</span> establishes interface functions, or 
+ ``exports'', on a new stobj that is a copy of an existing stobj, its 
+ ``foundation'', which is either <i>concrete</i> (introduced by <span class="tt"><a href="ACL2____DEFSTOBJ.html">defstobj</a></span>) or <i>abstract</i> (introduced by <span class="v">defabsstobj</span>).</p> 
+ 
+ <p>We begin below with an introduction to abstract <a href="ACL2____STOBJ.html">stobj</a>s.  We then 
+ explain the <span class="tt"><a href="ACL2____DEFABSSTOBJ.html">defabsstobj</a></span> event by way of an example.  We conclude by 
+ giving summary documentation for the <span class="v">defabsstobj</span> event.</p> 
+ 
+ <p>For another introduction to abstract stobjs, see the paper ``Abstract 
+ Stobjs and Their Application to ISA Modeling'' by Shilpi Goel, Warren A. Hunt, 
+ Jr., and Matt Kaufmann, in the proceedings of <a href="http://www.cs.uwyo.edu/~ruben/acl2-13" target="_blank"><nobr>ACL2 Workshop 2013<img src="../Icon_External_Link.png" title="External link to http://www.cs.uwyo.edu/~ruben/acl2-13"></nobr></a>.</p> 
+ 
+ <p><b>INTRODUCTION</b></p> 
+ 
+ <p>We start with a brief review of <a href="ACL2____STOBJ.html">stobj</a>s and some potential problems 
+ with them, followed by an introduction to abstract stobjs and how they can 
+ avoid these problems.  Prior experience with stobjs will probably help the 
+ reader to absorb the ideas below.</p> 
+ 
+ <p>Recall that single-threaded objects, or <a href="ACL2____STOBJ.html">stobj</a>s, provide a way for 
+ ACL2 users to stay within the ACL2 logic — where every data object is an 
+ atom or a <span class="tt"><a href="COMMON-LISP____CONS.html">cons</a></span> of data objects — while obtaining the benefits of 
+ fast evaluation through destructive updates.  Consider for example this very 
+ simple event.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFSTOBJ.html">defstobj</a> st fld)</pre> 
+ 
+ <p>This event introduces a recognizer, <span class="v">stp</span>, and a creator, 
+ <span class="v">create-st</span>, for a data structure consisting of a single field accessed and 
+ updated by functions <span class="v">fld</span> and <span class="v">update-fld</span>, respectively.  Each of 
+ these four primitive functions has both a logical definition, which is used 
+ when the prover reasons about the function, and an executable definition, 
+ which is used in raw Lisp.  In the logic, <span class="v">stp</span> recognizes objects that 
+ have the requisite fields.  In raw Lisp, there is a ``live stobj'', which is 
+ typically an array object whose fields correspond to those specified by the 
+ <span class="tt"><a href="ACL2____DEFSTOBJ.html">defstobj</a></span> event.  (If there is a single stobj field that is an array or 
+ hash-table field, then that field is the entire stobj in raw Lisp; but we 
+ ignore that case below.)</p> 
+ 
+ <p>Here are the logical definition and the executable definition, 
+ respectively, that are introduced for the field accessor, <span class="v">fld</span>, introduced 
+ above.  Notice that since a stobj is represented in raw Lisp using an array, 
+ the raw Lisp accessor uses a raw Lisp array accessor, <span class="v">svref</span>.  (You can 
+ see all the logical and executable definitions by evaluating the form 
+ <span class="v">(<a href="ACL2____TRACE_42.html">trace$</a> defstobj-axiomatic-defs defstobj-raw-defs)</span> before evaluating the 
+ <span class="tt"><a href="ACL2____DEFSTOBJ.html">defstobj</a></span> form.)</p> 
+ 
+ <pre class="code">; logical definition
+(<a href="COMMON-LISP____DEFUN.html">defun</a> fld (st)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____STP.html">stp</a> st)
+                  :verify-guards t))
+  (<a href="COMMON-LISP____NTH.html">nth</a> 0 st))
+
+; executable (raw Lisp) definition
+(<a href="COMMON-LISP____DEFUN.html">defun</a> fld (st)
+  (svref st 0))</pre> 
+ 
+ <p>Sophisticated programming with stobjs can provide efficient implementations 
+ of algorithms, but may require the preservation of a complex invariant.  One 
+ can, of course, define a function to implement such an invariant after 
+ introducing the stobj, as follows.</p> 
+ 
+ <pre class="code">; Introduce a stobj.
+(<a href="ACL2____DEFSTOBJ.html">defstobj</a> st fld1 ... fldk)
+
+; Define an invariant on that stobj.
+(<a href="COMMON-LISP____DEFUN.html">defun</a> good-stp (st)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs st))
+  ...)
+
+; Define some basic functions that update the stobj and preserve the
+; invariant.
+(<a href="COMMON-LISP____DEFUN.html">defun</a> update-st (... st ...)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs st
+                  :guard (<a href="COMMON-LISP____AND.html">and</a> (good-stp st) ...)))
+  ...)
+...
+
+; Prove that the invariant is indeed preserved by those basic functions.
+(<a href="ACL2____DEFTHM.html">defthm</a> good-stp-update-st
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (good-stp st)
+                ...)
+           (good-stp (update-st ... st ...))))
+...
+
+; Implement algorithms built on the basic functions.
+(<a href="COMMON-LISP____DEFUN.html">defun</a> foo (... st ...)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs st
+                  :guard (<a href="COMMON-LISP____AND.html">and</a> (good-stp st) ...)))
+  ... (update-st ... st ...) ...)
+
+; Prove invariance theorems about these algorithms.
+(<a href="ACL2____DEFTHM.html">defthm</a> good-stp-foo
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (good-stp st)
+                ...)
+           (good-stp (foo ... st ...))))
+...
+
+; Prove other properties of these algorithms.
+(<a href="ACL2____DEFTHM.html">defthm</a> foo-is-correct
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (good-stp st)
+                ...)
+           (some-property (foo ... st ...))))
+...</pre> 
+ 
+ <p>But there are at least two potential difficulties in using stobjs as 
+ described above.</p> 
+ 
+ <ol> 
+ 
+ <li>When <span class="v">foo</span> is executed on concrete data in the ACL2 loop, 
+ the guard check may be expensive because <span class="v">(good-stp st)</span> is expensive.</li> 
+ 
+ <li>Reasoning about <span class="v">foo</span> (using rules like <span class="v">foo-is-correct</span> above) 
+ involves proving hypotheses of invariance theorems, which may be complicated 
+ for the user to manage or slow for the theorem prover.</li> 
+ 
+ </ol> 
+ 
+ <p>The <span class="v">defabsstobj</span> event offers an opportunity to address these issues. 
+ It introduces a new stobj, which we call an ``abstract stobj'', which is 
+ associated with a corresponding ``foundational stobj'' introduced by an 
+ earlier <span class="tt"><a href="ACL2____DEFSTOBJ.html">defstobj</a></span> or <span class="v">defabsstobj</span> event.  The <span class="v">defabsstobj</span> 
+ event specifies a logical (<span class="v">:LOGIC</span>) and an executable (<span class="v">:EXEC</span>) 
+ definition for each primitive operation, or ``stobj primitive'', involving 
+ that stobj.  As is the case for <span class="tt"><a href="ACL2____DEFSTOBJ.html">defstobj</a></span>, the logical definition is 
+ what ACL2 reasons about, and is appropriate to apply to an ACL2 object 
+ satisfying the logical definition of the recognizer function for the stobj. 
+ The executable definition is applied in raw Lisp to a live stobj (as discussed 
+ above).</p> 
+ 
+ <p>Remark.  It is common to use ``a'' and ``c'' in a suffix to suggest 
+ ``abstract'' and ``concrete'', respectively.  The foundational stobj was, at 
+ one time, called the ``corresponding concrete stobj''.  That old terminology 
+ may still be appropriate in the common case that the foundational stobj is a 
+ concrete stobj (rather than another abstract stobj).  So below, a name like 
+ <span class="v">st$c0</span> suggests a foundational (``concrete'') stobj for an abstract stobj 
+ named <span class="v">st</span>, whose abstract stobj recognizer is <span class="v">st$ap</span>, and so on.  End 
+ of Remark.</p> 
+ 
+ <p>We can picture a sequence of updates to an abstract stobj and its 
+ foundational stobj.  Initially in this picture, <span class="v">st$a0</span> and <span class="v">st$c0</span> are 
+ an abstract stobj and its foundation (respectively).  Then an update, <span class="v">u1</span>, 
+ is applied with <span class="v">:LOGIC</span> and <span class="v">:EXEC</span> functions <span class="v">u$a1</span> and <span class="v">u$c1</span>, 
+ respectively.  The resulting abstract and foundational stobj, <span class="v">st$a1</span> and 
+ <span class="v">st$c1</span>, correspond as before.  Then a second update, <span class="v">u2</span>, is applied 
+ with <span class="v">:LOGIC</span> and <span class="v">:EXEC</span> functions <span class="v">u$a2</span> and <span class="v">u$c2</span>, 
+ respectively — again preserving the correspondence.  And so on.</p> 
+ 
+ <pre class="code">Abstract               u$a1       u$a2       u$a3
+(:logic)         st$a0  --&gt; st$a1  --&gt; st$a2  --&gt;   ...
+
+                   ^          ^          ^               ^
+Correspondence     |          |          |          ...  |
+                   v          v          v               v
+
+                       u$c1       u$c2       u$c3
+Foundation       st$c0  --&gt; st$c1  --&gt; st$c2  --&gt;   ...
+(:exec)</pre> 
+ 
+ <p>We conclude this introduction with some remarks about implementation. 
+ Consider an abstract stobj <span class="v">st</span> with corresponding foundation <span class="v">st$c</span>. 
+ The live stobjs for <span class="v">st</span> and <span class="v">st$c</span> have the same structure, but are 
+ distinct arrays.  Indeed, the raw Lisp creator function for <span class="v">st$c</span> is 
+ called to create a new initial live stobj for <span class="v">st</span>.  As we will see below, 
+ reads and writes in raw Lisp to the live stobj for <span class="v">st</span> are ultimately 
+ performed using the primitive accessors and updaters defined for <span class="v">st$c</span>. 
+ One might think of the live stobjs for <span class="v">st</span> and <span class="v">st$c</span> as being 
+ congruent stobjs (see <a href="ACL2____DEFSTOBJ.html">defstobj</a>), except that the stobjs themselves are 
+ not truly congruent: in particular, the stobj primitives introduced for 
+ <span class="v">st</span> may be applied to <span class="v">st</span>, but field updaters of <span class="v">st$c</span> may not. 
+ As one might expect, the <span class="v">:EXEC</span> function for an exported function is 
+ applied to the live stobj for <span class="v">st</span> in raw Lisp.</p> 
+ 
+ <p><b>EXAMPLE</b></p> 
+ 
+ <p>We present examples, with detailed comments intended to explain abstract 
+ stobjs, in two community books: <span class="v">books/demos/defabsstobj-example-1.lisp</span> 
+ and <span class="v">books/demos/defabsstobj-example-2.lisp</span>.  In this section we outline 
+ the first of these.  We suggest that after you finish this <a href="COMMON-LISP____DOCUMENTATION.html">documentation</a> topic, you read through those two books.  There are other books 
+ <span class="v">books/dmeos/defabsstobj-example-*.lisp</span> that may be helpful to read; in 
+ particular, <span class="v">books/demos/defabsstobj-example-5.lisp</span> illustrates building 
+ an abstract stobj on top of another abstract stobj (as its so-called 
+ ``foundation'', as described below).</p> 
+ 
+ <p>Here is the first of two closely related <span class="v">defabsstobj</span> <a href="ACL2____EVENTS.html">events</a> 
+ from the book <span class="v">defabsstobj-example-1.lisp</span>, but in expanded form.  We will 
+ show the abbreviated form later, which omits most of the data in the form that 
+ is immediately below.  Thus most of the information shown here is default 
+ information.  We believe that the comments below explain most or all of what 
+ you need to know in order to start using <span class="v">defabsstobj</span>, and that you will 
+ learn the remainder when you see error messages.  For example, we do not say 
+ in the comments below that every <span class="v">:LOGIC</span> and <span class="v">:EXEC</span> function must be 
+ <a href="ACL2____GUARD.html">guard</a>-verified, but that is indeed a requirement.</p> 
+ 
+ <pre class="code">(defabsstobj st ; The new abstract stobj is named st. 
+ 
+; The foundational stobj for st is st$c: 
+ 
+  :foundation st$c 
+ 
+; The recognizer for the new abstract stobj is stp, which is defined to be 
+; st$ap in the logic, and is executed on the live stobj in raw Lisp using 
+; st$cp. 
+ 
+  :recognizer (stp :logic st$ap :exec st$cp) 
+ 
+; The initial stobj is defined as create-st (a function of no arguments), 
+; which is defined logically as create-st$a, though create-st$c is invoked to 
+; create the initial live stobj for st.  The :correspondence and :preserved 
+; keywords refer to proof obligations, discussed below. 
+ 
+  :creator (create-st :logic create-st$a :exec create-st$c 
+                      :correspondence create-st{correspondence} 
+                      :preserved create-st{preserved}) 
+ 
+; Proof obligations are generated that involve a correspondence between the 
+; new abstract stobj and corresponding foundational stobj.  The function 
+; st$corr, which need not be executable (see :DOC defun-nx), takes two 
+; arguments, a foundational stobj and an abstract stobj.  This function symbol 
+; is used in the statements of the proof obligations. 
+ 
+  :corr-fn st$corr 
+ 
+; In this example we have four exports.  In each case a new function is 
+; introduced that has the same signature as its :EXEC function, except that 
+; st$c is replaced by st.  The :LOGIC and :EXEC functions are as specified, 
+; and the other keywords refer to proof obligations that we discuss below. 
+ 
+  :exports ((lookup :logic lookup$a 
+                    :exec mem$ci 
+                    :correspondence lookup{correspondence} 
+                    :guard-thm lookup{guard-thm}) 
+            (update :logic update$a 
+                    :exec update-mem$ci 
+                    :correspondence update{correspondence} 
+                    :preserved update{preserved} 
+                    :guard-thm update{guard-thm}) 
+            (misc :logic misc$a 
+                  :exec misc$c 
+                  :correspondence misc{correspondence}) 
+            (update-misc :logic update-misc$a 
+                         :exec update-misc$c 
+                         :correspondence update-misc{correspondence} 
+                         :preserved update-misc{preserved}))) 
+</pre> 
+ 
+ <p>Note that all stobj primitives (recognizer, creator, and exported 
+ functions) are defined in the ACL2 loop in terms of their <span class="v">:LOGIC</span> 
+ functions and in raw Lisp in terms of their <span class="v">:EXEC</span> functions.  In the ACL2 
+ loop, a <span class="tt"><a href="COMMON-LISP____DEFUN.html">defun</a></span> form defines a function, while in raw Lisp, a <span class="tt"><a href="COMMON-LISP____DEFMACRO.html">defmacro</a></span> form defines a macro (for efficiency).  We first illustrate how that 
+ works for the recognizer.  (You can see all the logical and executable 
+ definitions by evaluating the form <span class="v">(<a href="ACL2____TRACE_42.html">trace$</a> defabsstobj-axiomatic-defs
+ defabsstobj-raw-defs)</span> before evaluating the <span class="tt"><a href="ACL2____DEFSTOBJ.html">defstobj</a></span> form.)</p> 
+ 
+ <pre class="code">; In the ACL2 loop:
+(<a href="COMMON-LISP____DEFUN.html">defun</a> stp (st)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard 't))
+  (st$ap st))
+
+; In raw Lisp:
+(<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> stp (<a href="COMMON-LISP_____62REST.html">&amp;rest</a> args) (<a href="COMMON-LISP____CONS.html">cons</a> 'st$cp args))</pre> 
+ 
+ <p>The definitions are made similarly for exported functions.  <a href="ACL2____GUARD.html">Guard</a>s 
+ are derived from their <span class="v">:LOGIC</span> functions as follows.  Consider the 
+ exported function <span class="v">update</span> in our example.  Its <span class="v">:LOGIC</span> function, 
+ <span class="v">update$a</span>, has formals <span class="v">(k val st$a)</span> and the following guard.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> k) (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> 0 k) (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> k 49))
+     (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> val) (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> 0 val))
+     (st$ap st$a)
+     (mem$c-entryp val))</pre> 
+ 
+ <p>The formals of <span class="v">update</span> are obtained by starting with the formals of its 
+ <span class="v">:EXEC</span> function, <span class="v">update-mem$ci</span> — which are <span class="v">(i v st$c)</span> 
+ — and replacing the foundational stobj name <span class="v">st$c</span> by the new stobj 
+ name <span class="v">st</span>.  The formals of <span class="v">update</span> are thus <span class="v">(i v st)</span>.  The guard 
+ for <span class="v">update</span> is obtained in two steps.  The first step is to substitute the 
+ formals of <span class="v">update</span> for the formals of <span class="v">update$a</span> in the guard for 
+ <span class="v">update$a</span>, to obtain the following.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> i) (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> 0 i) (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> i 49))
+     (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> v) (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> 0 v))
+     (st$ap st)
+     (mem$c-entryp v))</pre> 
+ 
+ <p>The second step is to replace, for each new stobj primitive <span class="v">p</span>, the 
+ <span class="v">:LOGIC</span> function for <span class="v">p</span> by <span class="v">p</span> itself.  The only <span class="v">:LOGIC</span> 
+ function occurring in the formula just above is <span class="v">st$ap</span>, which is the 
+ <span class="v">:LOGIC</span> function for <span class="v">stp</span>.  The guard for <span class="v">update</span> is thus as 
+ follows.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> i) (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> 0 i) (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> i 49))
+     (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> v) (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> 0 v))
+     (<a href="ACL2____STP.html">stp</a> st)
+     (mem$c-entryp v))</pre> 
+ 
+ <p>Note that the <span class="v">:EXEC</span> version of an abstract <a href="ACL2____STOBJ.html">stobj</a> export must 
+ not include the abstract stobj name among its formals.</p> 
+ 
+ <p>We turn now to the proof obligations, as promised above.  There are three 
+ types: <span class="v">:CORRESPONDENCE</span>, <span class="v">:PRESERVED</span>, and <span class="v">:GUARD-THM</span>.  All 
+ required lemmas may be printed simply by defining the necessary <span class="v">:LOGIC</span> 
+ and <span class="v">:EXEC</span> functions and then submitting the <span class="v">defabsstobj</span> event.  (To 
+ advanced users: also see <a href="ACL2____DEFABSSTOBJ-MISSING-EVENTS.html">defabsstobj-missing-events</a> for a utility that 
+ returns the required formulas in translated form.)  Although the 
+ <span class="v">defabsstobj</span> event will fail if the required lemmas have not been proved, 
+ first it will print the <span class="tt"><a href="ACL2____DEFTHM.html">defthm</a></span> forms that must be admitted in order to 
+ complete submission of the <span class="v">defabsstobj</span> event.  (Note that although those 
+ theorems are stated exactly in the form expected by the system, you are 
+ welcome to supply whatever <span class="v">:</span><span class="tt"><a href="ACL2____RULE-CLASSES.html">rule-classes</a></span> you prefer, even though 
+ the system creates <span class="v">:rule-classes nil</span> by default.)</p> 
+ 
+ <p>The detailed theory explaining the need for these lemmas may be found in 
+ ACL2 source file <span class="v">other-events.lisp</span>, in a comment entitled ``Essay on the 
+ Correctness of Abstract Stobjs''.  Here, we give an informal sense of the 
+ importance of these lemmas as we present examples of them.  Fundamental is the 
+ notion of evaluation in the logic versus evaluation using live stobjs, where 
+ one imagines tracking the current value of each abstract stobj during each of 
+ these two evaluations.</p> 
+ 
+ <p>We start with the <span class="v">:CORRESPONDENCE</span> lemmas.  These guarantee that 
+ evaluation in the logic agrees with evaluation using live stobjs, in the sense 
+ that the only difference is between a logical stobj and a live stobj, where 
+ the two correspond in the sense of the function specified by <span class="v">:CORR-FN</span>. 
+ We start with the <span class="v">:CREATOR</span> function where the statement is quite simple, 
+ stating that the <span class="v">:CORR-FN</span> holds initially.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> create-st{correspondence}
+  (st$corr (create-st$c) (create-st$a)))</pre> 
+ 
+ <p>For the exported functions, there are essentially two cases.  If an 
+ exported function returns other than the new abstract stobj, then the theorem 
+ asserts the equality of the results of applying the <span class="v">:LOGIC</span> and <span class="v">:EXEC</span> 
+ functions for the exported function.  Hypotheses include the <span class="v">:CORR-FN</span> 
+ correspondence followed by the <a href="ACL2____GUARD.html">guard</a> for the <span class="v">:LOGIC</span> function, 
+ which is stated in terms of the formal parameters of the <span class="v">:EXEC</span> function 
+ except using the abstract stobj (here, <span class="v">st</span>) in place of the foundational 
+ stobj (here, <span class="v">st$c</span>).  The conclusion uses the <span class="v">:EXEC</span> formals, modified 
+ in the call of the <span class="v">:LOGIC</span> function (here, <span class="v">lookup$a</span>) to use the 
+ abstract stobj, as in the hypotheses.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> lookup{correspondence}
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (st$corr st$c st)
+                (<a href="COMMON-LISP____INTEGERP.html">integerp</a> i) (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> 0 i) (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> i 49)
+                (st$ap st))
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (mem$ci i st$c)
+                  (lookup$a i st)))
+  :rule-classes nil)</pre> 
+ 
+ <p>By contrast, if the exported function returns the new abstract stobj, then 
+ the conclusion uses the correspondence function instead of <span class="v">EQUAL</span>, as in 
+ the following.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> update{correspondence}
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (st$corr st$c st)
+                (<a href="COMMON-LISP____INTEGERP.html">integerp</a> i) (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> 0 i) (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> i 49)
+                (<a href="COMMON-LISP____INTEGERP.html">integerp</a> v) (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> 0 v)
+                (st$ap st)
+                (mem$c-entryp v))
+           (st$corr (update-mem$ci i v st$c)
+                    (update$a i v st)))
+  :rule-classes nil)</pre> 
+ 
+ <p>For exported functions that return multiple values, such conclusions are 
+ conjoined together over the returned values.</p> 
+ 
+ <p>The <span class="v">:PRESERVED</span> lemmas guarantee that updates to the abstract stobj 
+ preserve its recognizer.  The fact that every exported function has this 
+ property provides justification for an optimization performed by ACL2 during 
+ generation of proof obligations for <a href="ACL2____GUARD.html">guard</a> verification, by assuming 
+ that the recognizer always holds.  The <span class="v">:PRESERVED</span> lemma for the 
+ <span class="v">:CREATOR</span> shows that the recognizer holds initially.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> create-st{preserved}
+  (st$ap (create-st$a)))</pre> 
+ 
+ <p>Here is a typical such lemma, for the exported function <span class="v">update</span>.  Note 
+ that there is no such lemma for <span class="v">lookup</span>, since <span class="v">lookup</span> does not return 
+ <span class="v">st</span>.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> update{preserved}
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> i) (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> 0 i) (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> i 49)
+                (<a href="COMMON-LISP____INTEGERP.html">integerp</a> v) (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> 0 v)
+                (st$ap st)
+                (mem$c-entryp v))
+           (st$ap (update$a i v st))))</pre> 
+ 
+ <p>Finally, we consider the <span class="v">:GUARD-THM</span> lemmas.  These serve to guarantee 
+ that the <a href="ACL2____GUARD.html">guard</a> holds for each call of an <span class="v">:EXEC</span> function.  During 
+ guard verification, logical definitions are used; in particular, since each 
+ exported function is defined in the logic as the corresponding call of its 
+ <span class="v">:LOGIC</span> function, guard verification shows that each call of the 
+ <span class="v">:LOGIC</span> function for an exported function satisfies that function's guard. 
+ But why is this true for raw Lisp evaluation using live stobjs, where the 
+ <span class="v">:EXEC</span> function is called for an exported function?  The <span class="v">:GUARD-THM</span> 
+ lemmas provide the answer, as they state that if the <span class="v">:LOGIC</span> function's 
+ guard holds, then the <span class="v">:EXEC</span> function's guard holds.  Here is an example. 
+ Note that the hypotheses come from the correspondence of the foundational and 
+ abstract function as guaranteed by the <span class="v">:CORR</span> function, together with the 
+ guard of the <span class="v">:LOGIC</span> function; and the conclusion comes from the guard of 
+ the <span class="v">:EXEC</span> function.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> lookup{guard-thm}
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (st$corr st$c c)
+                (<a href="COMMON-LISP____INTEGERP.html">integerp</a> i)
+                (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> 0 i)
+                (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> i 49)
+                (st$ap st))
+           (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> i)
+                (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> 0 i)
+                (<a href="COMMON-LISP_____C3.html">&lt;</a> i (mem$c-length st$c))))
+  :rule-classes nil)</pre> 
+ 
+ <p>We conclude this EXAMPLE section by showing a short form for the 
+ <span class="v">defabsstobj</span> form displayed above.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFABSSTOBJ.html">defabsstobj</a> st
+  :exports ((lookup :exec mem$ci)
+            (update :exec update-mem$ci)
+            misc update-misc))</pre> 
+ 
+ <p><b>SUMMARY DOCUMENTATION</b></p> 
+ 
+ <p>The General Form is as shown below, where the order of keywords is 
+ unimportant.  Duplicate keywords are discouraged; while permitted, only the 
+ first (leftmost) occurrence of a given keyword is used.  Only the 
+ <span class="v">:exports</span> keyword is required.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFABSSTOBJ.html">defabsstobj</a> st
+  :foundation foundation
+  :recognizer recognizer
+  :creator creator
+  :corr-fn corr-fn
+  :congruent-to congruent-to
+  :protect-default protect-default
+  :exports (e1 ... ek))</pre> 
+ 
+ <p>The keyword argument <span class="v">:EXPORTS</span> must be supplied, and missing or 
+ <span class="v">nil</span> keyword arguments have defaults as indicated below.  All arguments 
+ must satisfy the conditions below.</p> 
+ 
+ <p>Before we describe the arguments, we define a notion of a ``function spec'' 
+ and its ``completion''.  A function spec is either a symbol or else a list of 
+ the form</p> 
+ 
+ <pre class="code">(fn <span class="v">:kwd1</span> val1 ... <span class="v">:kwdn</span> valn), </pre> 
+ 
+ <p>that is, a symbol followed by a <span class="tt"><a href="ACL2____KEYWORD-VALUE-LISTP.html">keyword-value-listp</a></span>.  We view the 
+ case of a symbol, <span class="v">s</span>, as the function spec <span class="v">(<a href="ACL2____S.html">s</a>)</span>, with no keywords. 
+ There must be no duplicate keywords.  In each case that we expect a function 
+ spec, the context provides a set of valid keywords for that function spec; it 
+ is an error to provide any other keyword in the function spec.  Each function 
+ spec is interpreted as its ``completion'', obtained by extending the function 
+ spec with a default value for each valid keyword as indicated below.  With 
+ that interpretation, the ``exported function'' of a function spec is its 
+ <span class="v">car</span>, and that function symbol and each keyword value must be a 
+ guard-verified function symbol; and moreover, the <span class="v">:EXEC</span> function must not 
+ include the new abstract stobj name, <span class="v">st</span>, among its formals.</p> 
+ 
+ <p>We are ready to describe the arguments of <span class="v">defabsstobj</span>.</p> 
+ 
+ <blockquote> 
+ 
+ <p><span class="v">St</span> is a symbol, which names the new abstract stobj.</p> 
+ 
+ <p><span class="v">Foundation</span> is the name of an existing stobj, which may have been 
+ introduced either with <span class="tt"><a href="ACL2____DEFSTOBJ.html">defstobj</a></span> or with <span class="v">defabsstobj</span>.</p> 
+ 
+ <p><span class="v">Recognizer</span> is a function spec (for the recognizer function).  The 
+ valid keywords are <span class="v">:LOGIC</span> and <span class="v">:EXEC</span>.  The default for 
+ <span class="v">recognizer</span> is obtained by adding the suffix <span class="v">"P"</span> to <span class="v">name</span>.  The 
+ default value for <span class="v">:LOGIC</span> is formed by adding the suffix <span class="v">"$AP"</span> to 
+ <span class="v">recognizer</span>; for <span class="v">:EXEC</span>, by adding the suffix <span class="v">"$CP"</span>.  The 
+ <span class="v">:EXEC</span> function must be the recognizer for the foundational stobj (which 
+ can be specified using the <span class="v">:FOUNDATION</span> keyword).</p> 
+ 
+ <p><span class="v">Creator</span> is a function spec (for the creator function).  The valid 
+ keywords are <span class="v">:LOGIC</span> and <span class="v">:EXEC</span>.  The default for <span class="v">creator</span> is 
+ obtained by adding the prefix <span class="v">"CREATE-"</span> to <span class="v">name</span>.  The default 
+ value for <span class="v">:LOGIC</span> is formed by adding the suffix <span class="v">"$A"</span> to 
+ <span class="v">creator</span>; for <span class="v">:EXEC</span>, by adding the suffix <span class="v">"$C"</span>.  The 
+ <span class="v">:EXEC</span> function must be the creator for the foundational stobj (which can 
+ be specified using the <span class="v">:FOUNDATION</span> keyword).</p> 
+ 
+ <p><span class="v">Corr-fn</span> is a known function symbol that takes two arguments (for the 
+ correspondence theorems).  The default for <span class="v">corr-fn</span> is obtained by adding 
+ the suffix <span class="v">"$CORR"</span> to <span class="v">name</span>.</p> 
+ 
+ <p><span class="v">Congruent-to</span> should either be <span class="v">nil</span> (the default) or the name of an 
+ abstract stobj previously introduced (by <span class="tt"><a href="ACL2____DEFABSSTOBJ.html">defabsstobj</a></span>).  In the latter 
+ case, the current and previous abstract stobj should have the same 
+ foundational stobj (not merely congruent foundational stobjs), and their 
+ <span class="v">:EXPORTS</span> fields should have the same length and also correspond, as 
+ follows: the ith export of each should have the same <span class="v">:LOGIC</span> and 
+ <span class="v">:EXEC</span> symbols.  See <a href="ACL2____DEFSTOBJ.html">defstobj</a> for more about congruent stobjs. 
+ Note that if two names are congruent, then they are either both ordinary 
+ stobjs or both abstract stobjs.</p> 
+ 
+ <p><span class="v">Protect-default</span> should either be <span class="v">nil</span> (the default) or <span class="v">t</span>.  It 
+ provides the value of keyword <span class="v">:PROTECT</span> for each member of <span class="v">exports</span> 
+ that does not explicitly specify <span class="v">:PROTECT</span>.  See the discussion of 
+ <span class="v">exports</span> below.</p> 
+ 
+ <p>An important aspect of the <span class="v">congruent-to</span> parameter is that if it is not 
+ <span class="v">nil</span>, then the checks for lemmas — <span class="v">{CORRESPONDENCE}</span>, 
+ <span class="v">{GUARD-THM}</span>, and <span class="v">{PRESERVED}</span> — are omitted.  Thus, the values 
+ of keyword <span class="v">:CORR-FN</span>, and the values of keywords <span class="v">:CORRESPONDENCE</span>, 
+ <span class="v">:GUARD-THM</span>, and <span class="v">:PRESERVED</span> in each export (as we discuss next), are 
+ irrelevant; they are not inferred and they need not be supplied.</p> 
+ 
+ <p>The value of <span class="v">:EXPORTS</span> is a non-empty true list.  Each <span class="v">ei</span> is a 
+ function spec (for an exported function).  The valid keywords are <span class="v">:LOGIC</span>, 
+ <span class="v">:EXEC</span>, <span class="v">:CORRESPONDENCE</span>, and <span class="v">:GUARD-THM</span>, <span class="v">:PROTECT</span>, 
+ <span class="v">:UPDATER</span>, and also <span class="v">:PRESERVED</span> if and only if the specified 
+ <span class="v">:EXEC</span> function returns the foundational stobj.  The default values for 
+ all of these keywords except <span class="v">:UPDATER</span> and <span class="v">:PROTECT</span> are obtained by 
+ respectively adding the suffix <span class="v">"$A"</span> <span class="v">"$C"</span>, 
+ <span class="v">"{CORRESPONDENCE}"</span>, <span class="v">"{GUARD-THM}"</span>, or <span class="v">"{PRESERVED}"</span>.  For 
+ <span class="v">:PROTECT</span>, the default is <span class="v">nil</span> unless the <span class="v">defabsstobj</span> event 
+ specifies <span class="v">:PROTECT-DEFAULT t</span>.  If <span class="v">:UPDATER upd</span> is supplied and 
+ <span class="v">upd</span> is not <span class="v">nil</span>, then function exported by the function spec is a 
+ child stobj accessor whose corresponding updater is <span class="v">upd</span>; see the 
+ discussion of <span class="v">:UPDATER</span> in <a href="ACL2____NESTED-STOBJS.html">nested-stobjs</a>.</p> 
+ 
+ </blockquote> 
+ 
+ <p>Not shown is the keyword, <span class="v">:MISSING</span>; the effect of <span class="v">:missing t</span> is 
+ to turn the call of <span class="v">defabsstobj</span> into a corresponding call of <span class="tt"><a href="ACL2____DEFABSSTOBJ-MISSING-EVENTS.html">defabsstobj-missing-events</a></span>.</p> 
+ 
+ <p>Note that a <span class="v">defabsstobj</span> event will fail if the required lemmas — 
+ that is, those for valid keywords <span class="v">:CORRESPONDENCE</span>, <span class="v">:GUARD-THM</span>, and 
+ <span class="v">:PRESERVED</span> — have not been proved, unless proofs are being skipped. 
+ The exemption when skipping proofs allows the supporting lemmas to be <span class="tt"><a href="ACL2____LOCAL.html">local</a></span> to <a href="ACL2____BOOKS.html">books</a> and <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span> <a href="ACL2____EVENTS.html">events</a>.  If the <span class="tt"><a href="ACL2____LD.html">ld</a></span> special <span class="tt"><a href="ACL2____LD-SKIP-PROOFSP.html">ld-skip-proofsp</a></span> is <span class="v">t</span>, then the missing <a href="ACL2____EVENTS.html">events</a> 
+ are printed with a warning before the <span class="v">defabsstobj</span> event is admitted; but 
+ if <span class="v">ld-skip-proofsp</span> is the symbol <span class="v">INCLUDE-BOOK</span>, then that warning is 
+ omitted.  (Also see <a href="ACL2____SKIP-PROOFS.html">skip-proofs</a> and see <a href="ACL2____LD-SKIP-PROOFSP.html">ld-skip-proofsp</a>.)  If 
+ however proofs are not being skipped, then the <span class="v">defabsstobj</span> event will 
+ fail after printing the missing events.  Advanced users may wish to see <a href="ACL2____DEFABSSTOBJ-MISSING-EVENTS.html">defabsstobj-missing-events</a> for a utility that returns a data structure 
+ containing the missing lemmas.</p> 
+ 
+ <p>Let <span class="v">st</span> be an abstract stobj with corresponding foundational stobj 
+ <span class="v">st$c</span>.  Let <span class="v">f</span> be an exported function for <span class="v">st</span> and let <span class="v">f$a</span> 
+ and <span class="v">f$c</span> be the corresponding <span class="v">:LOGIC</span> and <span class="v">:EXEC</span> functions, 
+ respectively.  The formals of <span class="v">f</span> are obtained by taking the formals of 
+ <span class="v">f$c</span> and replacing <span class="v">st$c</span> by <span class="v">st</span>.  The <a href="ACL2____GUARD.html">guard</a> for <span class="v">f</span> is 
+ derived as follows from the guard of <span class="v">f$a</span>.  First, the formals of <span class="v">f$a</span> 
+ are replaced by the formals of <span class="v">f</span> in the guard of <span class="v">f$a</span>, to obtain a 
+ term we denote here as <span class="v">guard-pre</span>.  Now for each exported function symbol 
+ <span class="v">g</span> of <span class="v">st</span> with corresponding <span class="v">:LOGIC</span> function <span class="v">g$a</span>, form a 
+ functional substitution by consing <span class="v">g$a</span> with <span class="v">g</span>.  Finally, apply that 
+ functional substitution to <span class="v">guard-pre</span>; the result is the guard of <span class="v">f</span>. 
+ That guard must satisfy the usual conditions of a guard: thus, it must return 
+ a single non-<a href="ACL2____STOBJ.html">stobj</a> value and satisfy normal syntactic restrictions, 
+ including single-threadedness in its handling of stobjs.</p> 
+ 
+ <p><span class="v">Remark</span>.  Because of how guards are created for exported functions, and 
+ in particular because <span class="v">:LOGIC</span> functions are replaced as discussed above, a 
+ good discipline is to define <span class="v">:LOGIC</span> functions that are not intended for 
+ general use, but are intended only for use as <span class="v">:LOGIC</span> functions of 
+ corresponding stobj primitives.  For example, suppose that you use <span class="v">length</span> 
+ as the <span class="v">:LOGIC</span> function for some stobj primitive, <span class="v">f</span> (as opposed to 
+ using your own function, say, <span class="v">foo-length</span> or <span class="v">foo$a</span>).  Then every call 
+ of <span class="v">length</span> will be replaced by <span class="v">f</span> when creating the guard of a stobj 
+ primitive from the guard of its <span class="v">:LOGIC</span> function.  This might not be what 
+ you intended if you were using <span class="v">length</span> in that guard simply to compute the 
+ length of an ordinary list.</p> 
+ 
+ <p>Additional restrictions include the following.</p> 
+ 
+ <ul> 
+ 
+ <li>All exported function names must be new (unless redefinition is on; see 
+ <a href="ACL2____LD-REDEFINITION-ACTION.html">ld-redefinition-action</a>), and there must be no duplicates among 
+ them.</li> 
+ 
+ <li>The foundational stobj name must be a formal parameter of the <span class="v">:EXEC</span> 
+ function of every function spec, except for the <span class="v">:CREATOR</span> function 
+ spec.</li> 
+ 
+ <li>The <span class="v">:LOGIC</span> and <span class="v">:EXEC</span> function for a function spec must agree on 
+ both the number of inputs and the number of outputs.</li> 
+ 
+ <li>The foundational stobj must not be a <a href="COMMON-LISP____DECLARE.html">declare</a>d stobj of the 
+ <span class="v">:LOGIC</span> function of any function spec.  (This restriction could perhaps be 
+ removed, but it is convenient for the implementation of the events generated 
+ by a call of <span class="v">defabsstobj</span>.)</li> 
+ 
+ <li>The <span class="v">:PROTECT</span> keyword is something that you should ignore unless you 
+ get an error message about it, pertaining to modifying the foundational stobj 
+ non-atomically.  In that case, you can eliminate the error by providing 
+ <span class="v">:PROTECT t</span> in the function spec, or by providing <span class="v">defabsstobj</span> keyword 
+ argument <span class="v">:PROTECT-DEFAULT t</span> at the top level, in order to restore the 
+ required atomicity.  The above explanation is probably all you need to know 
+ about <span class="v">:PROTECT</span>, but just below is a more complete explanation for those 
+ who desire it.  Further information is also available if you need it; see 
+ <a href="ACL2____SET-ABSSTOBJ-DEBUG.html">set-absstobj-debug</a>, and see the example uses of these keywords in 
+ community book <span class="v">books/demos/defabsstobj-example-2.lisp</span>.</li> 
+ 
+ </ul> 
+ 
+ <p>For those who are interested, here is a more detailed discussion of 
+ <span class="v">:PROTECT</span> and <span class="v">:PROTECT-DEFAULT</span>, as promised above.  It applies to any 
+ function spec for an export (hence not to the <span class="v">:CREATOR</span> function spec). 
+ If the <span class="v">:EXEC</span> function is a stobj primitive, then clearly the following 
+ property holds: any execution of a call of that function can only update the 
+ foundational stobj at most once — i.e., modification of the foundational 
+ stobj is atomic.  ACL2 can deduce this property not only for stobj primitives 
+ but for many other functions as well.  However, if ACL2 cannot deduce this 
+ property, then it will cause an error saying that the <span class="v">:EXEC</span> function 
+ ``appears capable of modifying the foundational stobj, <span class="v">&lt;stobj_name&gt;</span>, 
+ non-atomically.''  That message also explains how to eliminate this error: 
+ provide <span class="v">:PROTECT t</span> for the function spec.  Alternatively, all function 
+ specs without an explicit <span class="v">:PROTECT</span> keyword can be implicitly supplied 
+ <span class="v">:PROTECT t</span> by supplying the value <span class="v">t</span> for the <span class="v">:PROTECT-DEFAULT</span> 
+ keyword parameter of the <span class="v">defabsstobj</span> event.  However, beware that when 
+ <span class="v">:PROTECT</span> is <span class="v">t</span>, the generated raw Lisp code runs slightly less 
+ efficiently — though perhaps with negligible efficiency loss if the 
+ <span class="v">:EXEC</span> function is not trivial.  Community books 
+ <span class="v">books/demos/defabsstobj-example-3.lisp</span> and 
+ <span class="v">books/demos/defabsstobj-example-4.lisp</span> provide related information.  Also 
+ see <a href="ACL2____SET-ABSSTOBJ-DEBUG.html">set-absstobj-debug</a> for a potentially dangerous way to eliminate 
+ that inefficiency using argument <span class="v">:ignore</span>.</p> 
+ 
+ <p>We conclude with some remarks.</p> 
+ 
+ <p>Unlike <span class="tt"><a href="ACL2____DEFSTOBJ.html">defstobj</a></span>, there is no <span class="v">:renaming</span> argument.  Instead, the 
+ scheme described above provides a flexible way to assign names.  Also unlike 
+ <span class="tt"><a href="ACL2____DEFSTOBJ.html">defstobj</a></span>, there is no <span class="v">:inline</span> or <span class="v">:non-memoizable</span> argument; 
+ <span class="v">:inline</span> is essentially t, in the sense that stobj primitives are macros 
+ in raw Lisp; and the <span class="v">:non-memoizable</span> argument is derived implicitly, to 
+ agree with non-memoizability of the foundational stobj.</p> 
+ 
+ <p>Those who use <a href="ACL2____HONS-ENABLED.html">hons-enabled</a> features, including function 
+ memoization (see <a href="ACL2____MEMOIZE.html">memoize</a>), may be aware that the memo table for a 
+ function is flushed whenever it is the case that one of its stobj inputs is 
+ updated.  In fact, such flushing happens even when a stobj that is congruent 
+ to one of its stobj inputs is updated.  For that purpose, an abstract stobj is 
+ considered to be congruent to its foundational stobj.</p>
+</body>
+</html>

@@ -1,0 +1,167 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Developers-guide-evaluation</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____DEVELOPERS-GUIDE-EVALUATION">Click for Developers-guide-evaluation in the Full Manual</a></h3>
+
+<p>How Evaluation Is Implemented in ACL2</p><p>Our focus here is primarily on evaluation in the top-level loop. 
+ Also see the section on ``Evaluators'' in the chapter, <a href="ACL2____DEVELOPERS-GUIDE-UTILITIES.html">developers-guide-utilities</a>.</p> 
+ 
+ <font color="#800080"> 
+ <p>ALL OF THIS TOPIC IS IMPORTANT; coverage will depend on time available at 
+ the workshop.</p> 
+ </font> 
+ 
+ <h3>Introduction and further reading</h3> 
+ 
+ <p>This chapter is in two parts (not including this introduction).  It starts 
+ with a very brief review of evaluation in the read-eval-print loop.  Then it 
+ dives a bit into how *1* function definitions are generated.  It may be 
+ helpful to read the following additional material either before or after 
+ reading this chapter, or perhaps, both.</p> 
+ 
+ <p>The documentation topic, <a href="ACL2____EVALUATION.html">evaluation</a>, explains ``*1* functions'' 
+ — we assume here that you have some basic familiarity with that notion 
+ — and ``submitted functions'', which are the functions directly produced 
+ by the <span class="v">defun</span> forms in raw Lisp).  That topic also explains the role of 
+ these two functions in evaluation.  Below we start with a very brief 
+ illustration of that material.  For other reading relevant to evaluation at 
+ the user level, see <a href="ACL2____GUARD.html">guard</a> and consider looking at some of its 
+ subtopics, especially <a href="ACL2____GUARD-EVALUATION-TABLE.html">guard-evaluation-table</a>.  Finally, look at 
+ relevant source comments pertaining to the aspect of evaluation that you are 
+ modifying, whether that is in <span class="v">ev-rec</span>, <span class="v">oneify</span>, or some other 
+ function.</p> 
+ 
+ <p>The implementation of evaluation in ACL2 is rather subtle.  As is the case 
+ for this Developer's Guide in general, this chapter is not intended to provide 
+ complete coverage of the topic.  Its purpose is to provide sufficient 
+ background so that comments and code in the ACL2 sources can fill in on 
+ demand, as necessary.</p> 
+ 
+ <h3>Brief overview of evaluation in the ACL2 read-eval-print loop</h3> 
+ 
+ <p>The section on ``Commands and events'' in the chapter, <a href="ACL2____DEVELOPERS-GUIDE-BACKGROUND.html">developers-guide-background</a>, explains that evaluation of a form in the ACL2 
+ loop is performed by a variant of the function, <span class="tt"><a href="ACL2____TRANS-EVAL.html">trans-eval</a></span>.  That 
+ function (as well as <span class="v">trans-eval</span> itself), in turn, leads to a call of the 
+ evaluator, <span class="v">ev</span>, which ultimately leads to calls of the raw Lisp function, 
+ <span class="v">raw-ev-fncall</span>, to evaluate function calls <span class="v">(f val1 ... valk)</span>.  The 
+ function <span class="v">raw-ev-fncall</span>, in turn, calls the *1* function for the function 
+ symbol given as its first argument.  Let's see how that works.  First we 
+ define two functions and trace both of them.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> f1 (x)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____TRUE-LISTP.html">true-listp</a> x)))
+  (<a href="COMMON-LISP____CAR.html">car</a> x))
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> f2 (x)
+  (f1 x))
+
+(<a href="ACL2____TRACE_42.html">trace$</a> f1 f2)</pre> 
+ 
+ <p>Now let's see what can happen during evaluation.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(f2 '(3 4))
+1&gt; (ACL2_*1*_ACL2::F2 (3 4))
+  2&gt; (ACL2_*1*_ACL2::F1 (3 4))
+    3&gt; (F1 (3 4))
+    &lt;3 (F1 3)
+  &lt;2 (ACL2_*1*_ACL2::F1 3)
+&lt;1 (ACL2_*1*_ACL2::F2 3)
+3
+ACL2 !&gt;</pre> 
+ 
+ <p>Evaluation starts with a call to the *1* function for <span class="v">f2</span>.  Since 
+ <span class="v">f2</span> is not guard-verified, there is no call of the submitted function for 
+ <span class="v">f2</span> (see <a href="ACL2____EVALUATION.html">evaluation</a> for terminology).  Instead, the *1* function 
+ for <span class="v">f2</span> directly calls the *1* function for <span class="v">f1</span>.  Since <span class="v">f1</span> is 
+ guard-verified, this leads to a call of the submitted function for 
+ <span class="v">f1</span>.</p> 
+ 
+ <h3>Producing *1* functions: <span class="v">oneify</span> and <span class="v">oneify-cltl-code</span>
+</h3> 
+ 
+ <p>The production of *1* functions is subtle, largely because many cases need 
+ to be handled in order to connect the ACL2 logic with Common Lisp; see <a href="ACL2____GUARD-EVALUATION-TABLE.html">guard-evaluation-table</a> for a partial exploration of that connection.  <a href="ACL2____STOBJS.html">Stobjs</a> must be handled properly as well.</p> 
+ 
+ <p>The top-level function for creating *1* functions is <span class="v">oneify-cltl-code</span>. 
+ This function, in turn, calls <span class="v">oneify</span> on its guard and body.  Here is 
+ annotated trace output, created by submitting the definition of <span class="v">f1</span> above 
+ after tracing as follows: <span class="v">(<a href="ACL2____TRACE_12.html">trace!</a> (oneify-cltl-code :native
+ t) (oneify :native t))</span>.  Note that we use ``oneify'' as a verb: to oneify is 
+ to create code for a *1* function.</p> 
+ 
+ <pre class="code">; Top-level call:
+
+1&gt; (ONEIFY-CLTL-CODE :LOGIC
+                     (F1 (X)
+                         (<a href="COMMON-LISP____DECLARE.html">DECLARE</a> (<a href="ACL2____XARGS.html">XARGS</a> :GUARD (<a href="ACL2____TRUE-LISTP.html">TRUE-LISTP</a> X)))
+                         (<a href="COMMON-LISP____CAR.html">CAR</a> X))
+                     NIL |current-acl2-world|)
+
+; Oneify the guard:
+
+  2&gt; (ONEIFY (<a href="ACL2____TRUE-LISTP.html">TRUE-LISTP</a> X)
+             NIL |current-acl2-world| NIL)
+    3&gt; (ONEIFY X NIL |current-acl2-world| NIL)
+    &lt;3 (ONEIFY X)
+  &lt;2 (ONEIFY (ACL2_*1*_ACL2::TRUE-LISTP X))
+
+; Oneify the body:
+
+  2&gt; (ONEIFY (<a href="COMMON-LISP____CAR.html">CAR</a> X)
+             NIL |current-acl2-world| NIL)
+    3&gt; (ONEIFY X NIL |current-acl2-world| NIL)
+    &lt;3 (ONEIFY X)
+  &lt;2 (ONEIFY (ACL2_*1*_COMMON-LISP::CAR X))
+
+; Return the definition of the *1* function for f1 (without the leading
+; ``defun''):
+
+&lt;1 (ONEIFY-CLTL-CODE
+        (ACL2_*1*_ACL2::F1
+             (X)
+             (WHEN (<a href="COMMON-LISP____NOT.html">NOT</a> (<a href="COMMON-LISP____EQ.html">EQ</a> (<a href="ACL2____F-GET-GLOBAL.html">F-GET-GLOBAL</a> 'GUARD-CHECKING-ON
+                                          *THE-LIVE-STATE*)
+                            :NONE))
+
+; Unless guard-checking is :none, we check the guard.
+
+                   (<a href="COMMON-LISP____COND.html">COND</a> ((<a href="ACL2____TRUE-LISTP.html">TRUE-LISTP</a> X)
+
+; When the guard holds, call the submitted function to obtain the value.
+
+                          (RETURN-FROM ACL2_*1*_ACL2::F1 (F1 X)))
+                         ((<a href="ACL2____F-GET-GLOBAL.html">F-GET-GLOBAL</a> 'GUARD-CHECKING-ON
+                                        *THE-LIVE-STATE*)
+
+; The guard fails, and unless guard-checking is nil (<a href="COMMON-LISP____OR.html">or</a> :none, but that was
+; already considered above), cause an guard violation.
+
+                          (THROW-RAW-EV-FNCALL (<a href="COMMON-LISP____LIST.html">LIST</a> 'EV-FNCALL-GUARD-ER
+                                                     'F1
+                                                     (<a href="COMMON-LISP____LIST.html">LIST</a> X)
+                                                     '(<a href="ACL2____TRUE-LISTP.html">TRUE-LISTP</a> X)
+                                                     '(NIL)
+                                                     NIL)))))
+
+; If we didn't return or get a guard violation, then call a local function
+; defined to have the oneified body.  Note: LABELS is like LET but for
+; local function definitions, which may be recursively defined.  See any
+; Common Lisp documentation for more about LABELS.
+
+             (LABELS ((ACL2_*1*_ACL2::F1 (X)
+                                         (ACL2_*1*_COMMON-LISP::CAR X)))
+                     (ACL2_*1*_ACL2::F1 X))))</pre> 
+ 
+ <p>Do you see an inefficiency above?</p> 
+ 
+ <p>See code comments for how oneification deals with subtleties such as 
+ safe-mode, stobjs, and invariant-risk.</p> 
+ 
+ <p>NEXT SECTION: <a href="ACL2____DEVELOPERS-GUIDE-MISCELLANY.html">developers-guide-miscellany</a></p>
+</body>
+</html>

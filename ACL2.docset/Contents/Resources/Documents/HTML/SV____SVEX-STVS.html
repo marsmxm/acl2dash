@@ -1,0 +1,110 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Svex-stvs</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=SV____SVEX-STVS">Click for Svex-stvs in the Full Manual</a></h3>
+
+<p>SVEX Symbolic Test Vectors</p><p>Historically, Symbolic Test Vectors or STVs were 
+developed to aid checking of pipeline properties in the VL2014/ESIM hardware 
+verification framework -- see <a href="ACL2____SYMBOLIC-TEST-VECTORS.html">ACL2::symbolic-test-vectors</a>.  The VL/SV 
+framework replicates and extends that functionality, of which we give an 
+overview here.  For the implementation in the SV framework, we usually refer to 
+them as SVTVs, with the extra V distinguishing them from ESIM 
+STVs.</p> 
+ 
+<p>The <a href="SV____SV-TUTORIAL.html">SV tutorial</a> gives a step by step 
+overview of how to run tests and prove properties about hardware modules using 
+the VL/SV/SVTV framework.  Here we mainly summarize what SVTVs are for and link 
+to further documentation.</p> 
+ 
+<h3>Concept</h3> 
+<p>A symbolic test vector is a description of a multiphase simulation of a 
+hardware design, usually to show some particular functionality like the results 
+of running one fixed-latency instruction on an ALU.  Usually in such a 
+simulation we want to set some inputs (or override some internal signals) to 
+constant values or variables at certain times, and extract the values (given 
+those inputs/overrides) of some outputs or internal signals at certain times. 
+The result of defining a symbolic test vector is an expression (<a href="SV____SVEX.html">svex</a>) 
+for each output in terms of the input variables.</p> 
+ 
+<h3>Defining an SVTV</h3> 
+<p>There are two utilities for defining svex-based S(V)TVs: the original <a href="ACL2____DEFSVTV.html">defsvtv</a>, and the newer <a href="SV____DEFSVTV_42.html">defsvtv$</a>, which uses the <a href="SV____SVTV-DATA.html">svtv-data</a> stobj 
+framework to keep track of logical relationships between the results of 
+different steps in the process and support better debugging tools.  These 
+utilities both begin with SV modules as produced by the <a href="SV____VL-TO-SVEX.html">vl-to-svex</a> 
+tools, go through the steps described in <a href="SV____SVEX-COMPILATION.html">svex-compilation</a> to produce a 
+finite state machine representation of the design, and then compose the FSM 
+phases together to create the output expressions in terms of the input 
+variables according to the I/O specification.  Both use a similar timing 
+diagram syntax for describing the I/O specification, and both support a variant 
+<a href="SV____DEFSVTV-PHASEWISE.html">defsvtv-phasewise</a>, <a href="SV____DEFSVTV_42-PHASEWISE.html">defsvtv$-phasewise</a> that tend to make it easier 
+to edit these I/O specifications.</p> 
+ 
+<h3>Testing, Proof, and Debugging</h3> 
+<p>Once an SVTV is defined, the function <a href="ACL2____SVTV-RUN.html">svtv-run</a> can be used to run 
+tests on it, and is also the usual target for proofs about it.  There are also 
+some useful debugging utilities, <a href="ACL2____SVTV-DEBUG.html">svtv-debug</a> for dumping waveforms and 
+<a href="SV____SVTV-CHASE.html">svtv-chase</a> for chasing down the root causes of signal values.  See <a href="SV____SVTV-DATA.html">svtv-data</a> for versions of these utilities that can shorten the debug loop when 
+using SVTVs defined with <a href="SV____DEFSVTV_42.html">defsvtv$</a>.</p> 
+ 
+ 
+ 
+<h3>Symbolic Simulation</h3> 
+ 
+<p>Svex STVs support symbolic simulation via the GL or FGL packages. First, the 
+formulas are expressed as AIGs and then these AIGs are composed with the 
+symbolic representations of the inputs.  This is implemented in the book 
+"svex/symbolic.lisp".  <a href="ACL2____SVTV-RUN.html">Svtv-run</a> has an optional keyword argument that 
+can have an impact on symbolic execution (but doesn't mean anything logically): 
+<span class="v">:boolvars</span> is T by default, and in this case the symbolic execution assumes 
+that all your input vectors are syntactically obviously Boolean-valued.  This 
+helps symbolic execution speed, but can cause an error like:</p> 
+ 
+<pre class="code">ERROR: some bits assumed to be Boolean were not.</pre> 
+ 
+<p>If you see such an error, you should set <span class="v">:boolvars nil</span>.</p> 
+ 
+<h3>Decomposition Proofs</h3> 
+ 
+<p>The book "svex/decomp.lisp" contains a proof strategy for proving that the 
+composition of two or more STV runs is equivalent to some other STV run.  It 
+provides a computed hint that provides a good theory for rewriting such rules, 
+then a meta rule that can reverse the decomposition, and an invocation of GL to 
+finish off any mismatches due to svex simplification.  Here is an example 
+showing that the composition of STVs <span class="v">stv-a</span> and <span class="v">stv-b</span> is equivalent to 
+<span class="v">stv-c</span>:</p> 
+ 
+<pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> a-and-b-compose-to-c
+ (<a href="ACL2____IMPLIES.html">implies</a> (stv-c-autohyps)
+          (<a href="ACL2____B_A2.html">b*</a> ((c-out (<a href="SV____STV-RUN.html">stv-run</a> (stv-c) (stv-c-autoins)))
+               (a-ins (stv-a-autoins))
+               (a-out (<a href="SV____STV-RUN.html">stv-run</a> (stv-a) a-ins))
+               ;; may be various ways of making the input to the 2nd phase
+               (b-ins (stv-b-alist-autoins (<a href="COMMON-LISP____APPEND.html">append</a> a-ins a-out)))
+               (b-out (<a href="SV____STV-RUN.html">stv-run</a> (stv-b) b-ins)))
+            (<a href="COMMON-LISP____AND.html">and</a>
+              ;; may be various forms for the final equivalence
+              (<a href="COMMON-LISP____EQUAL.html">equal</a> (extract-keys *my-keys* b-out)
+                     (extract-keys *my-keys* c-out))
+              (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____CDR.html">cdr</a> (<a href="COMMON-LISP____ASSOC.html">assoc</a> 'out b-out))
+                     (<a href="COMMON-LISP____CDR.html">cdr</a> (<a href="COMMON-LISP____ASSOC.html">assoc</a> 'out c-out)))
+              (<a href="COMMON-LISP____EQUAL.html">equal</a> b-out c-out))))
+ :hints ((<a href="SV____SVDECOMP-HINTS.html">sv::svdecomp-hints</a> :hyp (stv-c-autohyps)
+                               :g-bindings (stv-c-autobinds)
+                               :enable (extract-keys-of-cons))))</pre> 
+ 
+<p>The <span class="v">:hyp</span> and <span class="v">:g-bindings</span> arguments to svdecomp-hints are for the 
+GL phase.  Usually some autohyps and autobindings from your STV are 
+appropriate. <span class="v">:enable</span> allows you to add rules to use in the initial 
+rewriting phase before the meta rule is used.  This can help on occasion when 
+you want to use some particular function to (e.g.) construct the alist for some 
+subsequent step or to extract values to compare.</p> 
+ 
+<p>More information about the decomposition strategy is in <a href="SV____SVEX-DECOMP.html">svex-decomp</a>, 
+or will be someday.</p>
+</body>
+</html>

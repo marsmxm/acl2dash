@@ -1,0 +1,183 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Bind-free-examples</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____BIND-FREE-EXAMPLES">Click for Bind-free-examples in the Full Manual</a></h3>
+
+<p>Examples pertaining to <span class="tt"><a href="ACL2____BIND-FREE.html">bind-free</a></span> hypotheses</p><p>See <a href="ACL2____BIND-FREE.html">bind-free</a> for a basic discussion of the use of 
+ <span class="v">bind-free</span> to control rewriting.</p> 
+ 
+ <p>Note that the examples below all illustrate the common case in which a 
+ <span class="v">bind-free</span> hypothesis generates a binding alist.  See <a href="ACL2____BIND-FREE.html">bind-free</a>, in 
+ particular the final section, for a discussion of the case that instead a list 
+ of binding alists is generated.</p> 
+ 
+ <p>We give examples of the use of <span class="tt"><a href="ACL2____BIND-FREE.html">bind-free</a></span> hypotheses from the 
+ perspective of a user interested in reasoning about arithmetic, but it should 
+ be clear that <span class="tt"><a href="ACL2____BIND-FREE.html">bind-free</a></span> can be used for many other purposes also.</p> 
+ 
+ <p>EXAMPLE 1: Cancel a common factor.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> bind-divisor (a b)
+
+; If a and b are polynomials with a common factor c, we return a
+; binding for x.  We could imagine writing get-factor to compute the
+; gcd, or simply to return a single non-invertible factor.
+
+  (<a href="COMMON-LISP____LET.html">let</a> ((c (get-factor a b)))
+    (<a href="COMMON-LISP____AND.html">and</a> c (<a href="COMMON-LISP____LIST.html">list</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'x c)))))
+
+(<a href="ACL2____DEFTHM.html">defthm</a> cancel-factor
+  ;; We use case-split here to ensure that, once we have selected
+  ;; a binding for x, the rest of the hypotheses will be relieved.
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____ACL2-NUMBERP.html">acl2-numberp</a> a)
+                (<a href="ACL2____ACL2-NUMBERP.html">acl2-numberp</a> b)
+                (<a href="ACL2____BIND-FREE.html">bind-free</a> (bind-divisor a b) (x))
+                (<a href="ACL2____CASE-SPLIT.html">case-split</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> x 0)))
+                (<a href="ACL2____CASE-SPLIT.html">case-split</a> (<a href="ACL2____ACL2-NUMBERP.html">acl2-numberp</a> x)))
+           (<a href="ACL2____IFF.html">iff</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> a b)
+                (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP_____F2.html">/</a> a x) (<a href="COMMON-LISP_____F2.html">/</a> b x)))))</pre> 
+ 
+ <p>EXAMPLE 2: Pull integer summand out of floor.  Note: This example has an 
+ <i>extended</i> <span class="tt"><a href="ACL2____BIND-FREE.html">bind-free</a></span> hypothesis, which uses the term 
+ <span class="v">(find-int-in-sum sum mfc state)</span>.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> fl (x)
+  ;; This function is defined, and used, in the IHS books.
+  (<a href="COMMON-LISP____FLOOR.html">floor</a> x 1))
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> int-binding (<a href="ACL2____TERM.html">term</a> mfc state)
+  ;; The call to mfc-ts returns the encoded type of term. ;
+  ;; Thus, we are asking if term is known by type reasoning to ;
+  ;; be an integer. ;
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (<a href="ACL2____STATE.html">state</a>) :mode :program))
+  (<a href="COMMON-LISP____IF.html">if</a> (ts-subsetp (<a href="ACL2____MFC-TS.html">mfc-ts</a> term mfc state)
+                  *ts-integer*)
+      (<a href="COMMON-LISP____LIST.html">list</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'int term))
+    nil))
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> find-int-in-sum (sum mfc state)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (<a href="ACL2____STATE.html">state</a>) :mode :program))
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____NVARIABLEP.html">nvariablep</a> sum)
+           (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____FQUOTEP.html">fquotep</a> sum))
+           (<a href="COMMON-LISP____EQ.html">eq</a> (<a href="ACL2____FFN-SYMB.html">ffn-symb</a> sum) 'binary-+))
+      (<a href="COMMON-LISP____OR.html">or</a> (int-binding (<a href="ACL2____FARGN.html">fargn</a> sum 1) mfc state)
+          (find-int-in-sum (<a href="ACL2____FARGN.html">fargn</a> sum 2) mfc state))
+    (int-binding sum mfc state)))
+
+; Some additional work is required to prove the following.  So for
+; purposes of illustration, we wrap skip-proofs around the defthm.
+
+(<a href="ACL2____SKIP-PROOFS.html">skip-proofs</a>
+ (<a href="ACL2____DEFTHM.html">defthm</a> cancel-fl-int
+  ;; The use of case-split is probably not needed, since we should
+  ;; know that int is an integer by the way we selected it.  But this
+  ;; is safer.
+   (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____ACL2-NUMBERP.html">acl2-numberp</a> sum)
+                 (<a href="ACL2____BIND-FREE.html">bind-free</a> (find-int-in-sum sum mfc state) (int))
+                 (<a href="ACL2____CASE-SPLIT.html">case-split</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> int)))
+            (<a href="COMMON-LISP____EQUAL.html">equal</a> (fl sum)
+                   (<a href="COMMON-LISP_____B2.html">+</a> int (fl (<a href="COMMON-LISP____-.html">-</a> sum int)))))
+   :rule-classes ((:rewrite :match-free :all)))
+)
+
+; Arithmetic libraries will have this sort of lemma.
+(<a href="ACL2____DEFTHM.html">defthm</a> hack (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP_____B2.html">+</a> (<a href="COMMON-LISP____-.html">-</a> x) x y) (<a href="ACL2____FIX.html">fix</a> y)))
+
+(<a href="ACL2____IN-THEORY.html">in-theory</a> (<a href="ACL2____DISABLE.html">disable</a> fl))
+
+(<a href="ACL2____THM.html">thm</a> (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> x) (<a href="ACL2____ACL2-NUMBERP.html">acl2-numberp</a> y))
+              (<a href="COMMON-LISP____EQUAL.html">equal</a> (fl (<a href="COMMON-LISP_____B2.html">+</a> x y)) (<a href="COMMON-LISP_____B2.html">+</a> x (fl y)))))</pre> 
+ 
+ <p>EXAMPLE 3: Simplify terms such as (equal (+ a (* a b)) 0)</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> factors (product)
+  ;; We return a list of all the factors of product.  We do not
+  ;; require that product actually be a product.
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQ.html">eq</a> (<a href="ACL2____FN-SYMB.html">fn-symb</a> product) 'BINARY-*)
+      (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="ACL2____FARGN.html">fargn</a> product 1)
+            (factors (<a href="ACL2____FARGN.html">fargn</a> product 2)))
+    (<a href="COMMON-LISP____LIST.html">list</a> product)))
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> make-product (factors)
+  ;; Factors is assumed to be a list of ACL2 terms.  We return an
+  ;; ACL2 term which is the product of all the elements of the
+  ;; list factors.
+  (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____ATOM.html">atom</a> factors)
+         ''1)
+        ((<a href="COMMON-LISP____NULL.html">null</a> (<a href="COMMON-LISP____CDR.html">cdr</a> factors))
+         (<a href="COMMON-LISP____CAR.html">car</a> factors))
+        ((<a href="COMMON-LISP____NULL.html">null</a> (<a href="COMMON-LISP____CDDR.html">cddr</a> factors))
+         (<a href="COMMON-LISP____LIST.html">list</a> 'BINARY-* (<a href="COMMON-LISP____CAR.html">car</a> factors) (<a href="COMMON-LISP____CADR.html">cadr</a> factors)))
+        (t
+         (<a href="COMMON-LISP____LIST.html">list</a> 'BINARY-* (<a href="COMMON-LISP____CAR.html">car</a> factors) (make-product (<a href="COMMON-LISP____CDR.html">cdr</a> factors))))))
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> quotient (common-factors sum)
+  ;; Common-factors is a list of ACL2 terms.   Sum is an ACL2 term each
+  ;; of whose addends have common-factors as factors.  We return
+  ;; (<a href="COMMON-LISP_____F2.html">/</a> sum (make-product common-factors)).
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQ.html">eq</a> (<a href="ACL2____FN-SYMB.html">fn-symb</a> sum) 'BINARY-+)
+      (<a href="COMMON-LISP____LET.html">let</a> ((<a href="COMMON-LISP____FIRST.html">first</a> (make-product (<a href="ACL2____SET-DIFFERENCE-EQUAL.html">set-difference-equal</a> (factors (<a href="ACL2____FARGN.html">fargn</a> sum 1))
+                                                       common-factors))))
+        (<a href="COMMON-LISP____LIST.html">list</a> 'BINARY-+ first (quotient common-factors (<a href="ACL2____FARGN.html">fargn</a> sum 2))))
+    (make-product (<a href="ACL2____SET-DIFFERENCE-EQUAL.html">set-difference-equal</a> (factors sum)
+                                        common-factors))))
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> intersection-equal (x y)
+  (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____ENDP.html">endp</a> x)
+         nil)
+        ((<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> (<a href="COMMON-LISP____CAR.html">car</a> x) y)
+         (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CAR.html">car</a> x) (<a href="ACL2____INTERSECTION-EQUAL.html">intersection-equal</a> (<a href="COMMON-LISP____CDR.html">cdr</a> x) y)))
+        (t
+         (<a href="ACL2____INTERSECTION-EQUAL.html">intersection-equal</a> (<a href="COMMON-LISP____CDR.html">cdr</a> x) y))))
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> common-factors (factors sum)
+  ;; Factors is a list of the factors common to all of the addends
+  ;; examined so far.  On entry, factors is a list of the factors in
+  ;; the first addend of the original sum, and sum is the rest of the
+  ;; addends.  We sweep through sum, trying to find a set of factors
+  ;; common to all the addends of sum.
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :measure (<a href="ACL2____ACL2-COUNT.html">acl2-count</a> sum)))
+  (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____NULL.html">null</a> factors)
+         nil)
+        ((<a href="COMMON-LISP____EQ.html">eq</a> (<a href="ACL2____FN-SYMB.html">fn-symb</a> sum) 'BINARY-+)
+         (common-factors (<a href="ACL2____INTERSECTION-EQUAL.html">intersection-equal</a> factors (factors (<a href="ACL2____FARGN.html">fargn</a> sum 1)))
+                         (<a href="ACL2____FARGN.html">fargn</a> sum 2)))
+        (t
+         (<a href="ACL2____INTERSECTION-EQUAL.html">intersection-equal</a> factors (factors sum)))))
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> simplify-terms-such-as-a+ab-rel-0-fn (sum)
+  ;; If we can find a set of factors common to all the addends of sum,
+  ;; we return an alist binding common to the product of these common
+  ;; factors and binding quotient to (<a href="COMMON-LISP_____F2.html">/</a> sum common).
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQ.html">eq</a> (<a href="ACL2____FN-SYMB.html">fn-symb</a> sum) 'BINARY-+)
+      (<a href="COMMON-LISP____LET.html">let</a> ((common-factors (common-factors (factors (<a href="ACL2____FARGN.html">fargn</a> sum 1))
+                                            (<a href="ACL2____FARGN.html">fargn</a> sum 2))))
+        (<a href="COMMON-LISP____IF.html">if</a> common-factors
+            (<a href="COMMON-LISP____LET.html">let</a> ((common (make-product common-factors))
+                  (quotient (quotient common-factors sum)))
+              (<a href="COMMON-LISP____LIST.html">list</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'common common)
+                    (<a href="COMMON-LISP____CONS.html">cons</a> 'quotient quotient)))
+          nil))
+    nil))
+
+(<a href="ACL2____DEFTHM.html">defthm</a> simplify-terms-such-as-a+ab-=-0
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____BIND-FREE.html">bind-free</a>
+                 (simplify-terms-such-as-a+ab-rel-0-fn sum)
+                 (common quotient))
+                (<a href="ACL2____CASE-SPLIT.html">case-split</a> (<a href="ACL2____ACL2-NUMBERP.html">acl2-numberp</a> common))
+                (<a href="ACL2____CASE-SPLIT.html">case-split</a> (<a href="ACL2____ACL2-NUMBERP.html">acl2-numberp</a> quotient))
+                (<a href="ACL2____CASE-SPLIT.html">case-split</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> sum
+                                   (<a href="COMMON-LISP_____A2.html">*</a> common quotient))))
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> sum 0)
+                  (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> common 0)
+                      (<a href="COMMON-LISP____EQUAL.html">equal</a> quotient 0)))))
+
+(<a href="ACL2____THM.html">thm</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP_____B2.html">+</a> u (<a href="COMMON-LISP_____A2.html">*</a> u v)) 0)
+      (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> u 0) (<a href="COMMON-LISP____EQUAL.html">equal</a> v -1))))</pre>
+</body>
+</html>

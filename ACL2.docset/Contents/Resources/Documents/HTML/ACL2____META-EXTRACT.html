@@ -1,0 +1,370 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Meta-extract</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____META-EXTRACT">Click for Meta-extract in the Full Manual</a></h3>
+
+<p>Meta reasoning using valid terms extracted from context or <a href="ACL2____WORLD.html">world</a></p><p>For this advanced topic, we assume familiarity with metatheorems 
+ and metafunctions (see <a href="ACL2____META.html">meta</a>), as well as extended metafunctions (see 
+ <a href="ACL2____EXTENDED-METAFUNCTIONS.html">extended-metafunctions</a>).  The capability described here — 
+ so-called ``meta-extract hypotheses'' for a <span class="v">:</span><span class="tt"><a href="ACL2____META.html">meta</a></span> or a 
+ <span class="v">:</span><span class="tt"><a href="ACL2____CLAUSE-PROCESSOR.html">clause-processor</a></span> rule — provides an advanced form of 
+ meta-level reasoning that was initially designed largely by Sol Swords, who 
+ also provided a preliminary implementation.</p> 
+ 
+ <p>A meta rule or clause-processor rule may have so-called ``meta-extract'' 
+ hypotheses that take forms displayed below.  Here <span class="v">evl</span> is the evaluator, 
+ <span class="v">obj</span> is an arbitrary term, <span class="v">mfc</span> is the metafunction context (which is 
+ a variable other than the symbol <span class="v">STATE</span> that represents the metafunction 
+ context; see <a href="ACL2____EXTENDED-METAFUNCTIONS.html">extended-metafunctions</a>), <span class="v">state</span> is literally the 
+ symbol <span class="v">STATE</span>, <span class="v">a</span> is the second argument of <span class="v">evl</span> in both arguments 
+ of the conclusion of the rule, and <span class="v">aa</span> is an arbitrary term.</p> 
+ 
+ <pre class="code">(evl (<a href="ACL2____META-EXTRACT-CONTEXTUAL-FACT.html">meta-extract-contextual-fact</a> obj mfc state) a)
+(evl (<a href="ACL2____META-EXTRACT-GLOBAL-FACT.html">meta-extract-global-fact</a> obj state) aa) ; equivalent to the next form
+(evl (<a href="ACL2____META-EXTRACT-GLOBAL-FACT_B2.html">meta-extract-global-fact+</a> obj state state) aa)
+(evl (<a href="ACL2____META-EXTRACT-GLOBAL-FACT_B2.html">meta-extract-global-fact+</a> obj st state) aa)</pre> 
+ 
+ <p>The first form is only legal for <span class="v">:meta</span> rules for which the 
+ metafunction is an extended metafunction.  The remaining forms are legal for 
+ both <span class="v">:meta</span> rules and <span class="v">:clause-processor</span> rules.</p> 
+ 
+ <p>Sol Swords has contributed a community book, 
+ <span class="v">clause-processors/meta-extract-user.lisp</span>, that uses a Skolemization trick 
+ to allow one to use at most one <span class="v">meta-extract-global-fact+</span> hypothesis and 
+ at most one <span class="v">meta-extract-contextual-fact</span> hypothesis.</p> 
+ 
+ <p>These additional hypotheses may be necessary in order to prove a proposed 
+ metatheorem or (for the second type of hypothesis above) clause-processor 
+ rule, in particular when the correctness of the metafunction depends on the 
+ correctness of utilities extracting formulas from the logical <a href="ACL2____WORLD.html">world</a> or 
+ (for the first type) facts from the metafunction context (mfc).  After the 
+ rule is proved, however, the meta-extract hypotheses have no effect on how the 
+ rule is applied during a proof.  An argument for correctness of using 
+ meta-extract hypotheses is given in the ACL2 source code within a comment 
+ entitled ``Essay on Correctness of Meta Reasoning''.  In the documentation 
+ below, we focus primarily on <span class="v">:</span><span class="tt"><a href="ACL2____META.html">meta</a></span> rules, since the use of 
+ <span class="v">meta-extract-global-fact</span> hypotheses in <span class="v">:</span><span class="tt"><a href="ACL2____CLAUSE-PROCESSOR.html">clause-processor</a></span> 
+ rules is entirely analogous.  (At the end, though, we discuss the last of the 
+ four forms displayed above.)  And for <span class="v">:meta</span> rules we focus not on the 
+ application of rules but, rather, on how the use of meta-extract hypotheses 
+ allow you to prove correctness of metafunctions that use facts from the 
+ logical <a href="ACL2____WORLD.html">world</a> or the metafunction context (mfc).</p> 
+ 
+ <p>Below we describe properties of <span class="v">meta-extract-contextual-fact</span> and 
+ <span class="v">meta-extract-global-fact</span>, but only after we illustrate their utility with 
+ an example.  But even before we present that example, we first give a sense of 
+ how to think about these functions by showing a theorem that one can prove 
+ about the first of them.  If this snippet doesn't help your intuition, then 
+ just skip over it and start with the example.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFEVALUATOR.html">defevaluator</a> evl evl-list
+  ((<a href="ACL2____BINARY-_B2.html">binary-+</a> x y) (<a href="ACL2____TYPESPEC-CHECK.html">typespec-check</a> x y)))
+
+(<a href="ACL2____THM.html">thm</a> (<a href="ACL2____IMPLIES.html">implies</a>
+      (<a href="COMMON-LISP____NOT.html">not</a> (bad-atom (<a href="COMMON-LISP____CDR.html">cdr</a> (<a href="ACL2____ASSOC-EQUAL.html">assoc-equal</a> 'x alist))))
+      (<a href="COMMON-LISP____EQUAL.html">equal</a> (evl (<a href="ACL2____META-EXTRACT-CONTEXTUAL-FACT.html">meta-extract-contextual-fact</a> (<a href="COMMON-LISP____LIST.html">list</a> :typeset 'x)
+                                                mfc
+                                                state)
+                  alist)
+             (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> 0 ; indicates non-empty intersection
+                         (<a href="COMMON-LISP____LOGAND.html">logand</a> (type-set-quote ; type-set of a constant
+                                  (<a href="COMMON-LISP____CDR.html">cdr</a> (<a href="ACL2____ASSOC-EQUAL.html">assoc-equal</a> 'x alist)))
+                                 (mfc-ts-fn 'x mfc state nil)))))))</pre> 
+ 
+ <p>Next we present an example, which comes from the community book, 
+ <span class="v">books/clause-processors/meta-extract-simple-test.lisp</span>.  That book 
+ presents very basic, contrived examples that nevertheless illustrate 
+ meta-extract hypotheses.  For a more interesting tutorial example, see the 
+ community book <span class="v">books/demos/nth-update-nth-meta-extract.lisp</span>.</p> 
+ 
+ <p>Our example includes this meta rule.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> plus-identity-2-meta
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (nthmeta-ev (<a href="ACL2____META-EXTRACT-GLOBAL-FACT.html">meta-extract-global-fact</a> '(:formula bar-posp)
+                                                      state)
+                            (<a href="COMMON-LISP____LIST.html">list</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'u
+                                        (nthmeta-ev (<a href="COMMON-LISP____CADR.html">cadr</a> (<a href="COMMON-LISP____CADR.html">cadr</a> term))
+                                                    a))))
+                (nthmeta-ev (<a href="ACL2____META-EXTRACT-CONTEXTUAL-FACT.html">meta-extract-contextual-fact</a>
+                             `(:typeset ,(<a href="COMMON-LISP____CADDR.html">caddr</a> term)) mfc state)
+                            a))
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (nthmeta-ev term a)
+                  (nthmeta-ev (plus-identity-2-metafn term mfc state) a)))
+  :rule-classes ((:meta :trigger-fns (<a href="ACL2____BINARY-_B2.html">binary-+</a>))))</pre> 
+ 
+ <p>The two hypotheses illustrate the two basic kinds of meta-extract 
+ hypotheses: applications of the evaluator to a call of 
+ <span class="v">meta-extract-global-fact</span> and to a call of 
+ <span class="v">meta-extract-contextual-fact</span>.  Here is the definition of the metafunction 
+ used in the above rule, slightly simplified here from what is found in the 
+ above book (but adequate for proving the two events that follow it in the 
+ above book).</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> plus-identity-2-metafn (<a href="ACL2____TERM.html">term</a> mfc state)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs state :verify-guards nil))
+  (<a href="ACL2____CASE-MATCH.html">case-match</a> term
+    (('binary-+ ('bar &amp;) y)
+     (<a href="COMMON-LISP____COND.html">cond</a>
+      ((<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____META-EXTRACT-FORMULA.html">meta-extract-formula</a> 'bar-posp state)
+              '(<a href="ACL2____POSP.html">POSP</a> (BAR U)))
+       (<a href="COMMON-LISP____IF.html">if</a> (ts= (<a href="ACL2____MFC-TS.html">mfc-ts</a> y mfc state :forcep nil)
+                *ts-character*)
+           (<a href="COMMON-LISP____CADR.html">cadr</a> term)
+         term))
+      (t term)))
+    (&amp; term)))</pre> 
+ 
+ <p>This metafunction returns its input term unchanged except in the case that 
+ the term is of the form <span class="v">(<a href="ACL2____BINARY-_B2.html">binary-+</a> (bar x) y)</span> and the following two 
+ conditions are met, in which case it returns <span class="v">(bar x)</span>.</p> 
+ 
+ <pre class="code">(1)  (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____META-EXTRACT-FORMULA.html">meta-extract-formula</a> 'bar-posp state)
+            '(<a href="ACL2____POSP.html">POSP</a> (BAR U)))
+
+(2)  (ts= (<a href="ACL2____MFC-TS.html">mfc-ts</a> y mfc state :forcep nil)
+          *ts-character*)</pre> 
+ 
+ <p>So suppose that term is <span class="v">(<a href="COMMON-LISP____LIST.html">list</a> 'binary-+ (<a href="COMMON-LISP____LIST.html">list</a> 'bar x) y)</span>.  We show how 
+ the meta-extract hypotheses together with (1) and (2) imply that the 
+ conclusion of the above <span class="v">:meta</span> rule holds.  Here is that conclusion after 
+ a bit of simplification.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____EQUAL.html">equal</a> (nthmeta-ev (<a href="COMMON-LISP____LIST.html">list</a> 'binary-+ (<a href="COMMON-LISP____LIST.html">list</a> 'bar x) y) a)
+       (nthmeta-ev (<a href="COMMON-LISP____LIST.html">list</a> 'bar x) a))</pre> 
+ 
+ <p>This equality simplifies as follows using the evaluator properties of 
+ <span class="v">nthmeta-ev</span>.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____BINARY-_B2.html">binary-+</a> (bar (nthmeta-ev x a))
+                 (nthmeta-ev y a))
+       (bar (nthmeta-ev x a)))</pre> 
+ 
+ <p>Since a positive number plus a character is that number, it clearly 
+ suffices to show:</p> 
+ 
+ <pre class="code">(A)  (<a href="ACL2____POSP.html">posp</a> (bar (nthmeta-ev x a)))
+
+(B)  (<a href="COMMON-LISP____CHARACTERP.html">characterp</a> (nthmeta-ev y a))</pre> 
+ 
+ <p>It remains then to show that these follow from (1) and (2) together with 
+ the meta-extract hypotheses.</p> 
+ 
+ <p>First consider (A).  We show that it is just a simplification of the first 
+ meta-extract hypothesis.</p> 
+ 
+ <pre class="code">(nthmeta-ev (<a href="ACL2____META-EXTRACT-GLOBAL-FACT.html">meta-extract-global-fact</a> '(:formula bar-posp)
+                                      state)
+            (<a href="COMMON-LISP____LIST.html">list</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'u
+                        (nthmeta-ev (<a href="COMMON-LISP____CADR.html">cadr</a> (<a href="COMMON-LISP____CADR.html">cadr</a> term))
+                                    a))))
+= {by our assumption that term is (<a href="COMMON-LISP____LIST.html">list</a> 'binary-+ (<a href="COMMON-LISP____LIST.html">list</a> 'bar x) y)}
+(nthmeta-ev (<a href="ACL2____META-EXTRACT-GLOBAL-FACT.html">meta-extract-global-fact</a> '(:formula bar-posp)
+                                      state)
+            (<a href="COMMON-LISP____LIST.html">list</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'u
+                        (nthmeta-ev x a))))
+= {by definition of meta-extract-global-fact, as discussed later}
+(nthmeta-ev (<a href="ACL2____META-EXTRACT-FORMULA.html">meta-extract-formula</a> 'bar-posp state)
+            (<a href="COMMON-LISP____LIST.html">list</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'u
+                        (nthmeta-ev x a))))
+= {by (1)}
+(nthmeta-ev '(<a href="ACL2____POSP.html">posp</a> (bar u))
+            (<a href="COMMON-LISP____LIST.html">list</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'u
+                        (nthmeta-ev x a))))
+= {by evaluator properties of nthmeta-ev}
+(<a href="ACL2____POSP.html">posp</a> (bar (nthmeta-ev x a)))</pre> 
+ 
+ <p>Now consider (B).  We show that it is just a simplification of the second 
+ meta-extract hypothesis.</p> 
+ 
+ <pre class="code">(nthmeta-ev (<a href="ACL2____META-EXTRACT-CONTEXTUAL-FACT.html">meta-extract-contextual-fact</a>
+             `(:typeset ,(<a href="COMMON-LISP____CADDR.html">caddr</a> term)) mfc state)
+            a)
+= {by our assumption that term is (<a href="COMMON-LISP____LIST.html">list</a> 'binary-+ (<a href="COMMON-LISP____LIST.html">list</a> 'bar x) y)}
+(nthmeta-ev (<a href="ACL2____META-EXTRACT-CONTEXTUAL-FACT.html">meta-extract-contextual-fact</a> (<a href="COMMON-LISP____LIST.html">list</a> ':typeset y) mfc state)
+            a)
+= {by definition of meta-extract-contextual-fact, as discussed later}
+(nthmeta-ev (<a href="COMMON-LISP____LIST.html">list</a> 'typespec-check
+                  (<a href="COMMON-LISP____LIST.html">list</a> 'quote
+                        (<a href="ACL2____MFC-TS.html">mfc-ts</a> y mfc state :forcep nil))
+                  y)
+            a)
+= {by (2)}
+(nthmeta-ev (<a href="COMMON-LISP____LIST.html">list</a> 'typespec-check
+                  (<a href="COMMON-LISP____LIST.html">list</a> 'quote *ts-character*)
+                  y)
+            a)
+= {by evaluator properties of nthmeta-ev}
+(<a href="ACL2____TYPESPEC-CHECK.html">typespec-check</a> *ts-character* (nthmeta-ev y a))
+= {by definition of typespec-check}
+(<a href="COMMON-LISP____CHARACTERP.html">characterp</a> (nthmeta-ev y a))</pre> 
+ 
+ <p>Note the use of <span class="v">:forcep nil</span> above.  All of the <span class="v">mfc-xx</span> functions 
+ take a keyword argument <span class="v">:forcep</span>.  Calls of <span class="v">mfc-xx</span> functions made on 
+ behalf of <span class="v">meta-extract-contextual-fact</span> always use <span class="v">:forcep nil</span>, so in 
+ order to reason about these calls in your own metafunctions, you will want to 
+ use <span class="v">:forcep nil</span>.  We have contemplated adding a utility like 
+ <span class="v">meta-extract-contextual-fact</span> that allows forcing but returns a tag-tree 
+ (see <a href="ACL2____TTREE.html">ttree</a>), and may do so if there is demand for it.</p> 
+ 
+ <p>Finally, we document what is provided logically by calls of 
+ <span class="v">meta-extract-global-fact</span> and <span class="v">meta-extract-contextual-fact</span>.  Of 
+ course, you are invited to look at the definitions of these functions in the 
+ ACL2 source code, or by using <span class="v">:</span><span class="tt"><a href="ACL2____PE.html">pe</a></span>.  Note that both of these 
+ functions are non-executable (each of their bodies is inside a call of <span class="tt"><a href="ACL2____NON-EXEC.html">non-exec</a></span>); their purpose is purely logical, not for execution.  The functions 
+ return <span class="v">*t*</span>, i.e., <span class="v">(<a href="COMMON-LISP____QUOTE.html">quote</a> t)</span>, in cases that they provide no 
+ information.</p> 
+ 
+ <p>First we consider the value of <span class="v">(<a href="ACL2____META-EXTRACT-GLOBAL-FACT.html">meta-extract-global-fact</a> obj state)</span> 
+ for various values of <span class="v">obj</span>.  When we refer below to concepts like ``body'' 
+ and ``evaluation'', we refer to these with respect to the logical world of the 
+ input <span class="v">state</span>.</p> 
+ 
+ <blockquote> 
+ 
+ <p>CASE <span class="v">obj</span> = <span class="v">(<a href="COMMON-LISP____LIST.html">list</a> :formula FN)</span>:</p> 
+ 
+ <p>In this case <span class="v">(<a href="ACL2____META-EXTRACT-GLOBAL-FACT.html">meta-extract-global-fact</a> obj state)</span> is equal to 
+ <span class="v">(<a href="ACL2____META-EXTRACT-FORMULA.html">meta-extract-formula</a> FN state)</span>.  That, in turn, evaluates to the 
+ ``formula'' of <span class="v">FN</span> in the following sense when <span class="v">state</span> is the ACL2 
+ ``live'' <a href="ACL2____STATE.html">state</a> object.  If <span class="v">FN</span> is a function symbol with formals 
+ <span class="v">(X1 ... Xk)</span>, then the formula is the <a href="ACL2____CONSTRAINT.html">constraint</a> on <span class="v">FN</span> if 
+ <span class="v">FN</span> is constrained or introduced by <span class="tt"><a href="ACL2____DEFCHOOSE.html">defchoose</a></span>, and otherwise is 
+ <span class="v">(<a href="COMMON-LISP____EQUAL.html">equal</a> (FN X1 ... Xk) BODY)</span>, where <span class="v">BODY</span> is the (unsimplified) body 
+ of the definition of <span class="v">FN</span>.  Otherwise, if <span class="v">FN</span> is the name of a theorem, 
+ the formula is just what is stored for that theorem.  Otherwise, the formula 
+ is <span class="v">*t*</span>.</p> 
+ 
+ <p>CASE <span class="v">obj</span> = <span class="v">(<a href="COMMON-LISP____LIST.html">list</a> :lemma FN N)</span>:</p> 
+ 
+ <p>Assume <span class="v">N</span> is a natural number; otherwise, treat <span class="v">N</span> as 0.  Then 
+ <span class="v">(<a href="ACL2____META-EXTRACT-GLOBAL-FACT.html">meta-extract-global-fact</a> obj state)</span> is equal to the term naturally 
+ constructed from the <span class="v">rewrite-rule</span> record structure <span class="v">(<a href="COMMON-LISP____NTH.html">nth</a> N (<a href="ACL2____GETPROPC.html">getpropc</a> FN
+ 'lemmas nil (<a href="ACL2____W.html">w</a> state)))</span> if <span class="v">N</span> is in range, else <span class="v">*t*</span>. 
+ (The ACL2 source function <span class="v">rewrite-rule-term</span> does this construction of a 
+ term from a <span class="v">rewrite-rule</span> record structure.  It has a guard of <span class="v">t</span>; a 
+ version that may execute more quickly but has a less trivial guard is 
+ <span class="v">rewrite-rule-term-exec</span>.)  Thus, if <span class="v">FN</span> is a function symbol with more 
+ than <span class="v">N</span> associated lemmas — ``associated'' in the sense of being 
+ either a <span class="v">:</span><span class="tt"><a href="ACL2____DEFINITION.html">definition</a></span> rule for <span class="v">FN</span> or a <span class="v">:</span><span class="tt"><a href="ACL2____REWRITE.html">rewrite</a></span> 
+ rule for <span class="v">FN</span> whose left-hand side has a top function symbol of <span class="v">FN</span> 
+ — then when <span class="v">state</span> is the actual ACL2 ``live'' <a href="ACL2____STATE.html">state</a> object, 
+ <span class="v">(<a href="ACL2____META-EXTRACT-GLOBAL-FACT.html">meta-extract-global-fact</a> obj state)</span> evaluates to the <span class="v">N</span>th such 
+ lemma (with zero-based indexing).</p> 
+ 
+ <p>CASE <span class="v">obj</span> = <span class="v">(<a href="COMMON-LISP____LIST.html">list</a> :fncall FN ARGLIST)</span>:</p> 
+ 
+ <p>Consider the term <span class="v">(<a href="ACL2____MAGIC-EV-FNCALL.html">magic-ev-fncall</a> FN ARGLIST state t nil)</span>, which is 
+ axiomatized to return a multiple values pair <span class="v">(<a href="ACL2____MV.html">mv</a> erp val)</span>, and moreover: 
+ if <span class="v">state</span> is the actual ACL2 ``live'' <a href="ACL2____STATE.html">state</a> and <span class="v">erp</span> is 
+ <span class="v">nil</span>, then <span class="v">val</span> is the result of applying <span class="v">fn</span> to <span class="v">arglist</span>. 
+ For example, after submitting <span class="v">(<a href="COMMON-LISP____DEFUN.html">defun</a> foo (z) (<a href="ACL2____MV.html">mv</a> (<a href="COMMON-LISP____CDR.html">cdr</a> z) (<a href="COMMON-LISP____CAR.html">car</a> z)))</span>, we 
+ can evaluate a corresponding call of <span class="v">magic-ev-fncall</span> as follows, noting 
+ that for this purpose the macro <span class="tt"><a href="ACL2____MV.html">mv</a></span> is given its logical meaning, 
+ <span class="tt"><a href="COMMON-LISP____LIST.html">list</a></span>:</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____MAGIC-EV-FNCALL.html">magic-ev-fncall</a> 'foo '((a b c)) state t nil)
+(NIL ((B C) A))
+ACL2 !&gt;</pre> 
+ 
+ <p>Let <span class="v">erp</span> and <span class="v">val</span> be as above: more precisely, let them abbreviate 
+ the terms <span class="v">(<a href="COMMON-LISP____NTH.html">nth</a> '0 (<a href="ACL2____MAGIC-EV-FNCALL.html">magic-ev-fncall</a> FN ARGLIST state t nil))</span> and <span class="v">(<a href="COMMON-LISP____NTH.html">nth</a>
+ '1 (<a href="ACL2____MAGIC-EV-FNCALL.html">magic-ev-fncall</a> FN ARGLIST state t nil))</span>, respectively.  Then 
+ <span class="v">(<a href="ACL2____META-EXTRACT-GLOBAL-FACT.html">meta-extract-global-fact</a> obj state)</span> is either <span class="v">*t*</span>, in the ``error 
+ case'' that <span class="v">erp</span> is not <span class="v">nil</span>, or else is a term that equates <span class="v">val</span> 
+ with the application of <span class="v">FN</span> to <span class="v">ARGLIST</span>, as follows.  Assume that 
+ <span class="v">FN</span> is a <span class="v">:</span><span class="tt"><a href="ACL2____LOGIC.html">logic</a></span>-mode function symbol and that <span class="v">ARGLIST</span> is 
+ a true list of values of the same length as list of formal parameters for 
+ <span class="v">FN</span> (i.e., as the input arity of <span class="v">FN</span>).  Let <span class="v">(QARG1 ... QARGk)</span> be 
+ the result of quoting each element of <span class="v">ARGLIST</span>, i.e., replacing each 
+ <span class="v">y</span> in <span class="v">ARGLIST</span> by the two-element list <span class="v">(<a href="COMMON-LISP____QUOTE.html">quote</a> y)</span>.  Then 
+ <span class="v">(<a href="ACL2____META-EXTRACT-GLOBAL-FACT.html">meta-extract-global-fact</a> obj state)</span> reduces to the term <span class="v">(<a href="COMMON-LISP____EQUAL.html">equal</a> (FN
+ QARG1 ... QARGk) (<a href="COMMON-LISP____QUOTE.html">quote</a> val))</span>.</p> 
+ 
+ <p>CASE otherwise:</p> 
+ 
+ <p>For any other values of <span class="v">obj</span>, the value is <span class="v">*t*</span>.</p> 
+ 
+ </blockquote> 
+ 
+ <p>Finally, the value of <span class="v">(<a href="ACL2____META-EXTRACT-CONTEXTUAL-FACT.html">meta-extract-contextual-fact</a> obj mfc state)</span> is 
+ as follows for various values of <span class="v">obj</span>.  Note a difference from the 
+ semantics of <span class="v">meta-extract-global-fact</span>: below, the relevant logical world 
+ is the one stored in the metafunction context, <span class="v">mfc</span>, not in the input 
+ <span class="v">state</span>.</p> 
+ 
+ <blockquote> 
+ 
+ <p>CASE <span class="v">obj</span> = (list :typeset TERM ...):</p> 
+ 
+ <p>The value is the value of <span class="v">(<a href="ACL2____TYPESPEC-CHECK.html">typespec-check</a> ts TERM)</span>, where <span class="v">ts</span> is 
+ the value of <span class="v">(<a href="ACL2____MFC-TS.html">mfc-ts</a> TERM mfc state :forcep nil :ttreep nil)</span>, and where 
+ <span class="v">(<a href="ACL2____TYPESPEC-CHECK.html">typespec-check</a> ts val)</span> is defined to be true when <span class="v">val</span> has type-set 
+ <span class="v">ts</span>.  (Exception: If <span class="v">val</span> satisfies <span class="v">bad-atom</span> then 
+ <span class="v">typespec-check</span> is true when <span class="v">ts</span> is negative.)</p> 
+ 
+ <p>CASE <span class="v">obj</span> = (list :rw+ TERM ALIST OBJ EQUIV ...):</p> 
+ 
+ <p>We assume below that <span class="v">EQUIV</span> is a symbol that represents an equivalence 
+ relation, where <span class="v">nil</span> represents <span class="tt"><a href="COMMON-LISP____EQUAL.html">equal</a></span>, <span class="v">t</span> represents <span class="tt"><a href="ACL2____IFF.html">iff</a></span>, and otherwise <span class="v">EQUIV</span> represents itself (an equivalence relation in 
+ the current logical <a href="ACL2____WORLD.html">world</a>).  For any other <span class="v">EQUIV</span> the value is 
+ <span class="v">*t*</span>.  Now let <span class="v">rhs</span> be the value of <span class="v">(<a href="ACL2____MFC-RW_B2.html">mfc-rw+</a> TERM ALIST OBJ EQUIV
+ mfc state :forcep nil :ttreep nil)</span>.  Then the value is the term <span class="v">(<a href="COMMON-LISP____LIST.html">list</a>
+ 'equv (<a href="ACL2____SUBLIS-VAR.html">sublis-var</a> ALIST TERM) rhs)</span>, where equv is the equivalence relation 
+ represented by <span class="v">EQUIV</span>, and <span class="v">sublis-var</span> is defined to substitute a 
+ variable-binding alist into a term.</p> 
+ 
+ <p>CASE <span class="v">obj</span> = (list :rw TERM OBJ EQUIV ...):</p> 
+ 
+ <p>The value is the same as above but for an <span class="v">ALIST</span> of <span class="v">nil</span>, i.e., for 
+ the case that <span class="v">obj</span> is <span class="v">(<a href="COMMON-LISP____LIST.html">list</a> :rw+ TERM nil OBJ EQUIV ...)</span>.</p> 
+ 
+ <p>CASE <span class="v">obj</span> = (list :ap TERM ...):</p> 
+ 
+ <p>The value is <span class="v">(<a href="COMMON-LISP____LIST.html">list</a> 'not TERM)</span> if <span class="v">(<a href="ACL2____MFC-AP.html">mfc-ap</a> TERM mfc state :forcep
+ nil)</span> is true, else is <span class="v">*t*</span>.</p> 
+ 
+ <p>CASE <span class="v">obj</span> = (list :relieve-hyp HYP ALIST RUNE TARGET BKPTR 
+ ...):</p> 
+ 
+ <p>The value is <span class="v">(<a href="ACL2____SUBLIS-VAR.html">sublis-var</a> alist hyp)</span> — see above for a discussion 
+ of <span class="v">sublis-var</span> — if the following is true.</p> 
+ 
+ <pre class="code">(<a href="ACL2____MFC-RELIEVE-HYP.html">mfc-relieve-hyp</a> hyp alist rune target bkptr mfc state
+                 :forcep nil :ttreep nil)</pre> 
+ 
+ <p>Otherwise the value is <span class="v">*t*</span>.</p> 
+ 
+ <p>CASE otherwise:</p> 
+ 
+ <p>If no case above applies, then the value is <span class="v">*t*</span>.</p> 
+ 
+ </blockquote> 
+ 
+ <p>We conclude by considering the fourth of the four forms above (and 
+ implicitly, its special case represented by the third form above):</p> 
+ 
+ <pre class="code">(evl (<a href="ACL2____META-EXTRACT-GLOBAL-FACT_B2.html">meta-extract-global-fact+</a> obj st state) aa)</pre> 
+ 
+ <p>The discussion above is for the function <span class="v">meta-extract-global-fact+</span>, 
+ but assumes that the logical <a href="ACL2____WORLD.html">world</a>s of <span class="v">st</span> and <span class="v">state</span> are 
+ equal; otherwise the value returned is <span class="v">*t*</span>.  Of course, since a call of 
+ <span class="v">meta-extract-global-fact</span> expands to a corresponding call of 
+ <span class="v">meta-extract-global-fact+</span> in which the last two arguments are both 
+ <span class="v">state</span>, that condition holds automatically for that case.  But the 
+ <span class="v">state</span> mentioned in the meta-extract hypotheses of a <a href="ACL2____META.html">meta</a> rule or 
+ <a href="ACL2____CLAUSE-PROCESSOR.html">clause-processor</a> rule is in essence an initial state.  In the case of a 
+ clause-processor rule, the clause-processor function may modify that initial 
+ state (say, by printing or modifying some state globals) without changing its 
+ world, and then pass that modified state to <span class="v">fncall-term</span>.  While 
+ <span class="v">fncall-term</span> may produce a different result for this modified state than 
+ for the initial state, both are valid: other than its world, the state is used 
+ only for heuristic purposes, such as determining whether guard-checking may 
+ cause an error.  A useful instance of the hypothesis displayed above will be 
+ one in which <span class="v">st</span> is that modified state.</p>
+</body>
+</html>

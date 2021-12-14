@@ -1,0 +1,111 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Function-termhint</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____FUNCTION-TERMHINT">Click for Function-termhint in the Full Manual</a></h3>
+
+<p>Give termhints according to the structure of a function with <a href="ACL2____HINTCONTEXT.html">hintcontext</a> annotations.</p> 
+ 
+<p>Usage (as a computed hint):</p> 
+<pre class="code">(<a href="ACL2____FUNCTION-TERMHINT.html">function-termhint</a> function-name case1 case2 ...)</pre> 
+<p>where each case is of one of the following two forms, and each ctxname is the 
+name given by some <a href="ACL2____HINTCONTEXT.html">hintcontext</a> annotation in the named function:</p> 
+<pre class="code">;; provides termhint at the ctxname hintcontext
+(ctxname termhint)
+
+;; provides termhint at the ctxname1 and ctxname2 hintcontexts
+((ctxname1 ctxname2 ...) termhint)</pre> 
+ 
+<h3>Rationale</h3> 
+<p>Sometimes when using <a href="ACL2____USE-TERMHINT.html">use-termhint</a> an otherwise sensible hint might 
+require replicating much of the body of a function.  This utility offers an 
+alternative.  First, place <a href="ACL2____HINTCONTEXT.html">hintcontext</a> annotations in the body of the 
+function in contexts where it makes sense to give a hint.  Then use <a href="ACL2____FUNCTION-TERMHINT.html">function-termhint</a>, which transforms the body of the function to place 
+user-provided termhint fragments in those contexts.  For example, if <span class="v">foo</span> 
+is defined as follows:</p> 
+ 
+<pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> foo (x)
+  (<a href="COMMON-LISP____IF.html">if</a> (test1 x)
+      (<a href="COMMON-LISP____LET.html">let</a> ((y (foo-y x)))
+        (<a href="COMMON-LISP____IF.html">if</a> (test2 y)
+            (<a href="ACL2____HINTCONTEXT.html">hintcontext</a> :test2-true (foo-ans1 y x))
+          (<a href="ACL2____HINTCONTEXT.html">hintcontext</a> :test2-false (foo-ans2 y x))))
+    (<a href="ACL2____HINTCONTEXT.html">hintcontext</a> :test1-false (foo-ans3 x))))</pre> 
+ 
+<p>then <span class="v">function-termhint</span> can be invoked as follows:</p> 
+ 
+<pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> foo-prop
+    (prop (foo x))
+    :hints ((<a href="ACL2____FUNCTION-TERMHINT.html">function-termhint</a> foo
+             (:test2-true `(:expand ((foo-ans ,(<a href="ACL2____HQ.html">hq</a> y) ,(<a href="ACL2____HQ.html">hq</a> x)))))
+             ((:test1-false :test2-false)
+              '(:use ((:instance my-lemma (z x))))))))</pre> 
+ 
+<p>This is equivalent to:</p> 
+ 
+<pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> foo-prop
+  (prop (foo x))
+  :hints ((<a href="ACL2____USE-TERMHINT.html">use-termhint</a>
+            (<a href="COMMON-LISP____IF.html">if</a> (test1 x)
+                (<a href="COMMON-LISP____LET.html">let</a> ((y (foo-y x)))
+                  (<a href="COMMON-LISP____IF.html">if</a> (test2 y)
+                      `(:expand ((foo-ans ,(<a href="ACL2____HQ.html">hq</a> y) ,(<a href="ACL2____HQ.html">hq</a> x)))) ;; :test2-true
+                    '(:use ((:instance my-lemma (z x)))))) ;; :test2-false
+             '(:use ((:instance my-lemma (z x)))))))) ;; :test1-false</pre> 
+ 
+<p>But note that in the latter form, we replicate the IF and LET structure of 
+the original function, whereas in the former, we only make reference to the 
+hintcontext labels and bound variables of that function.</p> 
+ 
+<p>An additional utility, <a href="ACL2____HINTCONTEXT-BIND.html">hintcontext-bind</a>, can be used to add variable 
+bindings that don't actually exist in the function but may be used by the 
+hints.  This is convenient for reasoning about stobjs: each binding of a stobj 
+in an executable function must shadow all of its previous bindings, but 
+<span class="v">hintcontext-bind</span> can make previous bindings also available to termhints.</p> 
+ 
+<h3>Operation</h3> 
+ 
+<p>Function-termhint analyzes the (unnormalized) body of the given function and 
+transforms it into a termhint term by replacing each <span class="v">hintcontext</span> 
+annotation with the corresponding hint from the user-provided case list.  This 
+transformation is done by the function <span class="v">term-replace-hintcontexts</span>, which we 
+describe below.  It uses an operator <span class="v">hintcontext-join</span> which produces the 
+first non-NIL hint out of its arguments.  In the following description, we call 
+this joining two potential hints.  The function 
+<span class="v">term-replace-hintcontexts</span> behaves as follows:</p> 
+ 
+<ul> 
+<li>If term is a variable or quote, return NIL.</li> 
+ 
+<li>If term is a hintcontext annotation, find the corresponding hint from the 
+case list and join this with the result of recurring on the body (third 
+argument).</li> 
+ 
+<li>If term is a hintcontext-bind annotation, create a <a href="ACL2____B_A2.html">b*</a> term whose 
+bindings are the (unquoted) second argument and whose body is the result of 
+recurring on the third argument.</li> 
+ 
+<li>If term is any other kind of RETURN-LAST call, return the result of 
+recurring on the last argument.  (Note: this means we only process the 
+<span class="v">:logic</span> part of MBE forms.)</li> 
+ 
+<li>If term is an IF, recur on the then and else branches; if either returns a 
+non-nil result, return <span class="v">(<a href="COMMON-LISP____IF.html">if</a> original-test then-result else-result</span>, 
+otherwise NIL.</li> 
+ 
+<li>If term is a function call, join the results of recurring on all the 
+function arguments.</li> 
+ 
+<li>If term is a lambda call, join the results of recurring on all the 
+arguments as well as, if the recursive call on the lambda body returns a 
+non-NIL result, the term <span class="v">((<a href="COMMON-LISP____LAMBDA.html">lambda</a> formals body-result) . original-args)</span>.</li> 
+ 
+</ul> 
+ 
+
+</body>
+</html>

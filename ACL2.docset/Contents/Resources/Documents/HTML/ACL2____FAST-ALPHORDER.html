@@ -1,0 +1,124 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Fast-alphorder</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____FAST-ALPHORDER">Click for Fast-alphorder in the Full Manual</a></h3>
+
+<p>Probably faster alternative to <a href="ACL2____ALPHORDER.html">alphorder</a>.</p><p><span class="tt">(fast-alphorder x y)</span> is logically the same as ACL2's built-in 
+<a href="ACL2____ALPHORDER.html">alphorder</a>, but it is probably usually faster on real set elements.</p> 
+ 
+<p>Conjecture: most "real" ACL2 objects are mainly built up from integers, 
+symbols, and strings.  That is, non-integer numbers and characters are probably 
+somewhat rare.</p> 
+ 
+<p>ACL2's built-in <a href="ACL2____ALPHORDER.html">alphorder</a> first checks whether the elements 
+are real or complex numbers, then characters, then finally strings or symbols. 
+This order isn't great if the conjecture above is true.  It seems especially 
+unfortunate as <a href="ACL2____REAL_F2RATIONALP.html">real/rationalp</a> and <a href="ACL2____COMPLEX_F2COMPLEX-RATIONALP.html">complex/complex-rationalp</a> seem 
+to be relatively expensive.  For instance, in CCL the following loop:</p> 
+ 
+<pre class="code">(loop for a in
+  '("foo" 3 #a 'foo (<a href="COMMON-LISP____EXPT.html">expt</a> 2 80) 1/3 (<a href="COMMON-LISP____COMPLEX.html">complex</a> 3 4))
+   do (format t "---- ~a ------~%" a)
+      (time (loop for i fixnum from 1 to 1000000000
+               do (<a href="COMMON-LISP____STRINGP.html">stringp</a> a)))
+      (time (loop for i fixnum from 1 to 1000000000
+               do (<a href="COMMON-LISP____INTEGERP.html">integerp</a> a)))
+      (time (loop for i fixnum from 1 to 1000000000
+               do (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> a)))
+      (time (loop for i fixnum from 1 to 1000000000
+               do (<a href="COMMON-LISP____CHARACTERP.html">characterp</a> a)))
+      (time (loop for i fixnum from 1 to 1000000000
+               do (<a href="ACL2____REAL_F2RATIONALP.html">real/rationalp</a> a)))
+      (time (loop for i fixnum from 1 to 1000000000
+                do (<a href="ACL2____COMPLEX_F2COMPLEX-RATIONALP.html">complex/complex-rationalp</a> a))))</pre> 
+ 
+<p>Appears to indicate that:</p> 
+ 
+<ul> 
+ <li>
+<a href="COMMON-LISP____CHARACTERP.html">characterp</a> is the very fastest (~.7 seconds)</li> 
+ <li>
+<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> is the next fastest (~1 second)</li> 
+ <li>
+<a href="COMMON-LISP____INTEGERP.html">integerp</a> and <a href="COMMON-LISP____STRINGP.html">stringp</a> are the next fastest (~1.6 seconds)</li> 
+ <li>
+<a href="ACL2____COMPLEX_F2COMPLEX-RATIONALP.html">complex/complex-rationalp</a> is slower (~3.6 seconds)</li> 
+ <li>
+<a href="ACL2____REAL_F2RATIONALP.html">real/rationalp</a> is much slower (4-6 seconds seconds)</li> 
+</ul> 
+ 
+<p>The <span class="v">fast-alphorder</span> function just rearranges things so that we first 
+check for integers, strings, and symbols, which optimizes for our expected data 
+distribution and avoids these expensive checks.  This seems to give us a nice 
+speedup for our expected kinds of data:</p> 
+ 
+<pre class="code">(loop for elem in
+  '( (1 . 2)                 ; 1.004 sec vs .769 sec
+     ("foo" . "bar")         ; 6.03 sec vs. 4.72 sec
+     (foo . bar)             ; 7.55 sec vs. 5.705 sec
+     (foo . foo)             ; 19.65 sec vs. .87 sec
+     (#\a . #\b) )           ; 2.276 sec vs 1.03 sec
+  do
+  (<a href="COMMON-LISP____LET.html">let</a> ((a (<a href="COMMON-LISP____CAR.html">car</a> elem))
+        (b (<a href="COMMON-LISP____CDR.html">cdr</a> elem)))
+    (format t "---- ~a vs. ~a ------~%" a b)
+    (time (loop for i fixnum from 1 to 100000000
+             do (<a href="ACL2____ALPHORDER.html">alphorder</a> a b)))
+    (time (loop for i fixnum from 1 to 100000000
+             do (<a href="ACL2____FAST-ALPHORDER.html">fast-alphorder</a> a b)))))</pre> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>fast-alphorder</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ fast-alphorder (x y)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____ATOM.html">atom</a> x) (<a href="COMMON-LISP____ATOM.html">atom</a> y))))
+ (<a href="ACL2____MBE.html">mbe</a>
+   :logic (<a href="ACL2____ALPHORDER.html">alphorder</a> x y)
+   :exec (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____INTEGERP.html">integerp</a> x)
+                (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____INTEGERP.html">integerp</a> y) (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> x y))
+                      ((<a href="ACL2____REAL_F2RATIONALP.html">real/rationalp</a> y) (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> x y))
+                      (t t)))
+               ((<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> x)
+                (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> y)
+                    (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____EQ.html">eq</a> x y) (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____SYMBOL_C3.html">symbol&lt;</a> y x)))
+                    (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> y)
+                             (<a href="COMMON-LISP____STRINGP.html">stringp</a> y)
+                             (<a href="COMMON-LISP____CHARACTERP.html">characterp</a> y)
+                             (<a href="ACL2____REAL_F2RATIONALP.html">real/rationalp</a> y)
+                             (<a href="ACL2____COMPLEX_F2COMPLEX-RATIONALP.html">complex/complex-rationalp</a> y)))))
+               ((<a href="COMMON-LISP____STRINGP.html">stringp</a> x)
+                (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____STRINGP.html">stringp</a> y) (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____STRING_C3_D3.html">string&lt;=</a> x y) t))
+                      ((<a href="COMMON-LISP____INTEGERP.html">integerp</a> y) nil)
+                      ((<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> y) t)
+                      (t (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____CHARACTERP.html">characterp</a> y)
+                                  (<a href="ACL2____REAL_F2RATIONALP.html">real/rationalp</a> y)
+                                  (<a href="ACL2____COMPLEX_F2COMPLEX-RATIONALP.html">complex/complex-rationalp</a> y))))))
+               ((<a href="COMMON-LISP____CHARACTERP.html">characterp</a> x)
+                (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____CHARACTERP.html">characterp</a> y)
+                       (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> (<a href="COMMON-LISP____CHAR-CODE.html">char-code</a> x) (<a href="COMMON-LISP____CHAR-CODE.html">char-code</a> y)))
+                      (t (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> y)
+                                  (<a href="ACL2____REAL_F2RATIONALP.html">real/rationalp</a> y)
+                                  (<a href="ACL2____COMPLEX_F2COMPLEX-RATIONALP.html">complex/complex-rationalp</a> y))))))
+               ((<a href="ACL2____REAL_F2RATIONALP.html">real/rationalp</a> x)
+                (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____INTEGERP.html">integerp</a> y) (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> x y))
+                      ((<a href="ACL2____REAL_F2RATIONALP.html">real/rationalp</a> y) (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> x y))
+                      (t t)))
+               ((<a href="ACL2____REAL_F2RATIONALP.html">real/rationalp</a> y) nil)
+               ((<a href="ACL2____COMPLEX_F2COMPLEX-RATIONALP.html">complex/complex-rationalp</a> x)
+                (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="ACL2____COMPLEX_F2COMPLEX-RATIONALP.html">complex/complex-rationalp</a> y)
+                       (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="COMMON-LISP____REALPART.html">realpart</a> x) (<a href="COMMON-LISP____REALPART.html">realpart</a> y))
+                           (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP_____D3.html">=</a> (<a href="COMMON-LISP____REALPART.html">realpart</a> x) (<a href="COMMON-LISP____REALPART.html">realpart</a> y))
+                                (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> (<a href="COMMON-LISP____IMAGPART.html">imagpart</a> x) (<a href="COMMON-LISP____IMAGPART.html">imagpart</a> y)))))
+                      (t t)))
+               ((<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> y)
+                    (<a href="COMMON-LISP____STRINGP.html">stringp</a> y)
+                    (<a href="COMMON-LISP____CHARACTERP.html">characterp</a> y)
+                    (<a href="ACL2____COMPLEX_F2COMPLEX-RATIONALP.html">complex/complex-rationalp</a> y))
+                nil)
+               (t (bad-atom&lt;= x y)))))</pre> 
+
+</body>
+</html>

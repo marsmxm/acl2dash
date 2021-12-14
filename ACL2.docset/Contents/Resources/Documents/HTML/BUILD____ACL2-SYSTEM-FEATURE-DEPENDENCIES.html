@@ -1,0 +1,68 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>ACL2-system-feature-dependencies</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=BUILD____ACL2-SYSTEM-FEATURE-DEPENDENCIES">Click for ACL2-system-feature-dependencies in the Full Manual</a></h3>
+
+<p>Automatically forcing recertification when changes in the ACL2 sources 
+          would invalidate a certificate.</p><p>In principle, every time the ACL2 system changes, all books should 
+be recertified.  However, in practice many users don't do this because the ACL2 
+system is updated frequently and it is time-consuming to rebuild all the 
+community books.  But sometimes a change to the ACL2 system makes certain books 
+no longer work correctly until they are recertified.  For example, the book 
+<span class="v">system/apply/apply-prim</span> uses the value of 
+<span class="v">*first-order-like-terms-and-out-arities*</span>, a constant defined by the ACL2 
+system, in a make-event form in order to define <span class="v">apply$-prim-meta-fn-ev</span>. 
+If the value of that constant changes, that book should be recertified; 
+otherwise, books that depend on it might fail to certify.</p> 
+ 
+<p>The <span class="v">GNUMakefile</span> provided with the ACL2 community books provides a 
+mechanism to force certain books to be recertified when the values of constants 
+built into the ACL2 system change.  To fix <span class="v">apply-prim</span> using this 
+mechanism, we add a comment to the book:</p> 
+<pre class="code">; (depends-on "build/first-order-like-terms-and-out-arities.certdep" :dir :system)</pre> 
+ 
+<p>This forces <span class="v">apply-prim</span> to be recertified if that file changes. We 
+arrange for this file to change by running ACL2 at the start of each invocation 
+of the community books' <span class="v">GNUMakefile</span> and comparing the value of 
+<span class="v">*first-order-like-terms-and-out-arities*</span> to the object read from 
+<span class="v">build/first-order-like-terms-and-out-arities.certdep</span>.  If those objects 
+differ, then the current <span class="v">*first-order-like-terms-and-out-arities*</span> is 
+written to that file, which then forces <span class="v">apply-prim</span> to be recertified.</p> 
+ 
+<p>It is fairly easy to add dependencies on other ACL2 features: simply add a 
+new invocation of <span class="v">write-file-if-obj-differs</span> to 
+<span class="v">build/cert_features.lsp</span>, similar to the ones that already exist there. 
+For example, the one used in the example above is:</p> 
+<pre class="code">(write-file-if-obj-differs "first-order-like-terms-and-out-arities.certdep"
+                           *first-order-like-terms-and-out-arities*
+                           state)</pre> 
+<p>Then add dependencies using <span class="v">depends-on</span> comments in the books that 
+depend on the current value of that constant.</p> 
+ 
+<p>The cert.pl build system by itself does not update these files, which means 
+that Makefiles that use cert.pl will not support this feature unless they run 
+the <span class="v">cert_features.lsp</span> script on startup, like <span class="v">books/GNUMakefile</span> does. 
+A workaround is to invoke <span class="v">books/GNUMakefile</span> after any rebuild of ACL2, 
+before using cert.pl alone or using a separate Makefile:</p> 
+<pre class="code">cd acl2/books
+make build/Makefile-features</pre> 
+<p>Cert.pl and cert.pl-generated Makefiles will arrange for files 
+<span class="v">build/%.certdep</span> to be created if they do not exist, so that books that 
+depend on them can still be certified using cert.pl alone.</p> 
+ 
+<p>Cert.pl also makes every certificate depend on two special certdep files: 
+<span class="v">build/acl2-version.certdep</span> and <span class="v">build/universal-dependency.certdep</span>. 
+The former is updated by <span class="v">cert_features.lsp</span> like the others, containing the 
+current ACL2 version string; this forces all books to be recertified when the 
+ACL2 version number changes.  The latter, unlike the others, is stored in the 
+ACL2 git repository.  It may be updated by ACL2 maintainers to force all books 
+to be recertified when they make other changes that require this, or by 
+community members who notice that such a change has been made without a 
+corresponding update.</p>
+</body>
+</html>

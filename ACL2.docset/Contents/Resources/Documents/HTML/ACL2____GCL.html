@@ -1,0 +1,132 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Gcl</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____GCL">Click for Gcl in the Full Manual</a></h3>
+
+<p>Tips on building and using ACL2 based on Gnu Common Lisp</p><p>See the installation instructions for basic information about 
+ building ACL2 on top of GCL, including information about where to fetch GCL. 
+ Here, we provide some tips that may be useful.</p> 
+ 
+ <p>1. You can place forms to evaluate at start-up into file <span class="v">init.lsp</span> in 
+ the directory where you are starting ACL2 (GCL), or into file 
+ <span class="v">acl2-init.lsp</span> in your home directory.  For example, in order to evaluate 
+ both of the lisp forms mentioned in 2 below, you could put them both into 
+ <span class="v">init.lsp</span> in the current directory or in <span class="v">~/acl2-init.lsp</span> (either way, 
+ without <span class="v">(<a href="ACL2____LP.html">lp</a>)</span> or <span class="v">:q</span>):</p> 
+ 
+ <pre class="code">(setq si::*optimize-maximum-pages* nil)
+(si::allocate 'cons 75000 t)</pre> 
+ 
+ <p>Note that if you want to put ACL2 patches in this file, you should precede 
+ them with (in-package "ACL2").</p> 
+ 
+ <p>2. Suppose you run out of space, for example with an error like this:</p> 
+ 
+ <pre class="code">Error: The storage for CONS is exhausted.
+  Currently, 59470 pages are allocated.
+  Use ALLOCATE to expand the space.</pre> 
+ 
+ <p>The following suggestion from Camm Maguire will minimize the heap size, at 
+ the cost of more garbage collection time.</p> 
+ 
+ <pre class="code">:q   ; exit the ACL2 loop
+(setq si::*optimize-maximum-pages* nil)
+(<a href="ACL2____LP.html">lp</a>) ; re-enter the ACL2 loop</pre> 
+ 
+ <p>A second thing to try, suggested by several people, is to preallocate more 
+ pages before the run, e.g.:</p> 
+ 
+ <pre class="code">:q   ; exit the ACL2 loop
+(si::allocate 'cons 75000 t)
+(<a href="ACL2____LP.html">lp</a>) ; re-enter the ACL2 loop</pre> 
+ 
+ <p>Also see <a href="ACL2____RESET-KILL-RING.html">reset-kill-ring</a> for a suggestion on how to free up 
+ space.</p> 
+ 
+ <p>3. Windows users have seen this error:</p> 
+ 
+ <pre class="code">cc1.exe: unrecognized option `-fno-zero-initialized-in-bss'</pre> 
+ 
+ <p>Camm Maguire suggests that a solution may be to evaluate the following in 
+ GCL before building ACL2.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____IN-PACKAGE.html">in-package</a> 'compiler)
+(<a href="COMMON-LISP____LET_A2.html">let*</a> ((x `-fno-zero-initialized-in-bss')
+       (i (<a href="COMMON-LISP____SEARCH.html">search</a> x *cc*)))
+        (setq *cc* (<a href="COMMON-LISP____CONCATENATE.html">concatenate</a> 'string
+                                (<a href="COMMON-LISP____SUBSEQ.html">subseq</a> *cc* 0 i)
+                                (<a href="COMMON-LISP____SUBSEQ.html">subseq</a> *cc* (<a href="COMMON-LISP_____B2.html">+</a> i (<a href="COMMON-LISP____LENGTH.html">length</a> x))))))</pre> 
+ 
+ <p>4. It is possible to profile using ACL2 built on GCL.  See file 
+ <span class="v">save-gprof.lsp</span> in the ACL2 source directory.</p> 
+ 
+ <p>5. Some versions of GCL may have garbage-collector bugs that, on rare 
+ occasions, cause ACL2 (when built on GCL) to break.  If you run into this, a 
+ solution may be to execute the following:</p> 
+ 
+ <pre class="code">:q
+(si::sgc-on nil)
+(<a href="ACL2____LP.html">lp</a>)</pre> 
+ 
+ <p>Alternatively, put <span class="v">(si::sgc-on nil)</span> in your <span class="v">~/acl2-init.lsp</span> 
+ file.</p> 
+ 
+ <p>A full regression test and found that this decreased performance by about 
+ 10%.  But even with that, GCL is probably one of the faster Common Lisp 
+ implementations for ACL2 on Linux.  Performance figures may often be found by 
+ following the ``Recent changes'' link on the ACL2 home page.</p> 
+ 
+ <p>6. GCL operations on numbers can sometimes be sped up, perhaps by up to two 
+ orders of magnitude, by suitable <span class="tt"><a href="COMMON-LISP____DECLARE.html">declare</a></span> forms (also see <a href="ACL2____TYPE-SPEC.html">type-spec</a>).  The following example, developed with Warren Hunt and Serita 
+ Nelesen, illustrates the use of such declarations.</p> 
+ 
+ <pre class="code">; File iplus.lisp:
+; Operations on naturals together with positive infinity (represented as -1).
+
+; After (<a href="ACL2____LD.html">ld</a> "iplus.lisp"), escape to raw Lisp with :q and then evaluate
+; (disassemble 'big-test).  You should see lots of arithmetic operations
+; in C code, but no calls of C functions CMPmake_fixnum or number_plus.
+
+(<a href="COMMON-LISP____IN-PACKAGE.html">in-package</a> "ACL2")
+
+(<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> i-max ()
+  (<a href="COMMON-LISP____EXPT.html">expt</a> 2 (<a href="COMMON-LISP____1-.html">1-</a> 28)))
+
+(<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> i+ (x y)
+  `(<a href="COMMON-LISP____THE.html">the</a> (signed-byte 28)
+        (<a href="COMMON-LISP____LET.html">let</a> ((x ,x)
+              (y ,y))
+          (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____TYPE.html">type</a> (signed-byte 28) x y))
+          (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP_____C3.html">&lt;</a> x 0)
+                     (<a href="COMMON-LISP_____C3.html">&lt;</a> y 0))
+                 -1)
+                (t (<a href="COMMON-LISP____LET.html">let</a> ((result
+                          (<a href="COMMON-LISP____THE.html">the</a> (signed-byte 29) (<a href="COMMON-LISP_____B2.html">+</a> x y))))
+                     (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____TYPE.html">type</a> (signed-byte 29) result))
+                     (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP_____E3_D3.html">&gt;=</a> result (i-max)) -1)
+                           (t (<a href="COMMON-LISP____THE.html">the</a> (signed-byte 28) result)))))))))
+
+(<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> imin (x y)
+  `(<a href="COMMON-LISP____THE.html">the</a> (signed-byte 28)
+        (<a href="COMMON-LISP____LET.html">let</a> ((x ,x)
+              (y ,y))
+          (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____TYPE.html">type</a> (signed-byte 28) x y))
+          (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP_____C3.html">&lt;</a> x 0)
+                 (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP_____C3.html">&lt;</a> y 0) -1)
+                       (t y)))
+                ((<a href="COMMON-LISP_____C3.html">&lt;</a> y 0)
+                 x)
+                (t
+                 (<a href="COMMON-LISP____THE.html">the</a> (signed-byte 28) (<a href="COMMON-LISP____MIN.html">min</a> x y)))))))
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> big-test (x y z)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____TYPE.html">type</a> (signed-byte 28) x y z))
+  (imin (i+ x y)
+        (i+ y (imin x z))))</pre>
+</body>
+</html>

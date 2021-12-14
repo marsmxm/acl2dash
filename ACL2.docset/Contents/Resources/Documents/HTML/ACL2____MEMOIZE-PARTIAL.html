@@ -1,0 +1,411 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Memoize-partial</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____MEMOIZE-PARTIAL">Click for Memoize-partial in the Full Manual</a></h3>
+
+<p><span class="tt"><a href="ACL2____MEMOIZE.html">Memoize</a></span> a partial version of a limited (`clocked') function</p><p>See <a href="ACL2____MEMOIZE.html">memoize</a> for relevant background.  Here we describe a 
+ utility that supports effective memoization for functions that have been 
+ introduced by <span class="tt"><a href="COMMON-LISP____DEFUN.html">defun</a></span>, as follows, under certain restrictions.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> fn-limit (x1 ... xn limit)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> ...) ; optional, as usual for defun ; ;
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2____ZP.html">zp</a> limit)
+      &lt;base&gt;
+    (<a href="COMMON-LISP____LET.html">let</a> ((limit (<a href="COMMON-LISP____1-.html">1-</a> limit)))
+      &lt;body&gt;)))</pre> 
+ 
+ <p>Here <span class="v">fn-limit</span> represents a function symbol and <span class="v">(x1 ... xn limit)</span> 
+ denotes a non-empty list of formal parameters, where we call the final 
+ formal (here, shown as <span class="v">limit</span>) the ``limit variable''.  <span class="v">&lt;Base&gt;</span> is any 
+ syntactically legal expression, but <span class="v">&lt;body&gt;</span> is restricted as follows: the 
+ occurrences of the limit variable are exactly as the final parameter in each 
+ recursive call of <span class="v">fn</span>.  More precisely, that restriction must hold after 
+ <span class="v">&lt;body&gt;</span> is converted to a translated term (see <a href="ACL2____TERM.html">term</a>).  In other 
+ words, the translation of <span class="v">&lt;body&gt;</span> must have the property that the limit 
+ variable only occurs in recursive calls, and in those calls it occurs exactly 
+ as the final argument and not in any other arguments.</p> 
+ 
+ <p>Such use of a ``limit'' argument to obtain termination is an old trick that 
+ pre-dates ACL2.  Such ``limited'' functions have traditionally often been 
+ called ``clocked'' functions.  In this documentation we refer to such a 
+ function as a ``total'' function, because the limit argument guarantees that 
+ its evaluation terminates.  We will be generating a corresponding ``partial'' 
+ function that avoids the limit argument, and hence might not terminate — 
+ but when it does, it computes the desired value, and uses memoization to do 
+ so, which can speed up computation.</p> 
+ 
+ <p>We organize the rest of this topic as follows: General Form, Basic Example, 
+ Example with Mutual Recursion, Detailed Documentation, and Optional Technical 
+ Remarks.</p> 
+ 
+ <h3>General Form:</h3> 
+ 
+ <pre class="code">(<a href="ACL2____MEMOIZE-PARTIAL.html">memoize-partial</a> fn+ ; see below
+                 :kwd1 val1 ... :kwdn valn)</pre> 
+ 
+ <p>where the supplied <span class="v">:kwdi</span> and <span class="v">vali</span> are valid keywords and values 
+ for <span class="tt"><a href="ACL2____MEMOIZE.html">memoize</a></span>.  In the simplest case, <span class="v">fn+</span> is a symbol.  Later 
+ below, after providing an example, we give more complete documentation, 
+ including discussion of <span class="tt"><a href="ACL2____MUTUAL-RECURSION.html">mutual-recursion</a></span> and the general case for 
+ <span class="v">fn+</span>.  None of the arguments is evaluated.</p> 
+ 
+ <h3>Basic Example</h3> 
+ 
+ <p>The following example from <a href="ACL2____COMMUNITY-BOOK.html">community-book</a> file 
+ <span class="v">books/demos/memoize-partial-input.lsp</span> illustrates the use of <span class="tt"><a href="ACL2____MEMOIZE-PARTIAL.html">memoize-partial</a></span>.  Consider the <a href="https://en.wikipedia.org/wiki/Collatz_conjecture" target="_blank"><nobr>Collatz 
+ Conjecture<img src="../Icon_External_Link.png" title="External link to https://en.wikipedia.org/wiki/Collatz_conjecture"></nobr></a>, sometimes known as the 3n+1 problem.  For any positive integer 
+ <span class="v">n</span>, compute a new integer as <span class="v">n/2</span> if <span class="v">n</span> is even, else as 
+ <span class="v">3*n+1</span>.  The Collatz conjecture states that this process eventually 
+ reaches <span class="v">1</span>.  Since this is an open problem, we can't realistically hope to 
+ prove termination, so we may code the above algorithm by using a limit 
+ argument, as follows.  This function returns, unless the limit is reached, the 
+ number of steps required for the computation to terminate (reach 1).</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> collatz-limit (n limit)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____NATP.html">natp</a> n)
+                              (<a href="ACL2____NATP.html">natp</a> limit))
+                  :measure (<a href="ACL2____ACL2-COUNT.html">acl2-count</a> limit)))
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2____ZP.html">zp</a> limit)
+      (<a href="ACL2____PROG2_42.html">prog2$</a> (<a href="ACL2____ER.html">er</a> hard? 'collatz-limit
+                  "Limit exceeded!")
+              0)
+    (<a href="COMMON-LISP____LET.html">let</a> ((limit (<a href="COMMON-LISP____1-.html">1-</a> limit)))
+      (<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2____INT_D3.html">int=</a> n 1)
+          0
+        (<a href="COMMON-LISP____1_B2.html">1+</a> (collatz-limit (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EVENP.html">evenp</a> n)
+                               (<a href="COMMON-LISP____FLOOR.html">floor</a> n 2)
+                             (<a href="COMMON-LISP____1_B2.html">1+</a> (<a href="COMMON-LISP_____A2.html">*</a> 3 n)))
+                           limit))))))</pre> 
+ 
+ <p>A moment's reflection suggests that if this algorithm terminates, then 
+ there are no cycles, so memoization from a single call will be useless. 
+ However, memoization can be useful if we make distinct calls.  But memoization 
+ might not be very useful even then, because after we save the result of a call 
+ <span class="v">(collatz-limit n0 limit0)</span>, a later call on <span class="v">n0</span> might be with a 
+ different limit, say, <span class="v">(collatz-limit n0 limit1)</span>.  So we prefer to memoize 
+ using the corresponding partial function, without a limit argument.  We can do 
+ that as follows.</p> 
+ 
+ <pre class="code">(<a href="ACL2____MEMOIZE-PARTIAL.html">memoize-partial</a> collatz)</pre> 
+ 
+ <p>Under the hood this generates, essentially, the following Common Lisp 
+ definition, which is to be memoized.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> collatz (n)
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2____INT_D3.html">int=</a> n 1)
+      0
+    (<a href="COMMON-LISP____1_B2.html">1+</a> (collatz (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EVENP.html">evenp</a> n)
+                     (<a href="COMMON-LISP____FLOOR.html">floor</a> n 2)
+                   (<a href="COMMON-LISP____1_B2.html">1+</a> (<a href="COMMON-LISP_____A2.html">*</a> 3 n)))))))</pre> 
+ 
+ <p>Since the <span class="v">limit</span> argument has disappeared, memoization is now more 
+ effective.  But how can one define <span class="v">collatz</span> in the ACL2 logic?  The 
+ <span class="v">memoize-partial</span> call shown above actually generates the following events, 
+ which define <span class="v">collatz</span> to capture the notion of the ``eventual stable 
+ value, as <span class="v">limit</span> goes to infinity, of <span class="v">(collatz n limit)</span>''.  It 
+ probably is not important to read these events unless one plans to reason 
+ about <span class="v">collatz</span>, and even then one might be able to complete proofs without 
+ reading these events.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFCHOOSE.html">DEFCHOOSE</a> COLLATZ-LIMIT-CHANGE (LARGE)
+  (N LIMIT)
+  (<a href="COMMON-LISP____AND.html">AND</a> (<a href="ACL2____NATP.html">NATP</a> LARGE)
+       (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> LIMIT LARGE)
+       (<a href="COMMON-LISP____NOT.html">NOT</a> (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (COLLATZ-LIMIT N LIMIT)
+                   (COLLATZ-LIMIT N LARGE)))))
+(<a href="ACL2____DEFCHOOSE.html">DEFCHOOSE</a> COLLATZ-LIMIT-STABLE (LIMIT)
+  (N)
+  (<a href="COMMON-LISP____AND.html">AND</a> (<a href="ACL2____NATP.html">NATP</a> LIMIT)
+       (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (COLLATZ-LIMIT N LIMIT)
+              (COLLATZ-LIMIT N (COLLATZ-LIMIT-CHANGE N LIMIT)))))
+(<a href="COMMON-LISP____DEFUN.html">DEFUN</a> COLLATZ (N)
+  (<a href="COMMON-LISP____DECLARE.html">DECLARE</a> (<a href="ACL2____XARGS.html">XARGS</a> :GUARD (<a href="COMMON-LISP____LET.html">LET</a> ((LIMIT 0))
+                              (<a href="COMMON-LISP____DECLARE.html">DECLARE</a> (<a href="COMMON-LISP____IGNORABLE.html">IGNORABLE</a> LIMIT))
+                              (<a href="COMMON-LISP____AND.html">AND</a> (<a href="ACL2____NATP.html">NATP</a> N) (<a href="ACL2____NATP.html">NATP</a> LIMIT)))))
+  (COLLATZ-LIMIT N (<a href="ACL2____NFIX.html">NFIX</a> (COLLATZ-LIMIT-STABLE N))))</pre> 
+ 
+ <p>The upshot is a logical definition of <span class="v">(collatz n)</span> as the eventual 
+ value (if any), as <span class="v">limit</span> increases without bound, of <span class="v">(collatz n
+ limit)</span> — together with an installed Common Lisp definition that is 
+ actually executed and, moreover, is memoized.</p> 
+ 
+ <p>We note that the call <span class="v">(<a href="ACL2____MEMOIZE-PARTIAL.html">memoize-partial</a> collatz)</span> also generates a 
+ <span class="tt"><a href="ACL2____TABLE.html">table</a></span> event as well as the form <span class="v">(<a href="ACL2____MEMOIZE.html">MEMOIZE</a> 'COLLATZ :TOTAL
+ 'COLLATZ-LIMIT)</span>.  However, these details are best ignored by the user; we do 
+ not expect those events to be generated by hand, and in particular it is 
+ probably inadvisable to use the <span class="v">:TOTAL</span> keyword of <span class="tt"><a href="ACL2____MEMOIZE.html">memoize</a></span> other 
+ than indirectly using <span class="v">memoize-partial</span>.  Failure to heed this advice could 
+ make failures more difficult to debug.</p> 
+ 
+ <p>See <a href="ACL2____COMMUNITY-BOOK.html">community-book</a> file <span class="v">books/demos/memoize-partial-input.lsp</span> 
+ for an application of this use of <span class="v">memoize-partial</span>, to compute the total 
+ number of steps required (without accounting for memoization) to run the 
+ Collatz algorithm to completion on the first <span class="v">n</span> positive integers.</p> 
+ 
+ <h3>Example with Mutual Recursion</h3> 
+ 
+ <p>The following example, also from <a href="ACL2____COMMUNITY-BOOK.html">community-book</a> file 
+ <span class="v">books/demos/memoize-partial-input.lsp</span>, illustrates the use of 
+ <span class="v">memoize-partial</span> on functions that have been defined using <span class="tt"><a href="ACL2____MUTUAL-RECURSION.html">mutual-recursion</a></span>.  (The suffix ``<span class="v">-bdd</span>'' below is intended to denote 
+ ``bounded'', to suggest what the ``<span class="v">-limit</span>'' suffix suggested in the first 
+ example.)</p> 
+ 
+ <pre class="code">(<a href="ACL2____MUTUAL-RECURSION.html">mutual-recursion</a>
+ (<a href="COMMON-LISP____DEFUN.html">defun</a> evenlp-bdd (x bound)
+   (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____NATP.html">natp</a> bound)))
+   (<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2____ZP.html">zp</a> bound)
+       'ouch
+     (<a href="COMMON-LISP____LET.html">let</a> ((bound (<a href="COMMON-LISP____1-.html">1-</a> bound)))
+       (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x) (oddlp-bdd (<a href="COMMON-LISP____CDR.html">cdr</a> x) bound) t))))
+ (<a href="COMMON-LISP____DEFUN.html">defun</a> oddlp-bdd (x bound)
+   (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____NATP.html">natp</a> bound)))
+   (<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2____ZP.html">zp</a> bound)
+       'ouch
+     (<a href="COMMON-LISP____LET.html">let</a> ((bound (<a href="COMMON-LISP____1-.html">1-</a> bound)))
+       (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x) (evenlp-bdd (<a href="COMMON-LISP____CDR.html">cdr</a> x) bound) nil)))))
+
+(<a href="ACL2____MEMOIZE-PARTIAL.html">memoize-partial</a> ((evenlp evenlp-bdd) (oddlp oddlp-bdd)))</pre> 
+ 
+ <p>Notice that this time the argument of <span class="v">memoize-partial</span> is a list of 
+ tuples.  Each tuple is a list with two elements: the name of the partial 
+ function to be defined, followed by the corresponding total (limited) function 
+ that has already been defined.  Indeed, the preceding example abbreviates 
+ <span class="v">(<a href="ACL2____MEMOIZE-PARTIAL.html">memoize-partial</a> ((collatz collatz-limit)))</span>.  Such abbreviations are 
+ discussed in the Detailed Documentation section below.</p> 
+ 
+ <p>Recall that in the first example, the <span class="v">memoize-partial</span> call defined 
+ functions <span class="v">collatz-limit-change</span> and <span class="v">collatz-limit-stable</span> using <span class="tt"><a href="ACL2____DEFCHOOSE.html">defchoose</a></span>, and then function <span class="v">collatz</span> using <span class="tt"><a href="COMMON-LISP____DEFUN.html">defun</a></span>.  In the 
+ present example such a trio of functions is introduced for each of the 
+ functions defined in the corresponding <span class="v">mutual-recursion</span> — 
+ equivalently, for each of the tuples supplied to <span class="v">memoize-partial</span>.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFCHOOSE.html">DEFCHOOSE</a> EVENLP-BDD-CHANGE (LARGE)
+  (X BOUND)
+  (<a href="COMMON-LISP____AND.html">AND</a> (<a href="ACL2____NATP.html">NATP</a> LARGE)
+       (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> BOUND LARGE)
+       (<a href="COMMON-LISP____NOT.html">NOT</a> (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (EVENLP-BDD X BOUND)
+                   (EVENLP-BDD X LARGE)))))
+(<a href="ACL2____DEFCHOOSE.html">DEFCHOOSE</a> EVENLP-BDD-STABLE (BOUND)
+  (X)
+  (<a href="COMMON-LISP____AND.html">AND</a> (<a href="ACL2____NATP.html">NATP</a> BOUND)
+       (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (EVENLP-BDD X BOUND)
+              (EVENLP-BDD X (EVENLP-BDD-CHANGE X BOUND)))))
+(<a href="COMMON-LISP____DEFUN.html">DEFUN</a> EVENLP (X)
+  (<a href="COMMON-LISP____DECLARE.html">DECLARE</a> (<a href="ACL2____XARGS.html">XARGS</a> :GUARD (<a href="COMMON-LISP____LET.html">LET</a> ((BOUND 0))
+                              (<a href="COMMON-LISP____DECLARE.html">DECLARE</a> (<a href="COMMON-LISP____IGNORABLE.html">IGNORABLE</a> BOUND))
+                              (<a href="ACL2____NATP.html">NATP</a> BOUND))))
+  (EVENLP-BDD X (<a href="ACL2____NFIX.html">NFIX</a> (EVENLP-BDD-STABLE X))))
+(<a href="ACL2____DEFCHOOSE.html">DEFCHOOSE</a> ODDLP-BDD-CHANGE (LARGE)
+  (X BOUND)
+  (<a href="COMMON-LISP____AND.html">AND</a> (<a href="ACL2____NATP.html">NATP</a> LARGE)
+       (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> BOUND LARGE)
+       (<a href="COMMON-LISP____NOT.html">NOT</a> (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (ODDLP-BDD X BOUND)
+                   (ODDLP-BDD X LARGE)))))
+(<a href="ACL2____DEFCHOOSE.html">DEFCHOOSE</a> ODDLP-BDD-STABLE (BOUND)
+  (X)
+  (<a href="COMMON-LISP____AND.html">AND</a> (<a href="ACL2____NATP.html">NATP</a> BOUND)
+       (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (ODDLP-BDD X BOUND)
+              (ODDLP-BDD X (ODDLP-BDD-CHANGE X BOUND)))))
+(<a href="COMMON-LISP____DEFUN.html">DEFUN</a> ODDLP (X)
+  (<a href="COMMON-LISP____DECLARE.html">DECLARE</a> (<a href="ACL2____XARGS.html">XARGS</a> :GUARD (<a href="COMMON-LISP____LET.html">LET</a> ((BOUND 0))
+                              (<a href="COMMON-LISP____DECLARE.html">DECLARE</a> (<a href="COMMON-LISP____IGNORABLE.html">IGNORABLE</a> BOUND))
+                              (<a href="ACL2____NATP.html">NATP</a> BOUND))))
+  (ODDLP-BDD X (<a href="ACL2____NFIX.html">NFIX</a> (ODDLP-BDD-STABLE X))))</pre> 
+ 
+ <p>The corresponding Common Lisp functions, to be executed for <a href="ACL2____GUARD.html">guard</a>-verified calls of <span class="v">evenlp</span> and <span class="v">oddlp</span>, are defined as one might 
+ expect, in analogy to the Common Lisp definition in the first example. 
+ Moreover, they are memoized.  Here are (again, essentially) the Common Lisp 
+ definitions of <span class="v">evenlp</span> and <span class="v">oddlp</span>.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">DEFUN</a> EVENLP (X)
+  (<a href="COMMON-LISP____IF.html">IF</a> (<a href="COMMON-LISP____CONSP.html">CONSP</a> X)
+      (ODDLP (<a href="COMMON-LISP____CDR.html">CDR</a> X))
+      T))
+(<a href="COMMON-LISP____DEFUN.html">DEFUN</a> ODDLP (X)
+  (<a href="COMMON-LISP____DECLARE.html">DECLARE</a> (<a href="COMMON-LISP____IGNORABLE.html">IGNORABLE</a> X))
+  (<a href="COMMON-LISP____IF.html">IF</a> (<a href="COMMON-LISP____CONSP.html">CONSP</a> X)
+      (EVENLP (<a href="COMMON-LISP____CDR.html">CDR</a> X))
+      NIL))</pre> 
+ 
+ <h3>Detailed Documentation</h3> 
+ 
+ <p>Recall the General Form</p> 
+ 
+ <pre class="code">(<a href="ACL2____MEMOIZE-PARTIAL.html">memoize-partial</a> fn+ ; see below
+                 :kwd1 val1 ... :kwdn valn)</pre> 
+ 
+ <p>where the supplied <span class="v">:kwdi</span> and <span class="v">vali</span> represent keyword options to be 
+ used for a generated call of <span class="tt"><a href="ACL2____MEMOIZE.html">memoize</a></span>.  We discuss later below how 
+ <span class="v">fn+</span> specifies either a recursively-defined function symbol or a sequence 
+ of function symbols defined by <span class="v">mutual-recursion</span> — all <a href="ACL2____GUARD.html">guard</a>-verified.  We call the final formal parameter, which must be the same 
+ for each function symbol defined in the <span class="v">mutual-recursion</span> case, the 
+ ``limit variable''.  The translated body (see <a href="ACL2____TERM.html">term</a> regarding the notion 
+ of ``translated'') of each of these function symbols must be of the following 
+ form, or of the corresponding form using <span class="tt"><a href="COMMON-LISP____COND.html">cond</a></span> in place of <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span>, 
+ where here <span class="v">limit</span> denotes the limit variable.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2____ZP.html">zp</a> limit)
+    &lt;base&gt;
+  (<a href="COMMON-LISP____LET.html">let</a> ((limit (<a href="COMMON-LISP____1-.html">1-</a> limit)))
+    &lt;body&gt;))</pre> 
+ 
+ <p>Moreover, each limit variable occurring in <span class="v">&lt;body&gt;</span> must occur as the 
+ final argument of a call of the defined function — in the mutual 
+ recursion case, of the functions defined by the <span class="v">mutual-recursion</span> — 
+ and conversely, each such call must have the limit variable as its final 
+ argument.</p> 
+ 
+ <p>Let us refer to each specified function as the ``total'' function.  A 
+ succesful invocation admits a sequence of three definitions for each total 
+ function, which we call the ``changed'', ``stable'', and ``partial'' function. 
+ Here are those three definitions, where ``<span class="v">...</span>'' denotes the formals of 
+ the partial function (that is, the formals of the total function other than 
+ the final formal, which is the limit variable).  We write <span class="v">LIMIT</span> below to 
+ denote the limit variable.  Note that <span class="v">LARGE</span> is replaced by a fresh 
+ variable when necessary, to avoid duplicating an existing formal.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFCHOOSE.html">DEFCHOOSE</a> &lt;changed&gt; (LARGE)
+  (... LIMIT)
+  (<a href="COMMON-LISP____AND.html">AND</a> (<a href="ACL2____NATP.html">NATP</a> LARGE)
+       (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> LIMIT LARGE)
+       (<a href="COMMON-LISP____NOT.html">NOT</a> (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (&lt;total&gt; ... LIMIT)
+                   (&lt;total&gt; ... LARGE)))))
+(<a href="ACL2____DEFCHOOSE.html">DEFCHOOSE</a> &lt;stable&gt; (LIMIT)
+  (...)
+  (<a href="COMMON-LISP____AND.html">AND</a> (<a href="ACL2____NATP.html">NATP</a> LIMIT)
+       (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (&lt;total&gt; ... LIMIT)
+              (&lt;total&gt; ... (&lt;change&gt; ... LIMIT)))))
+(<a href="COMMON-LISP____DEFUN.html">DEFUN</a> &lt;partial&gt; (...)
+  (<a href="COMMON-LISP____DECLARE.html">DECLARE</a> (<a href="ACL2____XARGS.html">XARGS</a> :GUARD (<a href="COMMON-LISP____LET.html">LET</a> ((LIMIT 0))
+                              (<a href="COMMON-LISP____DECLARE.html">DECLARE</a> (<a href="COMMON-LISP____IGNORABLE.html">IGNORABLE</a> LIMIT))
+                              &lt;guard_of_total&gt;)))
+  (&lt;total&gt; ... (<a href="ACL2____NFIX.html">NFIX</a> (&lt;stable&gt; ...))))</pre> 
+ 
+ <p>Under the hood, however, a Common Lisp definition is installed for 
+ <span class="v">&lt;partial&gt;</span> that avoids the limit variable, essentially by eliminating it 
+ in <span class="v">&lt;body&gt;</span> to produce a corresponding term, <span class="v">&lt;body'&gt;</span>, with the 
+ following result.  (Low-level details about exactly what is generated are 
+ discussed in the Optional Technical Remarks below, but should probably be 
+ ignored by most users.)</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> &lt;partial&gt; (...)
+  &lt;body'&gt;</pre> 
+ 
+ <p>We turn now to the first argument of <span class="v">memoize-partial</span>, denoted <span class="v">fn+</span> 
+ above, with discussion of its legal forms and its relation to the 
+ other (keyword) arguments of <span class="v">memoize-partial</span>.  The most flexible form for 
+ <span class="v">fn+</span> is a list of tuples, where each tuple is of the following form and 
+ the keyword arguments are optional and in any order.</p> 
+ 
+ <pre class="code">(&lt;partial&gt; &lt;total&gt;
+ :change &lt;change&gt;
+ :stable &lt;stable&gt;
+ :kwd1 val1 ... :kwdn valn)</pre> 
+ 
+ <p>The symbols <span class="v">&lt;partial&gt;</span>, <span class="v">&lt;total&gt;</span>, <span class="v">&lt;change&gt;</span>, and <span class="v">&lt;stable&gt;</span> 
+ are as discussed above, and the arguments <span class="v">:kwd1 val1 ... :kwdn valn</span> are 
+ as supplied to <span class="tt"><a href="ACL2____MEMOIZE.html">memoize</a></span>.  There should be a single tuple in the singly 
+ recursive case.  In the case that the partial functions were defined by a 
+ <span class="v">mutual-recursion</span> defining functions <span class="v">f1</span>, ..., <span class="v">fn</span>, then the 
+ <span class="v">&lt;partial&gt;</span> components of the tuples (their <span class="tt"><a href="COMMON-LISP____CAR.html">car</a></span>s) must also be 
+ <span class="v">f1</span>, ..., <span class="v">fn</span>.</p> 
+ 
+ <p>The keyword/value pairs of the tuple are optional.  The default for 
+ <span class="v">&lt;change&gt;</span> is obtained by adding the suffix <span class="v">"-CHANGE"</span> to 
+ <span class="v">&lt;total&gt;</span>, to create a symbol in the same package as that of <span class="v">&lt;total&gt;</span>; 
+ similarly for <span class="v">&lt;stable&gt;</span> and the suffix <span class="v">"-STABLE"</span>.  The <span class="v">&lt;total&gt;</span> 
+ function is defined as described above, with an under-the-hood Common Lisp 
+ definition also as described above, and <a href="ACL2____MEMOIZE.html">memoize</a>d.  The <span class="v">memoize</span> 
+ call uses the keywords supplied in the tuple other than <span class="v">:change</span> and 
+ <span class="v">:stable</span>.  For any <span class="v">memoize</span> keywords not specified in the tuple, the 
+ keywords specified at the top level of the <span class="v">memoize-partial</span> call — 
+ that is, the keyword arguments (if any) following the first argument (that is, 
+ following <span class="v">fn+</span>) — are also used in that generated <span class="v">memoize</span> 
+ call.</p> 
+ 
+ <p>There are some abbreviations allowed for <span class="v">fn+</span>, as follows.</p> 
+ 
+ <ul> 
+ 
+ <li>A symbol <span class="v">fn</span> for <span class="v">fn+</span> abbreviates the list <span class="v">(fn)</span>, which is an 
+ abbreviation as noted below.</li> 
+ 
+ <li>If <span class="v">fn+</span> is a list <span class="v">(t1 ... tk)</span>, then each <span class="v">ti</span> that is a 
+ symbol, say <span class="v">fn</span>, abbreviates the tuple <span class="v">(fn fn-limit)</span>, where 
+ <span class="v">fn-limit</span> is obtained by adding the suffix <span class="v">"-LIMIT"</span> to <span class="v">fn</span>, to 
+ create a symbol in the same package as that of <span class="v">fn</span>.</li> 
+ 
+ </ul> 
+ 
+ <p>Consider our first example, <span class="v">(<a href="ACL2____MEMOIZE-PARTIAL.html">memoize-partial</a> collatz)</span>.  In this case 
+ <span class="v">fn+</span> is <span class="v">collatz</span>.  By the first rule above, this abbreviates 
+ <span class="v">(collatz)</span>, which the second rule says is an abbreviation for <span class="v">(collatz
+ collatz-limit)</span>.  The default values are computed to treat this as the 
+ following tuple.</p> 
+ 
+ <pre class="code">(collatz collatz-limit
+         :change collatz-limit-change
+         :stable collatz-limit-stable)</pre> 
+ 
+ <p>Note that the keyword value <span class="v">:condition nil</span> for <span class="v">memoize</span> can be 
+ used to install executable definitions without actually saving values, 
+ essentially by merely profiling (except that unlike <span class="tt"><a href="ACL2____PROFILE.html">profile</a></span> the 
+ recursive calls are also affected by the <span class="v">memoize</span> call).  See the example 
+ involving ``worse-than'' functions in community book 
+ <span class="v">books/demos/memoize-partial-input.lsp</span>.</p> 
+ 
+ <p>We conclude this section by discussing restrictions pertaining to <a href="ACL2____STOBJ.html">stobj</a>s.  Recall that memoization is illegal (other than profiling) for 
+ functions that return a stobj or have the ACL2 <a href="ACL2____STATE.html">state</a> as an input. 
+ Those same restrictions apply to <span class="v">memoize-partial</span>.  However, it is legal 
+ for the given (``total'') functions to have user-defined stobjs as inputs, as 
+ long as they are not returned.  In that case, the generated definition of the 
+ partial function will be made with a call of <span class="tt"><a href="ACL2____NON-EXEC.html">non-exec</a></span> wrapped around 
+ the body.</p> 
+ 
+ <h3>Optional Technical Remarks.</h3> 
+ 
+ <p>Warning: These are technical remarks that are completely optional.</p> 
+ 
+ <p>Our general remark is to invite readers who want to dive below the user 
+ level, including implementation and foundational issues, to read the comment 
+ entitled ``Essay on Memoization with Partial Functions 
+ (Memoize-partial)'' in ACL2 source file <span class="v">other-events.lisp</span>.</p> 
+ 
+ <p>Our more specific remark concerns generated Common Lisp definitions. 
+ Recall that in the Basic Example above, we say that the Common Lisp definition 
+ of <span class="v">collatz</span> is essentially as follows.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> collatz (n)
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2____INT_D3.html">int=</a> n 1)
+      0
+    (<a href="COMMON-LISP____1_B2.html">1+</a> (collatz (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EVENP.html">evenp</a> n)
+                     (<a href="COMMON-LISP____FLOOR.html">floor</a> n 2)
+                   (<a href="COMMON-LISP____1_B2.html">1+</a> (<a href="COMMON-LISP_____A2.html">*</a> 3 n)))))))</pre> 
+ 
+ <p>We say ``essentially'' because the actual Common Lisp definition of 
+ <span class="v">collatz</span> is a bit different, as follows.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">DEFUN</a> COLLATZ (N)
+  (<a href="COMMON-LISP____DECLARE.html">DECLARE</a> (<a href="COMMON-LISP____IGNORABLE.html">IGNORABLE</a> N))
+  (<a href="COMMON-LISP____FLET.html">FLET</a> ((COLLATZ-LIMIT (N LIMIT)
+                        (<a href="COMMON-LISP____DECLARE.html">DECLARE</a> (<a href="COMMON-LISP____IGNORE.html">IGNORE</a> LIMIT))
+                        (COLLATZ N)))
+        (<a href="COMMON-LISP____DECLARE.html">DECLARE</a> (<a href="COMMON-LISP____INLINE.html">INLINE</a> COLLATZ-LIMIT))
+        (<a href="COMMON-LISP____LET.html">LET</a> ((LIMIT 0))
+             (<a href="COMMON-LISP____DECLARE.html">DECLARE</a> (<a href="COMMON-LISP____IGNORABLE.html">IGNORABLE</a> LIMIT))
+             (<a href="COMMON-LISP____IF.html">IF</a> (<a href="ACL2____INT_D3.html">INT=</a> N 1)
+                 0
+                 (<a href="COMMON-LISP____1_B2.html">1+</a> (COLLATZ-LIMIT
+                      (<a href="COMMON-LISP____IF.html">IF</a> (<a href="COMMON-LISP____EVENP.html">EVENP</a> N) (<a href="COMMON-LISP____FLOOR.html">FLOOR</a> N 2) (<a href="COMMON-LISP____1_B2.html">1+</a> (<a href="COMMON-LISP_____A2.html">*</a> 3 N)))
+                      LIMIT))))))</pre> 
+ 
+ <p>A little reflection will conclude that these two definitions are 
+ equivalent.  The latter, however, avoids a macroexpansion issue discussed in 
+ the aforementioned Essay.</p>
+</body>
+</html>

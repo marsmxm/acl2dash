@@ -1,0 +1,75 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Nat-list-remove-duplicates</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____NAT-LIST-REMOVE-DUPLICATES">Click for Nat-list-remove-duplicates in the Full Manual</a></h3>
+
+<p>High-performance duplicate-removal function for <a href="ACL2____NAT-LISTP.html">nat-listp</a>s.</p><p><span class="tt">(nat-list-remove-duplicates x)</span> is logically equal to:</p> 
+ 
+<pre class="code">(<a href="COMMON-LISP____REVAPPEND.html">revappend</a> (<a href="ACL2____HONS-REMOVE-DUPLICATES.html">hons-remove-duplicates</a> x) nil)</pre> 
+ 
+<p>We leave this definition enabled, so typically you will want to just reason 
+about <a href="ACL2____HONS-REMOVE-DUPLICATES.html">hons-remove-duplicates</a> and <a href="COMMON-LISP____REVAPPEND.html">revappend</a>.</p> 
+ 
+<p>In the execution, we first inspect the list and then heuristically decide 
+how to carry out the computation.</p> 
+ 
+<p>When the list is very short, we use a naive, quadratic function in the 
+spirit of <a href="COMMON-LISP____REMOVE-DUPLICATES.html">remove-duplicates</a>, which avoids the costs of allocating any 
+seen tables and practically speaking seems to be the fastest way to go.</p> 
+ 
+<p>For longer lists, our usual approach is to implement a seen table as a 
+bit-array, using a local stobj that is kept hidden from the caller.  This 
+approach performs very well for most lists that we encounter in practice, and 
+its memory overhead is relatively low because, at least on CCL, bit arrays 
+really do get implemented in an efficient way and, aside from some header 
+information, only require one bit per entry.</p> 
+ 
+<p>Of course, a bit-array is not appropriate when the list contains elements 
+that are particularly large numbers.  The storage required for the bit array is 
+just based upon the maximum element in the list.  Here are some examples:</p> 
+ 
+<pre class="code">2^21: 256 KB    2^24: 2 MB    2^27: 16 MB
+2^22: 512 KB    2^25: 4 MB    2^28: 32 MB
+2^23: 1 MB      2^26: 8 MB    2^29: 64 MB</pre> 
+ 
+<p>In some rare cases, it may actually be worth allocating hundreds of 
+megabytes of memory to remove duplicates from a list.  But most of the time, if 
+a list contains numbers in the millions or more, an array-based approach 
+probably isn't what we want to do, because the list is probably relatively 
+sparse.  Instead, we should just use a hash table.</p> 
+ 
+<p>We therefore adopt a heuristic for which algorithm to use.  If the maximum 
+element is under 2^17, then we always use the array since it requires us to 
+allocate at most 16 KB.  Since 2^17 = 131,072, this is really sufficient to 
+address a lot of lists that actually arise in practice.</p> 
+ 
+<p>If the maximum is over 2^17, we:</p> 
+ 
+<ul> 
+ 
+<li>again use the naive algorithm unless there are more than a few hundred 
+elements in the list, because experimentally it's cheaper.</li> 
+ 
+<li>use the array algorithm if there are more than max/256 elements in the 
+list, which is just pulled out of the air and hasn't really been tested in any 
+systematic way.  But just as an example, if the maximum element in our list is 
+2^22 (slightly over 4 million), we'll only allocate the 2 MB array if there are 
+more than 16,000 elements in the list.  If the maximum element is 2^29 (about 
+536 million), we'll only allocate the 64 MB array if there are more than two 
+million elements in the list.</li> 
+ 
+<li>essentially fall back to using <a href="ACL2____HONS-REMOVE-DUPLICATES.html">hons-remove-duplicates</a> otherwise.  In 
+this case, there are too many elements to use the naive algorithm, but not 
+enough to warrant allocating an array.  So, we want to use the hash table since 
+it can handle sparse lists well.</li> 
+ 
+</ul> 
+ 
+
+</body>
+</html>

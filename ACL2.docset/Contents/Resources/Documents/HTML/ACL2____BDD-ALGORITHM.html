@@ -1,0 +1,489 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Bdd-algorithm</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____BDD-ALGORITHM">Click for Bdd-algorithm in the Full Manual</a></h3>
+
+<p>Summary of the BDD algorithm in ACL2</p><p>The BDD algorithm in ACL2 uses a combination of manipulation of 
+ <span class="v">IF</span> terms and unconditional rewriting.  In this discussion we begin with 
+ some relevant mathematical theory.  This is followed by a description of how 
+ ACL2 does BDDs, including concluding discussions of soundness, completeness, 
+ and efficiency.</p> 
+ 
+ <p>We recommend that you read the other documentation about BDDs in ACL2 
+ before reading the rather technical material that follows.  See <a href="ACL2____BDD.html">bdd</a>.</p> 
+ 
+ <p>Here is an outline of our presentation.  Readers who want a user 
+ perspective, without undue mathematical theory, may wish to skip to Part (B), 
+ referring to Part (A) only on occasion if necessary.</p> 
+ 
+ <p>(A) <b>Mathematical Considerations</b></p> 
+ 
+ <blockquote> 
+ 
+ <p>(A1) BDD term order</p> 
+ 
+ <p>(A2) BDD-constructors and BDD terms, and their connection with aborting the 
+ BDD algorithm</p> 
+ 
+ <p>(A3) Canonical BDD terms</p> 
+ 
+ <p>(A4) A theorem stating the equivalence of provable and syntactic equality 
+ for canonical BDD terms</p> 
+ 
+ </blockquote> 
+ 
+ <p>(B) <b>Algorithmic Considerations</b></p> 
+ 
+ <blockquote> 
+ 
+ <p>(B1) BDD rules (rules used by the rewriting portion of the ACL2 BDD 
+ algorithm)</p> 
+ 
+ <p>(B2) Terms ``known to be Boolean''</p> 
+ 
+ <p>(B3) An ``IF-lifting'' operation used by the algorithm, as well as an 
+ iterative version of that operation</p> 
+ 
+ <p>(B4) The ACL2 BDD algorithm</p> 
+ 
+ <p>(B5) Soundness and Completeness of the ACL2 BDD algorithm</p> 
+ 
+ <p>(B6) Efficiency considerations</p>
+</blockquote> 
+ 
+ <p>(A) <b>Mathematical Considerations</b></p> 
+ 
+ <p>(A1) <i>BDD term order</i></p> 
+ 
+ <p>Our BDD algorithm creates a total ``BDD term order'' on ACL2 terms, on the 
+ fly.  We use this order in our discussions below of IF-lifting and of 
+ canonical BDD terms, and in the algorithm's use of commutativity.  The 
+ particular order is unimportant, except that we guarantee (for purposes of 
+ commutative functions) that constants are smaller in this order than 
+ non-constants.</p> 
+ 
+ <p>(A2) <i>BDD-constructors</i> (assumed to be <span class="v">'(<a href="COMMON-LISP____CONS.html">cons</a>)</span>) and <i>BDD 
+ terms</i></p> 
+ 
+ <p>We take as given a list of function symbols that we call the 
+ ``BDD-constructors.''  By default, the only BDD-constructor is <span class="tt"><a href="COMMON-LISP____CONS.html">cons</a></span>, 
+ although it is legal to specify any list of function symbols as the 
+ BDD-constructors, either by using the <a href="ACL2____ACL2-DEFAULTS-TABLE.html">ACL2-defaults-table</a> (see <a href="ACL2____ACL2-DEFAULTS-TABLE.html">ACL2-defaults-table</a>) or by supplying a <span class="v">:BDD-CONSTRUCTORS</span> hint (see <a href="ACL2____HINTS.html">hints</a>).  Warning: this capability is largely untested and may produce 
+ undesirable results.  Henceforth, except when explicitly stated to the 
+ contrary, we assume that BDD-constructors is <span class="v">'(<a href="COMMON-LISP____CONS.html">cons</a>)</span>.</p> 
+ 
+ <p>Roughly speaking, a <a href="ACL2____BDD.html">bdd</a> term is the sort of <a href="ACL2____TERM.html">term</a> produced by 
+ our BDD algorithm, namely a tree with all <span class="tt"><a href="COMMON-LISP____CONS.html">cons</a></span> nodes lying above all 
+ non-<span class="v">CONS</span> nodes.  More formally, a <a href="ACL2____TERM.html">term</a> is said to be a <a href="ACL2____BDD.html">bdd</a> 
+ term if it contains <b>no</b> subterm of either of the following forms, where 
+ <span class="v">f</span> is not <span class="v">CONS</span>.</p> 
+ 
+ <pre class="code">(f ... (<a href="COMMON-LISP____CONS.html">CONS</a> ...) ...)
+
+(f ... 'x ...)  ; where (<a href="COMMON-LISP____CONSP.html">consp</a> x) = t</pre> 
+ 
+ <p>We will see that whenever the BDD algorithm attempts to create a <a href="ACL2____TERM.html">term</a> that is not a <a href="ACL2____BDD.html">bdd</a> term, it aborts instead.  Thus, whenever the 
+ algorithm completes without aborting, it creates a <a href="ACL2____BDD.html">bdd</a> term.</p> 
+ 
+ <p>(A3) <i>Canonical BDD terms</i></p> 
+ 
+ <p>We can strengthen the notion of ``BDD term'' to a notion of ``canonical BDD 
+ term'' by imposing the following additional requirements, for every subterm of 
+ the form <span class="v">(<a href="COMMON-LISP____IF.html">IF</a> x y z)</span>:</p> 
+ 
+ <blockquote>
+<p>(a) <span class="v">x</span> is a variable, and it precedes (in the BDD term 
+ order) every variable occurring in <span class="v">y</span> or <span class="v">z</span>;</p> 
+ 
+ <p>(b) <span class="v">y</span> and <span class="v">z</span> are syntactically distinct; and,</p> 
+ 
+ <p>(c) it is not the case that <span class="v">y</span> is <span class="v">t</span> and <span class="v">z</span> is 
+ <span class="v">nil</span>.</p>
+</blockquote> 
+ 
+ <p>We claim that it follows easily from our description of the BDD algorithm 
+ that every term it creates is a canonical BDD term, assuming that the 
+ variables occurring in all such terms are treated by the algorithm as being 
+ Boolean (see (B2) below) and that the terms contain no function symbols other 
+ than <span class="v">IF</span> and <span class="v">CONS</span>.  Thus, under those assumptions the following 
+ theorem shows that the BDD algorithm never creates distinct terms that are 
+ provably equal, a property that is useful for completeness and efficiency (as 
+ we explain in (B5) and (B6) below).</p> 
+ 
+ <p>(A4) <i>Provably equal canonical BDD terms are identical</i></p> 
+ 
+ <p>We believe that the following theorem and proof are routine extensions of a 
+ standard result and proof to terms that allow calls of <span class="v">CONS</span>.</p> 
+ 
+ <p><b>Theorem</b>.  Suppose that <span class="v">t1</span> and <span class="v">t2</span> are canonical BDD terms 
+ that contain no function symbols other than <span class="v">IF</span> and <span class="v">CONS</span>.  Also 
+ suppose that <span class="v">(<a href="COMMON-LISP____EQUAL.html">EQUAL</a> t1 t2)</span> is a theorem.  Then <span class="v">t1</span> and <span class="v">t2</span> are 
+ syntactically identical.</p> 
+ 
+ <p>Proof of theorem: By induction on the total number of symbols occurring in 
+ these two terms.  First suppose that at least one term is a variable; without 
+ loss of generality let it be <span class="v">t1</span>.  We must prove that <span class="v">t2</span> is 
+ syntactically the same as <span class="v">t1</span>.  Now it is clearly consistent that 
+ <span class="v">(<a href="COMMON-LISP____EQUAL.html">EQUAL</a> t1 t2)</span> is false if <span class="v">t2</span> is a call of <span class="v">CONS</span> (to see this, 
+ simply let <span class="v">t1</span> be an value that is not a <span class="v">CONSP</span>).  Similarly, <span class="v">t2</span> 
+ cannot be a constant or a variable other than <span class="v">t1</span>.  The remaining 
+ possibility to rule out is that <span class="v">t2</span> is of the form <span class="v">(<a href="COMMON-LISP____IF.html">IF</a> t3 t4 t5)</span>, 
+ since by assumption its function symbol must be <span class="v">IF</span> or <span class="v">CONS</span> and we 
+ have already handled the latter case.  Since <span class="v">t2</span> is canonical, we know 
+ that <span class="v">t3</span> is a variable.  Since <span class="v">(<a href="COMMON-LISP____EQUAL.html">EQUAL</a> t1 t2)</span> is provable, i.e.,</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____EQUAL.html">EQUAL</a> t1 (<a href="COMMON-LISP____IF.html">if</a> t3 t4 t5))</pre> 
+ 
+ <p>is provable, it follows that we may substitute either <span class="v">t</span> or <span class="v">nil</span> 
+ for <span class="v">t3</span> into this equality to obtain two new provable equalities.  First, 
+ suppose that <span class="v">t1</span> and <span class="v">t3</span> are distinct variables.  Then these 
+ substitutions show that <span class="v">t1</span> is provably equal to both <span class="v">t4</span> and <span class="v">t5</span> 
+ (since <span class="v">t3</span> does not occur in <span class="v">t4</span> or <span class="v">t5</span> by property (a) above, as 
+ <span class="v">t2</span> is canonical), and hence <span class="v">t4</span> and <span class="v">t5</span> are provably equal to 
+ each other, which implies by the inductive hypothesis that they are the same 
+ term — and this contradicts the assumption that <span class="v">t2</span> is canonical 
+ (property (b)).  Therefore <span class="v">t1</span> and <span class="v">t3</span> are the same variable, i.e., 
+ the equality displayed above is actually <span class="v">(<a href="COMMON-LISP____EQUAL.html">EQUAL</a> t1 (<a href="COMMON-LISP____IF.html">if</a> t1 t4 t5))</span>. 
+ Substituting <span class="v">t</span> and then <span class="v">nil</span> for <span class="v">t1</span> into this provable equality 
+ lets us prove <span class="v">(<a href="COMMON-LISP____EQUAL.html">EQUAL</a> t t4)</span> and <span class="v">(<a href="COMMON-LISP____EQUAL.html">EQUAL</a> nil t5)</span>, which by the 
+ inductive hypothesis implies that <span class="v">t4</span> is (syntactically) the term <span class="v">t</span> 
+ and <span class="v">t5</span> is <span class="v">nil</span>.  That is, <span class="v">t2</span> is <span class="v">(<a href="COMMON-LISP____IF.html">IF</a> t1 t nil)</span>, which 
+ contradicts the assumption that <span class="v">t2</span> is canonical (property (c)).</p> 
+ 
+ <p>Next, suppose that at least one term is a call of <span class="v">IF</span>.  Our first 
+ observation is that the other term is also a call of <span class="v">IF</span>.  For if the 
+ other is a call of <span class="v">CONS</span>, then they cannot be provably equal, because the 
+ former has no function symbols other than <span class="v">IF</span> and hence is Boolean when 
+ all its variables are assigned Boolean values.  Also, if the other is a 
+ constant, then both branches of the <span class="v">IF</span> term are provably equal to that 
+ constant and hence these branches are syntactically identical by the inductive 
+ hypothesis, contradicting property (b).  Hence, we may assume for this case 
+ that both terms are calls of <span class="v">IF</span>; let us write them as follows.</p> 
+ 
+ <pre class="code">t0:  (<a href="COMMON-LISP____IF.html">IF</a> t1 t2 t3)
+u0:  (<a href="COMMON-LISP____IF.html">IF</a> u1 u2 u3)</pre> 
+ 
+ <p>Note that <span class="v">t1</span> and <span class="v">u1</span> are variables, by property (a) of canonical 
+ BDD terms.  First we claim that <span class="v">t1</span> does not strictly precede <span class="v">u1</span> in 
+ the BDD term order.  For suppose <span class="v">t1</span> does strictly precede <span class="v">u1</span>.  Then 
+ property (a) of canonical BDD terms guarantees that <span class="v">t1</span> does not occur in 
+ <span class="v">u0</span>.  Hence, an argument much like one used above shows that <span class="v">u0</span> is 
+ provably equal to both <span class="v">t2</span> (substituting <span class="v">t</span> for <span class="v">t1</span>) and <span class="v">t3</span> 
+ (substituting <span class="v">nil</span> for <span class="v">t1</span>), and hence <span class="v">t2</span> and <span class="v">t3</span> are 
+ provably equal.  That implies that they are identical terms, by the inductive 
+ hypothesis, which then contradicts property (b) for <span class="v">t0</span>.  Similarly, 
+ <span class="v">u1</span> does not strictly precede <span class="v">t1</span> in the BDD term order.  Therefore, 
+ <span class="v">t1</span> and <span class="v">u1</span> are the same variable.  By substituting <span class="v">t</span> for this 
+ variable we see that <span class="v">t2</span> and <span class="v">u2</span> are provably equal, and hence they 
+ are equal by the inductive hypothesis.  Similarly, by substituting <span class="v">nil</span> 
+ for <span class="v">t1</span> (and <span class="v">u1</span>) we see that <span class="v">t3</span> and <span class="v">u3</span> are provably, hence 
+ syntactically, equal.</p> 
+ 
+ <p>We have covered all cases in which at least one term is a variable or at 
+ least one term is a call of <span class="v">IF</span>.  If both terms are constants, then 
+ provable and syntactic equality are clearly equivalent.  Finally, then, we may 
+ assume that one term is a call of <span class="v">CONS</span> and the other is a constant or a 
+ call of <span class="v">CONS</span>.  The constant case is similar to the <span class="v">CONS</span> case if the 
+ constant is a <span class="v">CONSP</span>, so we omit it; while if the constant is not a 
+ <span class="v">CONSP</span> then it is not provably equal to a call of <span class="v">CONS</span>; in fact it is 
+ provably <i>not</i> equal!</p> 
+ 
+ <p>So, we are left with a final case, in which canonical BDD terms <span class="v">(<a href="COMMON-LISP____CONS.html">CONS</a> t1
+ t2)</span> and <span class="v">(<a href="COMMON-LISP____CONS.html">CONS</a> u1 u2)</span> are provably equal, and we want to show that 
+ <span class="v">t1</span> and <span class="v">u1</span> are syntactically equal as are <span class="v">t2</span> and <span class="v">u2</span>.  These 
+ conclusions are easy consequences of the inductive hypothesis, since the ACL2 
+ axiom <span class="v">CONS-EQUAL</span> (which you can inspect using <span class="v">:</span><span class="tt"><a href="ACL2____PE.html">pe</a></span>) shows 
+ that equality of the given terms is equivalent to the conjunction of <span class="v">(<a href="COMMON-LISP____EQUAL.html">EQUAL</a>
+ t1 t2)</span> and <span class="v">(<a href="COMMON-LISP____EQUAL.html">EQUAL</a> u1 u2)</span>.  Q.E.D.</p> 
+ 
+ <p>(B) <b>Algorithmic Considerations</b></p> 
+ 
+ <p>(B1) <i>BDD rules</i></p> 
+ 
+ <p>A rule of class <span class="v">:</span><span class="tt"><a href="ACL2____REWRITE.html">rewrite</a></span> (see <a href="ACL2____RULE-CLASSES.html">rule-classes</a>) is said to 
+ be a ``<a href="ACL2____BDD.html">bdd</a> rewrite rule'' if and only if it satisfies the following 
+ criteria.  (1) The rule is <a href="ACL2____ENABLE.html">enable</a>d.  (2) Its <a href="ACL2____EQUIVALENCE.html">equivalence</a> 
+ relation is <span class="tt"><a href="COMMON-LISP____EQUAL.html">equal</a></span>.  (3) It has no hypotheses.  (4) Its <span class="v">:</span><span class="tt"><a href="ACL2____LOOP-STOPPER.html">loop-stopper</a></span> field is <span class="v">nil</span>, i.e., it is not a permutative rule.  (5) All 
+ variables occurring in the rule occur in its left-hand side (i.e., there are 
+ no ``free variables''; see <a href="ACL2____REWRITE.html">rewrite</a>).  A rule of class <span class="v">:</span><span class="tt"><a href="ACL2____DEFINITION.html">definition</a></span> (see <a href="ACL2____RULE-CLASSES.html">rule-classes</a>) is said to be a ``<a href="ACL2____BDD.html">bdd</a> definition 
+ rule'' if it satisfies all the criteria above (except (4), which does not 
+ apply), and moreover the top function symbol of the left-hand side was not 
+ recursively (or mutually recursively) defined.  Technical point: Note that 
+ this additional criterion is independent of whether or not the indicated 
+ function symbol actually occurs in the right-hand side of the rule.</p> 
+ 
+ <p>Both BDD rewrite rules and BDD definition rules are said to be ``BDD 
+ rules.''</p> 
+ 
+ <p>(B2) <i>Terms ''known to be Boolean''</i></p> 
+ 
+ <p>We apply the BDD algorithm in the context of a top-level goal to prove, 
+ namely, the goal at which the <span class="v">:BDD</span> hint is attached.  As we run the BDD 
+ algorithm, we allow ourselves to say that a set of <a href="ACL2____TERM.html">term</a>s is ``known to 
+ be Boolean'' if we can verify that the goal is provable from the assumption 
+ that at least one of the terms is not Boolean.  Equivalently, we allow 
+ ourselves to say that a set of terms is ``known to be Boolean'' if we can 
+ verify that the original goal is provably equivalent to the assertion that if 
+ all terms in the set are Boolean, then the goal holds.  The notion ``known to 
+ be Boolean'' is conservative in the sense that there are generally sets of 
+ terms for which the above equivalent criteria hold and yet the sets of terms 
+ are not noted as as being ``known to be Boolean.''  However, ACL2 uses a 
+ number of tricks, including <a href="ACL2____TYPE-SET.html">type-set</a> reasoning and analysis of the 
+ structure of the top-level goal, to attempt to establish that a sufficiently 
+ inclusive set of terms is known to be Boolean.</p> 
+ 
+ <p>From a practical standpoint, the algorithm determines a set of terms known 
+ to be Boolean; we allow ourselves to say that each term in this set is ``known 
+ to be Boolean.''  The algorithm assumes that these terms are indeed Boolean, 
+ and can make use of that assumption.  For example, if <span class="v">t1</span> is known to be 
+ Boolean then the algorithm simplifies <span class="v">(<a href="COMMON-LISP____IF.html">IF</a> t1 t nil)</span> to <span class="v">t1</span>; see (iv) 
+ in the discussion immediately below.</p> 
+ 
+ <p>(B3) <i>IF-lifting</i> and the <i>IF-lifting-for-IF loop</i></p> 
+ 
+ <p>Suppose that one has a <a href="ACL2____TERM.html">term</a> of the form <span class="v">(f ... (<a href="COMMON-LISP____IF.html">IF</a> test x y)
+ ...)</span>, where <span class="v">f</span> is a function symbol other than <span class="v">CONS</span>.  Then we say 
+ that ``IF-lifting'' <span class="v">test</span> ``from'' this term produces the following term, 
+ which is provably equal to the given term.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____IF.html">if</a> test
+    (f ... x ...)  ; resulting true branch
+    (f ... y ...)) ; resulting false branch</pre> 
+ 
+ <p>Here, we replace each argument of <span class="v">f</span> of the form <span class="v">(<a href="COMMON-LISP____IF.html">IF</a> test .. ..)</span>, 
+ for the same <span class="v">test</span>, in the same way.  In this case we say that 
+ ``IF-lifting applies to'' the given term, ``yielding the test'' <span class="v">test</span> and 
+ with the ``resulting two branches'' displayed above.  Whenever we apply 
+ IF-lifting, we do so for the available <span class="v">test</span> that is least in the BDD term 
+ order (see (A1) above).</p> 
+ 
+ <p>We consider arguments <span class="v">v</span> of <span class="v">f</span> that are ``known to be Boolean'' 
+ (see above) to be replaced by <span class="v">(<a href="COMMON-LISP____IF.html">IF</a> v t nil)</span> for the purposes of 
+ IF-lifting, i.e., before IF-lifting is applied.</p> 
+ 
+ <p>There is one special case, however, for IF-lifting.  Suppose that the given 
+ term is of the form <span class="v">(<a href="COMMON-LISP____IF.html">IF</a> v y z)</span> where <span class="v">v</span> is a variable and is the test 
+ to be lifted out (i.e., it is least in the BDD term order among the potential 
+ tests).  Moreover, suppose that neither <span class="v">y</span> nor <span class="v">z</span> is of the form 
+ <span class="v">(<a href="COMMON-LISP____IF.html">IF</a> v W1 W2)</span> for that same <span class="v">v</span>.  Then IF-lifting does not apply to the 
+ given term.</p> 
+ 
+ <p>We may now describe the IF-lifting-for-IF loop, which applies to terms of 
+ the form <span class="v">(<a href="COMMON-LISP____IF.html">IF</a> test tbr fbr)</span> where the algorithm has already produced 
+ <span class="v">test</span>, <span class="v">tbr</span>, and <span class="v">fbr</span>.  First, if <span class="v">test</span> is <span class="v">nil</span> then we 
+ return <span class="v">fbr</span>, while if <span class="v">test</span> is a non-<span class="v">nil</span> constant or a call of 
+ <span class="v">CONS</span> then we return <span class="v">tbr</span>.  Otherwise, we see if IF-lifting applies. 
+ If IF-lifting does not apply, then we return <span class="v">(<a href="COMMON-LISP____IF.html">IF</a> test tbr fbr)</span>. 
+ Otherwise, we apply IF-lifting to obtain a term of the form <span class="v">(<a href="COMMON-LISP____IF.html">IF</a> x y z)</span>, 
+ by lifting out the appropriate test.  Now we recursively apply the 
+ IF-lifting-for-IF loop to the term <span class="v">(<a href="COMMON-LISP____IF.html">IF</a> x y z)</span>, unless any of the 
+ following special cases apply.</p> 
+ 
+ <blockquote>
+<p>(i) If <span class="v">y</span> and <span class="v">z</span> are the same term, then return 
+ <span class="v">y</span>.</p> 
+ 
+ <p>(ii) Otherwise, if <span class="v">x</span> and <span class="v">z</span> are the same term, then replace <span class="v">z</span> 
+ by <span class="v">nil</span> before recursively applying IF-lifting-for-IF.</p> 
+ 
+ <p>(iii) Otherwise, if <span class="v">x</span> and <span class="v">y</span> are the same term and <span class="v">y</span> is known 
+ to be Boolean, then replace <span class="v">y</span> by <span class="v">t</span> before recursively applying 
+ IF-lifting-for-IF.</p> 
+ 
+ <p>(iv) If <span class="v">z</span> is <span class="v">nil</span> and either <span class="v">x</span> and <span class="v">y</span> are the same term 
+ or <span class="v">x</span> is ``known to be Boolean'' and <span class="v">y</span> is <span class="v">t</span>, then return 
+ <span class="v">x</span>.</p>
+</blockquote> 
+ 
+ <p>NOTE: When a variable <span class="v">x</span> is known to be Boolean, it is easy to see that 
+ the form <span class="v">(<a href="COMMON-LISP____IF.html">IF</a> x t nil)</span> is always reduced to <span class="v">x</span> by this algorithm.</p> 
+ 
+ <p>(B4) <i>The ACL2 BDD algorithm</i></p> 
+ 
+ <p>We are now ready to present the BDD algorithm for ACL2.  It is given an 
+ ACL2 <a href="ACL2____TERM.html">term</a>, <span class="v">x</span>, as well as an association list <span class="v">va</span> that maps 
+ variables to terms, including all variables occurring in <span class="v">x</span>.  We maintain 
+ the invariant that whenever a variable is mapped by <span class="v">va</span> to a term, that 
+ term has already been constructed by the algorithm, except: initially <span class="v">va</span> 
+ maps every variable occurring in the top-level term to itself.  The algorithm 
+ proceeds as follows.  We implicitly ordain that whenever the BDD algorithm 
+ attempts to create a <a href="ACL2____TERM.html">term</a> that is not a <a href="ACL2____BDD.html">bdd</a> term (as defined 
+ above in (A2)), it aborts instead.  Thus, whenever the algorithm completes 
+ without aborting, it creates a <a href="ACL2____BDD.html">bdd</a> term.</p> 
+ 
+ <blockquote> 
+ 
+ <p>If <span class="v">x</span> is a variable, return the result of looking it up in <span class="v">va</span>.</p> 
+ 
+ <p>If <span class="v">x</span> is a constant, return <span class="v">x</span>.</p> 
+ 
+ <p>If <span class="v">x</span> is of the form <span class="v">(<a href="COMMON-LISP____IF.html">IF</a> test tbr fbr)</span>, then first run the 
+ algorithm on <span class="v">test</span> with the given <span class="v">va</span> to obtain <span class="v">test'</span>.  If 
+ <span class="v">test'</span> is <span class="v">nil</span>, then return the result <span class="v">fbr'</span> of running the 
+ algorithm on <span class="v">fbr</span> with the given <span class="v">va</span>.  If <span class="v">test'</span> is a constant 
+ other than <span class="v">nil</span>, or is a call of <span class="v">CONS</span>, then return the result 
+ <span class="v">tbr'</span> of running the algorithm on <span class="v">tbr</span> with the given <span class="v">va</span>.  If 
+ <span class="v">tbr</span> is identical to <span class="v">fbr</span>, return <span class="v">tbr</span>.  Otherwise, return the 
+ result of applying the IF-lifting-for-IF loop (described above) to the term 
+ <span class="tt">(IF test' tbr' fbr')</span>.</p> 
+ 
+ <p>If <span class="v">x</span> is of the form <span class="v">(<a href="ACL2____IF_A2.html">IF*</a> test tbr fbr)</span>, then compute the result 
+ exactly as though <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span> were used rather than <span class="tt"><a href="ACL2____IF_A2.html">if*</a></span>, except that if 
+ <span class="v">test'</span> is not a constant or a call of <span class="v">CONS</span> (see paragraph above), 
+ then abort the BDD computation.  Informally, the tests of <span class="tt"><a href="ACL2____IF_A2.html">if*</a></span> terms 
+ are expected to ``resolve.''  NOTE: This description shows how <span class="tt"><a href="ACL2____IF_A2.html">if*</a></span> can 
+ be used to implement conditional rewriting in the BDD algorithm.</p> 
+ 
+ <p>If <span class="v">x</span> is a <span class="v">LAMBDA</span> expression <span class="v">((<a href="COMMON-LISP____LAMBDA.html">LAMBDA</a> vars body) . args)</span> 
+ (which often corresponds to a <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span> term; see <a href="COMMON-LISP____LET.html">let</a>), then first 
+ form an alist <span class="v">va'</span> by binding each <span class="v">v</span> in <span class="v">vars</span> to the result of 
+ running the algorithm on the corresponding member of <span class="v">args</span>, with the 
+ current alist <span class="v">va</span>.  Then, return the result of the algorithm on <span class="v">body</span> 
+ in the alist <span class="v">va'</span>.</p> 
+ 
+ <p>Otherwise, <span class="v">x</span> is of the form <span class="v">(f x1 x2 ... xn)</span>, where <span class="v">f</span> is a 
+ function symbol other than <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span> or <span class="tt"><a href="ACL2____IF_A2.html">if*</a></span>.  In that case, let 
+ <span class="v">xi'</span> be the result of running the algorithm on <span class="v">xi</span>, for <span class="v">i</span> from 1 
+ to <span class="v">n</span>, using the given alist <span class="v">va</span>.  First there are a few special 
+ cases.  If <span class="v">f</span> is <span class="tt"><a href="COMMON-LISP____EQUAL.html">equal</a></span> then we return <span class="v">t</span> if <span class="v">x1'</span> is 
+ syntactically identical to <span class="v">x2'</span> (where this test is very fast; see (B6) 
+ below); we return <span class="v">x1'</span> if it is known to be Boolean and <span class="v">x2'</span> is 
+ <span class="v">t</span>; and similarly, we return <span class="v">x2'</span> if it is known to be Boolean and 
+ <span class="v">x1'</span> is <span class="v">t</span>.  Next, if each <span class="v">xi'</span> is a constant and the <span class="v">:</span><span class="tt"><a href="ACL2____EXECUTABLE-COUNTERPART.html">executable-counterpart</a></span> of <span class="v">f</span> is enabled, then the result is obtained by 
+ computation.  Next, if <span class="v">f</span> is <span class="tt"><a href="ACL2____BOOLEANP.html">booleanp</a></span> and <span class="v">x1'</span> is known to be 
+ Boolean, <span class="v">t</span> is returned.  Otherwise, we proceed as follows, first possibly 
+ swapping the arguments if they are out of (the BDD term) order and if <span class="v">f</span> 
+ is known to be commutative (see below).  If a BDD rewrite rule (as defined 
+ above) matches the term <span class="tt">(f x1'... xn')</span>, then the most recently stored 
+ such rule is applied.  If there is no such match and <span class="v">f</span> is a 
+ BDD-constructor, then we return <span class="tt">(f x1'... xn')</span>.  Otherwise, if a BDD 
+ definition rule matches this term, then the most recently stored such rule 
+ (which will usually be the original definition for most users) is applied.  If 
+ none of the above applies and neither does IF-lifting, then we return <span class="tt">(f 
+ x1'... xn')</span>.  Otherwise we apply IF-lifting to <span class="tt">(f x1'... xn')</span> to 
+ obtain a term <span class="v">(<a href="COMMON-LISP____IF.html">IF</a> test tbr fbr)</span>; but we aren't done yet.  Rather, we run 
+ the BDD algorithm (using the same alist) on <span class="v">tbr</span> and <span class="v">fbr</span> to obtain 
+ terms <span class="v">tbr'</span> and <span class="v">fbr'</span>, and we return <span class="tt">(IF test tbr' fbr')</span> 
+ unless <span class="v">tbr'</span> is syntactically identical to <span class="v">fbr'</span>, in which case we 
+ return <span class="v">tbr'</span>.</p>
+</blockquote> 
+ 
+ <p>When is it the case that, as said above, ``<span class="v">f</span> is known to be 
+ commutative''?  This happens when an enabled rewrite rule is of the form 
+ <span class="v">(<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (f X Y) (f Y X))</span>.  Regarding swapping the arguments in that case: 
+ recall that we may assume very little about the BDD term order, essentially 
+ only that we swap the two arguments when the second is a constant and the 
+ first is not, for example, in <span class="v">(<a href="COMMON-LISP_____B2.html">+</a> x 1)</span>.  Other than that situation, one 
+ cannot expect to predict accurately when the arguments of commutative 
+ operators will be swapped.</p> 
+ 
+ <p>(B5) Soundness and Completeness of the ACL2 BDD algorithm</p> 
+ 
+ <p>Roughly speaking, ``soundness'' means that the BDD algorithm should give 
+ correct answers, and ``completeness'' means that it should be powerful enough 
+ to prove all true facts.  Let us make the soundness claim a little more 
+ precise, and then we'll address completeness under suitable hypotheses.</p> 
+ 
+ <p><b>Claim</b> (Soundness).  If the ACL2 BDD algorithm runs to completion on 
+ an input term <span class="v">t0</span>, then it produces a result that is provably equal to 
+ <span class="v">t0</span>.</p> 
+ 
+ <p>We leave the proof of this claim to the reader.  The basic idea is simply 
+ to check that each step of the algorithm preserves the meaning of the term 
+ under the bindings in the given alist.</p> 
+ 
+ <p>Let us start our discussion of completeness by recalling the theorem proved 
+ above in (A4).</p> 
+ 
+ <p><b>Theorem</b>.  Suppose that <span class="v">t1</span> and <span class="v">t2</span> are canonical BDD terms 
+ that contain no function symbols other than <span class="v">IF</span> and <span class="v">CONS</span>.  Also 
+ suppose that <span class="v">(<a href="COMMON-LISP____EQUAL.html">EQUAL</a> t1 t2)</span> is a theorem.  Then <span class="v">t1</span> and <span class="v">t2</span> are 
+ syntactically identical.</p> 
+ 
+ <p>Below we show how this theorem implies the following completeness property 
+ of the ACL2 BDD algorithm.  We continue to assume that <span class="v">CONS</span> is the only 
+ BDD-constructor.</p> 
+ 
+ <p><b>Claim</b> (Completeness).  Suppose that <span class="v">t1</span> and <span class="v">t2</span> are provably 
+ equal terms, under the assumption that all their variables are known to be 
+ Boolean.  Assume further that under this same assumption, top-level runs of 
+ the ACL2 BDD algorithm on these terms return terms that contain only the 
+ function symbols <span class="v">IF</span> and <span class="v">CONS</span>.  Then the algorithm returns the same 
+ term for both <span class="v">t1</span> and <span class="v">t2</span>, and the algorithm reduces <span class="v">(<a href="COMMON-LISP____EQUAL.html">EQUAL</a> t1
+ t2)</span> to <span class="v">t</span>.</p> 
+ 
+ <p>Why is this claim true?  First, notice that the second part of the 
+ conclusion follows immediately from the first, by definition of the algorithm. 
+ Next, notice that the terms <span class="v">u1</span> and <span class="v">u2</span> obtained by running the 
+ algorithm on <span class="v">t1</span> and <span class="v">t2</span>, respectively, are provably equal to <span class="v">t1</span> 
+ and <span class="v">t2</span>, respectively, by the Soundness Claim.  It follows that <span class="v">u1</span> 
+ and <span class="v">u2</span> are provably equal to each other.  Since these terms contain no 
+ function symbols other than <span class="v">IF</span> or <span class="v">CONS</span>, by hypothesis, the Claim now 
+ follows from the Theorem above together with the following lemma.</p> 
+ 
+ <p><b>Lemma</b>.  Suppose that the result of running the ACL2 BDD algorithm on 
+ a top-level term <span class="v">t0</span> is a term <span class="v">u0</span> that contains only the function 
+ symbols <span class="v">IF</span> and <span class="v">CONS</span>, where all variables of <span class="v">t0</span> are known to be 
+ Boolean.  Then <span class="v">u0</span> is a canonical BDD term.</p> 
+ 
+ <p>Proof: left to the reader.  Simply follow the definition of the algorithm, 
+ with a separate argument for the IF-lifting-for-IF loop.</p> 
+ 
+ <p>Finally, let us remark on the assumptions of the Completeness Claim above. 
+ The assumption that all variables are known to be Boolean is often true; in 
+ fact, the system uses the forward-chaining rule <span class="v">boolean-listp-forward</span> 
+ (you can see it using <span class="v">:</span><span class="tt"><a href="ACL2____PE.html">pe</a></span>) to try to establish this assumption, 
+ if your theorem has a form such as the following.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____LET.html">let</a> ((x (<a href="COMMON-LISP____LIST.html">list</a> x0 x1 ...))
+      (y (<a href="COMMON-LISP____LIST.html">list</a> y0 y1 ...)))
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____BOOLEAN-LISTP.html">boolean-listp</a> x)
+                (<a href="ACL2____BOOLEAN-LISTP.html">boolean-listp</a> y))
+           ...))</pre> 
+ 
+ <p>Moreover, the <span class="v">:BDD</span> hint can be used to force the prover to abort if it 
+ cannot check that the indicated variables are known to be Boolean; see <a href="ACL2____HINTS.html">hints</a>.</p> 
+ 
+ <p>Finally, consider the effect in practice of the assumption that the terms 
+ resulting from application of the algorithm contain calls of <span class="v">IF</span> and 
+ <span class="v">CONS</span> only.  Typical use of BDDs in ACL2 takes place in a theory (see 
+ <a href="ACL2____THEORIES.html">theories</a>) in which all relevant non-recursive function symbols are 
+ enabled and all recursive function symbols possess enabled BDD rewrite rules 
+ that tell them how open up.  For example, such a rule may say how to expand on 
+ a given function call's argument that has the form <span class="v">(<a href="COMMON-LISP____CONS.html">CONS</a> a x)</span>, while 
+ another may say how to expand when that argument is <span class="v">nil</span>).  (See for 
+ example the rules <span class="v">append-cons</span> and <span class="v">append-nil</span> in the documentation 
+ for <span class="tt"><a href="ACL2____IF_A2.html">if*</a></span>.)  We leave it to future work to formulate a theorem that 
+ guarantees that the BDD algorithm produces terms containing calls only of 
+ <span class="v">IF</span> and <span class="v">CONS</span> assuming a suitably ``complete'' collection of rewrite 
+ rules.</p> 
+ 
+ <p>(B6) <i>Efficiency considerations</i></p> 
+ 
+ <p>Following Bryant's algorithm, we use a graph representation of <a href="ACL2____TERM.html">term</a>s 
+ created by the BDD algorithm's computation.  This representation enjoys some 
+ important properties.</p> 
+ 
+ <blockquote> 
+ 
+ <p>(Time efficiency) The test for syntactic equality of BDD terms is very 
+ fast.</p> 
+ 
+ <p>(Space efficiency) Equal BDD data structures are stored identically in 
+ memory.</p>
+</blockquote> 
+ 
+ <p><i>Implementation note.</i> The representation actually uses a sort of hash 
+ table for BDD terms that is implemented as an ACL2 1-dimensional array.  See 
+ <a href="ACL2____ARRAYS.html">arrays</a>.  In addition, we use a second such hash table to avoid 
+ recomputing the result of applying a function symbol to the result of running 
+ the algorithm on its arguments.  We believe that these uses of hash tables are 
+ standard.  They are also discussed in Moore's paper on BDDs; see <a href="ACL2____BDD.html">bdd</a> 
+ for the reference.</p>
+</body>
+</html>

@@ -1,0 +1,341 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Edgesynth</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL2014____EDGESYNTH">Click for Edgesynth in the Full Manual</a></h3>
+
+<p>Synthesize simple edge-triggered <span class="v">always</span> blocks into primitives.</p><p>This is our "final," transformation for synthesizing 
+edge-triggered always blocks into primitives.  This transform supports only a 
+limited subset of Verilog statements.  Generally speaking, VL can handle a much 
+richer subset of Verilog statements than we are going to deal with here.  Other 
+<a href="VL2014____TRANSFORMS.html">transforms</a>—e.g., <a href="VL2014____STMTREWRITE.html">stmtrewrite</a>, <a href="VL2014____CASEELIM.html">caseelim</a>, and <a href="VL2014____EDGESPLIT.html">edgesplit</a>—are typically first used to reduce these much richer 
+statements into the simple form that we now target.</p> 
+ 
+<p>Despite the many limits we place on the Verilog statements that we do try to 
+support here, synthesizing edge-triggered always blocks is still difficult to 
+do in a way that is completely faithful to the Verilog semantics.  We describe 
+some of the challenges and our general approach below.</p> 
+ 
+ 
+<h3>Preliminaries: Edge-Triggered Blocks, Clocks</h3> 
+ 
+<p><u>Definition.</u> We say that an <span class="v">always</span> block is <b>edge-triggered</b> 
+when it contains a <a href="VL2014____VL-TIMINGSTMT.html">vl-timingstmt</a> whose control is a list of <span class="v">posedge</span> 
+or <span class="v">negedge</span> events.  As examples:</p> 
+ 
+<pre class="code">always @(posedge clk) ... ;                  // edge-triggered
+always @(negedge clk) ... ;                  // edge-triggered
+always @(posedge clk or negedge reset) ... ; // edge-triggered
+
+always @(<a href="COMMON-LISP_____A2.html">*</a>) ... ;                            // not edge-triggered
+always @(a or b or c) ... ;                  // not edge-triggered
+always @(posedge clk or a) ... ;             // not edge-triggered
+always #3 ... ;                              // not edge-triggered
+always begin ... end ;                       // not edge-triggered</pre> 
+ 
+<p>Throughout this discussion, we will assume that we are attempting to 
+synthesize an edge-triggered always block.  Some other kinds of <span class="v">always</span> 
+blocks are supported by other VL transforms, e.g., the <a href="VL2014____CBLOCK.html">cblock</a> transform 
+can process certain kinds of combinational always blocks.  But we aren't going 
+to try to cover any of that, here.</p> 
+ 
+<p>For many years, VL only supported edge-triggered always blocks that had a 
+single <span class="v">posedge</span> or <span class="v">negedge</span> trigger.  We now support arbitrary lists of 
+<span class="v">posedge</span> and <span class="v">negedge</span> edges.  That is, we can now handle always blocks 
+such as:</p> 
+ 
+<pre class="code">always @(posedge a or negedge b or posedge c or ...)
+begin
+   // restricted statements as explained below
+end</pre> 
+ 
+<p><u>Definition</u>.  We say that the <b>clocks</b> of such an always block 
+are the expressions in the sensitivity list, regardless of whether they are 
+used with <span class="v">posedge</span> or <span class="v">negedge</span> specifiers.  For instance:</p> 
+ 
+<pre class="code">// example:                                  // clocks (<a href="VL2014____EXPRESSIONS.html">expressions</a>)
+always @(posedge clk) ...;                   //   clk
+always @(posedge mclk or negedge reset) ...; //   mclk, reset
+always @(posedge a &amp; b or posedge c[0]) ...; //   a &amp; b, c[0]</pre> 
+ 
+<p>We only support always blocks whose clocks are each <b>one-bit wide, plain 
+identifiers</b>.  Why?</p> 
+ 
+<ul> 
+ 
+<li>The width restriction is meant to avoid mismatches between Verilog tools: 
+we have found that various Verilog simulators do not agree about what 
+constitutes an edge for a wide signal.  At any rate, it would be weird to ask 
+about the edge of a wide signal.</li> 
+ 
+<li>Requiring the clock be a plain identifier is a significant help in keeping 
+our processing code more simple.  We'll soon describe some of the timing 
+nuances that make it important to be able to distinguishing clocks from 
+non-clocks in <span class="v">if</span> statements and right-hand sides of expressions.  We think 
+this restriction is probably not too severe, as most reasonable designs will 
+not include, e.g., vectors of clocks.</li> 
+ 
+</ul> 
+ 
+ 
+<h3>Synthesis Challenge: X Optimism</h3> 
+ 
+<p>One basic problem in synthesizing edge-triggered <span class="v">always</span> blocks (or any 
+other kind of <span class="v">always</span> blocks, for that matter) is the unwarranted optimism 
+of <span class="v">if</span> statements.</p> 
+ 
+<p>Suppose for simplicity that <span class="v">en</span> is one bit wide.  In the Verilog 
+semantics, a statement like <span class="v">if (en) q &lt;= d</span> causes an update to <span class="v">q</span> only 
+if <span class="v">en</span> evaluates to 1.  If <span class="v">en</span> instead evaluates to X or Z, the <span class="v">if</span> 
+statement <b>pretends it evaluated to 0</b> and does not update <span class="v">q</span>.  This 
+is generally bad, as it fails to properly treat X as an unknown.</p> 
+ 
+<p>When we synthesize these always blocks for use with properly monotonic 
+back-ends like <a href="ACL2____ESIM.html">esim</a>, where X really does represent an unknown, we have 
+no way to model this kind of optimism.  Instead, roughly speaking, we are going 
+to treat these statements like <span class="v">?:</span> operators, which have safer but 
+different X behavior.  That is, in our semantics, when <span class="v">en</span> evaluates to X 
+or Z, we may write an X value into <span class="v">q</span> instead of failing to update it.</p> 
+ 
+<p>We cannot see any way to avoid this kind of mismatch.  We generally regard 
+the <span class="v">?:</span> behavior as more reasonable and safer.  But it's easy to imagine 
+that if <span class="v">q</span> is later fed into other, non-conservative Verilog 
+constructs (such as if statements, case/casex/casez statements, case equality 
+operators, etc.), then a Verilog simulator could go produce completely 
+different results than, say, an esim-based simulation.</p> 
+ 
+ 
+<h3>Synthesis Challenge: Clock/Data Races</h3> 
+ 
+<p>A much more subtle and tricky problem is the event-based Verilog timing 
+model allows for a number of races between the clock signals and the data 
+inputs.  To illustrate this, consider the following examples:</p> 
+ 
+<pre class="code">// Version 1:
+
+always @(posedge clk or posedge reset)
+  q &lt;= reset ? 0 : data;
+
+// Version 2:
+
+wire q_next;
+assign q_next = reset ? 0 : data;
+always @(posedge clk or posedge reset)
+  q &lt;= q_next;</pre> 
+ 
+<p>You might hope these would behave the same.  After all, it looks like the 
+only difference is that we've named an intermediate expression.  Unfortunately, 
+Version 2 has a race condition in Verilog simulators.  In Version 2, when 
+<span class="v">reset</span> transitions from low to high, two separate events need to be 
+scheduled: the <span class="v">assign</span> and the <span class="v">always</span> block.  These events may occur 
+in any order, so we may find that either:</p> 
+ 
+<ul> 
+ 
+<li>The <span class="v">assign</span> statement happens first, so <span class="v">q_next</span> "properly" is 
+updated to 0 before the <span class="v">always</span> block updates <span class="v">q</span>, or</li> 
+ 
+<li>The <span class="v">always</span> statement happens first, so <span class="v">q_next</span> "improperly" has 
+the old value of <span class="v">data</span> when we assign it to <span class="v">q</span>.</li> 
+ 
+</ul> 
+ 
+<p>(If you run these on a Verilog simulator and find that they simulate in the 
+same way, try reordering the assignment and the always block and you may get a 
+different result.)</p> 
+ 
+<p>In contrast, at least in Verilog's simulation semantics, Version 1 does not 
+suffer from this problem and will "properly" reset <span class="v">q</span>.  The reason this 
+works is that there are no competing events are triggered by the transition of 
+<span class="v">reset</span>; only the single <span class="v">always</span> block must be run.</p> 
+ 
+<p>Here is an attempt to visualize what we might be modeling when we write 
+these two fragments of Verilog.</p> 
+ 
+<div class="ximg"><img src="../res/vl/always/edgesynth_reset.png"></div> 
+ 
+<p>Version 1 might be sensible.  If this handling of <span class="v">reset</span> is to be an 
+intrinsic part of the always block, a circuit designer might be able to design 
+something that implements it correctly.</p> 
+ 
+<p>But Version 2 is clearly not okay.  Here, with the muxing done independently 
+of the flop, we can see that a change in reset is going to trigger an update in 
+both the flop itself and in the mux that is feeding the flop.  This is a clear 
+race.</p> 
+ 
+<p>The fanciful "horrible circuit" is similar to Version 2, but made worse 
+just to drive the point home.  Imagine here that the adder is some large 
+circuit with some large delay.  When reset goes high, the flip-flop is 
+triggered and, meanwhile, the adder's inputs have changed, so it will be busily 
+transitioning to compute the new sum.  The value that gets latched in, then, is 
+anyone's guess.  Clearly you would never want to design something like 
+this.</p> 
+ 
+<p>At any rate, if we regard the right-hand sides of assignments in an 
+edge-triggered always block as the data inputs to flip-flops, then for our 
+design to make any sense, we really need these data inputs to be stable 
+whenever a clock changes.  For that to hold, these assignments should, at the 
+very least, <b>not depend on the clocks</b> of the always block.</p> 
+ 
+<p>This is difficult to reliably identify syntactically.  Even in a simple case 
+like Version 2, we would need to analyze the assignments that are occurring in 
+the module to discover that <span class="v">q_next</span> depends on <span class="v">reset</span>.  If <span class="v">q_next</span> 
+were instead driven by some submodule, then noticing this would require an 
+analysis of that submodule.  Aliasing makes this much worse, e.g., what if we 
+have something like:</p> 
+ 
+<pre class="code">wire my_clk = real_clk;
+always @(posedge my_clk) q &lt;= real_clk;</pre> 
+ 
+<p>At any rate, detecting this situation seems very difficult, so we have not 
+seriously considered trying to identify these races.  We do, however, at least 
+forbid the clocks from occurring in the right hand sides of expressions.</p> 
+ 
+<p>This may seem quite unsatisfying—it rules out Version 1 and doesn't 
+rule out Version 2!  But this restriction is practically very useful.  It means 
+that for the blocks we <i>do</i> support, it's reasonable to move the 
+right-hand sides out of the always block.  That is, it makes it safe to do 
+something like:</p> 
+ 
+<pre class="code">always @(posedge clk or posedge reset)
+  if (reset)
+     q &lt;= 0;
+  else
+     q &lt;= q+1;
+--&gt;
+
+assign q_next = q+1;
+
+always @(posedge clk or posedge reset)
+  if (reset)
+     q &lt;= 0;
+  else
+     q &lt;= q_next;</pre> 
+ 
+<p>This sort of reassignment wouldn't be valid if the right-hand side 
+expression mentioned any of the clocks, as we have just beaten to death, 
+above.  (It's the whole difference between Version 1 and Version 2).</p> 
+ 
+ 
+<h3>Historic Approach to Edge-Triggered Blocks</h3> 
+ 
+<p>Before describing our new approach, it's useful to describe the old way that 
+VL handled edge-triggered blocks.  Previously, VL supported only basic, 
+single-edge registers, and reduced all supported always blocks into instances 
+of a single, 1-bit flip-flop primitive.</p> 
+ 
+<pre class="code">module VL_1_BIT_FLOP (q, d, clk);
+  output reg q;
+  input d;
+  input clk;
+  always @(posedge clk)
+    q &lt;= d;
+endmodule</pre> 
+ 
+<p>Given this primitive, it was straightforward to implement a simple, 
+posedge-triggered, <i>N</i>-bit flip-flop: just instance <i>N</i> of these 
+primitive flops, one for each bit.  We named the resulting modules, e.g., 
+<span class="v">VL_4_BIT_FLOP</span>, <span class="v">VL_128_BIT_FLOP</span>, and so forth, for any <i>N</i>.</p> 
+ 
+<p>We then had a transformation that could support basic <span class="v">always</span> blocks by 
+converting them into instances of an appropriately sized flop module.  For 
+instance:</p> 
+ 
+<pre class="code">always @(posedge clk)
+  q &lt;= a + b + cin;
+ ---&gt;
+VL_12_BIT_FLOP foo123 (q, a + b + cin, clk);</pre> 
+ 
+<p>Our transform could also support always blocks with limited if/else 
+expressions, by merging the if/else structure into the data input.  For 
+instance:</p> 
+ 
+<pre class="code">always @(posedge clk)
+begin
+  if (cycle)
+     q &lt;= 12'b0;
+  else
+     q &lt;= a + b + cin;
+end
+---&gt;
+VL_12_BIT_FLOP foo123 (q, cycle ? 12'b0 : a + b + cin, clk);</pre> 
+ 
+<p>Along with other transforms, e.g., for converting <span class="v">negedge</span> into posedge 
+signals by inverting them, this allowed VL to support a fairly rich set of 
+single-edge always blocks.  Meanwhile, back-end tools like <a href="ACL2____ESIM.html">esim</a> only 
+needed to support a single VL_1_BIT_FLOP primitive.  Historically this was done 
+using a traditional master/slave latch style.</p> 
+ 
+ 
+<h3>New Primitives</h3> 
+ 
+<p>Unfortunately, we don't how we can construct a multi-edge flip flop out of a 
+single-edge flip-flop.  To allow VL to support <span class="v">always</span> blocks with multiple 
+edges, then, we need new primitives.</p> 
+ 
+<p>After studying the kinds of multi-edge flops that we wanted to support, we 
+decided that what we really want is a flip-flop with a built-in priority mux 
+that is governed by the clock edges.  Our new, simplest flip-flop primitive is 
+just like the previous VL_1_BIT_FLOP:</p> 
+ 
+<pre class="code">module VL_1_BIT_1_EDGE_FLOP (q, d, clk);
+  output reg q;
+  input d;
+  input clk;
+  always @(posedge clk)
+    q &lt;= d;
+endmodule</pre> 
+ 
+<p>The next simplest primitive has two clocks and two data signals.  We assume 
+that one clock has priority over the other.  This module is just a slight 
+generalization of, e.g., Version 1 of the resettable mux that we saw above, 
+where instead of necessarily resetting to zero we can choose between two 
+arbitrary data inputs.</p> 
+ 
+<pre class="code">module VL_1_BIT_2_EDGE_FLOP (q, d0, d1, clk0, clk1);
+ output reg q;
+ input d0, d1;
+ input clk0, clk1;
+ always @(posedge clk0 or posedge clk1)
+   if (clk0)
+      q &lt;= d0
+   else
+      q &lt;= d1;
+endmodule</pre> 
+ 
+<p><b>BOZO</b> consider using ?: instead of IF here for the Verilog definition.</p> 
+ 
+<p>For three clocks we simply add another clock and data input, extending the 
+priority mux.  This module could be used to model, e.g., a flip-flop with 
+asynchronous set and clears, e.g., by allowing <span class="v">d0 = 1</span> and <span class="v">d1 = 0</span> or 
+vice versa depending on the desired priority of set versus clear.</p> 
+ 
+<pre class="code">module VL_1_BIT_3_EDGE_FLOP (q, d0, d1, d2, clk0, clk1, clk2);
+ output reg q;
+ input d0, d1;
+ input clk0, clk1;
+ always @(posedge clk0 or posedge clk1 or posedge clk2)
+   if (clk0)
+      q &lt;= d0
+   else if (clk1)
+      q &lt;= d1;
+   else
+      q &lt;= d2;
+endmodule</pre> 
+ 
+<p>Although we don't know what use there would be for such a flip-flop with 
+more than three clocks and data inputs, we can continue this way, adding more 
+clocks and data inputs, up to any number desired.  See <a href="VL2014____NEDGEFLOP.html">nedgeflop</a> for 
+more details about how we generate these primitives.</p> 
+ 
+<p>Given these new primitives, we can still construct wide flip-flops by 
+chaining together one-bit primitive flops.</p> 
+ 
+<p>The remaining challenge is to line up edge-triggered <span class="v">always</span> with 
+instances of these primitives.</p>
+</body>
+</html>

@@ -1,0 +1,105 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Vl-expr-names-for-implicit</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL____VL-EXPR-NAMES-FOR-IMPLICIT">Click for Vl-expr-names-for-implicit in the Full Manual</a></h3>
+
+<p>Collect up wire names that might need to be implicitly declared.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(vl-expr-names-for-implicit x) → names</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">x</span> — <font color="#606060">Guard <span class="v">(<a href="VL____VL-EXPR-P.html">vl-expr-p</a> x)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">names</span> — <font color="#606060">Type <span class="v">(<a href="ACL2____STRING-LISTP.html">string-listp</a> names)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>Experimentation with NCVerilog and VCS reveals that only certain 
+names within expressions lead to implicit wires being declared.  See especially 
+the <span class="v">vl/linttest/implicit</span> tests for a test suite of sorts.  Here are some 
+findings:</p> 
+ 
+<ul> 
+ 
+<li>If we have a plain name on the left-hand side, like <span class="v">assign foo = 0</span>, then 
+we get an implicit wire.</li> 
+ 
+<li>If we instead have something like <span class="v">assign foo.bar = 0</span>, then we're 
+referencing something elsewhere and we don't want to create implicit wires 
+named <span class="v">foo</span> or <span class="v">bar</span>.</li> 
+ 
+<li>When <span class="v">foo</span> is not previously declared, both NCVerilog and VCS reject 
+<span class="v">assign foo[0] = 0</span>.  So I don't think we want to collect names that have 
+indexing or part-selects applied to them.  On the other hand, NCVerilog rejects 
+but VCS accepts (with warnings) gates such as <span class="v">buf mybuf(o, foo[0])</span>, and 
+seems to infer a wire for <span class="v">foo</span>.  We will try to mimic NCVerilog's behavior 
+since it is more consistent, and <i>not</i> infer wires that are being indexed 
+into.</li> 
+ 
+<li>Suppose we explicitly declare <span class="v">wire [3:0] vec;</span>.  Then both NCVerilog 
+and VCS reject <span class="v">assign vec[w] = 0</span> where <span class="v">w</span> is undeclared, instead of 
+inferring an implicit wire <span class="v">w</span>.  So I think we do not want to collect names 
+from <i>within</i> the indices and part-selects.  However, distressingly, NCV 
+and VCS both accept <span class="v">buf myand2(o, vec[w]);</span>, so what is the rule?  I think 
+it seems most sensible to not infer implicit wires within the index 
+expressions.</li> 
+ 
+<li>Within gate connections, NCV and VCS allow implicit wires in many 
+expressions, e.g., <span class="v">w1 + w2</span>, <span class="v">myfun(<a href="ACL2____W.html">w</a>)</span>, both sides of <span class="v">inside</span> 
+expressions, etc.  (These kinds of expressions aren't allowed in the LHS of 
+assignments, so we don't worry about them there.)</li> 
+ 
+<li>In submodule connections, NCV allows implicit wires to be inferred inside 
+of assignment patterns like <span class="v">triple_t'{a:implicit_w1,b:implicit_w2,...}</span>. 
+Our version of VCS says this isn't yet implemented.</li> 
+ 
+</ul> 
+ 
+ 
+ 
+<p><b>Theorem: </b>return-type-of-vl-expr-names-for-implicit.names</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> return-type-of-vl-expr-names-for-implicit.names
+        (<a href="ACL2____B_A2.html">b*</a> ((?names (<a href="VL____VL-EXPR-NAMES-FOR-IMPLICIT.html">vl-expr-names-for-implicit</a> x)))
+            (<a href="ACL2____STRING-LISTP.html">string-listp</a> names))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>return-type-of-vl-exprlist-names-for-implicit.names</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> return-type-of-vl-exprlist-names-for-implicit.names
+        (<a href="ACL2____B_A2.html">b*</a> ((?names (<a href="VL____VL-EXPRLIST-NAMES-FOR-IMPLICIT.html">vl-exprlist-names-for-implicit</a> x)))
+            (<a href="ACL2____STRING-LISTP.html">string-listp</a> names))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>true-listp-of-vl-expr-names-for-implicit</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> true-listp-of-vl-expr-names-for-implicit
+        (<a href="ACL2____TRUE-LISTP.html">true-listp</a> (<a href="VL____VL-EXPR-NAMES-FOR-IMPLICIT.html">vl-expr-names-for-implicit</a> x))
+        :rule-classes :type-prescription)</pre> 
+<p><b>Theorem: </b>true-listp-of-vl-exprlist-names-for-implicit</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> true-listp-of-vl-exprlist-names-for-implicit
+        (<a href="ACL2____TRUE-LISTP.html">true-listp</a> (<a href="VL____VL-EXPRLIST-NAMES-FOR-IMPLICIT.html">vl-exprlist-names-for-implicit</a> x))
+        :rule-classes :type-prescription)</pre> 
+<p><b>Theorem: </b>vl-expr-names-for-implicit-of-vl-expr-fix-x</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-expr-names-for-implicit-of-vl-expr-fix-x
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL____VL-EXPR-NAMES-FOR-IMPLICIT.html">vl-expr-names-for-implicit</a> (<a href="VL____VL-EXPR-FIX.html">vl-expr-fix</a> x))
+               (<a href="VL____VL-EXPR-NAMES-FOR-IMPLICIT.html">vl-expr-names-for-implicit</a> x)))</pre> 
+<p><b>Theorem: </b>vl-exprlist-names-for-implicit-of-vl-exprlist-fix-x</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-exprlist-names-for-implicit-of-vl-exprlist-fix-x
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL____VL-EXPRLIST-NAMES-FOR-IMPLICIT.html">vl-exprlist-names-for-implicit</a> (<a href="VL____VL-EXPRLIST-FIX.html">vl-exprlist-fix</a> x))
+               (<a href="VL____VL-EXPRLIST-NAMES-FOR-IMPLICIT.html">vl-exprlist-names-for-implicit</a> x)))</pre> 
+<p><b>Theorem: </b>vl-expr-names-for-implicit-vl-expr-equiv-congruence-on-x</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-expr-names-for-implicit-vl-expr-equiv-congruence-on-x
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="VL____VL-EXPR-EQUIV.html">vl-expr-equiv</a> x x-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL____VL-EXPR-NAMES-FOR-IMPLICIT.html">vl-expr-names-for-implicit</a> x)
+                        (<a href="VL____VL-EXPR-NAMES-FOR-IMPLICIT.html">vl-expr-names-for-implicit</a> x-equiv)))
+        :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>vl-exprlist-names-for-implicit-vl-exprlist-equiv-congruence-on-x</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+    vl-exprlist-names-for-implicit-vl-exprlist-equiv-congruence-on-x
+    (<a href="ACL2____IMPLIES.html">implies</a> (<a href="VL____VL-EXPRLIST-EQUIV.html">vl-exprlist-equiv</a> x x-equiv)
+             (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL____VL-EXPRLIST-NAMES-FOR-IMPLICIT.html">vl-exprlist-names-for-implicit</a> x)
+                    (<a href="VL____VL-EXPRLIST-NAMES-FOR-IMPLICIT.html">vl-exprlist-names-for-implicit</a> x-equiv)))
+    :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>vl-expr-names-for-implicit-nrev-removal</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-expr-names-for-implicit-nrev-removal
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL____VL-EXPR-NAMES-FOR-IMPLICIT-NREV.html">vl-expr-names-for-implicit-nrev</a> x nrev)
+               (<a href="COMMON-LISP____APPEND.html">append</a> nrev (<a href="VL____VL-EXPR-NAMES-FOR-IMPLICIT.html">vl-expr-names-for-implicit</a> x))))</pre> 
+<p><b>Theorem: </b>vl-exprlist-names-for-implicit-nrev-removal</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-exprlist-names-for-implicit-nrev-removal
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL____VL-EXPRLIST-NAMES-FOR-IMPLICIT-NREV.html">vl-exprlist-names-for-implicit-nrev</a> x nrev)
+               (<a href="COMMON-LISP____APPEND.html">append</a> nrev
+                       (<a href="VL____VL-EXPRLIST-NAMES-FOR-IMPLICIT.html">vl-exprlist-names-for-implicit</a> x))))</pre> 
+
+</body>
+</html>

@@ -1,0 +1,149 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Fgl-rewrite-rules</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=FGL____FGL-REWRITE-RULES">Click for Fgl-rewrite-rules in the Full Manual</a></h3>
+
+<p>Differences between FGL and ACL2 rewrite rules</p><p>FGL rewrite rules are essentially just ACL2 rewrite rules.  More 
+specifically, they are derived from formulas that have basically the same form 
+as ACL2 rewrite rules; they need not be stored with 
+<span class="v">:rule-classes :rewrite</span>.  FGL uses a different set of rules than the ones 
+that are enabled for use in ACL2, because not all good ACL2 rewrite rules are 
+good FGL rewrite rules, and 
+vice versa.  A particularly important difference is that <a href="ACL2____SYNTAXP.html">syntaxp</a> and 
+<a href="ACL2____BIND-FREE.html">bind-free</a> forms receive <a href="FGL____FGL-OBJECT.html">FGL symbolic 
+objects</a> as their inputs, rather than ACL2 terms.  FGL rewrite rules also 
+allow special constructs <a href="FGL____BIND-VAR.html">bind-var</a>, <a href="FGL____BINDER.html">binder</a>, and <a href="FGL____SYNTAX-BIND.html">syntax-bind</a> 
+which allow free variables to be bound as with <a href="ACL2____BIND-FREE.html">bind-free</a>, but in the RHS 
+of the rewrite rule rather than in the hyps.  They additionally support a form 
+<a href="FGL____ABORT-REWRITE.html">abort-rewrite</a> which causes the application of the rule to be aborted 
+when encountered in the RHS, similarly to if a hypothesis was not relieved.</p> 
+ 
+<h3>Creating and Removing FGL Rewrite Rules</h3> 
+<p>An FGL rewrite rule is an ACL2 rewrite rule.  You can register an existing 
+ACL2 theorem for use as an FGL rewrite rule using:</p> 
+<pre class="code">(<a href="FGL____ADD-FGL-REWRITE.html">fgl::add-fgl-rewrite</a> my-rule)</pre> 
+<p>And you can disable that rule for use by FGL using:</p> 
+<pre class="code">(<a href="FGL____REMOVE-FGL-REWRITE.html">fgl::remove-fgl-rewrite</a> my-rule)</pre> 
+<p>To create a new rewrite rule and enable it for FGL, you may use:</p> 
+<pre class="code">(<a href="FGL____DEF-FGL-REWRITE.html">fgl::def-fgl-rewrite</a> my-rule
+   body
+  :hints ...)</pre> 
+<p>This just expands to:</p> 
+<pre class="code">(<a href="ACL2____DEFTHMD.html">defthmd</a> my-rule ...)
+(<a href="FGL____ADD-FGL-REWRITE.html">fgl::add-fgl-rewrite</a> my-rule)</pre> 
+ 
+<p>FGL also supports rewrite rules that are triggered not on the leading 
+function symbol of the LHS, but on the leading function symbol of an 
+if-then-else branch.  These rules can be added using 
+<span class="v">(<a href="FGL____ADD-FGL-BRANCH-MERGE.html">fgl::add-fgl-branch-merge</a> my-rule)</span> and they can be created using:</p> 
+<pre class="code">(<a href="FGL____DEF-FGL-BRANCH-MERGE.html">fgl::def-fgl-branch-merge</a> my-rule
+   body
+   ...)</pre> 
+ 
+<p>A suitable branch merge rule has a left-hand side of the form <span class="v">(<a href="COMMON-LISP____IF.html">if</a> test
+then else)</span> where <span class="v">then</span> is a function call.  Generally, <span class="v">test</span> and 
+<span class="v">else</span> should be free variables, but this isn't a hard and fast rule.</p> 
+ 
+ 
+<h3>Advanced Features</h3> 
+ 
+<p>FGL rewrite rules support ACL2's <a href="ACL2____SYNTAXP.html">syntaxp</a> and <a href="ACL2____BIND-FREE.html">bind-free</a> 
+hypothesis forms.  However, it generally won't work to use the same rewrite 
+rule in both the ACL2 and FGL rewriters if it has syntaxp or bind-free 
+hypotheses, because in FGL the variables in the syntaxp/bind-free forms will be 
+bound to symbolic objects, whereas in ACL2 they will be bound to 
+terms. Therefore to use syntaxp, bind-free, and bind-var (discussed below), 
+one needs to be familiar with FGL symbolic objects -- see <a href="FGL____FGL-OBJECT.html">fgl-object</a>.</p> 
+ 
+<p>Two additional features support a new style of programming rewrite rules. 
+<span class="v">Bind-var</span> and <span class="v">syntax-bind</span> allow functionality similar to bind-free, 
+but available within the right-hand side of a rewrite rule.  <span class="v">Abort-rewrite</span> 
+allows the rewrite operation to be cancelled partway through interpreting the 
+right-hand side.</p> 
+ 
+<p>Here is an example that uses both syntax-bind and abort-rewrite, from 
+"bitops.lisp":</p> 
+ 
+<pre class="code">(<a href="FGL____DEF-FGL-REWRITE.html">def-fgl-rewrite</a> logtail-to-logtail-helper
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____SYNTAXP.html">syntaxp</a> (<a href="COMMON-LISP____NOT.html">not</a> (fgl-object-case n :g-concrete)))
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____LOGTAIL.html">logtail</a> n x)
+                  (<a href="ACL2____B_A2.html">b*</a> ((x (int x))
+                       (n (<a href="ACL2____NFIX.html">nfix</a> (int n)))
+                       ((when (<a href="FGL____SYNTAX-BIND.html">syntax-bind</a> n-concrete (fgl-object-case n :g-concrete)))
+                        (<a href="ACL2____LOGTAIL.html">logtail</a> n x))
+                       (n-width (<a href="FGL____SYNTAX-BIND.html">syntax-bind</a> n-width (fgl-object-case n
+                                                       :g-integer (<a href="COMMON-LISP____MAX.html">max</a> 0 (<a href="COMMON-LISP____1-.html">1-</a> (<a href="ACL2____LEN.html">len</a> n.bits)))
+                                                       :otherwise nil)))
+                       ((unless (<a href="COMMON-LISP____AND.html">and</a> n-width
+                                     (<a href="FGL____CHECK-UNSIGNED-BYTE-P.html">check-unsigned-byte-p</a> n-width n)))
+                        (<a href="FGL____ABORT-REWRITE.html">abort-rewrite</a> (<a href="ACL2____LOGTAIL.html">logtail</a> n x)))
+                       (n-rev (int-revapp n-width n 0)))
+                    (logtail-helper n-rev n-width x)))))</pre> 
+ 
+<p>When attempting to apply this rewrite rule, the FGL rewriter starts in much 
+the same way as the ACL2 rewriter.  As a precondition for attempting to apply 
+this rule, the term we are rewriting must be a call of logtail, and that call 
+must unify with the LHS of this rule -- in this case any call of logtail will 
+do so.</p> 
+ 
+<p>Next, we relieve the hyps.  This rule only has one hyp, which is a 
+syntaxp call; we check that <span class="v">n</span> is not a <span class="v">:g-concrete</span> object.</p> 
+ 
+<p>Then we proceed by interpreting the RHS.  We bind <span class="v">x</span> to the result of 
+rewriting <span class="v">(int x)</span> (where <span class="v">int</span> is an alias for <span class="v">ifix</span> and rebind 
+<span class="v">n</span> to the result of rewriting <span class="v">(<a href="ACL2____NFIX.html">nfix</a> (int n))</span>, and then we encounter 
+our first syntax-bind form.  The syntax-bind form has the free variable 
+<span class="v">n-concrete</span>, which is here to logically represent the result we get from 
+evaluating the syntax-bind form.  A syntax-bind form is logically equivalent to 
+its first argument, so when we prove <span class="v">logtail-to-logtail-helper</span> correct we 
+prove it with the free variable <span class="v">n-concrete</span> in place of the syntax-bind. 
+That means we are logically justified in returning anything we want from the 
+syntax-bind form -- since n-concrete is a free variable not previously bound, 
+the rule is applicable for any value of n-concrete.  In this case we evaluate 
+<span class="v">(fgl-object-case n :g-concrete)</span>.  (Note: <span class="v">syntax-bind</span> is a macro that 
+uses the primitive forms <a href="FGL____BIND-VAR.html">bind-var</a> and <a href="FGL____SYNTAX-INTERP.html">syntax-interp</a> to implement 
+this behavior; see their documentation for more general usage.)  This will 
+produce a Boolean value, which is a concrete FGL object representing itself.  If 
+true, then n is concrete and we will produce the result of again rewriting 
+<span class="v">(<a href="ACL2____LOGTAIL.html">logtail</a> n x)</span> -- note that we haven't created a loop here because the 
+syntaxp hyp required that the original <span class="v">n</span> was not concrete. Otherwise, we 
+proceed with the next syntax-bind form.</p> 
+ 
+<p>This next syntax-bind form (note it must use a different free variable than 
+the other form!) returns either some natural number value or else NIL.  Again, 
+either way it is a concrete object representing itself.  We bind this to 
+<span class="v">n-width</span>.  We then require that n-width is nonnil and that we can show 
+<span class="v">n</span> satisfies <span class="v">(<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> n-width n)</span> (note: check-unsigned-byte-p 
+is an alias for unsigned-byte-p which has rules that try to prove it cheaply). 
+If not, then we come to an <span class="v">abort-rewrite</span> form.  When FGL arrives at an 
+abort-rewrite form, it aborts the current rewrite rule attempt, ignoring the 
+form inside the abort-rewrite.  (In this case the form <span class="v">(<a href="ACL2____LOGTAIL.html">logtail</a> n x)</span> 
+inside the abort-rewrite was selected to make it easy to prove 
+<span class="v">logtail-to-logtail-helper</span> correct.)  Otherwise, we go on with our rewrite.</p> 
+ 
+<p>Note we needed to know <span class="v">(<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> n-width n)</span> in order to prove 
+<span class="v">logtail-to-logtail-helper</span>.  The <span class="v">syntax-bind</span> form produces the correct 
+number, but while proving <span class="v">logtail-to-logtail-helper</span> we don't know that. 
+Fortunately, it's fairly efficient to verify that after the fact using 
+<span class="v">check-unsigned-byte-p</span>.</p> 
+ 
+<h3>Examining the Interpreter State</h3> 
+ 
+<p>FGL's implementation of syntaxp, bind-free, and syntax-bind interpret the 
+syntactic term using a custom evaluator, <a href="FGL____FANCY-EV.html">fancy-ev</a>, that can be 
+instrumented to call functions that examine the ACL2 state and the FGL 
+interpreter state, and even make limited modifications to them.  See the 
+documentation for <a href="FGL____FANCY-EV.html">fancy-ev</a> for how to use it, and see <a href="FGL____FGL-INTERPRETER-STATE.html">fgl-interpreter-state</a> for documentation of the contents of the interpreter state. One 
+main use of this is to examine counterexamples produced from incremental SAT 
+calls.  By default, after loading <span class="v">fgl/top</span>, the rewrite rule 
+<span class="v">show-counterexample-rw</span> rewrites the constant-nil function 
+<span class="v">(show-counterexample msg)</span> such that a syntax-bind form fetches the latest 
+incremental SAT counterexample and prints it.</p> 
+
+</body>
+</html>

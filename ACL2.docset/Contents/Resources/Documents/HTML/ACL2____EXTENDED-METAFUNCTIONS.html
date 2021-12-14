@@ -1,0 +1,368 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Extended-metafunctions</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____EXTENDED-METAFUNCTIONS">Click for Extended-metafunctions in the Full Manual</a></h3>
+
+<p>State and context sensitive metafunctions</p><pre class="code">General Form of an Extended :Meta theorem:
+(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a> x)              ; this hyp is optional
+              (<a href="ACL2____ALISTP.html">alistp</a> a)                    ; this hyp is optional
+              (ev (hyp-fn x mfc state) a)   ; this hyp is optional
+              ; meta-extract hyps may also be included (see below)
+              )
+         (equiv (ev x a)
+                (ev (fn x mfc state) a)))</pre> 
+ 
+ <p>where the restrictions are as described in the <a href="COMMON-LISP____DOCUMENTATION.html">documentation</a> for 
+ <span class="tt"><a href="ACL2____META.html">meta</a></span> where <span class="v">state</span> is literally the symbol <span class="v">STATE</span>, and <span class="v">x</span>, 
+ <span class="v">a</span>, <span class="v">mfc</span>, and <span class="v">state</span> are distinct variable symbols.  A <span class="v">:meta</span> 
+ theorem of the above form installs <span class="v">fn</span> as a metatheoretic simplifier with 
+ hypothesis function <span class="v">hyp-fn</span>, exactly as for vanilla metafunctions.  The 
+ only difference is that when the metafunctions are applied, some contextual 
+ information is passed in via the <span class="v">mfc</span> argument and the ACL2 <span class="tt"><a href="ACL2____STATE.html">state</a></span> 
+ is made available.</p> 
+ 
+ <p>See <a href="ACL2____META.html">meta</a> for a discussion of vanilla flavored metafunctions.  This 
+ documentation assumes you are familiar with the simpler situation, in 
+ particular, how to define a vanilla flavored metafunction, <span class="v">fn</span>, and its 
+ associated hypothesis metafunction, <span class="v">hyp-fn</span>, and how to state and prove 
+ metatheorems installing such functions.  Defining extended metafunctions 
+ requires that you also be familiar with many ACL2 implementation details. 
+ This documentation is sketchy on these details; see the ACL2 source code or 
+ email the <a href="ACL2____ACL2-HELP.html">ACL2-help</a> list if you need more help.</p> 
+ 
+ <p>Additional hypotheses are supported, called ``meta-extract hypotheses'', 
+ that allow metafunctions to depend on the validity of certain terms extracted 
+ from the context or the logical <a href="ACL2____WORLD.html">world</a>.  These hypotheses provide an 
+ even more advanced form of metatheorem so we explain them elsewhere; see <a href="ACL2____META-EXTRACT.html">meta-extract</a>.</p> 
+ 
+ <p>The metafunction context, <span class="v">mfc</span>, is a list containing many different 
+ data structures used by various internal ACL2 functions.  Generally, your 
+ extended metafunction will take <span class="v">mfc</span> as its second formal and pass it into 
+ the functions mentioned below.  However, advanced users who want other access 
+ to <span class="v">mfc</span> may wish to see the documentation for <a href="ACL2____MFC.html">mfc</a>.  The ACL2 
+ <span class="v">state</span> is well-documented (see <a href="ACL2____STATE.html">state</a>).  Below we present 
+ expressions below that can be useful in defining extended metafunctions.  Some 
+ of these expressions involve keyword arguments, <span class="v">:forcep</span> and <span class="v">:ttree</span>, 
+ which are optional and in most cases are fine to omit, and which we explain 
+ after we present the useful expressions.</p> 
+ 
+ <p><span class="v">(<a href="ACL2____MFC-CLAUSE.html">mfc-clause</a> mfc)</span>: returns the current goal, in clausal form.  A clause 
+ is a list of ACL2 terms, implicitly denoting the disjunction of the listed 
+ terms.  The clause returned by <span class="v">mfc-clause</span> is the clausal form of the 
+ translation (see <a href="ACL2____TRANS.html">trans</a>) of the goal or subgoal on which the rewriter is 
+ working.  When a metafunction calls <span class="v">mfc-clause</span>, the term, <span class="v">term-mf</span>, 
+ being rewritten by the metafunction has resulted from an attempt to rewrite 
+ some term, <span class="v">term-cl</span>, in this clause.  These could be the same term, but 
+ that need not be the case: for example, <span class="v">term-mf</span> could be a term to which 
+ the rewriter has backchained while trying to rewrite <span class="v">term-cl</span>, or 
+ <span class="v">term-mf</span> could arise from the right-hand side of a rewrite rule applied to 
+ <span class="v">term-cl</span>.</p> 
+ 
+ <p><span class="v">(<a href="ACL2____MFC-ANCESTORS.html">mfc-ancestors</a> mfc)</span>: returns an alist whose keys are the negations of 
+ the backchaining hypotheses being pursued.  In particular, <span class="v">(<a href="COMMON-LISP____NULL.html">null</a>
+ (<a href="ACL2____MFC-ANCESTORS.html">mfc-ancestors</a> mfc))</span> will be true exactly when rewriting is on part of the 
+ current goal.  Exception: An element of this alist whose key is of the form 
+ <span class="v">(:binding-hyp hyp unify-subst)</span> indicates that <span class="v">hyp</span> has been 
+ encountered as a hypothesis of the form <span class="v">(<a href="COMMON-LISP____EQUAL.html">equal</a> var term)</span> or <span class="v">(equiv var
+ (double-rewrite-term))</span>, in each case binding variable <span class="v">var</span> to the result 
+ of rewriting <span class="v">term</span> under <span class="v">unify-subst</span>.</p> 
+ 
+ <p><span class="v">(<a href="ACL2____MFC-RDEPTH.html">mfc-rdepth</a> mfc)</span>: returns the remaining stack depth for calls of the 
+ rewriter (by default, <span class="v">*default-rewrite-stack-limit*</span> at the top level; see 
+ <a href="ACL2____REWRITE-STACK-LIMIT.html">rewrite-stack-limit</a>).  When this is 0, no further calls of the rewriter 
+ can be made without error.</p> 
+ 
+ <p><span class="v">(<a href="ACL2____MFC-TYPE-ALIST.html">mfc-type-alist</a> mfc)</span>: returns the type-alist governing the occurrence 
+ of the term, <span class="v">x</span>, being rewritten by the metafunction.  A type-alist is an 
+ association list, each element of which is of the form <span class="v">(<a href="ACL2____TERM.html">term</a> ts . ttree)</span>. 
+ Such an element means that the term <span class="v">term</span> has the <a href="ACL2____TYPE-SET.html">type-set</a> <span class="v">ts</span>; 
+ see <a href="ACL2____TYPE-ALIST.html">type-alist</a>.  The <span class="v">ttree</span> component is probably irrelevant here. 
+ All the terms in the type-alist are in translated form (see <a href="ACL2____TRANS.html">trans</a>). 
+ The <span class="v">ts</span> are numbers denoting finite Boolean combinations of ACL2's 
+ primitive types (see <a href="ACL2____TYPE-SET.html">type-set</a>).  The type-alist includes not only 
+ information gleaned from the conditions governing the term being rewritten but 
+ also that gleaned from forward chaining from the (negations of the) other 
+ literals in the clause returned by <span class="v">mfc-clause</span>.</p> 
+ 
+ <p><span class="v">(<a href="ACL2____MFC-UNIFY-SUBST.html">mfc-unify-subst</a> mfc)</span>: returns <span class="v">nil</span> except when evaluating a 
+ <span class="tt"><a href="ACL2____SYNTAXP.html">syntaxp</a></span> or <span class="tt"><a href="ACL2____BIND-FREE.html">bind-free</a></span> hypothesis, in which case, returns the 
+ unifying substitution present at the start of that evaluation.</p> 
+ 
+ <p><span class="v">(<a href="ACL2____MFC-WORLD.html">mfc-world</a> mfc)</span>: returns the ACL2 logical <span class="tt"><a href="ACL2____WORLD.html">world</a></span>.</p> 
+ 
+ <p><span class="v">(<a href="ACL2____MFC-TS.html">mfc-ts</a> term mfc state :forcep forcep :ttreep ttreep)</span>: returns the 
+ <span class="v">type-set</span> of <span class="v">term</span> in the current context; see <a href="ACL2____TYPE-SET.html">type-set</a>.</p> 
+ 
+ <p><span class="v">(<a href="ACL2____MFC-RW.html">mfc-rw</a> term obj equiv-info mfc state)</span>: returns the result of 
+ rewriting <span class="v">term</span> in the current context, <span class="v">mfc</span>, with objective <span class="v">obj</span> 
+ and the equivalence relation described by <span class="v">equiv-info</span>.  <span class="v">Obj</span> should be 
+ <span class="v">t</span>, <span class="v">nil</span>, or <span class="v">?</span>, and describes your objective: try to show that 
+ <span class="v">term</span> is true, false, or anything.  <span class="v">Equiv-info</span> is either <span class="v">nil</span>, 
+ <span class="v">t</span>, a function symbol <span class="v">fn</span> naming a known equivalence relation, or a 
+ list of congruence rules.  <span class="v">Nil</span> means return a term that is <span class="v">equal</span> to 
+ <span class="v">term</span>.  <span class="v">T</span> means return a term that is propositionally equivalent 
+ (i.e., in the <span class="v">iff</span> sense) to <span class="v">term</span>, while <span class="v">fn</span> means return a term 
+ <span class="v">fn</span>-equivalent to <span class="v">term</span>.  The final case, which is intended only for 
+ advanced users, allows the specification of generated equivalence relations, 
+ as supplied to the <span class="v">geneqv</span> argument of <span class="v">rewrite</span>.  Generally, if you 
+ wish to establish that <span class="v">term</span> is true in the current context, use the 
+ idiom</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____MFC-RW.html">mfc-rw</a> term t t mfc state) *t*)</pre> 
+ 
+ <p>The constant <span class="v">*t*</span> is set to the internal form of the constant term 
+ <span class="v">t</span>, i.e., <span class="v">'t</span>.</p> 
+ 
+ <p><span class="v">(<a href="ACL2____MFC-RW_B2.html">mfc-rw+</a> term alist obj equiv-info mfc state)</span>: if <span class="v">alist</span> is 
+ <span class="v">nil</span> then this is equivalent to <span class="v">(<a href="ACL2____MFC-RW.html">mfc-rw</a> term obj equiv-info mfc
+ state)</span>.  However, the former takes an argument, <span class="v">alist</span>, that binds 
+ variables to terms, and returns the result of rewriting <span class="v">term</span> under that 
+ <span class="v">alist</span>, where this rewriting is as described for <span class="v">mfc-rw</span> above.  The 
+ function <span class="v">mfc-rw+</span> can be more efficient than <span class="v">mfc-rw</span>, because the 
+ terms in the binding alist have generally already been rewritten, and it can 
+ be inefficient to rewrite them again.  For example, consider a rewrite rule of 
+ the following form.</p> 
+ 
+ <pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> ...
+              (<a href="ACL2____SYNTAXP.html">syntaxp</a> (... (<a href="ACL2____MFC-RW.html">mfc-rw</a> `(bar ,x) ...) ...))
+              ...)
+         (<a href="COMMON-LISP____EQUAL.html">equal</a> (... x ...) ...))</pre> 
+ 
+ <p>Here, <span class="v">x</span> is bound in the conclusion to the result of rewriting some 
+ term, say, <span class="v">tm</span>.  Then the above call of <span class="v">mfc-rw</span> will rewrite <span class="v">tm</span>, 
+ which is probably unnecessary.  So a preferable form of the rule above may be 
+ as follows, so that <span class="v">tm</span> is not further rewritten by <span class="v">mfc-rw+</span>.</p> 
+ 
+ <pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> ...
+              (<a href="ACL2____SYNTAXP.html">syntaxp</a> (... (<a href="ACL2____MFC-RW_B2.html">mfc-rw+</a> '(bar v) `((v . ,x)) ...) ...))
+              ...)
+         (<a href="COMMON-LISP____EQUAL.html">equal</a> (... x ...) ...))</pre> 
+ 
+ <p>However, you may find that the additional rewriting done by <span class="v">mfc-rw</span> is 
+ useful in some cases.</p> 
+ 
+ <p><span class="v">(<a href="ACL2____MFC-AP.html">mfc-ap</a> term mfc state)</span>: returns <span class="v">t</span> or <span class="v">nil</span> according to 
+ whether linear arithmetic can determine that <span class="v">term</span> is false.  To the 
+ cognoscenti: returns the contradiction flag produced by linearizing <span class="v">term</span> 
+ and adding it to the <span class="v">linear-pot-lst</span>.</p> 
+ 
+ <p><span class="v">(<a href="ACL2____MFC-RELIEVE-HYP.html">mfc-relieve-hyp</a> hyp alist rune target bkptr mfc state)</span>: returns 
+ <span class="v">t</span> or <span class="v">nil</span> according to whether the indicated hypothesis term, 
+ <span class="v">hyp</span>, can be relieved (proved) under the giving variable bindings, 
+ <span class="v">alist</span>.  Note that this function returns <span class="v">nil</span> if <span class="v">hyp</span> has free 
+ variables (see <a href="ACL2____FREE-VARIABLES.html">free-variables</a>).  Here, <span class="v">hyp</span> is the hypothesis of 
+ the indicated <span class="tt"><a href="ACL2____RUNE.html">rune</a></span> at (one-based) position <span class="v">bkptr</span>, and <span class="v">target</span> 
+ is an instantiated term to which <span class="v">rune</span> is being applied.  Note that no 
+ indication is returned for whether any assumptions have been generated by 
+ <span class="tt"><a href="ACL2____FORCE.html">force</a></span> or <span class="tt"><a href="ACL2____CASE-SPLIT.html">case-split</a></span>.  (If you need such a feature, feel free 
+ to request it of the ACL2 implementors.)</p> 
+ 
+ <p>We explain the <span class="v">:forcep</span> and <span class="v">:ttreep</span> keyword arguments provided in 
+ some expressions, as promised above.  Their defaults are <span class="v">:same</span> and 
+ <span class="v">nil</span>, respectively.  A value of <span class="v">:same</span> for <span class="v">:forcep</span> means that 
+ forcing will be allowed if and only if it is allowed in the current rewriting 
+ environment; see <a href="ACL2____FORCE.html">force</a>.  A value of <span class="v">t</span> or <span class="v">nil</span> for <span class="v">:forcep</span> 
+ overrides this default and allows or disallows forcing, respectively.  By 
+ default these functions return a single value, <span class="v">val</span>, but if <span class="v">:ttreep</span> 
+ is <span class="v">t</span> then they return <span class="v">(<a href="ACL2____MV.html">mv</a> val ttree)</span>, where <span class="v">ttree</span> is the 
+ tag-tree (see <a href="ACL2____TTREE.html">ttree</a>) returned by the indicated operation, with an input 
+ tag-tree of <span class="v">nil</span>).</p> 
+ 
+ <p>During the execution of a metafunction by the theorem prover, the 
+ expressions above compute the results specified.  Typically, you should 
+ imagine that there are no axioms about the <span class="v">mfc-</span> function symbols: treat 
+ them as uninterpreted function symbols.  There is an advanced feature, 
+ meta-extract hypotheses, that can avoid this logical weakness in some cases 
+ when proving <span class="v">:</span><span class="tt"><a href="ACL2____META.html">meta</a></span> rules; see <a href="ACL2____META-EXTRACT.html">meta-extract</a>.  But we assume 
+ for the rest of the present <a href="COMMON-LISP____DOCUMENTATION.html">documentation</a> topic that you do not use 
+ meta-extract hypotheses.  Thus, in the proof of the correctness of a 
+ metafunction, no information is available about the results of these 
+ functions: you should <i>use these functions for heuristic purposes 
+ only</i>.</p> 
+ 
+ <p>For example, your metafunction may use these functions to decide whether to 
+ perform a given transformation, but the transformation must be sound 
+ regardless of the value that your metafunction returns.  We illustrate this 
+ below.  It is sometimes possible to use the hypothesis metafunction, 
+ <span class="v">hyp-fn</span>, to generate a sufficient hypothesis to justify the 
+ transformation.  The generated hypothesis might have already been ``proved'' 
+ internally by your use of <span class="v">mfc-ts</span> or <span class="v">mfc-rw</span>, but the system will have 
+ to prove it ``officially'' by relieving it.  We illustrate this below 
+ also.</p> 
+ 
+ <p>We conclude with a script that defines, verifies, and uses several extended 
+ metafunctions.  This script is based on one provided by Robert Krug, who was 
+ instrumental in the development of this style of metafunction and whose help 
+ we gratefully acknowledge.</p> 
+ 
+ <pre class="code">; Here is an example.  I will define (foo i j) simply to be (<a href="COMMON-LISP_____B2.html">+</a> i j).
+; But I will keep its definition disabled so the theorem prover
+; doesn't know that.  Then I will define an extended metafunction
+; that reduces (foo i (<a href="COMMON-LISP____-.html">-</a> i)) to 0 provided i has integer type and the
+; expression (<a href="COMMON-LISP_____C3.html">&lt;</a> 10 i) occurs as a hypothesis in the clause.
+
+; Note that (foo i (<a href="COMMON-LISP____-.html">-</a> i)) is 0 in any case.
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> foo (i j) (<a href="COMMON-LISP_____B2.html">+</a> i j))
+
+(<a href="ACL2____DEFEVALUATOR.html">defevaluator</a> eva eva-lst ((foo i j)
+                           (<a href="ACL2____UNARY--.html">unary--</a> i)
+
+; I won't need these two cases until the last example below, but I
+; include them now.
+
+                           (<a href="COMMON-LISP____IF.html">if</a> x y z)
+                           (<a href="COMMON-LISP____INTEGERP.html">integerp</a> x)))
+
+(<a href="ACL2____SET-STATE-OK.html">set-state-ok</a> t)
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> metafn (x mfc state)
+  (<a href="COMMON-LISP____COND.html">cond</a>
+   ((<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x)
+         (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____CAR.html">car</a> x) 'foo)
+         (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____CADDR.html">caddr</a> x) (<a href="COMMON-LISP____LIST.html">list</a> 'unary-- (<a href="COMMON-LISP____CADR.html">cadr</a> x))))
+
+; So x is of the form (foo i (<a href="COMMON-LISP____-.html">-</a> i)).  Now I want to check some other
+; conditions.
+
+    (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____AND.html">and</a> (ts-subsetp (<a href="ACL2____MFC-TS.html">mfc-ts</a> (<a href="COMMON-LISP____CADR.html">cadr</a> x) mfc state)
+                            *ts-integer*)
+                (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> `(<a href="COMMON-LISP____NOT.html">NOT</a> (<a href="COMMON-LISP_____C3.html">&lt;</a> '10 ,(<a href="COMMON-LISP____CADR.html">cadr</a> x)))
+                              (<a href="ACL2____MFC-CLAUSE.html">mfc-clause</a> mfc)))
+           (<a href="COMMON-LISP____QUOTE.html">quote</a> (<a href="COMMON-LISP____QUOTE.html">quote</a> 0)))
+          (t x)))
+   (t x)))
+
+(<a href="ACL2____DEFTHM.html">defthm</a> metafn-correct
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> (eva x a) (eva (metafn x mfc state) a))
+  :rule-classes ((:meta :trigger-fns (foo))))
+
+(<a href="ACL2____IN-THEORY.html">in-theory</a> (<a href="ACL2____DISABLE.html">disable</a> foo))
+
+; The following will fail because the metafunction won't fire.
+; We don't know enough about i.
+
+(<a href="ACL2____THM.html">thm</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (foo i (<a href="COMMON-LISP____-.html">-</a> i)) 0))
+
+; Same here.
+
+(<a href="ACL2____THM.html">thm</a> (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> i) (<a href="COMMON-LISP_____C3.html">&lt;</a> 0 i)) (<a href="COMMON-LISP____EQUAL.html">equal</a> (foo i (<a href="COMMON-LISP____-.html">-</a> i)) 0)))
+
+; But this will work.
+
+(<a href="ACL2____THM.html">thm</a> (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> i) (<a href="COMMON-LISP_____C3.html">&lt;</a> 10 i))
+              (<a href="COMMON-LISP____EQUAL.html">equal</a> (foo i (<a href="COMMON-LISP____-.html">-</a> i)) 0)))
+
+; This won't, because the metafunction looks for (<a href="COMMON-LISP_____C3.html">&lt;</a> 10 i) literally,
+; not just something that implies it.
+
+(<a href="ACL2____THM.html">thm</a> (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> i) (<a href="COMMON-LISP_____C3.html">&lt;</a> 11 i))
+              (<a href="COMMON-LISP____EQUAL.html">equal</a> (foo i (<a href="COMMON-LISP____-.html">-</a> i)) 0)))
+
+; Now I will undo the defun of metafn and repeat the exercise, but
+; this time check the weaker condition that (<a href="COMMON-LISP_____C3.html">&lt;</a> 10 i) is provable
+; (<a href="ACL2____BY.html">by</a> rewriting it) rather than explicitly present.
+
+(<a href="ACL2____UBT.html">ubt</a> 'metafn)
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> metafn (x mfc state)
+  (<a href="COMMON-LISP____COND.html">cond</a>
+   ((<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x)
+         (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____CAR.html">car</a> x) 'foo)
+         (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____CADDR.html">caddr</a> x) (<a href="COMMON-LISP____LIST.html">list</a> 'unary-- (<a href="COMMON-LISP____CADR.html">cadr</a> x))))
+    (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____AND.html">and</a> (ts-subsetp (<a href="ACL2____MFC-TS.html">mfc-ts</a> (<a href="COMMON-LISP____CADR.html">cadr</a> x) mfc state)
+                            *ts-integer*)
+                (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____MFC-RW.html">mfc-rw</a> `(<a href="COMMON-LISP_____C3.html">&lt;</a> '10 ,(<a href="COMMON-LISP____CADR.html">cadr</a> x)) t t mfc state)
+                       *t*))
+
+; The mfc-rw above rewrites (<a href="COMMON-LISP_____C3.html">&lt;</a> 10 i) with objective t and iffp t.  The
+; objective means the theorem prover will try to establish it.  The
+; iffp means the theorem prover can rewrite maintaining propositional
+; equivalence instead of strict equality.
+
+           (<a href="COMMON-LISP____QUOTE.html">quote</a> (<a href="COMMON-LISP____QUOTE.html">quote</a> 0)))
+          (t x)))
+   (t x)))
+
+(<a href="ACL2____DEFTHM.html">defthm</a> metafn-correct
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> (eva x a) (eva (metafn x mfc state) a))
+  :rule-classes ((:meta :trigger-fns (foo))))
+
+(<a href="ACL2____IN-THEORY.html">in-theory</a> (<a href="ACL2____DISABLE.html">disable</a> foo))
+
+; Now it will prove both:
+
+(<a href="ACL2____THM.html">thm</a> (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> i) (<a href="COMMON-LISP_____C3.html">&lt;</a> 10 i))
+              (<a href="COMMON-LISP____EQUAL.html">equal</a> (foo i (<a href="COMMON-LISP____-.html">-</a> i)) 0)))
+
+(<a href="ACL2____THM.html">thm</a> (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> i) (<a href="COMMON-LISP_____C3.html">&lt;</a> 11 i))
+              (<a href="COMMON-LISP____EQUAL.html">equal</a> (foo i (<a href="COMMON-LISP____-.html">-</a> i)) 0)))
+
+; Now I undo the defun of metafn and change the problem entirely.
+; This time I will rewrite (<a href="COMMON-LISP____INTEGERP.html">integerp</a> (foo i j)) to t.  Note that
+; this is true if i and j are integers.  I can check this
+; internally, but have to generate a hyp-fn to make it official.
+
+(<a href="ACL2____UBT.html">ubt</a> 'metafn)
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> metafn (x mfc state)
+  (<a href="COMMON-LISP____COND.html">cond</a>
+   ((<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x)
+         (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____CAR.html">car</a> x) 'integerp)
+         (<a href="COMMON-LISP____CONSP.html">consp</a> (<a href="COMMON-LISP____CADR.html">cadr</a> x))
+         (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____CAR.html">car</a> (<a href="COMMON-LISP____CADR.html">cadr</a> x)) 'foo))
+
+; So x is (<a href="COMMON-LISP____INTEGERP.html">integerp</a> (foo i j)).  Now check that i and j are
+; ``probably'' integers.
+
+    (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____AND.html">and</a> (ts-subsetp (<a href="ACL2____MFC-TS.html">mfc-ts</a> (<a href="COMMON-LISP____CADR.html">cadr</a> (<a href="COMMON-LISP____CADR.html">cadr</a> x)) mfc state)
+                            *ts-integer*)
+                (ts-subsetp (<a href="ACL2____MFC-TS.html">mfc-ts</a> (<a href="COMMON-LISP____CADDR.html">caddr</a> (<a href="COMMON-LISP____CADR.html">cadr</a> x)) mfc state)
+                            *ts-integer*))
+           *t*)
+          (t x)))
+   (t x)))
+
+; To justify this transformation, I generate the appropriate hyps.
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> hyp-fn (x mfc state)
+
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORE.html">ignore</a> mfc state))
+
+; The hyp-fn is run only if the metafn produces an answer different
+; from its input.  Thus, we know at execution time that x is of the
+; form (<a href="COMMON-LISP____INTEGERP.html">integerp</a> (foo i j)) and we know that metafn rewrote
+; (<a href="COMMON-LISP____INTEGERP.html">integerp</a> i) and (<a href="COMMON-LISP____INTEGERP.html">integerp</a> j) both to t.  So we just produce their
+; conjunction.  Note that we must produce a translated term; we
+; cannot use the macro AND and must quote constants!  Sometimes you
+; must do tests in the hyp-fn to figure out which case the metafn
+; produced, but not in this example.
+
+           `(<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> ,(<a href="COMMON-LISP____CADR.html">cadr</a> (<a href="COMMON-LISP____CADR.html">cadr</a> x)))
+                (<a href="COMMON-LISP____INTEGERP.html">integerp</a> ,(<a href="COMMON-LISP____CADDR.html">caddr</a> (<a href="COMMON-LISP____CADR.html">cadr</a> x)))
+                'nil))
+
+(<a href="ACL2____DEFTHM.html">defthm</a> metafn-correct
+  (<a href="ACL2____IMPLIES.html">implies</a> (eva (hyp-fn x mfc state) a)
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (eva x a) (eva (metafn x mfc state) a)))
+  :rule-classes ((:meta :trigger-fns (<a href="COMMON-LISP____INTEGERP.html">integerp</a>))))
+
+(<a href="ACL2____IN-THEORY.html">in-theory</a> (<a href="ACL2____DISABLE.html">disable</a> foo))
+
+; This will not be proved.
+
+(<a href="ACL2____THM.html">thm</a> (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____RATIONALP.html">rationalp</a> x) (<a href="COMMON-LISP____INTEGERP.html">integerp</a> i)) (<a href="COMMON-LISP____INTEGERP.html">integerp</a> (foo i j))))
+
+; But this will be.
+
+(<a href="ACL2____THM.html">thm</a> (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____RATIONALP.html">rationalp</a> x)
+                   (<a href="COMMON-LISP____INTEGERP.html">integerp</a> i)
+                   (<a href="COMMON-LISP____INTEGERP.html">integerp</a> j))
+              (<a href="COMMON-LISP____INTEGERP.html">integerp</a> (foo i j))))</pre>
+</body>
+</html>

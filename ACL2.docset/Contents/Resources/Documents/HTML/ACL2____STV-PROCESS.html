@@ -1,0 +1,120 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Stv-process</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____STV-PROCESS">Click for Stv-process in the Full Manual</a></h3>
+
+<p>Process a symbolic test vector and prepare it to be run.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(stv-process name stv cstv mod) → pstv</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">name</span> — A name for this STV.  Used by <a href="ACL2____STV-DEBUG.html">stv-debug</a>.<br>    <font color="#606060">Guard <span class="v">(<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> name)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">stv</span> — The bundled up, original symbolic test vector description that the 
+          user wrote.  This isn't actually used for anything, except that we 
+          stuff it into the resulting processed-stv, perhaps mainly for 
+          documentation?.<br>    <font color="#606060">Guard <span class="v">(<a href="ACL2____STVDATA-P.html">stvdata-p</a> stv)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">cstv</span> — An already-compiled version of <span class="v">stv</span>.  We take this as an argument, 
+          rather than compiling it ourselves, mainly to parallelize the STV 
+          book building process.<br>    <font color="#606060">Guard <span class="v">(<a href="ACL2____COMPILED-STV-P.html">compiled-stv-p</a> cstv)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">mod</span> — The <a href="ACL2____ESIM.html">esim</a> module that <span class="v">stv</span> is being written for.<br>    <font color="#606060">Guard <span class="v">(good-esim-modulep mod)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">pstv</span> — The fully processed, ready-to-run STV.<br>    <font color="#606060">Type <span class="v">(<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____PROCESSED-STV-P.html">processed-stv-p</a> pstv) (<a href="COMMON-LISP____IF.html">if</a> pstv t nil))</span>, given <span class="v">(<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____FORCE.html">force</a> (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> name)) (<a href="ACL2____FORCE.html">force</a> (<a href="ACL2____COMPILED-STV-P.html">compiled-stv-p</a> cstv)))</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>An STV must be processed before it can be run with <a href="ACL2____STV-RUN.html">stv-run</a>. 
+This processing can be expensive and involves several steps.</p> 
+ 
+<ul> 
+ 
+<li>The <span class="v">mod</span> is symbolically simulated using a fully-general multi-phase 
+<a href="ACL2____ESIM.html">esim</a> simulation.</li> 
+ 
+<li>The relevant outputs are then extracted from this simulation and 
+specialized as suggested by this particular <span class="v">stv</span>.</li> 
+ 
+<li>These restricted outputs and other information is then saved into a <a href="ACL2____PROCESSED-STV-P.html">processed-stv-p</a> object that can be given to <a href="ACL2____STV-RUN.html">stv-run</a> or <a href="ACL2____STV-DEBUG.html">stv-debug</a>.</li> 
+ 
+</ul> 
+ 
+<p>Note that there are many chances for memoization, e.g., if you have a lot of 
+different symbolic test vectors that all target the same module, they can reuse 
+the same <a href="ACL2____ESIM.html">esim</a> simulation, so processing the first STV may be very 
+expensive but processing subsequent STVs can be much cheaper.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>stv-process</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ stv-process (<a href="ACL2____NAME.html">name</a> stv cstv mod)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> name)
+                             (<a href="ACL2____STVDATA-P.html">stvdata-p</a> stv)
+                             (<a href="ACL2____COMPILED-STV-P.html">compiled-stv-p</a> cstv)
+                             (good-esim-modulep mod))))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'stv-process))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+   (((<a href="ACL2____COMPILED-STV.html">compiled-stv</a> cstv) cstv)
+    (need-internals (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____SUBSETP.html">subsetp</a> cstv.int-extract-alists '(nil))))
+    ((<a href="ACL2____MV.html">mv</a> ?init-st-general
+         ?in-alists-general nst-alists-general
+         out-alists-general int-alists-general)
+     (<a href="COMMON-LISP____IF.html">if</a>
+      need-internals
+      (<a href="ACL2____TIME_42.html">time$</a>
+        (<a href="ACL2____STV-FULLY-GENERAL-SIMULATION-DEBUG.html">stv-fully-general-simulation-debug</a>
+             cstv.nphases mod cstv.override-bits)
+        :msg "; stv-process debug simulation: ~st sec, ~sa bytes.~%"
+        :mintime 1/2)
+      (<a href="ACL2____TIME_42.html">time$</a> (<a href="ACL2____STV-FULLY-GENERAL-SIMULATION-RUN.html">stv-fully-general-simulation-run</a>
+                  cstv.nphases mod cstv.override-bits)
+             :msg "; stv-process simulation: ~st sec, ~sa bytes.~%"
+             :mintime 1/2)))
+    (relevant-signals-general
+     (<a href="ACL2____TIME_42.html">time$</a>
+      (<a href="COMMON-LISP____LET_A2.html">let*</a>
+       ((acc nil)
+        (acc (<a href="ACL2____STV-EXTRACT-RELEVANT-SIGNALS.html">stv-extract-relevant-signals</a> cstv.out-extract-alists
+                                           out-alists-general acc))
+        (acc
+           (<a href="COMMON-LISP____IF.html">if</a> need-internals
+               (<a href="ACL2____STV-EXTRACT-RELEVANT-SIGNALS.html">stv-extract-relevant-signals</a> cstv.int-extract-alists
+                                             int-alists-general acc)
+               acc))
+        (acc (<a href="ACL2____STV-EXTRACT-RELEVANT-SIGNALS.html">stv-extract-relevant-signals</a> cstv.nst-extract-alists
+                                           nst-alists-general acc)))
+       acc)
+      :msg "; stv-process extraction: ~st sec, ~sa bytes.~%"
+      :mintime 1/2))
+    (relevant-signals-specialized
+     (<a href="ACL2____TIME_42.html">time$</a>
+      (<a href="ACL2____WITH-FAST-ALIST.html">with-fast-alist</a>
+           cstv.restrict-alist
+           (4v-sexpr-restrict-with-rw-alist relevant-signals-general
+                                            cstv.restrict-alist))
+      :msg "; stv-process specialization: ~st sec, ~sa bytes.~%"
+      :mintime 1/2)))
+   (<a href="ACL2____MAKE-PROCESSED-STV.html">make-processed-stv</a>
+        :name name
+        :user-stv stv
+        :compiled-stv cstv
+        :relevant-signals relevant-signals-specialized))))</pre> 
+<p><b>Theorem: </b>return-type-of-stv-process</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> return-type-of-stv-process
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____FORCE.html">force</a> (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> name))
+                      (<a href="ACL2____FORCE.html">force</a> (<a href="ACL2____COMPILED-STV-P.html">compiled-stv-p</a> cstv)))
+                 (<a href="ACL2____B_A2.html">b*</a> ((pstv (<a href="ACL2____STV-PROCESS.html">stv-process</a> name stv cstv mod)))
+                     (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____PROCESSED-STV-P.html">processed-stv-p</a> pstv)
+                            (<a href="COMMON-LISP____IF.html">if</a> pstv t nil))))
+        :rule-classes :rewrite)</pre> 
+
+</body>
+</html>

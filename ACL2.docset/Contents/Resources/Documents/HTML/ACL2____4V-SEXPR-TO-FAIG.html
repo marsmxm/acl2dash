@@ -1,0 +1,76 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>4v-sexpr-to-faig</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____4V-SEXPR-TO-FAIG">Click for 4v-sexpr-to-faig in the Full Manual</a></h3>
+
+<p>Translation from <a href="ACL2____4V-SEXPRS.html">4v-sexprs</a> into a <a href="ACL2____FAIG.html">faig</a>s.</p><p>It is often useful to be able to convert a sexpr into a <a href="ACL2____FAIG.html">faig</a>, since then you can apply AIG/FAIG based tools such as ABC, sat solvers, 
+the <a href="ACL2____BDDIFY.html">bddify</a> algorithm, and so forth to sexpr-based models.  For instance, 
+we use this conversion to implement an efficient <a href="ACL2____GL.html">gl</a> symbolic counterpart 
+for <a href="ACL2____4V-SEXPR-EVAL.html">4v-sexpr-eval</a>, which is used in practically all of our GL-based 
+hardware proofs.</p> 
+ 
+<p><b>Signature:</b> <span class="tt">(4v-sexpr-to-faig x onoff &amp;key (optimize 't))</span> builds an <a href="ACL2____FAIG.html">faig</a>.</p> 
+ 
+<p><span class="v">x</span> is the sexpr you want to convert into an FAIG.</p> 
+ 
+<p><span class="v">onoff</span> argument should be an alist that assigns an initial FAIG for 
+every variable of <span class="v">x</span>.  Commonly the <span class="v">onoff</span> alist should bind each 
+variable <span class="v">v</span> to some pair of fresh variables like <span class="v">(v1 . v0)</span>, i.e., 
+<span class="v">v1</span> is the onset variable and <span class="v">v0</span> is the offset variable for <span class="v">v</span>, 
+but other uses are also possible.  It is beneficial for <span class="v">onoff</span> to be a fast 
+alist, but it will be made fast if necessary.</p> 
+ 
+<p><span class="v">optimize</span> is an optional flag that defaults to <span class="v">t</span>.  When 
+optimization is allowed, we convert the sexpr in a smarter way that is 
+generally faster and produces smaller FAIGs which may be easier for other tools 
+to analyze.  You almost certainly want optimization <b>unless</b> you are doing 
+certain kinds of fragile AIG decomposition where you really want AIGs that are 
+exactly the same.  (If that sounds like nonsense, then you want 
+optimization.)</p> 
+ 
+<p>The basic idea of the optimization is to take advantage of the fact that 
+many sexpr operations are actually "three-valued," i.e., they never produce 
+Z.  For instance, when we are converting a sexpr like <span class="v">(<a href="COMMON-LISP____NOT.html">NOT</a> (<a href="COMMON-LISP____AND.html">AND</a> A B))</span> into 
+an <a href="ACL2____FAIG.html">faig</a>, since we know the result of an <span class="v">AND</span> gate is never Z, it 
+suffices to use <a href="ACL2____T-AIG-NOT.html">t-aig-not</a> instead of <a href="ACL2____F-AIG-NOT.html">f-aig-not</a>.  There are 
+similar reductions for many gates; see <a href="ACL2____FAIG-CONSTRUCTORS.html">faig-constructors</a> for some 
+details.</p> 
+ 
+<p>You might regard <span class="v">4v-sexpr-to-faig</span> as a somewhat low-level function. 
+Its correctness theorem is rather elaborate and to make use of it you generally 
+need to construct an <span class="v">onoff</span> alist that sensibly accomplishes your goal.  A 
+good starting place and example might be <span class="v">4v-sexpr-eval-by-faig</span>, which 
+generates an appropriate <span class="v">onoff</span> so that it can carry out a <a href="ACL2____4V-SEXPR-EVAL.html">4v-sexpr-eval</a> computation using FAIG evaluation as the engine.</p> 
+ 
+ 
+ 
+<p><b>Function: </b>4v-sexpr-to-faig-fn1</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> 4v-sexpr-to-faig-fn1 (x onoff optimizep)
+       "Assumes ONOFF is fast."
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t))
+       (<a href="COMMON-LISP____IF.html">if</a> optimizep (<a href="ACL2____4V-SEXPR-TO-FAIG-OPT.html">4v-sexpr-to-faig-opt</a> x onoff)
+           (<a href="ACL2____4V-SEXPR-TO-FAIG-PLAIN.html">4v-sexpr-to-faig-plain</a> x onoff)))</pre> 
+<p><b>Function: </b>4v-sexpr-to-faig-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> 4v-sexpr-to-faig-fn (x onoff optimizep)
+       "Assumes ONOFF is fast."
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t))
+       (<a href="ACL2____WITH-FAST-ALIST.html">with-fast-alist</a> onoff
+                        (<a href="COMMON-LISP____IF.html">if</a> optimizep (<a href="ACL2____4V-SEXPR-TO-FAIG-OPT.html">4v-sexpr-to-faig-opt</a> x onoff)
+                            (<a href="ACL2____4V-SEXPR-TO-FAIG-PLAIN.html">4v-sexpr-to-faig-plain</a> x onoff))))</pre> 
+<p><b>Theorem: </b>4v-sexpr-to-faig-fn1-removal</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> 4v-sexpr-to-faig-fn1-removal
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (4v-sexpr-to-faig-fn1 x onoff optimizep)
+               (4v-sexpr-to-faig-fn x onoff optimizep)))</pre> 
+<p><b>Theorem: </b>consp-of-4v-sexpr-to-faig-fn</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> consp-of-4v-sexpr-to-faig-fn
+        (<a href="COMMON-LISP____CONSP.html">consp</a> (4v-sexpr-to-faig-fn x onoff optimize))
+        :rule-classes :type-prescription)</pre> 
+<p><b>Theorem: </b>faig-eval-of-4v-sexpr-to-faig</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> faig-eval-of-4v-sexpr-to-faig
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____FAIG-EVAL.html">faig-eval</a> (4v-sexpr-to-faig-fn x onoff optimize)
+                          env)
+               (<a href="ACL2____FAIG-EVAL.html">faig-eval</a> (<a href="ACL2____4V-SEXPR-TO-FAIG-PLAIN.html">4v-sexpr-to-faig-plain</a> x onoff)
+                          env)))</pre> 
+
+</body>
+</html>

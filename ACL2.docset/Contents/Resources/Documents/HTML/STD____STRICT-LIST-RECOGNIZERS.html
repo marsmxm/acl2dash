@@ -1,0 +1,103 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Strict-list-recognizers</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=STD____STRICT-LIST-RECOGNIZERS">Click for Strict-list-recognizers in the Full Manual</a></h3>
+
+<p>Should your list recognizers require <span class="v">nil</span>-terminated lists?</p><p>Here are two ways that you could write a list recognizer:</p> 
+ 
+<p>The "strict" way:</p> 
+ 
+<pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> foo-listp (x)
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ATOM.html">atom</a> x)
+      (<a href="COMMON-LISP____NOT.html">not</a> x)
+    (<a href="COMMON-LISP____AND.html">and</a> (foop (<a href="COMMON-LISP____CAR.html">car</a> x))
+         (foo-listp (<a href="COMMON-LISP____CDR.html">cdr</a> x)))))</pre> 
+ 
+<p>The "loose" way:</p> 
+ 
+<pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> foo-listp (x)
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ATOM.html">atom</a> x)
+      t
+    (<a href="COMMON-LISP____AND.html">and</a> (foop (<a href="COMMON-LISP____CAR.html">car</a> x))
+         (foo-listp (<a href="COMMON-LISP____CDR.html">cdr</a> x)))))</pre> 
+ 
+<p>The only difference is that in the base case, the strict recognizer requires 
+X to be NIL, whereas the loose recognizer allows X to be any atom.</p> 
+ 
+<p>By default, the recognizers introduced by <a href="STD____DEFLIST.html">deflist</a> follow the loose 
+approach.  You can use the <span class="v">:true-listp</span> option to change this behavior, and 
+instead introduce a strict recognizer.</p> 
+ 
+<p>Why in the world would we use a loose recognizer?  Well, there are 
+advantages to either approach.</p> 
+ 
+<p>The strict approach is certainly more clear and less weird.  It is nice that 
+a strict recognizer always implies <a href="ACL2____TRUE-LISTP.html">true-listp</a>.  And it makes EQUAL more 
+meaningful when applied to FOO-LISTP objects.</p> 
+ 
+<p>That is, when FOO-LISTP is strict, there is only one FOO-LISTP that has 
+length 3 and whose first three elements are (A B C).  However, when FOO-LISTP 
+is loose, there are infinitely many lists like this, and the only difference 
+between them is their final cdr.</p> 
+ 
+<p>This nicer equality behavior makes the strict approach especially appealing 
+when you are building new data types that include FOO-LISTP components, and 
+you'd like to just reuse EQUAL instead of having new equivalence relations for 
+each structure.</p> 
+ 
+<p>But the loose approach more nicely follows the <a href="ACL2____LIST-FIX.html">list-fix</a> convention: 
+"a function that takes a list as an argument should coerce the final-cdr to 
+NIL, and produce the same result regardless of the final cdr." More formally, 
+you might say that F respects the list-fix convention when you can prove</p> 
+ 
+<pre class="code">(<a href="ACL2____DEFCONG.html">defcong</a> list-equiv equal (f ... x ...) n)</pre> 
+ 
+<p>Where list-equiv is equality up to the final cdr, e.g.,</p> 
+ 
+<pre class="code">(<a href="ACL2____LIST-EQUIV.html">list-equiv</a> x y) = (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____LIST-FIX.html">list-fix</a> x) (<a href="ACL2____LIST-FIX.html">list-fix</a> y))</pre> 
+ 
+<p>Many functions follow this convention or something similar to it, and 
+because of this there are sometimes nicer theorems about loose list recognizers 
+than about strict list recognizers.  For instance, consider <a href="COMMON-LISP____APPEND.html">append</a>.  In 
+the loose style, we can prove:</p> 
+ 
+<pre class="code">(<a href="COMMON-LISP____EQUAL.html">equal</a> (foo-listp (<a href="COMMON-LISP____APPEND.html">append</a> x y))
+       (<a href="COMMON-LISP____AND.html">and</a> (foo-listp x)
+            (foo-listp y)))</pre> 
+ 
+<p>In the strict style, we have to prove something uglier, e.g.,</p> 
+ 
+<pre class="code">(<a href="COMMON-LISP____EQUAL.html">equal</a> (foo-listp (<a href="COMMON-LISP____APPEND.html">append</a> x y))
+       (<a href="COMMON-LISP____AND.html">and</a> (foo-listp (<a href="ACL2____LIST-FIX.html">list-fix</a> x))
+            (foo-listp y)))</pre> 
+ 
+<p>There are many other nice theorems, but just as a few examples, each of 
+these theorems are very nice in the loose style, and are uglier in the strict 
+style:</p> 
+ 
+<pre class="code">(<a href="COMMON-LISP____EQUAL.html">equal</a> (foo-listp (<a href="ACL2____LIST-FIX.html">list-fix</a> x))
+       (foo-listp x))
+
+(<a href="COMMON-LISP____EQUAL.html">equal</a> (foo-listp (<a href="ACL2____REV.html">rev</a> x))
+       (foo-listp x))
+
+(<a href="COMMON-LISP____EQUAL.html">equal</a> (foo-listp (<a href="SET____MERGESORT.html">mergesort</a> x))
+       (foo-listp x))
+
+(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____SUBSETP-EQUAL.html">subsetp-equal</a> x y)
+              (foo-listp y))
+         (foo-listp x))</pre> 
+ 
+<p><a href="STD____DEFLIST.html">deflist</a> originally came out of <a href="ACL2____MILAWA.html">ACL2::milawa</a>, where I 
+universally applied the loose approach, and in that context I think it is very 
+nice.  It's not entirely clear that loose recognizers are a good fit for ACL2. 
+Really one of the main objections to the loose style is: ACL2's built-in list 
+recognizers use the strict approach, and it can become irritating to keep track 
+of which recognizers require true-listp and which don't.</p>
+</body>
+</html>

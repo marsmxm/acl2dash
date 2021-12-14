@@ -1,0 +1,90 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Vl-usertype</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL____VL-USERTYPE">Click for Vl-usertype in the Full Manual</a></h3>
+
+<p>Represents a reference to some user-defined SystemVerilog datatype.</p><p>This is a product type, introduced by <a href="FTY____DEFTAGSUM.html">deftagsum</a> in support of <a href="VL____VL-DATATYPE.html">vl-datatype</a>.</p> 
+<h5>Fields</h5> 
+<dl>
+<dt>name — <a href="VL____VL-SCOPEEXPR.html">vl-scopeexpr</a>
+</dt> 
+<dd>Typedef name, like <span class="v">foo_t</span>.  May have a package scope, but 
+               should not otherwise be hierarchical.</dd> 
+ 
+<dt>res — <a href="VL____VL-MAYBE-DATATYPE.html">vl-maybe-datatype</a>
+</dt> 
+<dd>The resolved type that name refers to.  If present, it means 
+               we've already looked up the type and resolved its value.  See 
+               below for more notes.</dd> 
+ 
+<dt>pdims — <a href="VL____VL-DIMENSIONLIST.html">vl-dimensionlist</a>
+</dt> 
+<dd>Packed dimensions for this user type.</dd> 
+ 
+<dt>udims — <a href="VL____VL-DIMENSIONLIST.html">vl-dimensionlist</a>
+</dt> 
+<dd>Unpacked dimensions for this user type.</dd> 
+ 
+<dt>virtual-intfc — <a href="ACL2____BOOLEANP.html">booleanp</a>
+</dt> 
+<dd>Indicates a virtual interface type, which we don't really support.</dd> 
+ 
+<dt>intfc-params — <a href="VL____VL-MAYBE-PARAMARGS.html">vl-maybe-paramargs</a>
+</dt> 
+<dd>Parameter values -- relevant for the virtual-intfc case</dd> 
+ 
+</dl><h3>Notes about the <span class="v">res</span> Field</h3> 
+ 
+            <p>Originally, to deal with user-defined types, we tried to just 
+            substitute definitions for usertypes.  However, it turns out that 
+            this isn't correct: e.g.</p> 
+ 
+            <pre class="code">typedef logic signed [3:0] snib;
+snib [3:0] foo1;</pre> 
+ 
+            <p>is <b>not</b> the same as just</p> 
+ 
+            <pre class="code">logic signed [3:0] [3:0] foo2;</pre> 
+ 
+            <p>Here, <span class="v">foo1</span> is an unsigned array of signed slots, whereas 
+            <span class="v">foo2</span> is a signed array of unsigned slots.  (NCV and VCS also 
+            treat them differently; we believe NCV gets it right with respect 
+            to the spec, whereas VCS seems to do the substitution.)</p> 
+ 
+            <p>We then decided we'd just deal with usertypes directly.  We 
+            rewrote all our type-manipulating functions to operate on a 
+            datatype and scopestack simultaneously.  However, we don't want to 
+            store scopestacks between transformations.  So there's a problem 
+            with e.g. type parameters: e.g.</p> 
+ 
+            <pre class="code">module sub #(<a href="COMMON-LISP____TYPE.html">type</a> and_t = logic [3:0])
+            (input and_t a, b, output and_t o);
+  assign o = a &amp; b;
+endmodule
+
+module super ();
+  typedef logic signed [5:0] my_and_t;
+  my_and_t a, b;
+  my_and_t o;
+  sub #(.and_t(my_and_t)) inst (a, b, o);
+endmodule</pre> 
+ 
+            <p>Here, we want to transform <span class="v">sub</span>, replacing the <span class="v">and_t</span> 
+            parameter with the overridden version <span class="v">my_and_t</span>.  But 
+            <span class="v">my_and_t</span> is only defined in <span class="v">super</span>!  So we might want to 
+            do something like replacing the <span class="v">and_t</span> type parameter with 
+            <span class="v">typedef my_and_t and_t;</span>, or leaving it as a <span class="v">parameter
+            #(<a href="COMMON-LISP____TYPE.html">type</a> and_t = my_and_t)</span>.  But neither of these work, because 
+            <span class="v">my_and_t</span> isn't defined in the scope of <span class="v">sub</span>.</p> 
+ 
+            <p>Our solution is to go back to doing substitution, but instead of 
+            strictly substituting <span class="v">usertype &lt;- definition</span>, we leave the 
+            <span class="v">usertype</span> but add the <span class="v">res</span> field, a <a href="VL____VL-MAYBE-DATATYPE.html">vl-maybe-datatype</a> which, if present, means we've resolved this 
+            usertype and its definition is the <span class="v">res</span>.</p>
+</body>
+</html>

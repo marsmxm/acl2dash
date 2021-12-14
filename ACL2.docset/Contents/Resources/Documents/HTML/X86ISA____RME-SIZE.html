@@ -1,0 +1,187 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Rme-size</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=X86ISA____RME-SIZE">Click for Rme-size in the Full Manual</a></h3>
+
+<p>Read an unsigned value with the specified number of bytes 
+          from memory via an effective address.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(rme-size proc-mode nbytes 
+          eff-addr seg-reg r-x check-alignment? 
+          x86 &amp;key (mem-ptr? 'nil)) 
+ 
+  → 
+(mv flg value x86-new)</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">check-alignment?</span> — <font color="#606060">Guard <span class="v">(<a href="ACL2____BOOLEANP.html">booleanp</a> check-alignment?)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">mem-ptr?</span> — <font color="#606060">Guard <span class="v">(<a href="ACL2____BOOLEANP.html">booleanp</a> mem-ptr?)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">value</span> — <font color="#606060">Type <span class="v">(<a href="ACL2____NATP.html">natp</a> value)</span>.</font>
+</dd> 
+<dd>
+<span class="tt">x86-new</span> — <font color="#606060">Type <span class="v">(x86p x86-new)</span>, given <span class="v">(x86p x86)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>The effective address is translated to a canonical linear address using 
+   <a href="X86ISA____EA-TO-LA.html">ea-to-la</a>. If this translation is successful and no other errors (like 
+   alignment errors) occur, then <a href="X86ISA____RML-SIZE.html">rml-size</a> is called.</p> 
+   <p>Prior to the effective address translation, we check whether read 
+   access is allowed.  The only case in which it is not allowed is when a 
+   read access is attempted on an execute-only code segment, in 32-bit 
+   mode.  In 64-bit mode, the R bit of the code segment descriptor is 
+   ignored; see Intel manual, Dec'17, Volume 2, Section 4.8.1</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>rme-size$inline</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ rme-size$inline
+ (proc-mode nbytes eff-addr seg-reg
+            r-x check-alignment? x86 mem-ptr?)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (x86)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____TYPE.html">type</a> (integer 0 4) proc-mode)
+          (<a href="COMMON-LISP____TYPE.html">type</a> (<a href="COMMON-LISP____MEMBER.html">member</a> 1 2 4 6 8 10 16) nbytes)
+          (<a href="COMMON-LISP____TYPE.html">type</a> (signed-byte 64) eff-addr)
+          (<a href="COMMON-LISP____TYPE.html">type</a> (integer 0 5) seg-reg)
+          (<a href="COMMON-LISP____TYPE.html">type</a> (<a href="COMMON-LISP____MEMBER.html">member</a> :r :x) r-x))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____BOOLEANP.html">booleanp</a> check-alignment?)
+                             (<a href="ACL2____BOOLEANP.html">booleanp</a> mem-ptr?))))
+ (<a href="ACL2____B_A2.html">b*</a>
+  (((when
+     (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP_____F2_D3.html">/=</a> proc-mode 0)
+          (<a href="COMMON-LISP_____D3.html">=</a> seg-reg 1)
+          (<a href="COMMON-LISP____EQ.html">eq</a> r-x :r)
+          (<a href="ACL2____B_A2.html">b*</a> ((attr (<a href="ACL2____LOGHEAD.html">loghead</a> 16 (seg-hidden-attri seg-reg x86)))
+               (r (<a href="X86ISA____CODE-SEGMENT-DESCRIPTOR-ATTRIBUTESBITS-_E3R.html">code-segment-descriptor-attributesbits-&gt;r</a> attr)))
+              (<a href="COMMON-LISP_____D3.html">=</a> r 0))))
+    (<a href="ACL2____MV.html">mv</a> (<a href="COMMON-LISP____LIST.html">list</a> :execute-only-code-segment eff-addr)
+        0 x86))
+   ((<a href="ACL2____MV.html">mv</a> flg lin-addr)
+    (<a href="X86ISA____EA-TO-LA.html">ea-to-la</a> proc-mode eff-addr seg-reg nbytes x86))
+   ((when flg) (<a href="ACL2____MV.html">mv</a> flg 0 x86))
+   ((unless (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____NOT.html">not</a> check-alignment?)
+                (<a href="X86ISA____ADDRESS-ALIGNED-P.html">address-aligned-p</a> lin-addr nbytes mem-ptr?)))
+    (<a href="ACL2____MV.html">mv</a> (<a href="COMMON-LISP____LIST.html">list</a> :unaligned-linear-address lin-addr)
+        0 x86)))
+  (<a href="X86ISA____RML-SIZE.html">rml-size</a> nbytes lin-addr r-x x86)))</pre> 
+<p><b>Theorem: </b>natp-of-rme-size.value</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> natp-of-rme-size.value
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?flg acl2::?value ?x86-new)
+              (rme-size$inline proc-mode nbytes eff-addr seg-reg
+                               r-x check-alignment? x86 mem-ptr?)))
+            (<a href="ACL2____NATP.html">natp</a> value))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>x86p-of-rme-size.x86-new</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+    x86p-of-rme-size.x86-new
+    (<a href="ACL2____IMPLIES.html">implies</a>
+         (x86p x86)
+         (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?flg acl2::?value ?x86-new)
+               (rme-size$inline proc-mode nbytes eff-addr seg-reg
+                                r-x check-alignment? x86 mem-ptr?)))
+             (x86p x86-new)))
+    :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>rme-size-when-64-bit-modep-and-not-fs/gs</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+    rme-size-when-64-bit-modep-and-not-fs/gs
+    (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> seg-reg 4))
+                  (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> seg-reg 5))
+                  (<a href="X86ISA____CANONICAL-ADDRESS-P.html">canonical-address-p</a> eff-addr)
+                  (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____NOT.html">not</a> check-alignment?)
+                      (<a href="X86ISA____ADDRESS-ALIGNED-P.html">address-aligned-p</a> eff-addr nbytes mem-ptr?)))
+             (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="X86ISA____RME-SIZE.html">rme-size</a> 0 nbytes eff-addr
+                              seg-reg r-x check-alignment? x86
+                              :mem-ptr? mem-ptr?)
+                    (<a href="X86ISA____RML-SIZE.html">rml-size</a> nbytes eff-addr r-x x86))))</pre> 
+<p><b>Theorem: </b>rme-size-when-64-bit-modep-fs/gs</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ rme-size-when-64-bit-modep-fs/gs
+ (<a href="ACL2____IMPLIES.html">implies</a>
+  (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> seg-reg 4) (<a href="COMMON-LISP____EQUAL.html">equal</a> seg-reg 5))
+  (<a href="COMMON-LISP____EQUAL.html">equal</a>
+    (<a href="X86ISA____RME-SIZE.html">rme-size</a> 0 nbytes eff-addr
+              seg-reg r-x check-alignment? x86
+              :mem-ptr? mem-ptr?)
+    (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> flg lin-addr)
+          (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> base &amp; &amp;)
+                (<a href="X86ISA____SEGMENT-BASE-AND-BOUNDS.html">segment-base-and-bounds</a> 0 seg-reg x86))
+               (lin-addr (<a href="X86ISA____I64.html">i64</a> (<a href="COMMON-LISP_____B2.html">+</a> base (<a href="X86ISA____N64.html">n64</a> eff-addr)))))
+              (<a href="COMMON-LISP____IF.html">if</a> (<a href="X86ISA____CANONICAL-ADDRESS-P.html">canonical-address-p</a> lin-addr)
+                  (<a href="ACL2____MV.html">mv</a> nil lin-addr)
+                  (<a href="ACL2____MV.html">mv</a> (<a href="COMMON-LISP____LIST.html">list</a> :non-canonical-address lin-addr)
+                      0))))
+         ((when flg) (<a href="ACL2____MV.html">mv</a> flg 0 x86))
+         ((unless (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____NOT.html">not</a> check-alignment?)
+                      (<a href="X86ISA____ADDRESS-ALIGNED-P.html">address-aligned-p</a> lin-addr nbytes mem-ptr?)))
+          (<a href="ACL2____MV.html">mv</a> (<a href="COMMON-LISP____LIST.html">list</a> :unaligned-linear-address lin-addr)
+              0 x86)))
+        (<a href="X86ISA____RML-SIZE.html">rml-size</a> nbytes lin-addr r-x x86)))))</pre> 
+<p><b>Theorem: </b>rme-size-unaligned-when-64-bit-modep-and-not-fs/gs</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+   rme-size-unaligned-when-64-bit-modep-and-not-fs/gs
+   (<a href="ACL2____IMPLIES.html">implies</a>
+        (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> seg-reg 4))
+             (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> seg-reg 5))
+             (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____NOT.html">not</a> check-alignment?)
+                      (<a href="X86ISA____ADDRESS-ALIGNED-P.html">address-aligned-p</a> eff-addr nbytes mem-ptr?)))
+             (<a href="X86ISA____CANONICAL-ADDRESS-P.html">canonical-address-p</a> eff-addr))
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="X86ISA____RME-SIZE.html">rme-size</a> 0 nbytes eff-addr
+                         seg-reg r-x check-alignment? x86
+                         :mem-ptr? mem-ptr?)
+               (<a href="COMMON-LISP____LIST.html">list</a> (<a href="COMMON-LISP____LIST.html">list</a> :unaligned-linear-address eff-addr)
+                     0 x86))))</pre> 
+<p><b>Theorem: </b>rme-size-non-canonical-when-64-bit-modep-and-not-fs/gs</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> rme-size-non-canonical-when-64-bit-modep-and-not-fs/gs
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> seg-reg 4))
+                      (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> seg-reg 5))
+                      (<a href="COMMON-LISP____NOT.html">not</a> (<a href="X86ISA____CANONICAL-ADDRESS-P.html">canonical-address-p</a> eff-addr)))
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="X86ISA____RME-SIZE.html">rme-size</a> 0 nbytes eff-addr
+                                  seg-reg r-x check-alignment? x86
+                                  :mem-ptr? mem-ptr?)
+                        (<a href="COMMON-LISP____LIST.html">list</a> (<a href="COMMON-LISP____LIST.html">list</a> :non-canonical-address eff-addr)
+                              0 x86))))</pre> 
+<p><b>Theorem: </b>rme-size-of-1-to-rme08</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> rme-size-of-1-to-rme08
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="X86ISA____RME-SIZE.html">rme-size</a> proc-mode 1 eff-addr
+                         seg-reg r-x check-alignment? x86
+                         :mem-ptr? mem-ptr?)
+               (<a href="X86ISA____RME08.html">rme08</a> proc-mode eff-addr seg-reg r-x x86)))</pre> 
+<p><b>Theorem: </b>rme-size-of-2-to-rme16</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> rme-size-of-2-to-rme16
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="X86ISA____RME-SIZE.html">rme-size</a> proc-mode 2 eff-addr
+                         seg-reg r-x check-alignment? x86
+                         :mem-ptr? mem-ptr?)
+               (<a href="X86ISA____RME16.html">rme16</a> proc-mode eff-addr
+                      seg-reg r-x check-alignment? x86)))</pre> 
+<p><b>Theorem: </b>rme-size-of-4-to-rme32</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> rme-size-of-4-to-rme32
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="X86ISA____RME-SIZE.html">rme-size</a> proc-mode 4 eff-addr
+                         seg-reg r-x check-alignment? x86
+                         :mem-ptr? mem-ptr?)
+               (<a href="X86ISA____RME32.html">rme32</a> proc-mode eff-addr
+                      seg-reg r-x check-alignment? x86
+                      :mem-ptr? mem-ptr?)))</pre> 
+<p><b>Theorem: </b>rme-size-of-6-to-rme48</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> rme-size-of-6-to-rme48
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="X86ISA____RME-SIZE.html">rme-size</a> proc-mode 6 eff-addr
+                         seg-reg r-x check-alignment? x86
+                         :mem-ptr? mem-ptr?)
+               (<a href="X86ISA____RME48.html">rme48</a> proc-mode eff-addr
+                      seg-reg r-x check-alignment? x86)))</pre> 
+<p><b>Theorem: </b>rme-size-of-8-to-rme64</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> rme-size-of-8-to-rme64
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="X86ISA____RME-SIZE.html">rme-size</a> proc-mode 8 eff-addr
+                         seg-reg r-x check-alignment? x86
+                         :mem-ptr? mem-ptr?)
+               (<a href="X86ISA____RME64.html">rme64</a> proc-mode eff-addr
+                      seg-reg r-x check-alignment? x86)))</pre> 
+<p><b>Theorem: </b>rme-size-of-10-to-rme64</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> rme-size-of-10-to-rme64
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="X86ISA____RME-SIZE.html">rme-size</a> proc-mode 10 eff-addr
+                         seg-reg r-x check-alignment? x86
+                         :mem-ptr? mem-ptr?)
+               (<a href="X86ISA____RME80.html">rme80</a> proc-mode eff-addr
+                      seg-reg r-x check-alignment? x86)))</pre> 
+<p><b>Theorem: </b>rme-size-of-16-to-rme128</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> rme-size-of-16-to-rme128
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="X86ISA____RME-SIZE.html">rme-size</a> proc-mode 16 eff-addr
+                         seg-reg r-x check-alignment? x86
+                         :mem-ptr? mem-ptr?)
+               (<a href="X86ISA____RME128.html">rme128</a> proc-mode eff-addr
+                       seg-reg r-x check-alignment? x86)))</pre> 
+
+</body>
+</html>

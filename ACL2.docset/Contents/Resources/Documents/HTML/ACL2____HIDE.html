@@ -1,0 +1,147 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Hide</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____HIDE">Click for Hide in the Full Manual</a></h3>
+
+<p>Hide a term from the rewriter</p><p><span class="v">Hide</span> is actually the <a href="COMMON-LISP____IDENTITY.html">identity</a> function: <span class="v">(<a href="ACL2____HIDE.html">hide</a> x) =
+ x</span> for all <span class="v">x</span>.  However, terms of the form <span class="v">(<a href="ACL2____HIDE.html">hide</a> x)</span> are ignored by 
+ the ACL2 rewriter, except when explicit <span class="v">:expand</span> <a href="ACL2____HINTS.html">hints</a> are given 
+ for such terms (see <a href="ACL2____HINTS.html">hints</a>) or when rewrite rules explicitly about 
+ <span class="v">hide</span> are available.  An <span class="v">:expand</span> hint that removes all calls of 
+ <span class="v">hide</span> is:</p> 
+ 
+ <pre class="code">:expand ((:free (x) (<a href="ACL2____HIDE.html">hide</a> x)))</pre> 
+ 
+ <p>The above hint can be particularly useful when ACL2's equality heuristics 
+ apply <span class="v">hide</span> to an equality after substituting it into the rest of the 
+ goal, if that goal (or a subgoal of it) fails to be proved.</p> 
+ 
+ <p>Another common case, described below, is when <span class="v">hide</span> is added by the 
+ simplifier because an attempted execution of the term failed.  In this case, 
+ an <span class="v">:expand</span> hint as described above will have no effect because the 
+ execution will just fail again; the <span class="v">hide</span> will be re-inserted; and the 
+ hapless user will find themselves questioning their own sanity.</p> 
+ 
+ <p><span class="v">Hide</span> terms are generally ignored not only by the rewriter but by other 
+ ACL2 procedures, including the induction heuristics and (by default) removal 
+ of <a href="ACL2____GUARD-HOLDERS.html">guard-holders</a>.</p> 
+ 
+ <p>Sometimes the ACL2 simplifier inserts <span class="v">hide</span> terms into a proof attempt 
+ out of the blue, as it were.  Why and what can you do about it?  Suppose you 
+ have a constrained function, say <span class="v">constrained-fn</span>, and you define another 
+ function, say <span class="v">another-fn</span>, in terms of it, as in:</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> another-fn (x y z)
+  (<a href="COMMON-LISP____IF.html">if</a> (big-hairy-test x y z)
+      (constrained-fn x y z)
+      t))</pre> 
+ 
+ <p>Suppose the term <span class="v">(another-fn 1 2 3)</span> arises in a proof.  Since the 
+ arguments are all constants, ACL2 may try to reduce such a term to a constant 
+ by executing the definition of <span class="v">another-fn</span>.  However, after a possibly 
+ extensive computation (because of <span class="v">big-hairy-test</span>) the execution fails 
+ because of the unevaluable call of <span class="v">constrained-fn</span>.  To avoid subsequent 
+ attempts to evaluate the term, ACL2 embeds it in a <span class="v">hide</span> expression. 
+ Often that expression will use a call of <span class="tt"><a href="ACL2____COMMENT.html">comment</a></span>, where <span class="v">(<a href="ACL2____COMMENT.html">comment</a> x
+ y)</span> is logically just <span class="v">y</span>, to tell you the problematic constrained 
+ function, in this case by rewriting the original expression to the following; 
+ see <a href="ACL2____COMMENT.html">comment</a>.  (Near the end of this topic we discuss how to avoid the 
+ call of <span class="v">comment</span>.)</p> 
+ 
+ <pre class="code">(<a href="ACL2____HIDE.html">hide</a> (<a href="ACL2____COMMENT.html">comment</a> "Failed attempt to call constrained function CONSTRAINED-FN"
+               (another-fn 1 2 3)))</pre> 
+ 
+ <p>You might think this rarely occurs since all the arguments of 
+ <span class="v">another-fn</span> must be constants.  You would be right except for one special 
+ case: if <span class="v">another-fn</span> takes no arguments, i.e., is a constant function, 
+ then every call of it fits this case.  Thus, if you define a function <span class="v">f</span> 
+ of no arguments in terms of a constrained function <span class="v">g</span>, you may 
+ often see <span class="v">(f)</span> rewrite to:</p> 
+ 
+ <pre class="code">(<a href="ACL2____HIDE.html">hide</a> (<a href="ACL2____COMMENT.html">comment</a> "Failed attempt to call constrained function G"
+               (f))).</pre> 
+ 
+ <p>We do not hide the term if the <a href="ACL2____EXECUTABLE-COUNTERPART.html">executable-counterpart</a> of the 
+ function is <a href="ACL2____DISABLE.html">disable</a>d — because we do not try to evaluate it in 
+ the first place.  Thus, to prevent the insertion of a <span class="v">hide</span> term into the 
+ proof attempt, you can globally disable the executable-counterpart of the 
+ offending defined function, e.g.,</p> 
+ 
+ <pre class="code">(<a href="ACL2____IN-THEORY.html">in-theory</a> (<a href="ACL2____DISABLE.html">disable</a> (:executable-counterpart another-fn))).</pre> 
+ 
+ <p>It is conceivable that you cannot afford to do this: perhaps some calls of 
+ the offending function must be computed while others cannot be.  One way to 
+ handle this situation is to leave the executable-counterpart enabled, so that 
+ <span class="v">hide</span> terms are introduced on the calls that cannot be computed, but prove 
+ explicit <span class="v">:</span><span class="tt"><a href="ACL2____REWRITE.html">rewrite</a></span> rules for each of those <span class="v">hide</span> terms.  For 
+ example, suppose that in the proof of some theorem, thm, it is necessary to 
+ leave the executable-counterpart of <span class="v">another-fn</span> enabled but that the call 
+ <span class="v">(another-fn 1 2 3)</span> arises in the proof and cannot be computed.  Thus the 
+ proof attempt will introduce the term <span class="v">(<a href="ACL2____HIDE.html">hide</a> (<a href="ACL2____COMMENT.html">comment</a> ".." (another-fn 1 2
+ 3)))</span> mentioned above.  Suppose that you can show that <span class="v">(another-fn 1 2
+ 3)</span> is <span class="v">(constrained-fn 1 2 3)</span> and that such a step is necessary to the 
+ proof.  Unfortunately, proving the rewrite rule</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> thm-helper
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> (another-fn 1 2 3) (constrained-fn 1 2 3)))</pre> 
+ 
+ <p>would not help the proof of thm because the target term is hidden inside 
+ the <span class="v">hide</span>.  However,</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> thm-helper
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____HIDE.html">hide</a> (<a href="ACL2____COMMENT.html">comment</a> "Failed attempt to call constrained function CONSTRAINED-FN"
+                        (another-fn 1 2 3)))
+         (constrained-fn 1 2 3)))</pre> 
+ 
+ <p>would be applied in the proof of thm and is the rule you should prove.</p> 
+ 
+ <p>Now to prove <span class="v">thm-helper</span> you need to use the two ``tricks'' which have 
+ already been discussed.  First, to eliminate the <span class="v">hide</span> term in the proof 
+ of <span class="v">thm-helper</span> you should include a hint to <span class="v">:expand</span> that term. 
+ Second, to prevent the <span class="v">hide</span> term from being reintroduced when the system 
+ tries and fails to evaluate <span class="v">(another-fn 1 2 3)</span> you should include the 
+ hint <span class="v">:in-theory</span> <span class="v">(<a href="ACL2____DISABLE.html">disable</a> (:executable-counterpart another-fn))</span>. 
+ Thus, <span class="v">thm-helper</span> will actually be:</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> thm-helper
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____HIDE.html">hide</a> (<a href="ACL2____COMMENT.html">comment</a> "Failed attempt to call constrained function CONSTRAINED-FN"
+                        (another-fn 1 2 3)))
+         (constrained-fn 1 2 3))
+  :hints
+  (("Goal" :expand
+           (<a href="ACL2____HIDE.html">hide</a> (<a href="ACL2____COMMENT.html">comment</a> "Failed attempt to call constrained function CONSTRAINED-FN"
+                          (another-fn 1 2 3)))
+           :in-theory (<a href="ACL2____DISABLE.html">disable</a> (:executable-counterpart another-fn)))))</pre> 
+ 
+ <p>See <a href="ACL2____EVISCERATE-HIDE-TERMS.html">eviscerate-hide-terms</a> for how to affect the printing of 
+ <span class="v">hide</span> terms.</p> 
+ 
+ <p>Finally, note that you can avoid the generation of <span class="tt"><a href="ACL2____COMMENT.html">comment</a></span> calls 
+ inside the generated call of <span class="v">hide</span>, as was the case through ACL2 Version 
+ 8.2, as follows.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFATTACH-SYSTEM.html">defattach-system</a> ; generates (<a href="ACL2____LOCAL.html">local</a> (<a href="ACL2____DEFATTACH.html">defattach</a> ...))
+  hide-with-comment-p
+  constant-nil-function-arity-0)</pre> 
+ 
+ <p>After evaluation of this event, our running example <span class="v">(another-fn 1 2 3)</span> 
+ would generate <span class="v">(<a href="ACL2____HIDE.html">hide</a> (another-fn 1 2 3))</span> rather than a term of the 
+ form <span class="v">(<a href="ACL2____HIDE.html">hide</a> (<a href="ACL2____COMMENT.html">comment</a> "..." (another-fn 1 2 3)))</span>.</p> 
+ 
+ <p>In some cases such backward compatibility might also be achieved as 
+ follows; also see <a href="ACL2____GUARD-HOLDERS.html">guard-holders</a>.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFATTACH-SYSTEM.html">defattach-system</a> ; generates (<a href="ACL2____LOCAL.html">local</a> (<a href="ACL2____DEFATTACH.html">defattach</a> ...))
+  remove-guard-holders-blocked-by-hide-p
+  constant-nil-function-arity-0)</pre> 
+ 
+ <p><b>Function: </b>hide</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> hide (x)
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t))
+       x)</pre>
+</body>
+</html>

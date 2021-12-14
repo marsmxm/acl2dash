@@ -1,0 +1,109 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Implicit-wires-generate-scoping</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL____IMPLICIT-WIRES-GENERATE-SCOPING">Click for Implicit-wires-generate-scoping in the Full Manual</a></h3>
+
+<p>Some details about generate block scoping quirks which affect 
+implicit wire handling and other aspects of scoping.</p><p>AFAICT none of the following is discussed in the SystemVerilog-2012 
+standard.</p> 
+ 
+<p>Unlike any other kind of <span class="v">generate</span> statement, it seems that plain old 
+<span class="v">begin ... end</span> style generate blocks with no names are treated by 
+commercial simulators in a special way.  In particular, they don't (at least at 
+the top level; see below) introduce new scopes.</p> 
+ 
+<p>This has implications for correctly introducing implicit wires and also for 
+scoping in general.  We want to be smart enough to prohibit things like:</p> 
+ 
+<pre class="code">module m;
+  not(v, w);       // implicit declaration of w
+  begin
+    wire w = 1;    // illegal (redefinition of w)
+  end
+endmodule</pre> 
+ 
+<p>while at the same time allowing legal things like:</p> 
+ 
+<pre class="code">module m;
+  not(v, w);       // implicit declaration of w
+  begin : myblock
+    wire w = 1;    // fine (this is a new scope)
+  end
+endmodule</pre> 
+ 
+ 
+<h5>Top-level begin/end: no name = no scope</h5> 
+ 
+<p>On both NCV and VCS, at least at the top level of a module, an unnamed block 
+does NOT appear to introduce a new scope.  Instead, wires declared inside it 
+become visible to the rest of the module after the generate, just as if they 
+were declared before the begin/end block.</p> 
+ 
+<p>Moreover, the following seem to be roughly(*) equivalent,</p> 
+ 
+<pre class="code">module m ;                    module m ;
+  begin
+    ...              vs.           ...
+  end
+endmodule                     endmodule</pre> 
+ 
+<p>(*) Exceptions we're aware of: begin/end blocks aren't allowed to have 
+ports, specify blocks, and specparams (Section 27.3) and parameter declarations 
+inside of begin/end blocks are supposed to be treated as localparams.  Testing 
+suggests that these restrictions still hold for unnamed top-level begin/end 
+blocks.  See especially <a href="VL____VL-GENELEMENTLIST-FLATTEN.html">vl-genelementlist-flatten</a>.</p> 
+ 
+ 
+<h5>Interior begin/end: no name = unclear scope</h5> 
+ 
+<p>We find that NCV and VCS <b>disagree</b> about the handling of scopes for 
+nested begin/end generate blocks.  In particular, consider something like:</p> 
+ 
+<pre class="code">module m ;
+begin
+  wire [3:0] w1 = 0;
+  begin
+    wire [3:0] w2 = 1;
+  end
+  wire [3:0] w3 = w1;
+  wire [3:0] w4 = w2;
+end
+endmodule</pre> 
+ 
+<p>This code is happily accepted by NCVerilog, suggesting that the inner 
+begin/end block is not given its own scope.  However, VCS instead produces an 
+error saying that <span class="v">w2</span> is not declared, which suggests that VCS treats 
+interior begin/end blocks as new scopes.  Note however that VCS still treats 
+top-level begin/end blocks as not being new scopes.  Messy.</p> 
+ 
+<p>In VL we choose to follow the behavior of NCVerilog since it is seems more 
+consistent.  That is, we will universally regard any unnamed begin/end generate 
+blocks as <b>not</b> introducing a scope.</p> 
+ 
+ 
+<h5>Eliminating begin/end blocks</h5> 
+ 
+<p>Since we are going to treat unnamed begin/end blocks as not having their own 
+scopes, there's really no reason to keep them around.</p> 
+ 
+<p>It also seems like a good idea to get rid of them.  If we keep unnamed 
+begin/end blocks around, then when building scopes for <a href="VL____VL-SCOPESTACK.html">vl-scopestack</a>s, 
+we would need to would need to collect all the items from (say) the module, and 
+then also dive down into the begin/end blocks and (recursively) collect up the 
+items within them.  It seems much nicer and simpler to inline the contents of 
+these generate blocks into their surroundings.  Similarly we would need to do 
+this sort of thing for packages.</p> 
+ 
+<p>We do this inlining as part of introducing implicit wires.  This seems like 
+a reasonable place: it certainly needs to happen before or during implicit wire 
+introduction in order to get implicit wires right.  It also needs to happen 
+before we create scopestacks for shadowchecking.</p> 
+ 
+
+</body>
+</html>

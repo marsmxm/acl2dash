@@ -1,0 +1,314 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Save-exec</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____SAVE-EXEC">Click for Save-exec in the Full Manual</a></h3>
+
+<p>Save an executable image and a wrapper script</p><p><span class="v">Save-exec</span> saves your ACL2 state so that you can immediately 
+ re-start later in that same state.  This utility can be useful for a project 
+ with <a href="ACL2____BOOKS.html">books</a> to be included every time ACL2 is started (see 
+ <a href="BUILD____USING-EXTENDED-ACL2-IMAGES.html">build::using-extended-ACL2-images</a>), to avoid time 
+ taken to run <span class="tt"><a href="ACL2____INCLUDE-BOOK.html">include-book</a></span>.  Another use of <span class="v">save-exec</span> is to save 
+ an executable that takes command-line arguments beyond those normally passed 
+ to the host Lisp executable.  All arguments of a call of <span class="v">save-exec</span> are 
+ evaluated.</p> 
+ 
+ <pre class="code">Examples:
+
+; Save an executable script named my-saved_acl2, with the indicated message
+; added below the words "MODIFICATION NOTICE" under the start-up banner:
+(<a href="ACL2____SAVE-EXEC.html">save-exec</a> "my-saved_acl2"
+           "This saved image includes Version 7 of Project Foo.")
+
+; Same as above, but instead with a generic comment under the modification
+; notice:
+(<a href="ACL2____SAVE-EXEC.html">save-exec</a> "my-saved_acl2" nil)
+
+; Arrange that the generated script passes the indicated arguments to be
+; processed by the Lisp (<a href="ACL2____ACL2.html">ACL2</a>) executable (where this example is specific to
+; the case that CCL is the host Lisp):
+(<a href="ACL2____SAVE-EXEC.html">save-exec</a> "my-saved_acl2" nil
+           :host-lisp-args "--no-init -Z 256M")
+
+; Arrange that the generated script passes along the indicated arguments
+; to Lisp (<a href="ACL2____ACL2.html">ACL2</a>), but that they are not processed by Lisp other than to
+; record the additional arguments (see (6) below).
+(<a href="ACL2____SAVE-EXEC.html">save-exec</a> "my-saved_acl2" nil
+           :inert-args "abc xyz -i foo")
+
+; Combining the preceding two examples:
+(<a href="ACL2____SAVE-EXEC.html">save-exec</a> "my-saved_acl2" nil
+           :host-lisp-args "--no-init -Z 256M"
+           :inert-args "abc xyz -i foo")
+
+; Arrange that ACL2 evaluates (with LD) the three forms shown.
+; In this example, the THM form fails, but that does not stop the definition
+; of BAR from being evaluated: LD continues on, just as the top-level loop
+; lets you continue after a failure.
+(<a href="ACL2____SAVE-EXEC.html">save-exec</a> "my-acl2" "test"
+           :init-forms
+           '((<a href="COMMON-LISP____DEFUN.html">defun</a> foo (x) (<a href="COMMON-LISP____REVERSE.html">reverse</a> x))
+             (<a href="ACL2____THM.html">thm</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (foo x) x))
+             (<a href="COMMON-LISP____DEFUN.html">defun</a> bar (x) x)))
+
+; Essentially as just above, except that the call of LD returns after the THM
+; failure, so BAR does not get defined.
+(<a href="ACL2____SAVE-EXEC.html">save-exec</a> "my-acl2" "test"
+           :init-forms
+           '((<a href="ACL2____LD.html">ld</a> '((<a href="COMMON-LISP____DEFUN.html">defun</a> foo (x) (<a href="COMMON-LISP____REVERSE.html">reverse</a> x))
+                   (<a href="ACL2____THM.html">thm</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (foo x) x))
+                   (<a href="COMMON-LISP____DEFUN.html">defun</a> bar (x) x))
+                 :ld-pre-eval-print t :ld-verbose nil)))
+
+; Immediately exit the ACL2 read-eval-print loop after starting up.
+(<a href="ACL2____SAVE-EXEC.html">save-exec</a> "my-acl2" nil
+           :return-from-lp t)
+
+; Immediately exit the ACL2 read-eval-print loop after starting up and
+; defining function FOO in the logic.
+(<a href="ACL2____SAVE-EXEC.html">save-exec</a> "my-acl2" "Start with foo defined."
+           :return-from-lp '(<a href="ACL2____WITH-OUTPUT.html">with-output</a>
+                             :off :all
+                             (<a href="COMMON-LISP____DEFUN.html">defun</a> foo (x) x)))
+
+; Immediately exit the ACL2 read-eval-print loop after starting up and
+; defining variable xxx in raw Lisp.
+(<a href="ACL2____SAVE-EXEC.html">save-exec</a> "my-acl2" "Start with xxx defined."
+           :return-from-lp '(<a href="ACL2____WITH-OUTPUT.html">with-output</a>
+                             :off :all
+                             (<a href="ACL2____LD.html">ld</a> '((<a href="ACL2____SET-RAW-MODE-ON_12.html">set-raw-mode-on!</a>)
+                                   (defvar xxx (<a href="COMMON-LISP____MAKE-LIST.html">make-list</a> 10))
+                                   (<a href="ACL2____SET-RAW-MODE.html">set-raw-mode</a> nil)
+                                   (<a href="ACL2____U.html">u</a>)))))</pre> 
+ 
+ <p>Each example above generates a file named "my-saved_acl2".  That file is 
+ quite similar in form to the script generated when building ACL2 directly from 
+ source code; details are below.  For example, here are the contents of that 
+ generated file if the host Lisp is CCL (but where dates and pathnames are 
+ specific to one's environment).  Here, we break lines using `\', but the 
+ <span class="v">exec</span> command is actually on a single line.</p> 
+ 
+ <pre class="code">#!/bin/sh
+
+# Saved August 16, 2013  23:06:49
+#  then August 17, 2013  11:01:56
+
+export CCL_DEFAULT_DIRECTORY="/projects/acl2/lisps/ccl/15542/ccl"
+exec "/projects/ccl/lx86cl64" -I "/u/smith/my-saved_acl2.lx86cl64" \
+     -Z 64M -K ISO-8859-1 -e "(acl2::acl2-default-restart)" \
+     --no-init -Z 256M \
+     -- \
+     abc xyz -i foo \
+     "$@"</pre> 
+ 
+ <pre class="code">General Form:
+(<a href="ACL2____SAVE-EXEC.html">save-exec</a> exec-filename extra-startup-string
+           :host-lisp-args host-lisp-args
+           :inert-args inert-args
+           :return-from-lp return-from-lp
+           :init-forms init-forms)</pre> 
+ 
+ <p>where the keyword arguments are optional, and arguments are as follows.</p> 
+ 
+ <blockquote>
+<p><span class="v">Exec-filename</span> is the filename of the proposed 
+ executable.</p> 
+ 
+ <p><span class="v">Extra-startup-string</span> is a non-empty string to be printed after the 
+ normal ACL2 startup message when you start up the saved image.  However, 
+ <span class="v">extra-startup-string</span> is allowed to be <span class="v">nil</span>, in which case a generic 
+ string will be printed instead.</p> 
+ 
+ <p><span class="v">Host-lisp-args</span> can be <span class="v">nil</span> (the default), but if it is a 
+ non-<span class="v">nil</span> value, then it is a string to be inserted into the command line 
+ in the saved script, specifying additional arguments that are to be processed 
+ by the host Lisp executable.  (Note for SBCL only: these are runtime options; 
+ for toplevel options, see (8) below.)</p> 
+ 
+ <p><span class="v">Inert-args</span> can be <span class="v">nil</span> (the default), but if it is a non-<span class="v">nil</span> 
+ value, then it is a string to be inserted into the command line in the saved 
+ script, specifying additional arguments that are not to be processed by the 
+ host Lisp executable.</p>
+</blockquote> 
+ 
+ <p><span class="v">Return-from-lp</span> and <span class="v">init-forms</span> are <span class="v">nil</span> by default. 
+ Regardless of their value, ACL2 starts up and enters its read-eval-print loop 
+ in the usual way; see <a href="ACL2____LP.html">lp</a>.  Normally you'll stay inside that loop, but 
+ if <span class="v">return-from-lp</span> or <span class="v">init-forms</span> is not <span class="v">nil</span>, then the indicated 
+ forms are evaluated in the ACL2 read-eval-print loop: a single form in the 
+ case of <span class="v">return-from-lp</span>, and a list of forms in the case of 
+ <span class="v">init-forms</span>.  (Essentially, the <span class="tt"><a href="ACL2____LD.html">ld</a></span> special <span class="tt"><a href="ACL2____STANDARD-OI.html">standard-oi</a></span> is 
+ provided to a call of <span class="tt"><a href="ACL2____LD.html">ld</a></span> as a list with the indicated forms on the 
+ front.)  Moreover, if the case of <span class="v">return-from-lp</span>, the loop is exited 
+ after evaluation of the form, leaving you in raw Lisp.  Evaluation of 
+ <span class="v">return-from-lp</span> is done with <span class="tt"><a href="ACL2____LD.html">ld</a></span> options that minimize output (also 
+ see <a href="ACL2____WITH-OUTPUT.html">with-output</a> to minimize output).  Suggestion: let 
+ <span class="v">return-from-lp</span> be <span class="v">t</span> if you simply want to exit the read-eval-print 
+ loop at startup, without evaluating any (nontrivial) form.</p> 
+ 
+ <p>NOTE: It is illegal to supply non-<span class="v">nil</span> values for both 
+ <span class="v">:return-from-lp</span> and <span class="v">:init-forms</span>.  But if you add <span class="v">(<a href="ACL2____VALUE.html">value</a> :q)</span> to 
+ the end of your list of <span class="v">:init-forms</span>, and your other forms do not result 
+ in an error, then you will be left in raw Lisp (as was presumably intended if 
+ you were planning to use <span class="v">:return-from-lp</span>).</p> 
+ 
+ <p>The remainder of this documentation focuses on the options other than 
+ <span class="v">return-from-lp</span> and <span class="v">init-forms</span>.</p> 
+ 
+ <p><b>Details</b>:</p> 
+ 
+ <p>(1) You must first exit the ACL2 read-eval-print loop, typically by 
+ executing <span class="v">:q</span>, before evaluating a <span class="v">save-exec</span> call; otherwise an error 
+ occurs.</p> 
+ 
+ <p>(2) The image will be saved so that in the new image, the raw Lisp package 
+ and the package in the ACL2 read-eval-print loop (see <a href="ACL2____LP.html">lp</a>) will be the 
+ same as their respective values at the time <span class="v">save-exec</span> is called.</p> 
+ 
+ <p>(3) <span class="v">Save-exec</span> generates a small script file (e.g., 
+ <span class="v">"my-saved_acl2"</span> in the examples above), similar in form (see (4) below) 
+ to the script generated when building ACL2 directly from source code, but with 
+ a comment line indicating the time at which the new script is written. 
+ <span class="v">Save-exec</span> also saves an associated binary file.  The binary file's name 
+ is obtained by putting a suffix on the script filename; for example, if the 
+ host Lisp is GCL running on a Linux or Darwin (MacOS) system, then that binary 
+ file has the name <span class="v">my-saved_acl2.gcl</span> in the examples above.</p> 
+ 
+ <p>(4) If <span class="v">inert-args</span> is <span class="v">nil</span> (for example if keyword <span class="v">:inert-args</span> 
+ is omitted), then when the generated ACL2 script is invoked with command line 
+ arguments, those arguments will be passed to the host Lisp; otherwise they 
+ will not.  Thus for the example above, suppose we invoke the generated script 
+ as follows.</p> 
+ 
+ <pre class="code">my-saved_acl2 -a bcd -e fgh</pre> 
+ 
+ <p>If <span class="v">my-saved_acl2</span> was generated using a <span class="v">save-exec</span> command with a 
+ non-<span class="v">nil</span> value specified for keyword <span class="v">:inert-args</span>, then the arguments 
+ ``<span class="v">-a bcd -e fgh</span>'' will not be passed to the host Lisp; otherwise, they 
+ will be.  Note that for ACL2 executable scripts generated by an ordinary ACL2 
+ build from sources, the latter case (i.e., without <span class="v">inert-args</span>) takes 
+ place.</p> 
+ 
+ <p>(5) The generated script, which specifies execution with <span class="v">/bin/sh</span>, will 
+ generally contain a line of one of the following forms.  (But for SBCL, see 
+ (8) below.)  In the examples that follow, <span class="v">ACL2_options</span> is a suitable list 
+ of command-line arguments given to the ACL2 executable.  The quoted string 
+ <span class="v">"$@"</span> is intended to allow the user to pass additional command-line 
+ arguments to that executable.</p> 
+ 
+ <blockquote> 
+ 
+ <p>If <span class="v">host-lisp-args</span> and <span class="v">inert-args</span> are omitted (or <span class="v">nil</span>):</p> 
+ 
+ <pre class="code">exec &lt;lisp_executable&gt; &lt;ACL2_options&gt; "$@"</pre> 
+ 
+ <p>More generally, <span class="v">host-lisp-args</span> is inserted immediately after 
+ <span class="v">&lt;ACL2_options&gt;</span>, but only if it is non-<span class="v">nil</span> (hence a string).  If 
+ <span class="v">inert-args</span> is <span class="v">nil</span>, we thus get:</p> 
+ 
+ <pre class="code">exec &lt;lisp_executable&gt; &lt;ACL2_options&gt; host-lisp-args "$@"</pre> 
+ 
+ <p>If <span class="v">host-lisp-args</span> redefines a value from <span class="v">&lt;ACL2_options&gt;</span>, then it 
+ is up to the host lisp which value to use.  For example, experiments show that 
+ in CCL, if <span class="v">-Z</span> appears twice, each with a legal value, then the second 
+ value is the one that is used (i.e. it does indeed override the original value 
+ written out by ACL2 in <span class="v">&lt;ACL2_options&gt;</span>.  But experiments also show that in 
+ LispWorks, where ``<span class="v">-init -</span>'' is included in <span class="v">&lt;ACL2_options&gt;</span>, then 
+ inclusion of ``<span class="v">-init foo.lisp</span>'' in <span class="v">host-lisp-args</span> is ignored.</p> 
+ 
+ <p>The remaining cases below are for a non-<span class="v">nil</span> value of <span class="v">inert-args</span>. 
+ In each case, if <span class="v">host-lisp-args</span> is <span class="v">nil</span> then it should be omitted 
+ from the displayed command.</p> 
+ 
+ <p>If <span class="v">inert-args</span> is <span class="v">t</span> then an additional argument, `<span class="v">--</span>', 
+ indicates that when ACL2 is given command line arguments, these should not be 
+ processed by the host Lisp (other than recording them; see (6) below):</p> 
+ 
+ <pre class="code">exec &lt;lisp_executable&gt; &lt;ACL2_options&gt; host-lisp-args -- "$@"</pre> 
+ 
+ <p>If <span class="v">inert-args</span> is a string then the result is similar to the above, 
+ except that <span class="v">inert-args</span> is added immediately after `<span class="v">--</span>':</p> 
+ 
+ <pre class="code">exec &lt;lisp_executable&gt; &lt;ACL2_options&gt; host-lisp-args -- inert-args "$@"</pre> 
+ 
+ </blockquote> 
+ 
+ <p>(6) See <a href="OSLIB____ARGV.html">oslib::argv</a> for a utility that returns a list of all 
+ <span class="v">inert-args</span> from an invocation of ACL2.  See also <a href="ACL2____GETOPT.html">getopt</a> 
+ for a convenient way to parse these arguments.</p> 
+ 
+ <p>(7) Suppose that you invoke an ACL2 script, say <span class="v">"my-saved_acl2"</span>, 
+ that was generated by <span class="v">save-exec</span>, and then optionally evaluate some forms. 
+ Then you may save a new ACL2 script with <span class="v">save-exec</span>.  The new script will 
+ contain comment lines that extend comment lines in <span class="v">"my-saved_acl2"</span> with 
+ a new write date, but otherwise will be identical to the script that would 
+ have been generated by executing the new <span class="v">save-exec</span> call after invoking 
+ the original ACL2 executable (built directly from ACL2 sources) instead of 
+ <span class="v">"my-saved_acl2"</span>.  In other words, the options added by the earlier 
+ <span class="v">save-exec</span> call that created <span class="v">"my-saved_acl2"</span> are discarded by the 
+ new <span class="v">save-exec</span> call.  However, the <span class="v">.core</span> file will built on top of 
+ the <span class="v">.core</span> file that was consulted when <span class="v">"my-saved_acl2"</span> was 
+ invoked.</p> 
+ 
+ <p>(8) The following note pertains only to the case that the host Lisp is 
+ SBCL.  For SBCL, the scripts written are analogous to, but slightly different 
+ from, those shown above.  Please note that for SBCL, the <span class="v">host-lisp-args</span> 
+ are what the SBCL manual calls ``runtime options''.  For SBCL only, an extra 
+ keyword argument, <span class="v">:toplevel-args</span>, may be used for specifying what the 
+ SBCL manual calls ``toplevel options.  As with <span class="v">:host-lisp-args</span>, this 
+ value, <span class="v">toplevel-args</span>, should be <span class="v">nil</span> (the default) or a string.  Here 
+ is an example.</p> 
+ 
+ <pre class="code">(<a href="ACL2____SAVE-EXEC.html">save-exec</a> "my-saved_acl2" nil
+           :host-lisp-args "--dynamic-space-size 50000"
+           :toplevel-args "--eval '(print \"HELLO\")'"
+           :inert-args "--my-option my-value")</pre> 
+ 
+ <p>The script generated by this example call of <span class="v">save-exec</span> contains a line 
+ such as the following (with the same convention for `\' as before).  Notice 
+ that <span class="v">:host-lisp-args</span> can be modified at startup (without <span class="v">save-exec</span>) 
+ by setting environment variable <span class="v">SBCL_USER_ARGS</span>.</p> 
+ 
+ <pre class="code">exec "/projects/sbcl-1.1.7-x86-64-linux/src/runtime/sbcl" \
+     --dynamic-space-size 24000 --control-stack-size 64 \
+     --core "/u/smith/my-saved_acl2.core" --dynamic-space-size 50000 \
+     ${SBCL_USER_ARGS} \
+     --end-runtime-options \
+     --no-userinit --eval '(acl2::sbcl-restart)' \
+     --eval '(print "HELLO")' \
+     --end-toplevel-options \
+     --my-option my-value \
+     "$@"</pre> 
+ 
+ <p>In general, the generated script is of one of the following forms (with the 
+ same convention for `\' as before).</p> 
+ 
+ <blockquote> 
+ 
+ <p>For the case that <span class="v">inert-args</span> is <span class="v">nil</span>:</p> 
+ 
+ <pre class="code">exec &lt;lisp_executable&gt; \
+     &lt;ACL2_runtime_options&gt; host-lisp-args --end-runtime-options \
+     &lt;ACL2_toplevel_options&gt; host-lisp-args \
+     "$@"</pre> 
+ 
+ <p>For the case that <span class="v">inert-args</span> is non-<span class="v">nil</span>:</p> 
+ 
+ <pre class="code">exec &lt;lisp_executable&gt; \
+     &lt;ACL2_runtime_options&gt; host-lisp-args --end-runtime-options \
+     &lt;ACL2_toplevel_options&gt; host-lisp-args --end-toplevel-options \
+     inert-args "$@"</pre> 
+ 
+ </blockquote> 
+ 
+ <p>Notice that as before, when the generated script is invoked (for example, 
+ at the shell), additional command-line arguments provided at that time are 
+ passed to Lisp if and only if <span class="v">inert-args</span> is <span class="v">nil</span>.  For SBCL, when 
+ they are passed to Lisp they are passed as toplevel options, not as runtime 
+ options.</p>
+</body>
+</html>

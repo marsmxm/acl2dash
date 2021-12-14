@@ -1,0 +1,59 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Atj-pre-translation-var-reuse</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=JAVA____ATJ-PRE-TRANSLATION-VAR-REUSE">Click for Atj-pre-translation-var-reuse in the Full Manual</a></h3>
+
+<p>Pre-translation step performed by ATJ: 
+          marking of reusable lambda-bound variables.</p><p>Consider a function body of the form</p><pre class="code">(<a href="COMMON-LISP____LET.html">let</a> ((x ...))
+  (<a href="COMMON-LISP____LET.html">let</a> ((x ...))
+    (f x)))</pre><p>The second <span class="v">x</span> bound by <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span> 
+     ``overwrites'' the first one completely, 
+     because in the rest of the term (namely, <span class="v">(f x)</span>) 
+     only the second one is referenced, not the first one.</p><p>In contrast, consider a function body of the form</p><pre class="code">(<a href="COMMON-LISP____LET.html">let</a> ((x ...))
+  (f (<a href="COMMON-LISP____LET.html">let</a> ((x ...)) (f x)) (g x)))</pre><p>Here, the second <span class="v">x</span> bound by <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span> 
+     ``overwrites'' the second one only partially, namely in <span class="v">(f x)</span>, 
+     but other parts of the rest of the term, namely <span class="v">(g x)</span>, 
+     reference the first one.</p><p>When we translate ACL2 to Java, 
+     <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span>-bound variables become Java local variables. 
+     In the first example above, 
+     provided that the two <span class="v">x</span> variables have the same type, 
+     the Java code can use the same local variable for both: 
+     for the first binding, the Java code declares and initializes the variable; 
+     for the second binding, the Java code assigns to the variable, 
+     destructively updating it, 
+     which is safe because the old value is no longer needed. 
+     However, in the second example above, 
+     there have to be two distinct Java local variables, 
+     say <span class="v">x1</span> and <span class="v">x2</span>, 
+     corresponding to the two bound variables: 
+     both are declared and initialized, 
+     none can be safely destructively updated.</p><p>This pre-translation step analyzes terms 
+     to find out which lambda-bound (i.e. <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span>-bound) variables 
+     can be reused and destructively updated. 
+     The lambda-bound variables are marked as either `new' or `old': 
+     the first marking means that 
+     the variable must be a new Java local variable 
+     that is declared and initilized; 
+     the second marking means that 
+     the variable can be an old Java local variable 
+     that is destructively assigned. 
+     These markings provide ``instructions'' to the ACL2-to-Java translation.</p><p>In the first example above the markings would be</p><pre class="code">(<a href="COMMON-LISP____LET.html">let</a> (([n]x ...))
+  (<a href="COMMON-LISP____LET.html">let</a> (([o]x ...))
+    (f [o]x)))</pre><p>while in the second example above the markings would be</p><pre class="code">(<a href="COMMON-LISP____LET.html">let</a> (([n]x ...))
+  (f (<a href="COMMON-LISP____LET.html">let</a> (([n]x ...)) (f [n]x)) (g [n]x)))</pre><p>Note that, as we mark the lambda-bound variables, 
+     we must mark in the same way the occurrences in the lambda bodies, 
+     to maintain the well-formedness of the ACL2 terms.</p><p>This pre-translation step must be performed after the <a href="JAVA____ATJ-PRE-TRANSLATION-TYPE-ANNOTATION.html">type annotation step</a>, so that types are kept into account: 
+      a variable can be reused only if 
+      it has the same type in both lambda formal parameters. 
+      Since the type annotation step adds types to variable names, 
+      by comparing names for equality we also compare their types for equality. 
+      If two variables have different types, 
+      they also have different names (since the name includes the type).</p><p>After this translation step, the <a href="JAVA____ATJ-PRE-TRANSLATION-VAR-RENAMING.html">variable renaming step</a> takes care of renaming apart ACL2 variables with the same name 
+      that are both marked as `new'.</p>
+</body>
+</html>

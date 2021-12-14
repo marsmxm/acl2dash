@@ -1,0 +1,96 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Consideration</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____CONSIDERATION">Click for Consideration in the Full Manual</a></h3>
+
+<p>An object indicating that some instantiation is relevant.</p><p>Considerations are the objects one provides as part of 
+<span class="v">:consider</span> <a href="ACL2____HINTS.html">hints</a>.  The most convenient form of a consideration is 
+simply the name of a lemma.  The system will then search for a relevant 
+instantiation of the left-hand side of the conclusion of that lemma inside the 
+specified goal clause, starting with the last literal.  The system uses a 
+heuristically modified version of the Huet-Lang second-order pattern matching 
+algorithm and, in general, produces instantiations of both variable symbols and 
+constrained function symbols in the lemma.  If an instance is found, the 
+consideration is turned into a <a href="ACL2____LEMMA-INSTANCE.html">lemma-instance</a> and <span class="v">:use</span>d.</p> 
+ 
+<p>For example, suppose the following theorem has been proved:</p> 
+ 
+<pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> map-h-append
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____TRUE-LISTP.html">true-listp</a> x)
+                (<a href="ACL2____TRUE-LISTP.html">true-listp</a> y))
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (map-h-append (<a href="COMMON-LISP____APPEND.html">append</a> x y))
+                  (<a href="COMMON-LISP____APPEND.html">append</a> (map-h x) (map-h y))))
+  :rule-classes nil)</pre> 
+ 
+<p>and suppose <span class="v">map-h</span> is a defined function involving some constrained 
+function symbol <span class="v">h</span>.  Then the consideration <span class="v">map-h-append</span> attached to a 
+clause identifier will cause the system to find the identified clause and 
+search through it for an instance and/or functional instance of 
+<span class="v">(map-h-append (<a href="COMMON-LISP____APPEND.html">append</a> x y))</span> and to add that (functional) instance as a 
+hypothesis when it finds it.  If no instance is found, an error is signaled. 
+The more elaborate form of a consideration allows you to specify what is used 
+as the pattern and where that pattern is searched for in the clause.</p> 
+ 
+<p>The most general form of a consideration is</p> 
+ 
+<pre class="code">(<a href="ACL2____NAME.html">name</a>
+ :pattern             pterm   ; term or :lhs
+ :target              tterm   ; term or :conclusion or :clause
+ :instance            vsubst  ; variable substitution
+ :functional-instance fsubst) ; functional substitution</pre> 
+ 
+<p>where <span class="v">name</span> is the name of a previously proved theorem, <span class="v">pterm</span> is 
+either a term or the keyword <span class="v">:lhs</span>, <span class="v">tterm</span> is either a term or the 
+keyword <span class="v">conclusion</span> or the keyword <span class="v">:clause</span>, <span class="v">vsubst</span> is a variable 
+substitution as might be given in an <span class="v">:instance</span>, e.g., <span class="v">((x (<a href="ACL2____REV.html">rev</a>
+a)) (y (sort b)))</span>, and <span class="v">fsubst</span> is a functional substitution as might be 
+given in a <span class="v">:functional-instance</span>, e.g., <span class="v">((map-h sumer))</span>.</p> 
+ 
+<p>If <span class="v">pterm</span> is a term, that term is used as the pattern we try to 
+instantiate.  If <span class="v">pterm</span> is the keyword <span class="v">:lhs</span>, the left-hand side of the 
+conclusion of <span class="v">name</span> is used as the pattern.  If no <span class="v">:pattern</span> is 
+specified, <span class="v">:lhs</span> is used by default.</p> 
+ 
+<p>If <span class="v">tterm</span> is a term, that term is matched against the pattern to 
+generate the instantiation.  If <span class="v">tterm</span> is <span class="v">:conclusion</span>, a match of the 
+pattern is searched for in the conclusion of the specified subgoal clause.  If 
+<span class="v">tterm</span> is <span class="v">:clause</span>, a match of the pattern is searched for in the 
+entire subgoal clause, starting with the conclusion and searching backwards 
+toward the first hypothesis.  The search is outer-most first, left-to-right 
+recursive descent.  The first subterm of the target producing a match of the 
+pattern stops the search and generates the instantiation.  Note that if 
+<span class="v">tterm</span> is given explicitly, no search occurs.  Note also that because we 
+cannot do the search until we know what the subgoal clause is, the work for 
+this hint -- the Huet-Lang second-order matching algorithm -- cannot commence 
+until the indicated subgoal arises.</p> 
+ 
+<p>The substitutions produced by second-order matching are what we called 
+``mixed substitutions'' by which we mean a given substitution will substitute 
+both for variable symbols and hereditarily constrained function symbols.  The 
+effect, however, is the same as</p> 
+ 
+<pre class="code">(:INSTANCE (:FUNCTIONAL-INSTANCE name (fn1 (<a href="COMMON-LISP____LAMBDA.html">lambda</a> ...)) ...)
+           (var1 term1)
+           ...).</pre> 
+ 
+<p>Second-order matching typically produces a plethora of such substitutions. 
+We rule many out on heuristic grounds.  Thus, our heuristic modification of the 
+Huet-Lang algorithm makes it incomplete.  Still, it is typical for a lot of 
+substitutions to be found and the system selects some to pursue in an 
+DISJUNCTIVE way.  That is, it takes each of the ``winning'' substitutions and 
+generates a <span class="v">:use</span> hint for each of them separately to see if any one of 
+them will prove the indicated subgoal.</p> 
+ 
+<p>It is frequently necessary to give the matcher a ``hint'' to limit its 
+consideration of all possible substitutions.  The <span class="v">vsubst</span> and <span class="v">fsubst</span> 
+are treated as ``seed'' substitutions.  Any computed instance is an extension 
+of the two seeds.  That is, the variable pairs in the mixed substitutions 
+extend <span class="v">vsubst</span> and the functional pairs in the mixed substitutions extend 
+<span class="v">fsubst</span>.  Both <span class="v">vsubst</span> and <span class="v">fsubst</span> default to <span class="v">nil</span>.</p>
+</body>
+</html>

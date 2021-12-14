@@ -1,0 +1,112 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Stobj-updater-independence</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=STOBJS____STOBJ-UPDATER-INDEPENDENCE">Click for Stobj-updater-independence in the Full Manual</a></h3>
+
+<p>Discussion of the accessor/updater independence or <i>frame problem</i>, 
+          especially as it relates to the <a href="ACL2____DEF-UPDATER-INDEPENDENCE-THM.html">def-updater-independence-thm</a> utility.</p><p>Note: This is related to what is known as the frame problem in 
+philosophy/artificial intelligence/logic; for a broader discussion see <a href="https://plato.stanford.edu/entries/frame-problem/" target="_blank"><nobr>this 
+article<img src="../Icon_External_Link.png" title="External link to https://plato.stanford.edu/entries/frame-problem/"></nobr></a>.</p> 
+ 
+<p>When reasoning about structured data in ACL2, especially stobjs, one 
+commonly needs to know that a given updater has no effect on a given accessor. 
+During the development of any large program involving such a structured object, 
+the number and complexity of accessor and updater functions tends to grow until 
+the ad-hoc approach to the problem (proving each such theorem as it is needed) 
+becomes unworkable.</p> 
+ 
+<p>In the ad hoc approach, a given data structure might require a number of 
+theorems close to the product of the structure's accessor and updater count. 
+For many programs this isn't so large that it is impossible to generate and 
+prove all such theorems, but we propose a much more scalable approach here.</p> 
+ 
+<h3>Proposed Approach</h3> 
+ 
+<p>Broadly speaking, the approach requires the following two sorts of theorems:</p> 
+ 
+<p>The approach described here (and implemented by <a href="ACL2____DEF-UPDATER-INDEPENDENCE-THM.html">def-updater-independence-thm</a> relies on indexed accesses and updates of the 
+structure.  That is, there should be a single accessor and a single updater 
+function in terms of which all primitive accesses and updates can be logically 
+described, such as <span class="v">nth</span>/<span class="v">update-nth</span>, <span class="v">assoc</span>/<span class="v">acons</span>, or 
+<span class="v">g</span>/<span class="v">s</span>.  If the data structure in question doesn't have such a single 
+accessor/updater, it is easy (though perhaps tedious) to define them.</p> 
+ 
+<p>The main idea is to prove two kinds of theorems that work together:</p> 
+ 
+<ul> 
+<li>For each accessor, a theorem stating sufficient conditions under which the 
+accessor applied to two different structures produces equal results.</li> 
+ 
+<li>For each updater, one or more theorems stating that the updater does not 
+change certain fields or accessor applications.</li> 
+</ul> 
+ 
+<h4>Example 1</h4> 
+<p>The following theorem states that as long as element 3 of 
+two objects are equal, the <span class="v">access-3rd</span> of those two stobjs is equal:</p> 
+<pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____NTH.html">nth</a> 3 new) (<a href="COMMON-LISP____NTH.html">nth</a> 3 old))
+         (<a href="COMMON-LISP____EQUAL.html">equal</a> (access-3rd new) (access-3rd old)))</pre> 
+ 
+<p>Note that if we interpret this as a rewrite rule, the variable <span class="v">old</span> is 
+free, which would greatly limit is usefulness.  We use a <a href="ACL2____BIND-FREE.html">bind-free</a> 
+hypothesis to strategically bind <span class="v">old</span> to a good candidate; see below.</p> 
+ 
+<p>The following theorem states that for any element other than number 4, 
+<span class="v">update-4th</span> of an object preserves that element:</p> 
+<pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____NFIX.html">nfix</a> n) 4))
+         (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____NTH.html">nth</a> n (update-4th val x))
+                (<a href="COMMON-LISP____NTH.html">nth</a> n x)))</pre> 
+ 
+<p>These two rules can be used with the bind-free strategy below to prove:</p> 
+ <pre class="code">(<a href="COMMON-LISP____EQUAL.html">equal</a> (access-3rd (update-4th val x)) (access-3rd x))</pre> 
+ 
+<h4>Example 2</h4> 
+<p>The following theorem states that as long as the first <span class="v">k</span> elements of 
+field 2 of two objects are equal, the non-primitive accessor <span class="v">sum-range-of-field2</span> of the two 
+objects is preserved:</p> 
+<pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="STOBJS____RANGE-EQUAL.html">range-equal</a> 0 k (<a href="COMMON-LISP____NTH.html">nth</a> 2 new) (<a href="COMMON-LISP____NTH.html">nth</a> 2 old))
+         (<a href="COMMON-LISP____EQUAL.html">equal</a> (sum-range-of-field2 k new)
+                (sum-range-of-field2 k old)))</pre> 
+ 
+<p>The following theorem states that the non-primitive updater <span class="v">clear-field2-from</span> only 
+affects elements k and above of field 2:</p> 
+<pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="ACL2____NFIX.html">nfix</a> i) (<a href="ACL2____NFIX.html">nfix</a> k))
+         (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____NTH.html">nth</a> i (<a href="COMMON-LISP____NTH.html">nth</a> 2 (clear-field2-from k x)))
+                (<a href="COMMON-LISP____NTH.html">nth</a> i (<a href="COMMON-LISP____NTH.html">nth</a> 2 x))))</pre> 
+ 
+<p>Given an appropriate reasoning strategy about <span class="v">range-equal</span> and the 
+bind-free strategy below, these two rules are sufficient to prove:</p> 
+ <pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> (<a href="ACL2____NFIX.html">nfix</a> j) (<a href="ACL2____NFIX.html">nfix</a> k))
+         (<a href="COMMON-LISP____EQUAL.html">equal</a> (sum-range-of-field2 j (clear-field2-from k x))
+                (sum-range-of-field2 j x)))</pre> 
+ 
+<h3>Free Variable Binding Strategy</h3> 
+ 
+<p>Accessor theorems of the form above contain a free variable <span class="v">old</span>.  Our 
+approaches use two strategies to bind this variable:</p> 
+ 
+<ul> 
+ 
+<li>When trying to prove another such accessor rule, we bind <span class="v">old</span> to 
+<span class="v">old</span> whenever <span class="v">new</span> is bound to <span class="v">new</span> (and do not apply the rule 
+otherwise).  This strategy is effective as long as all such accessor rules are 
+phrased in terms of the same two variables.</li> 
+ 
+<li>In other contexts, we only apply the rule when <span class="v">new</span> is a function call. 
+In that case, we use the <span class="v">prev-stobj-binding</span> utility to bind <span class="v">old</span> to 
+one of the actuals of that function call, depending on the formals and 
+stobjs-out of the function in question.  For example, suppose <span class="v">foo</span> takes 
+formals <span class="v">(x val st$)</span> and has stobjs-out <span class="v">(nil st$)</span>.  That is, 
+it (perhaps) modifies <span class="v">st$</span> and returns it as its second value.  Then if 
+<span class="v">new</span> is bound to <span class="v">(<a href="ACL2____MV-NTH.html">mv-nth</a> 1 (foo k q bar))</span>, we will find <span class="v">(<a href="COMMON-LISP____NTH.html">nth</a> 1
+stobjs-out) = st$</span>, find that <span class="v">st$</span> is the 3rd formal, and thus bind the 
+third actual, <span class="v">bar</span>, to <span class="v">old</span>.</li> 
+ 
+</ul>
+</body>
+</html>

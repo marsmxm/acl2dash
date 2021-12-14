@@ -1,0 +1,93 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Sat</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=SATLINK____SAT">Click for Sat in the Full Manual</a></h3>
+
+<p>Top-level function for running a SAT solver.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(sat formula env$ &amp;key (config '*default-config*)) 
+  → 
+(mv status env$)</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">formula</span> — A <a href="SATLINK____CNF.html">cnf</a> formula to solve.<br>    <font color="#606060">Guard <span class="v">(<a href="SATLINK____LIT-LIST-LISTP.html">lit-list-listp</a> formula)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">env$</span> — Environment to populate with a satisfying assignment, in the case 
+             of SAT.  Will be emptied, in any case.</dd> 
+  <dd>
+<span class="tt">config</span> — Configuration for running a SAT solver.<br>    <font color="#606060">Guard <span class="v">(<a href="SATLINK____CONFIG-P.html">config-p</a> config)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">status</span> — <span class="v">:sat</span>, <span class="v">:unsat</span>, or <span class="v">:failed</span>.</dd> 
+<dd>
+<span class="tt">env$</span> — Satisfying assignment, in the case of <span class="v">:sat</span>.</dd> 
+ 
+</dl></div> 
+<p>This is the top-level wrapper for calling SAT.  It handles the 
+details of clearing out the <a href="SATLINK____ENV_42.html">env$</a> and checking the SAT solver's answers 
+when there is a counterexample or an LRAT proof available.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>sat-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ sat-fn (<a href="ACL2____FORMULA.html">formula</a> env$ config)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (<a href="SATLINK____ENV_42.html">env$</a>)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="SATLINK____LIT-LIST-LISTP.html">lit-list-listp</a> formula)
+                             (<a href="SATLINK____CONFIG-P.html">config-p</a> config))))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'sat))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+   ((<a href="SATLINK____ENV_42.html">env$</a> (<a href="ACL2____MBE.html">mbe</a> :logic (<a href="ACL2____NON-EXEC.html">non-exec</a> nil)
+               :exec (<a href="ACL2____RESIZE-BITS.html">resize-bits</a> 0 env$)))
+    ((when (trivial-unsat-p formula))
+     (<a href="ACL2____MV.html">mv</a> :unsat env$))
+    ((<a href="SATLINK____CONFIG.html">config</a> config) config)
+    ((<a href="ACL2____MV.html">mv</a> status env$ lrat-proof)
+     (<a href="ACL2____TIME_42.html">time$</a> (<a href="SATLINK____SATLINK-RUN.html">satlink-run</a> config formula env$)
+            :msg "; SATLINK: round trip: ~st sec, ~sa bytes.~%"
+            :mintime config.mintime))
+    ((when (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQ.html">eq</a> status :unsat)
+                config.lrat-check))
+     (<a href="ACL2____B_A2.html">b*</a>
+      ((lrat-formula (formula-to-lrat-formula formula 1))
+       (ok
+          (<a href="ACL2____TIME_42.html">time$</a> (lrat::lrat-refutation-p$ lrat-proof lrat-formula)
+                 :msg "; SATLINK: lrat check: ~st sec, ~sa bytes.~%"
+                 :mintime config.mintime))
+       ((unless ok)
+        (<a href="ACL2____CW.html">cw</a>
+         "SAT: Supposedly unsatisfiable, but check of LRAT proof failed!~%")
+        (<a href="ACL2____MV.html">mv</a> :failed env$)))
+      (<a href="ACL2____MV.html">mv</a> :unsat env$)))
+    ((unless (<a href="COMMON-LISP____EQ.html">eq</a> status :sat))
+     (<a href="ACL2____MV.html">mv</a> status env$))
+    ((when
+      (<a href="ACL2____TIME_42.html">time$</a>
+        (<a href="ACL2____INT_D3.html">int=</a> 0 (<a href="SATLINK____EVAL-FORMULA.html">eval-formula</a> formula env$))
+        :msg "; SATLINK: verifying assignment: ~st sec, ~sa bytes~%"
+        :mintime config.mintime))
+     (<a href="ACL2____CW.html">cw</a> "SAT: Supposedly satisfiable, but assignment is wrong~%")
+     (<a href="ACL2____MV.html">mv</a> :failed env$)))
+   (<a href="ACL2____MV.html">mv</a> :sat env$))))</pre> 
+<p><b>Theorem: </b>sat-normalize-env</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> sat-normalize-env
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____SYNTAXP.html">syntaxp</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> env$ ''nil)))
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SATLINK____SAT.html">sat</a> formula env$ :config config)
+                        (<a href="SATLINK____SAT.html">sat</a> formula nil :config config))))</pre> 
+<p><b>Theorem: </b>sat-when-sat</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> sat-when-sat
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> status new-env$)
+              (<a href="SATLINK____SAT.html">sat</a> formula env$ :config config)))
+            (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> status :sat)
+                     (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SATLINK____EVAL-FORMULA.html">eval-formula</a> formula new-env$)
+                            1))))</pre> 
+<p><b>Theorem: </b>sat-when-unsat</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> sat-when-unsat
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> status &amp;)
+              (<a href="SATLINK____SAT.html">sat</a> formula env$ :config config)))
+            (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SATLINK____EVAL-FORMULA.html">eval-formula</a> formula env) 1)
+                     (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> status :unsat)))))</pre> 
+
+</body>
+</html>

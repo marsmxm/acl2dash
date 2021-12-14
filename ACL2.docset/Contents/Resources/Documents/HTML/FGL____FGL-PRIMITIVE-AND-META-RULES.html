@@ -1,0 +1,163 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Fgl-primitive-and-meta-rules</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=FGL____FGL-PRIMITIVE-AND-META-RULES">Click for Fgl-primitive-and-meta-rules in the Full Manual</a></h3>
+
+<p>Adding fast-executing primitive routines to FGL.</p> 
+ 
+<p>FGL is geared toward doing most reasoning via rewrite rules.  But sometimes 
+rewrite rules aren't fast enough or are otherwise inadequate for something we 
+want to do.  For these cases, FGL supports two kinds of custom reasoning 
+procedures, "metafunctions" and "primitives".  Metafunctions are more 
+general than primitives and we will mostly discuss them here.  A metafunction 
+takes a function and argument list as input and produces a term and binding 
+alist as output.  A primitive is a specialization of a metafunction that 
+produces a symbolic object as output rather than a term and binding alist. 
+When applying a metafunction, the term returned is symbolically interpreted 
+under the returned bindings, whereas when applying a primitive the symbolic 
+object is returned directly.</p> 
+ 
+<p>A metafunction is a function that takes a function name <span class="v">f</span>, argument 
+list (symbolic objects), interpreter state, and state, and returns <span class="v">(<a href="ACL2____MV.html">mv</a>
+successp rhs-term bindings interp-st state)</span>, where successp is a flag 
+indicating whether the answer is valid.  If so, <span class="v">rhs-term</span> must evaluate 
+under the evaluation of <span class="v">bindings</span> to <span class="v">f</span> of the evaluations of the 
+arguments.  The returned <span class="v">interp-st</span> must satisfy several constraints 
+showing that it was not invalidly modified; usually, all a primitive should do 
+with the <span class="v">interp-st</span> is build new gates onto the <span class="v">aignet</span> of its 
+<span class="v">logicman</span> (see <a href="FGL____FGL-INTERPRETER-STATE.html">fgl-interpreter-state</a>).  Primitives take the same inputs but 
+return <span class="v">(<a href="ACL2____MV.html">mv</a> successp obj interp-st state)</span>, where the evaluation of <span class="v">obj</span> 
+must equal <span class="v">f</span> of the evaluations of the arguments.</p> 
+ 
+<p>New metafunctions can be defined with the form <span class="v">def-fgl-meta</span> and new 
+primitives with <span class="v">def-fgl-primitive</span>.  However, before the newly defined 
+metafunctions/primitives may be used, they must be installed into the current 
+metafunction and primitive dispatcher function using <span class="v">install-fgl-metafns</span>. 
+This creates a new function that wraps all existing metafunctions into a case 
+statement, and attaches it to the stub <span class="v">fgl-meta-fncall-stub</span>.  It also 
+creates a similar dispatcher function for primitives and another one for binder 
+meta rules (see <a href="FGL____BINDER.html">binder</a>).</p> 
+ 
+ 
+<h3>Example</h3> 
+ 
+<p>The primitive for <span class="v">intcar</span>, which returns the least-significant bit of 
+<span class="v">(<a href="ACL2____IFIX.html">ifix</a> x)</span> as a Boolean value, is defined in <span class="v">primitives.lisp</span> as 
+follows:</p> 
+ 
+<pre class="code">(def-fgl-primitive intcar (x)
+  (fgl-object-case x
+    :g-concrete (<a href="ACL2____MV.html">mv</a> t (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> x.val)
+                           (intcar x.val))
+                    interp-st)
+    :g-integer (<a href="ACL2____MV.html">mv</a> t (mk-g-boolean (<a href="COMMON-LISP____CAR.html">car</a> x.bits)) interp-st)
+    :g-boolean (<a href="ACL2____MV.html">mv</a> t nil interp-st)
+    :g-cons (<a href="ACL2____MV.html">mv</a> t nil interp-st)
+    :g-map (<a href="ACL2____MV.html">mv</a> t (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> x.alist)
+                      (intcar x.alist))
+               interp-st)
+    :otherwise (<a href="ACL2____MV.html">mv</a> nil nil interp-st)))</pre> 
+ 
+<p><span class="v">Def-fgl-primitive</span> sets up the correct signature and guards for the 
+primitive function, extracts the named formals (in this case <span class="v">x</span>) from the 
+argument list, and proves the necessary theorems to ensure it can be installed 
+as a primitive.  It stores the association between <span class="v">intcar</span> and the new 
+primitive function, named <span class="v">fgl-intcar-primitive</span>, in the table 
+<span class="v">fgl-primitives</span>.</p> 
+ 
+<p>To install the primitives listed in <span class="v">fgl-primitives</span>, use 
+<span class="v">(install-fgl-metafns name)</span>, which defines a new function 
+<span class="v">name-primitive-fncall</span> that takes a function symbol, argument list, 
+interp-st, and state, and dispatches based on the function symbol to that 
+function's primitive, if any (if not, it returns unsuccessful).  This function 
+is then attached to <span class="v">fgl-primitive-fncall-stub</span>, which is called by the FGL 
+interpreter to run primitives.</p> 
+ 
+<h3>Formula Checks</h3> 
+ 
+<p>FGL requires that primitives return results that evaluate correctly with 
+respect to the FGL evaluator, <a href="FGL____FGL-OBJECT-EVAL.html">fgl-object-eval</a> -- that is, the result 
+object must evaluate to the same thing as the evaluation of the input function 
+symbol applied to the argument list.  However, <span class="v">fgl-object-eval</span> is based on 
+an ACL2 evaluator <span class="v">fgl-ev</span> which only understands a limited set of 
+function symbols.  Naively, this would prevent us from proving that the 
+primitives evaluate correctly.  However, we are allowed to assume the 
+correctness of facts we extract from the ACL2 state with respect to 
+<span class="v">fgl-ev</span> -- see <a href="ACL2____META-EXTRACT.html">meta-extract</a> 
+for details.  In many cases we can show that when some set of theorems are 
+stored in the state in the expected form, and the evaluator is assumed to 
+always evaluate these theorems to non-NIL values, the evaluator then correctly 
+understands some new function.</p> 
+ 
+<p>As a very simple example, <span class="v">(<a href="ACL2____IFIX.html">ifix</a> x)</span> is not understood by <span class="v">fgl-ev</span>, 
+but it is defined as <span class="v">(<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> x) x 0)</span>.  All of the functions in its 
+definition -- <span class="v">if</span>, <span class="v">integerp</span> -- are understood by <span class="v">fgl-ev</span>.  So we 
+can show that <span class="v">fgl-ev</span> understands <span class="v">ifix</span> if we check that the 
+definition of <span class="v">ifix</span> stored in the state is the one we expect, and also 
+assume that facts stored in the state are correct with respect to 
+<span class="v">fgl-ev</span>.</p> 
+ 
+<p>We can build up to arbitrarily complex functions, in this way, as long as 
+they are defined rather than constrained.  For example, if we check that the 
+definitional formulas for <span class="v">=</span>, <span class="v">ZIP</span>, <span class="v">FIX</span>, and <span class="v">EXPT</span> are present 
+in the world, then we can show that <span class="v">fgl-ev</span> understands <span class="v">expt</span> terms.</p> 
+ 
+<p>In order to define primitives that need to check formulas in order to show 
+they are correct, we first define a "formula check" function, an executable 
+function that checks that a list of facts are correctly present in the state. 
+We show that if this formula check function returns true, then the primitive 
+evaluates correctly.  When installing a new set of primitives, we define a new 
+formula check function that checks all the facts checked by the formula check 
+functions depended on by the primitives, and show that it implies each of them. 
+Then, when running the FGL clause processor, we run that formula check function 
+to check that all the definitions that primitives depend on are present: doing 
+this once ahead of time is fast and allows primitives to proceed without 
+checking any of these facts.</p> 
+ 
+<p>We offer some automation for proving formula check theorems.  For example, 
+in <span class="v">bitops-primitives.lisp</span>, we use the form</p> 
+<pre class="code">(def-formula-checks bitops-formula-checks
+  (<a href="ACL2____LOGAPP.html">logapp</a>
+   acl2::logmask$inline
+   acl2::logtail$inline
+   acl2::loghead$inline
+   logbitp
+   integer-length))</pre> 
+ 
+<p>This introduces a function <span class="v">bitops-formula-checks</span> which checks all of 
+the facts necessary to ensure that the listed functions operate as expected. 
+Then, when defining a primitive that depends on this, we simply add 
+<span class="v">:formula-check bitops-formula-checks</span> within the def-fgl-primitive form. 
+For example:</p> 
+ 
+<pre class="code">(def-fgl-primitive acl2::logtail$inline (n x)
+  (<a href="ACL2____B_A2.html">b*</a> (((unless (fgl-object-case n :g-concrete))
+        (<a href="ACL2____MV.html">mv</a> nil nil interp-st))
+       ((<a href="ACL2____MV.html">mv</a> ok x) (gobj-syntactic-integer-fix x))
+       ((unless ok) (<a href="ACL2____MV.html">mv</a> nil nil interp-st))
+       (x-bits (gobj-syntactic-integer-&gt;bits x)))
+    (<a href="ACL2____MV.html">mv</a> t (mk-g-integer (tail-bits (<a href="ACL2____NFIX.html">nfix</a> (<a href="FGL____G-CONCRETE-_E3VAL.html">g-concrete-&gt;val</a> n)) x-bits))
+        interp-st))
+  :formula-check bitops-formula-checks)</pre> 
+ 
+<p>The <span class="v">def-formula-checks</span> automation currently only supports single 
+recursion and only uses the base definitions of functions.  However, it would 
+be possible to extend it to support custom definitions, thereby supporting 
+mutual recursion using definitions of those functions that equate them to calls 
+of a flag function.</p> 
+ 
+<p>Constrained functions, and functions that depend on constrained functions, 
+pose more of a challenge.  But recall that what we're trying to prove is that 
+if the primitive call succeeds, then its result is equivalent to the input 
+function call.  If we are to introduce a primitive for a constrained function, 
+or a function that depends on a constrained function, we must be able to prove 
+that equal to something in some cases.  It would then suffice to check formulas 
+that show that in the cases we care about, the evaluation of the function 
+reduces to some other form.</p>
+</body>
+</html>

@@ -1,0 +1,109 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Slow-alist-warning</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____SLOW-ALIST-WARNING">Click for Slow-alist-warning in the Full Manual</a></h3>
+
+<p>Warnings/errors issued when <span class="tt"><a href="ACL2____FAST-ALISTS.html">fast-alists</a></span> are used inefficiently</p><p>Obtaining hash-table performance from <span class="tt"><a href="ACL2____HONS-GET.html">hons-get</a></span> requires one 
+ to follow a certain discipline.  If this discipline is violated, you may see 
+ the following message, which by default is followed by a Lisp break.  (The Lisp 
+ break may be ignored by continuing in the host Common Lisp, for example using 
+ <span class="v">:go</span> if the host Lisp is CCL.  Or, it may be aborted, often using <span class="v">:q</span>, 
+ again depending on the host Lisp.)</p> 
+ 
+ <pre class="code">*****************************************************************
+Fast alist discipline violated in HONS-ACONS.
+See :DOC slow-alist-warning to suppress or break on this warning.
+*****************************************************************</pre> 
+ 
+ <p>This warning means that the alist you are extending or accessing does not 
+ have a valid hash table associated with it, and hence any accesses must be 
+ carried out with <span class="tt"><a href="ACL2____HONS-ASSOC-EQUAL.html">hons-assoc-equal</a></span> instead of <span class="v">gethash</span>.</p> 
+ 
+ <p>You can control whether or not you get a warning and, if so, whether or not 
+ a break (again: an error from which you can continue) ensues.  For 
+ instance:</p> 
+ 
+ <pre class="code">(<a href="ACL2____SET-SLOW-ALIST-ACTION.html">set-slow-alist-action</a> :break)    ; warn and also call break$ (<a href="ACL2____DEFAULT.html">default</a>)
+(<a href="ACL2____SET-SLOW-ALIST-ACTION.html">set-slow-alist-action</a> :warning)  ; warn on slow access
+(<a href="ACL2____SET-SLOW-ALIST-ACTION.html">set-slow-alist-action</a> nil)       ; do not warn or break</pre> 
+ 
+ <p>The above forms expand to <span class="tt"><a href="ACL2____TABLE.html">table</a></span> <a href="ACL2____EVENTS.html">events</a>, so they can be 
+ embedded in <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span>s and <a href="ACL2____BOOKS.html">books</a>, wrapped in <span class="tt"><a href="ACL2____LOCAL.html">local</a></span>, 
+ and so on.</p> 
+ 
+ <p>We conclude by showing how slow alist warnings can occur naturally, 
+ together with a couple of possible solutions.  First consider the rather 
+ trivial example; the labels A1, A2, etc. are explained later.</p> 
+ 
+ <pre class="code">; (A1) Create a hash-table HT1 and associate it with the resulting alist.
+(<a href="ACL2____ASSIGN.html">assign</a> a (<a href="ACL2____HONS-ACONS.html">hons-acons</a> 'fn1 1 nil))
+
+; (A2) Create a hash-table HT2 and associate it with the resulting alist.
+; (Minor observation: HT1 is no longer accessible.)
+(<a href="ACL2____ASSIGN.html">assign</a> a (<a href="ACL2____HONS-ACONS.html">hons-acons</a> 'fn1 1 nil))
+
+; (B1) Update HT2 and associate it with the resulting alist.  Thus, H2 is
+; no longer associated with (<a href="ACL2_____04.html">@</a> a).
+(<a href="ACL2____ASSIGN.html">assign</a> b (<a href="ACL2____HONS-ACONS.html">hons-acons</a> 'fn2 2 (<a href="ACL2_____04.html">@</a> a)))
+
+; (B2) Fast alist warning (with a Lisp break, by default): discipline is
+; violated because (<a href="ACL2_____04.html">@</a> a) no longer has a backing hash-table.
+(<a href="ACL2____ASSIGN.html">assign</a> b (<a href="ACL2____HONS-ACONS.html">hons-acons</a> 'fn2 2 (<a href="ACL2_____04.html">@</a> a)))
+
+; (C1) Fast alist warning/break: discipline is violated because (<a href="ACL2_____04.html">@</a> b) does not
+; have a backing hash-table.
+(<a href="ACL2____ASSIGN.html">assign</a> c (<a href="ACL2____HONS-ACONS.html">hons-acons</a> 'fn3 3 (<a href="ACL2_____04.html">@</a> b)))
+
+; (C2) Fast alist warning/break: discipline is violated because (<a href="ACL2_____04.html">@</a> b) does not
+; have a backing hash-table.
+(<a href="ACL2____ASSIGN.html">assign</a> c (<a href="ACL2____HONS-ACONS.html">hons-acons</a> 'fn3 3 (<a href="ACL2_____04.html">@</a> b)))</pre> 
+ 
+ <p>Now consider the following related example (in a fresh session), involving 
+ three <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span> events labeled A, B, and C.</p> 
+ 
+ <pre class="code">(<a href="ACL2____ENCAPSULATE.html">encapsulate</a> nil (<a href="ACL2____DEFCONST.html">defconst</a> *a* (<a href="ACL2____HONS-ACONS.html">hons-acons</a> 'fn1 1 nil))) ; (A)
+(<a href="ACL2____ENCAPSULATE.html">encapsulate</a> nil (<a href="ACL2____DEFCONST.html">defconst</a> *b* (<a href="ACL2____HONS-ACONS.html">hons-acons</a> 'fn2 2 *a*))) ; (B)
+(<a href="ACL2____ENCAPSULATE.html">encapsulate</a> nil (<a href="ACL2____DEFCONST.html">defconst</a> *c* (<a href="ACL2____HONS-ACONS.html">hons-acons</a> 'fn3 3 *b*))) ; (C)</pre> 
+ 
+ <p>Each of these <span class="v">encapsulate</span> events generates two calls of <span class="tt"><a href="ACL2____HONS-ACONS.html">hons-acons</a></span>: one in the first pass of the <span class="v">encapsulate</span> and one in the 
+ second pass.  With a little reflection you can see the connection between the 
+ two sequences of events above: <span class="v">encapsulate</span> A makes assignments analogous 
+ to A1 (in its first pass) and A2 (in its second pass); similarly for B, B1, B2 
+ and for C, C1, C2.  Thus, we get a slow alist warning/break on the second pass 
+ of B and on both passes of C.</p> 
+ 
+ <p>The simplest way to fix this problem is to call <span class="tt"><a href="ACL2____MAKE-FAST-ALIST.html">make-fast-alist</a></span>, 
+ which is essentially a no-op when its argument is already a fast alist.</p> 
+ 
+ <pre class="code">(<a href="ACL2____ENCAPSULATE.html">encapsulate</a> nil (<a href="ACL2____DEFCONST.html">defconst</a> *a* (<a href="ACL2____MAKE-FAST-ALIST.html">make-fast-alist</a> (<a href="ACL2____HONS-ACONS.html">hons-acons</a> 'fn1 1 nil))))
+(<a href="ACL2____ENCAPSULATE.html">encapsulate</a> nil (<a href="ACL2____DEFCONST.html">defconst</a> *b* (<a href="ACL2____MAKE-FAST-ALIST.html">make-fast-alist</a> (<a href="ACL2____HONS-ACONS.html">hons-acons</a> 'fn2 2 *a*))))
+(<a href="ACL2____ENCAPSULATE.html">encapsulate</a> nil (<a href="ACL2____DEFCONST.html">defconst</a> *c* (<a href="ACL2____MAKE-FAST-ALIST.html">make-fast-alist</a> (<a href="ACL2____HONS-ACONS.html">hons-acons</a> 'fn3 3 *b*))))</pre> 
+ 
+ <p>We still see the warning/break in pass 2 of the second and third 
+ encapsulates, created by calls of <span class="tt"><a href="ACL2____HONS-ACONS.html">hons-acons</a></span> exactly as before. 
+ However, the results of those two calls are converted to fast alists by 
+ <span class="v">make-fast-alist</span>; so after each <span class="v">encapsulate</span>, the value of the defined 
+ constant is indeed a fast alist.  A problem still persists: the second and 
+ third <span class="tt"><a href="ACL2____DEFCONST.html">defconst</a></span> event each steal the fast-alist value of the previous 
+ <span class="v">defconst</span>.  That's a problem that we won't try to solve here; we will just 
+ focus on how to ensure that the value of <span class="v">*c*</span> is a fast alist.</p> 
+ 
+ <p>The following alternate solution has the advantage of avoiding the expense 
+ of reconstituting the fast alist during pass 2 of each of the <span class="v">defconst</span> 
+ events.  (We continue to use <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span> since otherwise the issue at 
+ hand dissolves.)</p> 
+ 
+ <pre class="code">(<a href="ACL2____ENCAPSULATE.html">encapsulate</a> nil (<a href="ACL2____MAKE-EVENT.html">make-event</a> `(<a href="ACL2____DEFCONST.html">defconst</a> *a* ',(<a href="ACL2____HONS-ACONS.html">hons-acons</a> 'fn1 1 nil))))
+(<a href="ACL2____ENCAPSULATE.html">encapsulate</a> nil (<a href="ACL2____MAKE-EVENT.html">make-event</a> `(<a href="ACL2____DEFCONST.html">defconst</a> *b* ',(<a href="ACL2____HONS-ACONS.html">hons-acons</a> 'fn2 2 *a*))))
+(<a href="ACL2____ENCAPSULATE.html">encapsulate</a> nil (<a href="ACL2____MAKE-EVENT.html">make-event</a> `(<a href="ACL2____DEFCONST.html">defconst</a> *c* ',(<a href="ACL2____HONS-ACONS.html">hons-acons</a> 'fn3 3 *b*))))</pre> 
+ 
+ <p>These uses of <span class="tt"><a href="ACL2____MAKE-EVENT.html">make-event</a></span> cause each fast alist from pass 1 to be 
+ saved and then reused in pass 2.  There are no fast-alist warnings, and we 
+ avoid the expense of <span class="tt"><a href="ACL2____MAKE-FAST-ALIST.html">make-fast-alist</a></span>.</p>
+</body>
+</html>

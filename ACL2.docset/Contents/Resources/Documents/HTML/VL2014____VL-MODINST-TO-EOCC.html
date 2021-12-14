@@ -1,0 +1,252 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Vl-modinst-to-eocc</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL2014____VL-MODINST-TO-EOCC">Click for Vl-modinst-to-eocc in the Full Manual</a></h3>
+
+<p>Main function for transforming a Verilog module instance into 
+an (preliminary) E language occurrence.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(vl-modinst-to-eocc x walist mods modalist eal warnings) 
+  → 
+(mv successp warnings eocc)</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">x</span> — The module instance that we want to convert into an E occurrence.<br>    <font color="#606060">Guard <span class="v">(<a href="VL2014____VL-MODINST-P.html">vl-modinst-p</a> x)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">walist</span> — The wire alist for the superior module.  We use it to build the 
+              wire lists for the actuals.<br>    <font color="#606060">Guard <span class="v">(<a href="VL2014____VL-WIREALIST-P.html">vl-wirealist-p</a> walist)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">mods</span> — The list of all modules.  Needed so we can look up the submodule 
+              being instantiated, so we can compute its port pattern.<br>    <font color="#606060">Guard <span class="v">(<a href="VL2014____VL-MODULELIST-P.html">vl-modulelist-p</a> mods)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">modalist</span> — For fast submodule lookups.<br>    <font color="#606060">Guard <span class="v">(<a href="COMMON-LISP____EQUAL.html">equal</a> modalist (<a href="VL2014____VL-MODALIST.html">vl-modalist</a> mods))</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">eal</span> — The already-processed <a href="VL2014____VL-EALIST-P.html">vl-ealist-p</a> that binds module names 
+              to the E modules we've built for them so far.  We use this to 
+              look up the definiton of the submodule for the <span class="v">:op</span> field of 
+              the E occurrence.<br>    <font color="#606060">Guard <span class="v">(<a href="VL2014____VL-EALIST-P.html">vl-ealist-p</a> eal)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">warnings</span> — Warnings accumulator for the superior module.<br>    <font color="#606060">Guard <span class="v">(<a href="VL2014____VL-WARNINGLIST-P.html">vl-warninglist-p</a> warnings)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">successp</span> — <font color="#606060">Type <span class="v">(<a href="ACL2____BOOLEANP.html">booleanp</a> successp)</span>.</font>
+</dd> 
+<dd>
+<span class="tt">warnings</span> — <font color="#606060">Type <span class="v">(<a href="VL2014____VL-WARNINGLIST-P.html">vl-warninglist-p</a> warnings)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>We do a lot of sanity checking to make sure the module instance is 
+simple enough to transform, that the submodule exists and was translated into 
+an E module successfully, etc.  Then, we figure out the bindings to use for the 
+<span class="v">:i</span> and <span class="v">:o</span> fields of the occurrence, as described in <a href="VL2014____MODINSTS-TO-EOCCS.html">modinsts-to-eoccs</a>.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>vl-modinst-to-eocc</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ vl-modinst-to-eocc
+ (x walist mods modalist eal warnings)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="VL2014____VL-MODINST-P.html">vl-modinst-p</a> x)
+                             (<a href="VL2014____VL-WIREALIST-P.html">vl-wirealist-p</a> walist)
+                             (<a href="VL2014____VL-MODULELIST-P.html">vl-modulelist-p</a> mods)
+                             (<a href="VL2014____VL-EALIST-P.html">vl-ealist-p</a> eal)
+                             (<a href="VL2014____VL-WARNINGLIST-P.html">vl-warninglist-p</a> warnings)
+                             (<a href="COMMON-LISP____EQUAL.html">equal</a> modalist (<a href="VL2014____VL-MODALIST.html">vl-modalist</a> mods)))))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'vl-modinst-to-eocc))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+   (((<a href="VL2014____VL-MODINST.html">vl-modinst</a> x) x)
+    ((unless x.instname)
+     (<a href="ACL2____MV.html">mv</a>
+      nil
+      (<a href="VL2014____FATAL.html">fatal</a>
+       :type :vl-bad-instance
+       :msg
+       "~a0: expected all module instances to be named.  Did ~
+                         you run the addinstnames transform?"
+       :args (<a href="COMMON-LISP____LIST.html">list</a> x))
+      nil))
+    ((when x.range)
+     (<a href="ACL2____MV.html">mv</a>
+      nil
+      (<a href="VL2014____FATAL.html">fatal</a>
+       :type :vl-bad-instance
+       :msg
+       "~a0: expected only simple module instances, but ~s1 ~
+                         is an array of module instances.  Did you run the ~
+                         replicate transform?"
+       :args (<a href="COMMON-LISP____LIST.html">list</a> x x.instname))
+      nil))
+    ((unless (<a href="VL2014____VL-PARAMARGS-EMPTY-P.html">vl-paramargs-empty-p</a> x.paramargs))
+     (<a href="ACL2____MV.html">mv</a>
+      nil
+      (<a href="VL2014____FATAL.html">fatal</a>
+       :type :vl-bad-instance
+       :msg
+       "~a0: expected only simple module instances, but ~s1 ~
+                         still has parameters.  Did you run the ~
+                         unparameterization transform?"
+       :args (<a href="COMMON-LISP____LIST.html">list</a> x x.instname))
+      nil))
+    ((when (<a href="COMMON-LISP____EQ.html">eq</a> (<a href="VL2014____VL-ARGUMENTS-KIND.html">vl-arguments-kind</a> x.portargs)
+               :vl-arguments-named))
+     (<a href="ACL2____MV.html">mv</a>
+      nil
+      (<a href="VL2014____FATAL.html">fatal</a>
+       :type :vl-bad-instance
+       :msg
+       "~a0: expected only resolved module instances, but ~
+                         ~s1 still has named arguments.  Did you run the ~
+                         argresolve transform?"
+       :args (<a href="COMMON-LISP____LIST.html">list</a> x x.instname))
+      nil))
+    (sub (<a href="VL2014____VL-FAST-FIND-MODULE.html">vl-fast-find-module</a> x.modname mods modalist))
+    ((unless sub)
+     (<a href="ACL2____MV.html">mv</a> nil
+         (<a href="VL2014____FATAL.html">fatal</a> :type :vl-bad-instance
+                :msg "~a0 refers to undefined module ~m1."
+                :args (<a href="COMMON-LISP____LIST.html">list</a> x x.modname))
+         nil))
+    (sub-esim (<a href="COMMON-LISP____CDR.html">cdr</a> (<a href="ACL2____HONS-GET.html">hons-get</a> x.modname eal)))
+    ((unless sub-esim)
+     (<a href="ACL2____MV.html">mv</a>
+      nil
+      (<a href="VL2014____FATAL.html">fatal</a>
+       :type :vl-bad-submodule
+       :msg
+       "~a0 refers to module ~m1, but we failed to build an ~
+                         E module for ~m1."
+       :args (<a href="COMMON-LISP____LIST.html">list</a> x x.modname))
+      nil))
+    ((<a href="ACL2____MV.html">mv</a> okp &amp; sub-walist)
+     (<a href="VL2014____VL-MODULE-WIREALIST.html">vl-module-wirealist</a> sub nil))
+    ((unless okp)
+     (<a href="ACL2____MV.html">mv</a>
+      nil
+      (<a href="VL2014____FATAL.html">fatal</a>
+       :type :vl-programming-error
+       :msg
+       "~a0: failed to build a wire alist for ~x0?  Jared ~
+                         thinks this should never happen since we were able ~
+                         to build the ESIM module for it."
+       :args (<a href="COMMON-LISP____LIST.html">list</a> x.modname))
+      nil))
+    ((<a href="ACL2____MV.html">mv</a> successp &amp; portpat)
+     (<a href="VL2014____VL-PORTLIST-MSB-BIT-PATTERN.html">vl-portlist-msb-bit-pattern</a> (<a href="VL2014____VL-MODULE-_E3PORTS.html">vl-module-&gt;ports</a> sub)
+                                  sub-walist))
+    ((unless successp)
+     (<a href="ACL2____MV.html">mv</a>
+      nil
+      (<a href="VL2014____FATAL.html">fatal</a>
+       :type :vl-programming-error
+       :msg
+       "~a0: failed to build a portlist pattern for module ~
+                         ~m1. Jared thinks this should never happen because ~
+                         we check that these lists can be built before trying ~
+                         to make E occurrences from module instances."
+       :args (<a href="COMMON-LISP____LIST.html">list</a> x x.modname))
+      nil))
+    (actuals (<a href="VL2014____VL-ARGUMENTS-PLAIN-_E3ARGS.html">vl-arguments-plain-&gt;args</a> x.portargs))
+    ((unless (same-lengthp actuals portpat))
+     (<a href="ACL2____MV.html">mv</a>
+      nil
+      (<a href="VL2014____FATAL.html">fatal</a>
+          :type :vl-bad-instance
+          :msg
+          "~a0: wrong arity.  Expected ~x1 arguments but found ~x2."
+          :args (<a href="COMMON-LISP____LIST.html">list</a> x (<a href="ACL2____LEN.html">len</a> portpat) (<a href="ACL2____LEN.html">len</a> actuals)))
+      nil))
+    ((<a href="ACL2____MV.html">mv</a> successp warnings binding-alist)
+     (<a href="VL2014____VL-MODINST-EOCC-BINDINGS.html">vl-modinst-eocc-bindings</a> actuals portpat walist warnings x))
+    ((unless successp)
+     (<a href="ACL2____MV.html">mv</a> nil warnings nil))
+    ((<a href="ACL2____MV.html">mv</a> successp &amp; in-pat out-pat)
+     (<a href="VL2014____VL-PORTDECLS-TO-I_F2O.html">vl-portdecls-to-i/o</a> (<a href="VL2014____VL-MODULE-_E3PORTDECLS.html">vl-module-&gt;portdecls</a> sub)
+                          sub-walist))
+    ((unless successp)
+     (<a href="ACL2____MV.html">mv</a>
+      nil
+      (<a href="VL2014____FATAL.html">fatal</a>
+       :type :vl-programming-error
+       :msg
+       "~a0: failed to build :i and :o patterns for module ~
+                         ~m1.  Jared thinks this should never happen because ~
+                         we already built its esim and should have checked ~
+                         that this was all okay due to port-bit-checking."
+       :args (<a href="COMMON-LISP____LIST.html">list</a> x x.modname))
+      nil))
+    ((unless (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> in-pat (gpl :i sub-esim))
+                  (<a href="COMMON-LISP____EQUAL.html">equal</a> out-pat (gpl :o sub-esim))))
+     (<a href="ACL2____MV.html">mv</a>
+      nil
+      (<a href="VL2014____FATAL.html">fatal</a>
+       :type :vl-programming-error
+       :msg
+       "~a0: the :i and :o patterns we built for ~m1 do ~
+                         not agree with the :i and :o patterns of its ESIM? ~
+                         Jared thinks this should never happen because the ~
+                         patterns should be being built in the same way. ~%  ~
+                          - in-pat: ~x2~%  ~
+                          - found:  ~x3~%  ~
+                          - out-pat: ~x4~%  ~
+                          - found:   ~x5~%"
+       :args (<a href="COMMON-LISP____LIST.html">list</a> x x.modname in-pat (gpl :i sub-esim)
+                   out-pat (gpl :o sub-esim)))
+      nil))
+    ((with-fast binding-alist))
+    (all-formal-bits (<a href="ACL2____PAT-FLATTEN.html">pat-flatten</a> out-pat (<a href="ACL2____PAT-FLATTEN1.html">pat-flatten1</a> in-pat)))
+    (all-actual-bits (<a href="ACL2____ALIST-KEYS.html">alist-keys</a> binding-alist))
+    ((unless (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SET____MERGESORT.html">mergesort</a> all-formal-bits)
+                    (<a href="SET____MERGESORT.html">mergesort</a> all-actual-bits)))
+     (<a href="ACL2____MV.html">mv</a>
+      nil
+      (<a href="VL2014____FATAL.html">fatal</a>
+       :type :vl-programming-error
+       :msg
+       "~a0: the binding alist we produced doesn't contain ~
+                         bindings for exactly the right bits.  Jared thinks ~
+                         vl-modinst-to-eocc-bindings should ensure that this ~
+                         never happens."
+       :args (<a href="COMMON-LISP____LIST.html">list</a> x))
+      nil))
+    (inputs (<a href="ACL2____AL-_E3PAT.html">al-&gt;pat</a> in-pat binding-alist nil))
+    (outputs (<a href="ACL2____AL-_E3PAT.html">al-&gt;pat</a> out-pat binding-alist nil))
+    (instname (<a href="VL2014____VL-PLAIN-WIRE-NAME.html">vl-plain-wire-name</a> x.instname))
+    (eocc (<a href="COMMON-LISP____LIST_A2.html">list*</a> :u instname
+                 :op sub-esim :o outputs :i inputs
+                 (<a href="COMMON-LISP____IF.html">if</a> x.atts (<a href="COMMON-LISP____LIST.html">list</a> :a x.atts) nil))))
+   (<a href="ACL2____MV.html">mv</a> t (<a href="VL2014____OK.html">ok</a>) eocc))))</pre> 
+<p><b>Theorem: </b>booleanp-of-vl-modinst-to-eocc.successp</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+    booleanp-of-vl-modinst-to-eocc.successp
+    (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?successp ?warnings ?eocc)
+          (<a href="VL2014____VL-MODINST-TO-EOCC.html">vl-modinst-to-eocc</a> x walist mods modalist eal warnings)))
+        (<a href="ACL2____BOOLEANP.html">booleanp</a> successp))
+    :rule-classes :type-prescription)</pre> 
+<p><b>Theorem: </b>vl-warninglist-p-of-vl-modinst-to-eocc.warnings</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+    vl-warninglist-p-of-vl-modinst-to-eocc.warnings
+    (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?successp ?warnings ?eocc)
+          (<a href="VL2014____VL-MODINST-TO-EOCC.html">vl-modinst-to-eocc</a> x walist mods modalist eal warnings)))
+        (<a href="VL2014____VL-WARNINGLIST-P.html">vl-warninglist-p</a> warnings))
+    :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>good-esim-occp-of-vl-modinst-to-eocc</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ good-esim-occp-of-vl-modinst-to-eocc
+ (<a href="COMMON-LISP____LET.html">let</a>
+    ((ret (<a href="VL2014____VL-MODINST-TO-EOCC.html">vl-modinst-to-eocc</a> x walist mods modalist eal warnings)))
+    (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 0 ret)
+                  (<a href="ACL2____FORCE.html">force</a> (<a href="VL2014____VL-MODINST-P.html">vl-modinst-p</a> x))
+                  (<a href="ACL2____FORCE.html">force</a> (<a href="VL2014____VL-WIREALIST-P.html">vl-wirealist-p</a> walist))
+                  (<a href="ACL2____FORCE.html">force</a> (<a href="VL2014____VL-MODULELIST-P.html">vl-modulelist-p</a> mods))
+                  (<a href="ACL2____FORCE.html">force</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> modalist (<a href="VL2014____VL-MODALIST.html">vl-modalist</a> mods)))
+                  (<a href="ACL2____FORCE.html">force</a> (<a href="VL2014____VL-EALIST-P.html">vl-ealist-p</a> eal)))
+             (good-esim-occp (<a href="ACL2____MV-NTH.html">mv-nth</a> 2 ret)))))</pre> 
+
+</body>
+</html>

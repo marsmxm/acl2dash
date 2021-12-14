@@ -1,0 +1,131 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Vl-consteval</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL2014____VL-CONSTEVAL">Click for Vl-consteval in the Full Manual</a></h3>
+
+<p>An evaluator for a small set of "constant expressions" in Verilog.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(vl-consteval x ss) → (mv successp ans)</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">x</span> — Expression to try to evaluate.<br>    <font color="#606060">Guard <span class="v">(<a href="VL2014____VL-EXPR-P.html">vl-expr-p</a> x)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">ss</span> — <font color="#606060">Guard <span class="v">(<a href="VL2014____VL-SCOPESTACK-P.html">vl-scopestack-p</a> ss)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">successp</span> — Indicates whether we successfully sized and evaluated 
+                         <span class="v">x</span> to a constant.<br>    <font color="#606060">Type <span class="v">(<a href="ACL2____BOOLEANP.html">booleanp</a> successp)</span>.</font>
+</dd> 
+<dd>
+<span class="tt">ans</span> — On success, a resolved, constant expression with the 
+                          appropriate width and size.<br>    <font color="#606060">Type <span class="v">(<a href="VL2014____VL-EXPR-P.html">vl-expr-p</a> ans)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>This is a careful, limited evaluator for a small subset of Verilog 
+expressions.  It is intended to be safe for use in contexts such as:</p> 
+ 
+<ul> 
+ <li>Wire ranges, e.g., <span class="v">wire [width-1:0] foo</span>
+</li> 
+ <li>Selects from wires, e.g., <span class="v">foo[width-1:0]</span>
+</li> 
+ <li>Parameter values arguments, e.g., <span class="v">mymod #(.size(width*2)) ...</span>
+</li> 
+</ul> 
+ 
+<p>Where there is no explicit left-hand side.  This evaluator does <b>not</b> 
+know how to look up identifiers like <span class="v">width</span>.  Instead, it is generally 
+meant to be useful after <span class="v">`define</span>d constants and parameters have already 
+been expanded.</p> 
+ 
+<p>Note that in general it is <b>not safe</b> to call this function on 
+arbitrary Verilog expressions to do constant folding.  That is, this function 
+does not know about any surrounding expression or left-hand side, which could 
+alter the widths (and hence the values) produced by certain operations.</p> 
+ 
+<p>However, we think this function is safe to use on top-level indexes into 
+arrays, range expressions, parameter values, etc., where there is no left-hand 
+side context.</p> 
+ 
+<p>This function can fail for a number of reasons.  For it to succeed, the 
+expression can contain only resolved constant values.  That is, things like 
+"weird" integers with X/Z bits aren't allowed.  Neither are any identifiers, 
+function calls, and so forth.  The operators in the expression must be 
+supported by <a href="VL2014____VL-CONSTEVAL-MAIN.html">vl-consteval-main</a>, and the evaluation must proceed without 
+"run-time errors" such as division by zero.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>vl-consteval</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+   vl-consteval (x ss)
+   (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="VL2014____VL-EXPR-P.html">vl-expr-p</a> x)
+                               (<a href="VL2014____VL-SCOPESTACK-P.html">vl-scopestack-p</a> ss))))
+   (<a href="COMMON-LISP____LET.html">let</a> ((__function__ 'vl-consteval))
+        (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+        (<a href="ACL2____B_A2.html">b*</a> ((x (<a href="VL2014____VL-EXPR-FIX.html">vl-expr-fix</a> x))
+             ((<a href="ACL2____MV.html">mv</a> successp ?warnings sized-x)
+              (<a href="VL2014____VL-EXPR-SIZE.html">vl-expr-size</a> nil x
+                            ss *vl-fake-elem-for-vl-consteval* nil))
+             ((unless (<a href="COMMON-LISP____AND.html">and</a> successp
+                           (<a href="ACL2____POSP.html">posp</a> (<a href="VL2014____VL-EXPR-_E3FINALWIDTH.html">vl-expr-&gt;finalwidth</a> sized-x))
+                           (<a href="VL2014____VL-EXPR-_E3FINALTYPE.html">vl-expr-&gt;finaltype</a> sized-x)))
+              (<a href="ACL2____MV.html">mv</a> nil x))
+             ((<a href="ACL2____MV.html">mv</a> okp ans)
+              (<a href="VL2014____VL-CONSTEVAL-MAIN.html">vl-consteval-main</a> sized-x ss))
+             ((unless okp) (<a href="ACL2____MV.html">mv</a> nil x)))
+            (<a href="ACL2____MV.html">mv</a> t ans))))</pre> 
+<p><b>Theorem: </b>booleanp-of-vl-consteval.successp</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> booleanp-of-vl-consteval.successp
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?successp ?ans)
+              (<a href="VL2014____VL-CONSTEVAL.html">vl-consteval</a> x ss)))
+            (<a href="ACL2____BOOLEANP.html">booleanp</a> successp))
+        :rule-classes :type-prescription)</pre> 
+<p><b>Theorem: </b>vl-expr-p-of-vl-consteval.ans</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-expr-p-of-vl-consteval.ans
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?successp ?ans)
+              (<a href="VL2014____VL-CONSTEVAL.html">vl-consteval</a> x ss)))
+            (<a href="VL2014____VL-EXPR-P.html">vl-expr-p</a> ans))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>vl-expr-resolved-p-of-vl-consteval</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-expr-resolved-p-of-vl-consteval
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?successp ?ans)
+              (<a href="VL2014____VL-CONSTEVAL.html">vl-consteval</a> x ss)))
+            (<a href="ACL2____IMPLIES.html">implies</a> successp (<a href="VL2014____VL-EXPR-RESOLVED-P.html">vl-expr-resolved-p</a> ans)))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>vl-expr-welltyped-p-of-vl-consteval</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-expr-welltyped-p-of-vl-consteval
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?successp ?ans)
+              (<a href="VL2014____VL-CONSTEVAL.html">vl-consteval</a> x ss)))
+            (<a href="ACL2____IMPLIES.html">implies</a> successp (<a href="VL2014____VL-EXPR-WELLTYPED-P.html">vl-expr-welltyped-p</a> ans)))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>vl-expr-&gt;finalwidth-of-vl-consteval</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-expr-&gt;finalwidth-of-vl-consteval
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?successp ?ans)
+              (<a href="VL2014____VL-CONSTEVAL.html">vl-consteval</a> x ss)))
+            (<a href="ACL2____IMPLIES.html">implies</a> successp
+                     (<a href="ACL2____POSP.html">posp</a> (<a href="VL2014____VL-EXPR-_E3FINALWIDTH.html">vl-expr-&gt;finalwidth</a> ans))))
+        :rule-classes :type-prescription)</pre> 
+<p><b>Theorem: </b>vl-expr-&gt;finaltype-of-vl-consteval</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-expr-&gt;finaltype-of-vl-consteval
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?successp ?ans)
+              (<a href="VL2014____VL-CONSTEVAL.html">vl-consteval</a> x ss)))
+            (<a href="ACL2____IMPLIES.html">implies</a> successp
+                     (<a href="VL2014____VL-EXPRTYPE-P.html">vl-exprtype-p</a> (<a href="VL2014____VL-EXPR-_E3FINALTYPE.html">vl-expr-&gt;finaltype</a> ans))))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>vl-consteval-of-vl-expr-fix-x</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-consteval-of-vl-expr-fix-x
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL2014____VL-CONSTEVAL.html">vl-consteval</a> (<a href="VL2014____VL-EXPR-FIX.html">vl-expr-fix</a> x) ss)
+               (<a href="VL2014____VL-CONSTEVAL.html">vl-consteval</a> x ss)))</pre> 
+<p><b>Theorem: </b>vl-consteval-vl-expr-equiv-congruence-on-x</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-consteval-vl-expr-equiv-congruence-on-x
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="VL2014____VL-EXPR-EQUIV.html">vl-expr-equiv</a> x x-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL2014____VL-CONSTEVAL.html">vl-consteval</a> x ss)
+                        (<a href="VL2014____VL-CONSTEVAL.html">vl-consteval</a> x-equiv ss)))
+        :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>vl-consteval-of-vl-scopestack-fix-ss</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-consteval-of-vl-scopestack-fix-ss
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL2014____VL-CONSTEVAL.html">vl-consteval</a> x (<a href="VL2014____VL-SCOPESTACK-FIX.html">vl-scopestack-fix</a> ss))
+               (<a href="VL2014____VL-CONSTEVAL.html">vl-consteval</a> x ss)))</pre> 
+<p><b>Theorem: </b>vl-consteval-vl-scopestack-equiv-congruence-on-ss</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-consteval-vl-scopestack-equiv-congruence-on-ss
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="VL2014____VL-SCOPESTACK-EQUIV.html">vl-scopestack-equiv</a> ss ss-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL2014____VL-CONSTEVAL.html">vl-consteval</a> x ss)
+                        (<a href="VL2014____VL-CONSTEVAL.html">vl-consteval</a> x ss-equiv)))
+        :rule-classes :congruence)</pre> 
+
+</body>
+</html>

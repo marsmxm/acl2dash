@@ -1,0 +1,105 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Example-2</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=SMT____EXAMPLE-2">Click for Example-2 in the Full Manual</a></h3>
+
+<p>Example 2: something wild</p><h3>Example 2</h3> 
+<p>Prerequisite read for this tutorial example is <span class="tt"><a href="SMT____TUTORIAL.html">tutorial</a></span>.</p> 
+<p>Smtlink is extensible, with the user's understanding that the extended part 
+is not verified and therefore is the user's responsibility to ensure its 
+soundness.  A different trust tag is installed if this customized Smtlink is 
+used.  Such ability makes Smtlink very powerful.  Here's an example to show the 
+usage.</p> 
+<p>Let's say we want to prove the theorem:</p> 
+ 
+<div class="box"> 
+<p> 
+<b><font color="#323cbe">Theorem 2.</font></b> 
+\forall x,y,z\in R, and \forall m,n \in Z, if  0 \le z \le 1 and 
+ 0 \le m \le n , then  2xy\cdot z^n \le (x^2+y^2)z^m. 
+</p> 
+</div> 
+ 
+<p>In <span class="v">smtlink/z3_interface/</span>, file <span class="v">RewriteExpt.py</span> is a Python class 
+extending from the default class in ACL2_to_Z3.py.  One could imaging defining 
+one's own file that does magical things in the SMT solver.  What 
+<span class="v">RewriteExpt.py</span> does is that it uses basic rewrite lemmas about <span class="v">expt</span> 
+to help the SMT solver to solve.  In order to make Smtlink uses the custom 
+version instead of the default, one needs to define and attach a new 
+configuration:</p> 
+ 
+<pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> my-smtlink-expt-config
+       nil (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t))
+       (<a href="SMT____CHANGE-SMTLINK-CONFIG.html">change-smtlink-config</a> (default-smt-cnf)
+                              :smt-module "RewriteExpt"
+                              :smt-class "to_smt_w_expt"
+                              :smt-cmd "python"
+                              :pythonpath ""))</pre> 
+<pre class="code">(<a href="ACL2____DEFATTACH.html">defattach</a> custom-smt-cnf my-smtlink-expt-config)</pre> 
+ 
+<p>Defining the function <span class="v">x^2+y^2</span></p> 
+<pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> x^2+y^2 (x y)
+       (<a href="COMMON-LISP_____B2.html">+</a> (<a href="COMMON-LISP_____A2.html">*</a> x x) (<a href="COMMON-LISP_____A2.html">*</a> y y)))</pre> 
+ 
+<p>Then define the theorem to prove:</p> 
+<pre class="code">(<a href="ACL2____ENCAPSULATE.html">encapsulate</a>
+ nil
+ (<a href="ACL2____LOCAL.html">local</a> (<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "arithmetic-5/top"
+                      :dir :system))
+ (<a href="ACL2____DEFTHM.html">defthm</a>
+  poly-of-expt-example
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____REAL_F2RATIONALP.html">real/rationalp</a> x)
+                (<a href="ACL2____REAL_F2RATIONALP.html">real/rationalp</a> y)
+                (<a href="ACL2____REAL_F2RATIONALP.html">real/rationalp</a> z)
+                (<a href="COMMON-LISP____INTEGERP.html">integerp</a> m)
+                (<a href="COMMON-LISP____INTEGERP.html">integerp</a> n)
+                (<a href="COMMON-LISP_____C3.html">&lt;</a> 0 z)
+                (<a href="COMMON-LISP_____C3.html">&lt;</a> z 1)
+                (<a href="COMMON-LISP_____C3.html">&lt;</a> 0 m)
+                (<a href="COMMON-LISP_____C3.html">&lt;</a> m n))
+           (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> (<a href="COMMON-LISP_____A2.html">*</a> 2 (<a href="COMMON-LISP____EXPT.html">expt</a> z n) x y)
+               (<a href="COMMON-LISP_____A2.html">*</a> (<a href="COMMON-LISP____EXPT.html">expt</a> z m) (x^2+y^2 x y))))
+  :hints
+  (("Goal"
+        :smtlink-custom
+        (:functions
+             ((<a href="COMMON-LISP____EXPT.html">expt</a> :formals ((r real/rationalp) (i real/rationalp))
+                    :returns ((ex real/rationalp))
+                    :level 0))
+             :hypotheses (((<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="COMMON-LISP____EXPT.html">expt</a> z n) (<a href="COMMON-LISP____EXPT.html">expt</a> z m)))
+                          ((<a href="COMMON-LISP_____C3.html">&lt;</a> 0 (<a href="COMMON-LISP____EXPT.html">expt</a> z m)))
+                          ((<a href="COMMON-LISP_____C3.html">&lt;</a> 0 (<a href="COMMON-LISP____EXPT.html">expt</a> z n))))
+             :int-to-rat t)))))</pre> 
+ 
+<p>Notice the <span class="v">:hints</span> keyword used this time is <span class="v">:smtlink-custom</span>.  It 
+allows the customized version of Smtlink to be applied to the current 
+clause.  Take a read in <a href="SMT____SMT-HINT.html">smt-hint</a> for a detailed description of each 
+keyword.  Here we will only describe what's used in this example.</p> 
+ 
+<p>In the hints, <span class="v">:function</span> tells Smtlink to treat <span class="v">expt</span> as an 
+uninterpreted function.  <span class="v">:formals</span> tells us the input argument types of the 
+uninterpreted function and <span class="v">:returns</span> tells us the output argument type. 
+<span class="v">:levels</span> specifies an expansion level of 0, making the function an 
+uninterpreted function.</p> 
+ 
+<p><span class="v">:hypotheses</span> provides a list of hypotheses that the user believes to be 
+true and can help with the proof. The hypotheses will be insert into the 
+hypotheses when generating the SMT problem. They will be proved correctness 
+as part of the returned clauses from the verified clause processor. </p> 
+ 
+<p><span class="v">:int-to-rat</span> tells Smtlink to raise integers to rationals when 
+translating the clause into a SMT problem. This is because of the limitation in 
+Z3. Integers mixed with real numbers are hard for Z3. We prove the given 
+theorem by proving a more general statement in the SMT solver.</p> 
+ 
+<p>Another observation is that, we are including the arithmetic-5 book for 
+proving the returned auxiliary clauses, which requires arithmetic 
+reasoning.</p> 
+
+</body>
+</html>

@@ -1,0 +1,106 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>ACL2-as-standalone-program</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____ACL2-AS-STANDALONE-PROGRAM">Click for ACL2-as-standalone-program in the Full Manual</a></h3>
+
+<p>Calling ACL2 from another program</p><p>ACL2 is intended for interactive use.  It is generally unrealistic 
+ to expect it to prove theorems fully automatically; see <a href="ACL2____THE-METHOD.html">the-method</a>, and 
+ see <a href="ACL2____INTRODUCTION-TO-THE-THEOREM-PROVER.html">introduction-to-the-theorem-prover</a> for a more detailed 
+ tutorial.</p> 
+ 
+ <p>Nevertheless, here we describe an approach for how to call the ACL2 theorem 
+ prover noninteractively.  These steps can of course be modified according to 
+ your needs.  Here, we illustrate how to call ACL2 from another Lisp program 
+ (or an arbitrary program) to attempt to prove an arithmetic theorem.</p> 
+ 
+ <p>See also <a href="ACL2____INTERFACING-TOOLS.html">interfacing-tools</a>.  In particular, if you want to make a 
+ command-line tool to ACL2 with options, you may be interested in <a href="OSLIB____ARGV.html">oslib::argv</a>, <a href="ACL2____GETOPT.html">getopt</a>, and especially <a href="GETOPT-DEMO____DEMO2.html">getopt-demo::demo2</a>. 
+ Alternately, if you want to develop a server application on top of ACL2, you 
+ might consider <a href="ACL2____BRIDGE.html">bridge</a>.</p> 
+ 
+ <h3>Step 1</h3> 
+ 
+ <p>Build a suitable ACL2 image by starting ACL2 and then executing the 
+ following forms.  In particular, these define a macro, <span class="v">try-thm</span>, that 
+ causes ACL2 to exit with an exit status indicating success or failure of a 
+ proof attempt.</p> 
+ 
+ <pre class="code">(<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "arithmetic-5/top" :dir :system)
+(<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> try-thm (<a href="COMMON-LISP_____62REST.html">&amp;rest</a> args)
+  `(<a href="ACL2____MV-LET.html">mv-let</a> (erp val state)
+           (<a href="ACL2____WITH-PROVER-TIME-LIMIT.html">with-prover-time-limit</a> 3 (<a href="ACL2____THM.html">thm</a> ,@args))
+           (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORE.html">ignore</a> val))
+           (<a href="ACL2____PROG2_42.html">prog2$</a> (<a href="COMMON-LISP____IF.html">if</a> erp (<a href="ACL2____EXIT.html">exit</a> 1) (<a href="ACL2____EXIT.html">exit</a> 0)) state))))
+(<a href="ACL2____RESET-PREHISTORY.html">reset-prehistory</a>) ; optional
+:q
+(<a href="ACL2____SAVE-EXEC.html">save-exec</a> "arith-acl2" "Included arithmetic-4/top")</pre> 
+ 
+ <p>If you prefer, above you can replace 3 by some other number of seconds as a 
+ time limit for the prover.  Also, you can replace</p> 
+ 
+ <pre class="code">(<a href="ACL2____WITH-PROVER-TIME-LIMIT.html">with-prover-time-limit</a> 3 (<a href="ACL2____THM.html">thm</a> ,@args))</pre> 
+ 
+ <p>by</p> 
+ 
+ <pre class="code">(<a href="ACL2____WITH-OUTPUT.html">with-output</a> :off :all (<a href="ACL2____WITH-PROVER-TIME-LIMIT.html">with-prover-time-limit</a> 3 (<a href="ACL2____THM.html">thm</a> ,@args)))</pre> 
+ 
+ <p>if you want to turn off output.  It may be best to leave the output on, 
+ instead eliminating it in the calling program (see Step 3 below).</p> 
+ 
+ <h3>Step 2</h3> 
+ 
+ <p>Try a little test.  In that same directory try this:</p> 
+ 
+ <pre class="code">echo '(try-thm (<a href="COMMON-LISP____EQUAL.html">equal</a> x x))' | ./arith-acl2
+echo $?</pre> 
+ 
+ <p>The exit status should be 0, indicating success.  Now try this:</p> 
+ 
+ <pre class="code">echo '(try-thm (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> x x)))' | ./arith-acl2
+echo $?</pre> 
+ 
+ <p>The exit status should be 1, indicating failure.</p> 
+ 
+ <h3>Step 3</h3> 
+ 
+ <p>Create a shell script that automates Step 2, for example:</p> 
+ 
+ <pre class="code">#!/bin/sh
+(echo "(try-thm $1)" | ./arith-acl2) &gt;&amp; /dev/null
+exit $?</pre> 
+ 
+ <h3>Step 4</h3> 
+ 
+ <p>Try your script from a Lisp program, if you like.  Here is how you can do 
+ it in SBCL, for example.  (Different Lisps have different ways to do this, as 
+ summarized in function <span class="v">system-call</span> in ACL2 source file 
+ <span class="v">acl2-init.lisp</span>.)</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> provable? (x)
+  (<a href="COMMON-LISP____LET.html">let</a> ((status
+         (process-exit-code
+          (sb-ext:run-program "./try-thm.sh" (<a href="COMMON-LISP____LIST.html">list</a> (format nil "~s" x))
+                              :output t :search t))))
+    (<a href="COMMON-LISP____EQL.html">eql</a> status 0)))</pre> 
+ 
+ <p>Then here is a log:</p> 
+ 
+ <pre class="code">* (provable? '(<a href="COMMON-LISP____EQUAL.html">equal</a> x y))
+
+NIL
+* (provable? '(<a href="COMMON-LISP____EQUAL.html">equal</a> x x))
+
+T
+*</pre> 
+ 
+ <p>Certainly refinements are possible — for example the above doesn't 
+ distinguish between unprovable and ill-formed input.  But it's a start.</p> 
+ 
+ 
+</body>
+</html>

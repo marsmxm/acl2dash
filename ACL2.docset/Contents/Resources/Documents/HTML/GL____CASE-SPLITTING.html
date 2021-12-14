@@ -1,0 +1,166 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Case-splitting</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=GL____CASE-SPLITTING">Click for Case-splitting in the Full Manual</a></h3>
+
+<p></p> 
+ 
+<p>BDD performance can sometimes be improved by breaking a problem into 
+subcases.  The standard example is floating-point addition, which benefits from 
+separating the problem into cases based on the difference between the two 
+inputs' exponents.  (See for instance work by <a href="http://dx.doi.org/10.1007/BFb0028769" target="_blank"><nobr>Chen and Bryant<img src="../Icon_External_Link.png" title="External link to http://dx.doi.org/10.1007/BFb0028769"></nobr></a> and <a href="http://dx.doi.org/10.1145/309847.309968" target="_blank"><nobr>Aagard, Jones, and 
+Seger<img src="../Icon_External_Link.png" title="External link to http://dx.doi.org/10.1145/309847.309968"></nobr></a>.)</p> 
+ 
+<p>For each exponent difference, the two mantissas are aligned differently 
+before being added together, so a different BDD order is necessary to 
+interleave their bits at the right offset.  Without case splitting, a single 
+BDD ordering has to be used for the whole problem; no matter what ordering we 
+choose, the mantissas will be poorly interleaved for some exponent differences, 
+causing severe performance problems.  Separating the cases allows the 
+appropriate order to be used for each difference.</p> 
+ 
+<p>GL provides a <a href="ACL2____DEF-GL-PARAM-THM.html">def-gl-param-thm</a> command that supports this technique. 
+This command splits the goal formula into several subgoals and attempts to 
+prove each of them using the <a href="ACL2____DEF-GL-THM.html">def-gl-thm</a> approach, so for each subgoal 
+there is a symbolic execution step and coverage proof.  To show the subgoals 
+suffice to prove the goal formula, it also does another <a href="ACL2____DEF-GL-THM.html">def-gl-thm</a>-style 
+proof that establishes that any inputs satisfying the hypothesis are covered by 
+some case.</p> 
+ 
+<h3>A First Example</h3> 
+ 
+<p>Here is how we might split the proof for <span class="v">fast-logcount-32</span> into five 
+subgoals.  One goal handles the case where the most significant bit is 1.  The 
+other four goals assume the most significant bit is 0, and separately handle 
+the cases where the lower two bits are 0, 1, 2, or 3.  Each case has a 
+different symbolic binding for <span class="v">x</span>, giving the BDD variable order. Of 
+course, splitting into cases and varying the BDD ordering is unnecessary for 
+this theorem, but it illustrates how the <a href="ACL2____DEF-GL-PARAM-THM.html">def-gl-param-thm</a> command 
+works.</p> 
+ 
+<pre class="code">(<a href="ACL2____DEF-GL-PARAM-THM.html">def-gl-param-thm</a> fast-logcount-32-correct-alt
+  :hyp (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 32 x)
+  :concl (<a href="COMMON-LISP____EQUAL.html">equal</a> (fast-logcount-32 x)
+                (<a href="COMMON-LISP____LOGCOUNT.html">logcount</a> x))
+  :param-bindings
+  `((((msb 1) (low nil)) ((x ,(<a href="GL____G-INT.html">g-int</a> 32 -1 33))))
+    (((msb 0) (low 0))   ((x ,(<a href="GL____G-INT.html">g-int</a>  0  1 33))))
+    (((msb 0) (low 1))   ((x ,(<a href="GL____G-INT.html">g-int</a>  5  1 33))))
+    (((msb 0) (low 2))   ((x ,(<a href="GL____G-INT.html">g-int</a>  0  2 33))))
+    (((msb 0) (low 3))   ((x ,(<a href="GL____G-INT.html">g-int</a>  3  1 33)))))
+  :param-hyp (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> msb (<a href="COMMON-LISP____ASH.html">ash</a> x -31))
+                  (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> msb 1)
+                      (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____LOGAND.html">logand</a> x 3) low)))
+  :cov-bindings `((x ,(<a href="GL____G-INT.html">g-int</a> 0 1 33))))</pre> 
+ 
+<p>We specify the five subgoals to consider using two new variables, <span class="v">msb</span> 
+and <span class="v">low</span>.  Here, <span class="v">msb</span> will determine the most significant bit of 
+<span class="v">x</span>; <span class="v">low</span> will determine the two least significant bits of <span class="v">x</span>, but 
+only when <span class="v">msb</span> is 0.</p> 
+ 
+<p>The <span class="v">:param-bindings</span> argument describes the five subgoals by assigning 
+different values to <span class="v">msb</span> and <span class="v">low</span>.  It also gives the <span class="v">g-bindings</span> 
+to use in each case.  We use different bindings for <span class="v">x</span> for each subgoal to 
+show how it is done.</p> 
+ 
+<p>The <span class="v">:param-hyp</span> argument describes the relationship between <span class="v">msb</span>, 
+<span class="v">low</span>, and <span class="v">x</span> that will be assumed in each subgoal.  In the symbolic 
+execution performed for each subgoal, the <span class="v">:param-hyp</span> is used to reduce the 
+space of objects represented by the symbolic binding for <span class="v">x</span>.  For example, 
+in the subgoal where <span class="v">msb = 1</span>, this process will assign <span class="v">t</span> to 
+<span class="v">x[31]</span>.  The <span class="v">:param-hyp</span> will also be assumed to hold for the coverage 
+proof for each case.</p> 
+ 
+<p>How do we know the case-split is complete?  One final proof is needed to 
+show that whenever the hypothesis holds for some <span class="v">x</span>, then at least one of 
+the settings of <span class="v">msb</span> and <span class="v">low</span> satisfies the <span class="v">:param-hyp</span> for this 
+<span class="v">x</span>.  That is:</p> 
+ 
+<pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 32 x)
+         (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____LET.html">let</a> ((msb 1) (low nil))
+               (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> msb (<a href="COMMON-LISP____ASH.html">ash</a> x -31))
+                    (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> msb 1)
+                        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____LOGAND.html">logand</a> x 3) low))))
+             (<a href="COMMON-LISP____LET.html">let</a> ((msb 0) (low 0)) ...)
+             (<a href="COMMON-LISP____LET.html">let</a> ((msb 0) (low 1)) ...)
+             (<a href="COMMON-LISP____LET.html">let</a> ((msb 0) (low 2)) ...)
+             (<a href="COMMON-LISP____LET.html">let</a> ((msb 0) (low 3)) ...)))</pre> 
+ 
+<p>This proof is also done in the <a href="ACL2____DEF-GL-THM.html">def-gl-thm</a> style, so we need we need 
+one last set of symbolic bindings, which is provided by the <span class="v">:cov-bindings</span> 
+argument.</p> 
+ 
+<h3>Another Example</h3> 
+ 
+<p>Suppose we want to prove the commutativity of <span class="v">*</span> for two finite natural 
+numbers, <span class="v">a</span> and <span class="v">n</span>, but that GL isn't able to prove this property 
+unless we case-split on the eight possible values for <span class="v">n</span>.  We can do so 
+with the following call of <a href="ACL2____DEF-GL-PARAM-THM.html">def-gl-param-thm</a></p> 
+ 
+<pre class="code">(<a href="ACL2____DEF-GL-PARAM-THM.html">def-gl-param-thm</a> finite-commute-of-*
+  :hyp (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____NATP.html">natp</a> a)
+            (<a href="COMMON-LISP_____C3.html">&lt;</a> a (<a href="COMMON-LISP____EXPT.html">expt</a> 2 16))
+            (<a href="ACL2____NATP.html">natp</a> n)
+            (<a href="COMMON-LISP_____C3.html">&lt;</a> n 8))
+  :concl (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP_____A2.html">*</a> n a)
+                (<a href="COMMON-LISP_____A2.html">*</a> a n))
+  :param-bindings `((((lsb 0) (mid-sb 0) (high-sb 0))
+                     ,(<a href="GL____AUTO-BINDINGS.html">gl::auto-bindings</a> (:nat a 16)
+                                         (:nat n 3)))
+                    (((lsb 0) (mid-sb 0) (high-sb 1))
+                     ,(<a href="GL____AUTO-BINDINGS.html">gl::auto-bindings</a> (:nat a 16)
+                                         (:nat n 3)))
+                    (((lsb 0) (mid-sb 1) (high-sb 0))
+                     ,(<a href="GL____AUTO-BINDINGS.html">gl::auto-bindings</a> (:nat a 16)
+                                         (:nat n 3)))
+                    (((lsb 0) (mid-sb 1) (high-sb 1))
+                     ,(<a href="GL____AUTO-BINDINGS.html">gl::auto-bindings</a> (:nat a 16)
+                                         (:nat n 3)))
+                    (((lsb 1) (mid-sb 0) (high-sb 0))
+                     ,(<a href="GL____AUTO-BINDINGS.html">gl::auto-bindings</a> (:nat a 16)
+                                         (:nat n 3)))
+                    (((lsb 1) (mid-sb 0) (high-sb 1))
+                     ,(<a href="GL____AUTO-BINDINGS.html">gl::auto-bindings</a> (:nat a 16)
+                                         (:nat n 3)))
+                    (((lsb 1) (mid-sb 1) (high-sb 0))
+                     ,(<a href="GL____AUTO-BINDINGS.html">gl::auto-bindings</a> (:nat a 16)
+                                         (:nat n 3)))
+                    (((lsb 1) (mid-sb 1) (high-sb 1))
+                     ,(<a href="GL____AUTO-BINDINGS.html">gl::auto-bindings</a> (:nat a 16)
+                                         (:nat n 3))))
+  :param-hyp (<a href="COMMON-LISP____EQUAL.html">equal</a> n
+                    (<a href="ACL2____LOGAPP.html">logapp</a> 1 lsb
+                            (<a href="ACL2____LOGAPP.html">logapp</a> 1 mid-sb
+                                    high-sb)))
+
+  :cov-bindings (<a href="GL____AUTO-BINDINGS.html">gl::auto-bindings</a> (:nat a 16)
+                                   (:nat n 3)))</pre> 
+ 
+<p>The <span class="v">:hyp</span> and <span class="v">:concl</span> are the same as in a <span class="v">def-gl-thm</span>.  The 
+<span class="v">:gl-bindings</span> becomes <span class="v">:cov-bindings</span>.  And we must add the 
+<span class="v">:param-bindings</span> and <span class="v">:param-hyp</span>.</p> 
+ 
+<p>As in the previous example, the <span class="v">:param-hyp</span> specifies the relationship 
+between the variables in the theorem that we want to case-split and the values 
+given in <span class="v">:param-bindings</span>.  In this example, we essentially encode a truth 
+table into <span class="v">:param-bindings</span> using the least significant bit (<span class="v">lsb</span>), 
+middle significant bit 
+(<span class="v">mid-sb</span>), and most significant bit (<span class="v">high-sb</span>).  We then indicate that 
+these three significant-bit variables appended together represent the variable 
+<span class="v">n</span> in our theorem.</p> 
+ 
+<p>The syntax for specifying the variable ordering for each case-split is a bit 
+strange.  Currently, for each <span class="v">:param-bindings</span> entry, one must specify the 
+symbolic objects (BDD ordering, number of bits required, etc.) for each 
+case-split.  Thus, in this example, you see the bindings specified many times. 
+We could write a macro (perhaps using <a href="ACL2____PAIRLIS_42.html">pairlis$</a>) so we didn't 
+have to type so much, but for clarity of instruction, we leave the expansion in 
+this example.</p> 
+
+</body>
+</html>

@@ -1,0 +1,128 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Sse-max/min</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=X86ISA____SSE-MAX_F2MIN">Click for Sse-max/min in the Full Manual</a></h3>
+
+<p></p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(sse-max/min operation op1 op2 mxcsr exp-width frac-width) 
+  → 
+(mv * * *)</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">op1</span> — <font color="#606060">Guard <span class="v">(<a href="ACL2____NATP.html">natp</a> op1)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">op2</span> — <font color="#606060">Guard <span class="v">(<a href="ACL2____NATP.html">natp</a> op2)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">exp-width</span> — <font color="#606060">Guard <span class="v">(<a href="ACL2____POSP.html">posp</a> exp-width)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">frac-width</span> — <font color="#606060">Guard <span class="v">(<a href="ACL2____POSP.html">posp</a> frac-width)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+ 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>sse-max/min</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ sse-max/min
+ (operation op1 op2 mxcsr exp-width frac-width)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____TYPE.html">type</a> (integer 0 36) operation)
+          (<a href="COMMON-LISP____TYPE.html">type</a> (unsigned-byte 32) mxcsr))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____NATP.html">natp</a> op1)
+                             (<a href="ACL2____NATP.html">natp</a> op2)
+                             (<a href="ACL2____POSP.html">posp</a> exp-width)
+                             (<a href="ACL2____POSP.html">posp</a> frac-width))))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'sse-max/min))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+   ((mxcsr (<a href="ACL2____MBE.html">mbe</a> :logic (<a href="ACL2____LOGHEAD.html">loghead</a> 32 mxcsr)
+                :exec mxcsr))
+    ((<a href="ACL2____MV.html">mv</a> kind1 sign1 exp1 implicit1 frac1)
+     (<a href="X86ISA____FP-DECODE.html">fp-decode</a> op1 exp-width frac-width))
+    ((<a href="ACL2____MV.html">mv</a> kind2 sign2 exp2 implicit2 frac2)
+     (<a href="X86ISA____FP-DECODE.html">fp-decode</a> op2 exp-width frac-width))
+    (daz (<a href="COMMON-LISP____LOGBITP.html">logbitp</a> 6 mxcsr))
+    ((<a href="ACL2____MV.html">mv</a> kind1 exp1 frac1)
+     (<a href="X86ISA____SSE-DAZ.html">sse-daz</a> kind1 exp1 frac1 daz))
+    ((<a href="ACL2____MV.html">mv</a> kind2 exp2 frac2)
+     (<a href="X86ISA____SSE-DAZ.html">sse-daz</a> kind2 exp2 frac2 daz))
+    ((<a href="ACL2____MV.html">mv</a> special-ok sign exp &amp; frac invalid)
+     (<a href="X86ISA____SSE-MAX_F2MIN-SPECIAL.html">sse-max/min-special</a> kind1 sign1 exp1 implicit1 frac1 kind2
+                          sign2 exp2 implicit2 frac2 operation))
+    (mxcsr (<a href="COMMON-LISP____IF.html">if</a> invalid (<a href="X86ISA_____12MXCSRBITS-_E3IE.html">!mxcsrbits-&gt;ie</a> 1 mxcsr)
+               mxcsr))
+    (im (<a href="COMMON-LISP____LOGBITP.html">logbitp</a> 7 mxcsr))
+    ((when (<a href="COMMON-LISP____AND.html">and</a> invalid (<a href="COMMON-LISP____NOT.html">not</a> im)))
+     (<a href="ACL2____MV.html">mv</a> 'invalid-operand-exception-is-not-masked
+         0 mxcsr))
+    (de (<a href="X86ISA____DENORMAL-EXCEPTION.html">denormal-exception</a> kind1 kind2))
+    (mxcsr (<a href="COMMON-LISP____IF.html">if</a> de (<a href="X86ISA_____12MXCSRBITS-_E3DE.html">!mxcsrbits-&gt;de</a> 1 mxcsr) mxcsr))
+    (dm (<a href="COMMON-LISP____LOGBITP.html">logbitp</a> 8 mxcsr))
+    ((when (<a href="COMMON-LISP____AND.html">and</a> de (<a href="COMMON-LISP____NOT.html">not</a> dm)))
+     (<a href="ACL2____MV.html">mv</a> 'denormal-operand-exception-is-not-masked
+         0 mxcsr)))
+   (<a href="COMMON-LISP____IF.html">if</a>
+    special-ok
+    (<a href="ACL2____MV.html">mv</a> nil
+        (<a href="X86ISA____FP-ENCODE-INTEGER.html">fp-encode-integer</a> sign exp frac exp-width frac-width)
+        mxcsr)
+    (<a href="ACL2____B_A2.html">b*</a>
+     ((bias
+       (<a href="ACL2____NFIX.html">nfix</a>
+        (<a href="ACL2____EC-CALL.html">ec-call</a> (rtl::bias (<a href="COMMON-LISP____LIST.html">list</a> nil (<a href="COMMON-LISP____1_B2.html">1+</a> frac-width) exp-width)))))
+      (rat1 (<a href="X86ISA____FP-TO-RAT.html">fp-to-rat</a> sign1
+                       exp1 frac1 bias exp-width frac-width))
+      (rat2 (<a href="X86ISA____FP-TO-RAT.html">fp-to-rat</a> sign2
+                       exp2 frac2 bias exp-width frac-width))
+      (rat (<a href="COMMON-LISP____CASE.html">case</a> operation
+                 (34 (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP_____E3.html">&gt;</a> rat1 rat2) rat1 rat2))
+                 (36 (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP_____C3.html">&lt;</a> rat1 rat2) rat1 rat2))
+                 (otherwise 0)))
+      (sign (<a href="X86ISA____SSE-MAX_F2MIN-SIGN.html">sse-max/min-sign</a> rat rat1 sign1 sign2))
+      (fp-result (rat-to-fp rat sign
+                            nil nil nil 0 exp-width frac-width)))
+     (<a href="ACL2____MV.html">mv</a> nil fp-result mxcsr))))))</pre> 
+<p><b>Theorem: </b>integerp-result-sse-max/min</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     integerp-result-sse-max/min
+     (<a href="COMMON-LISP____INTEGERP.html">integerp</a>
+          (<a href="ACL2____MV-NTH.html">mv-nth</a> 1
+                  (<a href="X86ISA____SSE-MAX_F2MIN.html">sse-max/min</a> operation
+                               op1 op2 mxcsr exp-width frac-width)))
+     :rule-classes :type-prescription)</pre> 
+<p><b>Theorem: </b>n32p-mxcsr-sse-max/min</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ n32p-mxcsr-sse-max/min
+ (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a>
+      32
+      (<a href="ACL2____MV-NTH.html">mv-nth</a> 2
+              (<a href="X86ISA____SSE-MAX_F2MIN.html">sse-max/min</a> operation
+                           op1 op2 mxcsr exp-width frac-width)))
+ :rule-classes
+ (:rewrite
+  (:type-prescription
+    :corollary
+    (<a href="ACL2____NATP.html">natp</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 2
+                  (<a href="X86ISA____SSE-MAX_F2MIN.html">sse-max/min</a> operation
+                               op1 op2 mxcsr exp-width frac-width)))
+    :hints
+    (("Goal" :in-theory '(<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> integer-range-p natp))))
+  (:linear
+   :corollary
+   (<a href="COMMON-LISP____AND.html">and</a>
+      (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> 0
+          (<a href="ACL2____MV-NTH.html">mv-nth</a> 2
+                  (<a href="X86ISA____SSE-MAX_F2MIN.html">sse-max/min</a> operation
+                               op1 op2 mxcsr exp-width frac-width)))
+      (<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 2
+                 (<a href="X86ISA____SSE-MAX_F2MIN.html">sse-max/min</a> operation
+                              op1 op2 mxcsr exp-width frac-width))
+         4294967296))
+   :hints (("Goal" :in-theory (<a href="ACL2____E_F2D_A2.html">e/d*</a> (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a>) nil))))))</pre> 
+
+</body>
+</html>

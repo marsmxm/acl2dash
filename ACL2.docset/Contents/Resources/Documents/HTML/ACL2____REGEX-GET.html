@@ -1,0 +1,112 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Regex-get</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____REGEX-GET">Click for Regex-get in the Full Manual</a></h3>
+
+<p>Lookup a string in the regular expression alist.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(regex-get str alist) → key-value-pair</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">str</span> — String to lookup.<br>    <font color="#606060">Guard <span class="v">(<a href="COMMON-LISP____STRINGP.html">stringp</a> str)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">alist</span> — Alistp where keys are regular expressions in 
+                                string form and the values are of an 
+                                unspecified type.<br>    <font color="#606060">Guard <span class="v">(<a href="ACL2____STRING-KEYED-ALIST-P.html">string-keyed-alist-p</a> alist)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">key-value-pair</span> — Matching regular expression paired with its value. 
+                            Nil if no entry is found.  Note that this is an 
+                            exact match, which is different from the 
+                            functionality of grep, which returns substrings 
+                            that match.<br>    <font color="#606060">Type <span class="v">(<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____CONSP.html">consp</a> key-value-pair) (<a href="COMMON-LISP____IF.html">if</a> key-value-pair t nil))</span>, given the <a href="ACL2____GUARD.html">guard</a>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>Warning: this is likely to be a pretty slow way of doing things -- 
+         but we currently have no experimental evidence that indicates whether 
+         this performance is unacceptable.  If you're looking for a place to 
+         suspect of bad performance, this could be a good place to start.</p> 
+ 
+         <p>It is likely that the user will want to use <span class="tt">regex-get</span> to 
+         implement a function that returns a value of a specific type.  Here, 
+         we show a couple events that we needed to provide to prove that our 
+         wrapper for <span class="tt">regex-get</span> returns an <span class="tt">acl2-number-listp</span>. 
+         We expect that users in similar situations will need comparable 
+         lemmas. 
+ 
+         Such composability is similar to the approach available and documented 
+         in the book <span class="tt">defexec/other-apps/records/records</span>.</p> 
+ 
+         <p>We now begin our approach.  First we setup an alist to serve as our 
+         regex dictionary:</p> 
+ 
+<pre class="code">(<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "std/util/defalist" :dir :system)
+
+(<a href="STD____DEFALIST.html">std::defalist</a> dictionary-p (x)
+  :key (<a href="COMMON-LISP____STRINGP.html">stringp</a> x)
+  :val (<a href="ACL2____ACL2-NUMBER-LISTP.html">acl2-number-listp</a> x)
+  :true-listp t)</pre> 
+ 
+        <p>Next we establish two lemmas that help us specify the return type 
+        for what will be our use of regex-get:</p> 
+ 
+<pre class="code">(<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "projects/regex/regex-ui" :dir :system)
+
+(<a href="ACL2____DEFTHM.html">defthm</a> dictionary-p-is-string-keyed-alist-p
+  (<a href="ACL2____IMPLIES.html">implies</a> (dictionary-p x)
+           (<a href="ACL2____STRING-KEYED-ALIST-P.html">string-keyed-alist-p</a> x))
+  :hints (("Goal" :in-theory (<a href="ACL2____ENABLE.html">enable</a> string-keyed-alist-p))))
+
+(<a href="ACL2____DEFTHM.html">defthm</a> regex-get-of-dictionary-p-returns-terminal-list-p
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____STRINGP.html">stringp</a> x)
+                (dictionary-p dict))
+           (<a href="ACL2____ACL2-NUMBER-LISTP.html">acl2-number-listp</a> (<a href="COMMON-LISP____CDR.html">cdr</a> (<a href="ACL2____REGEX-GET.html">regex-get</a> x dict))))
+  :hints (("Goal" :in-theory (<a href="ACL2____ENABLE.html">enable</a> regex-get))))</pre> 
+ 
+        <p>Which enables ACL2 to admit our lookup function:</p> 
+ 
+<pre class="code">(<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "std/util/define" :dir :system)
+
+(<a href="ACL2____DEFINE.html">define</a> dictionary-lookup ((key stringp)
+                           (dictionary dictionary-p))
+  :returns (ans (<a href="ACL2____ACL2-NUMBER-LISTP.html">acl2-number-listp</a> ans)
+                "The list of integers associated with the given key"
+                :hyp :fguard)
+  (<a href="COMMON-LISP____LET.html">let</a> ((val (<a href="ACL2____REGEX-GET.html">regex-get</a> key dictionary)))
+    (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____CONSP.html">consp</a> val)
+        (<a href="COMMON-LISP____CDR.html">cdr</a> val)
+      nil))) ; return value in the atom case is chosen by user</pre> 
+ 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>regex-get</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ regex-get (str alist)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____STRINGP.html">stringp</a> str)
+                             (<a href="ACL2____STRING-KEYED-ALIST-P.html">string-keyed-alist-p</a> alist))))
+ (<a href="COMMON-LISP____LET.html">let</a>
+   ((__function__ 'regex-get))
+   (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+   (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ATOM.html">atom</a> alist)
+       nil
+       (<a href="ACL2____MV-LET.html">mv-let</a> (err whole substrs)
+               (<a href="ACL2____DO-REGEX-MATCH.html">do-regex-match</a> str (<a href="COMMON-LISP____CAAR.html">caar</a> alist)
+                               (<a href="ACL2____PARSE-OPTIONS.html">parse-options</a> 'ere nil nil nil nil))
+               (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORE.html">ignore</a> substrs))
+               (<a href="COMMON-LISP____COND.html">cond</a> (err (<a href="ACL2____ER.html">er</a> hard? 'regex-get err))
+                     ((<a href="COMMON-LISP____EQUAL.html">equal</a> str whole) (<a href="COMMON-LISP____CAR.html">car</a> alist))
+                     (t (<a href="ACL2____REGEX-GET.html">regex-get</a> str (<a href="COMMON-LISP____CDR.html">cdr</a> alist))))))))</pre> 
+<p><b>Theorem: </b>return-type-of-regex-get</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> return-type-of-regex-get
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____FORCE.html">force</a> (<a href="COMMON-LISP____STRINGP.html">stringp</a> str))
+                      (<a href="ACL2____FORCE.html">force</a> (<a href="ACL2____STRING-KEYED-ALIST-P.html">string-keyed-alist-p</a> alist)))
+                 (<a href="ACL2____B_A2.html">b*</a> ((key-value-pair (<a href="ACL2____REGEX-GET.html">regex-get</a> str alist)))
+                     (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____CONSP.html">consp</a> key-value-pair)
+                            (<a href="COMMON-LISP____IF.html">if</a> key-value-pair t nil))))
+        :rule-classes :rewrite)</pre> 
+
+</body>
+</html>

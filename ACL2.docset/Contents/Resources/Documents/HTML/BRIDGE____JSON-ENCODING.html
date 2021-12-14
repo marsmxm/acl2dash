@@ -1,0 +1,139 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Json-encoding</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=BRIDGE____JSON-ENCODING">Click for Json-encoding in the Full Manual</a></h3>
+
+<p>Simple encoder to convert ACL2 Objects into JSON Objects.</p><h3>Introduction</h3> 
+ 
+<p>Sensibly converting ACL2 objects into JSON is not at all 
+straightforward.</p> 
+ 
+<p>On one hand, JSON is very rich.  Should we try to map association lists into 
+JSON objects, or should we just treat all cons trees the same and use arrays? 
+Since JSON has distinct NULL and FALSE values, which should we map NIL 
+into?</p> 
+ 
+<p>On the other, JSON is missing some types that we would like.  Should we just 
+map ACL2 symbols and strings into strings, and lose the distinction between 
+them?  What on earth should we do with rationals and complex numbers?  Should 
+we assume that the JSON consumer supports bignums, or use a separate bignum 
+encoding?</p> 
+ 
+<p>Arguably, the "safe" approach would be: develop a reliable JSON encoding 
+that ensures a unique interpretation of each ACL2 object.  For instance, we 
+should keep symbols and strings separate, record the name/package of each 
+symbol separately, etc.</p> 
+ 
+<p>But that would suck.  The resulting JSON objects would be full of unwieldy 
+type information, which most of the time we wouldn't care about.  Usually, we 
+are hooking up ACL2 to web pages or other interfaces that want to get some 
+simple, small fragments of data.  In this context, I'd prefer a simple 
+representation that is easy to work with, even at the cost of losing some 
+precision.</p> 
+ 
+<h3>Atoms</h3> 
+ 
+<p>I encode every ACL2 atom as a JSON string.  For example:</p> 
+ 
+<pre class="code">  Lisp Atom           JSON
+---------------------------------------
+   NIL                "NIL"
+   T                  "T"
+   FOO                "FOO"
+   :FOO               ":FOO"
+   "foo"              "foo"
+   #\f                "f"
+   123                "123"
+   -123               "-123"
+   -1/2               "-1/2"
+   #c(17/2 -3/8)      "#C(17/2 -3/8)"
+---------------------------------------</pre> 
+ 
+<p>This has many quirks.  The main weirdness is that there are many ACL2 
+objects which, although they are not EQUAL, cannot be told apart from one 
+another in the JSON world.  For instance, the atoms on each line below have 
+identical JSON encodings:</p> 
+ 
+<ul> 
+<li><span class="v">ACL2::FOO,    VL::FOO,     "FOO"          </span></li> 
+<li><span class="v">ACL2::F,      VL::F,       "F",      #\F </span></li> 
+<li><span class="v">ACL2::|123|,  VL::|123|,   "123",    123  </span></li> 
+<li><span class="v">:FOO,         ":FOO",    ACL2::|:FOO|     </span></li> 
+</ul> 
+ 
+<p>Some motivation behind this approach:</p> 
+ 
+<ul> 
+ 
+<li>Why use "NIL" and "T" instead of, e.g., JSON's null (or false) and 
+true?  The main reason is that null/true can't be used as keys in JSON objects, 
+so this would lead to either special handling of alists with nil/t keys, or 
+alists that have different encoding depending on their keys, and it just seems 
+simpler to use strings for all atoms.</li> 
+ 
+<li>Why use "123" when JSON has integers?  The same reason as for NIL and T 
+applies, but also: the JSON "spec" doesn't mandate what ranges of numbers its 
+implementations have to support, and practically speaking many of its 
+implementations don't use bignums.  So, what are the options?  (1) Use integers 
+for small numbers and do something special for bignums.  But this would be 
+quite error prone when programming the client.  (2) Assume bignums are 
+supported and just accept that clients will see garbage in some cases.  But 
+that is just terrible.  So given all this, just using strings seems like the 
+best thing to do.</li> 
+ 
+</ul> 
+ 
+<h3>Conses</h3> 
+ 
+<p>With one exception (see below), I encode any true-lists as a JSON arrays 
+containing its encoded elements, and I encode any "improper" list as a JSON 
+array containing its encoded elements AND its final cdr.  For example:</p> 
+ 
+<pre class="code">   Lisp Object                     JSON
+-------------------------------------------------------------
+   (a . nil)                       ["A"]
+   (a . b)                         ["A","B"]
+   (a b . nil)                     ["A","B"]
+   (a b . c)                       ["A","B","C"]
+   (a b c . nil)                   ["A","B","C"]
+   ((a . b) (c . d) . e)           [["A","B"],["C","D"],"E"]</pre> 
+ 
+<p>This has its own quirks.  For instance, as with atoms, you can't tell the 
+difference between Lisp objects like: (A B C) and (A B . C).</p> 
+ 
+<p>The exception is that, for proper ALISTS whose every key is an atom, I 
+instead generate the corresponding JSON Object.  For example:</p> 
+ 
+<pre class="code">   Lisp Object                     JSON
+-------------------------------------------------------------
+   ((a . b))                      {"A":"B"}
+   ((a . b) (c . d))              {"A":"B","C":"D"}
+   ((a . b) (c . d) . e)          [["A","B"],["C","D"],"E"]</pre> 
+ 
+<p>In certain cases, this runs the risk that you might see a different encoding 
+for an alist, depending on whether or not you have inserted a cons.  But many 
+alists have atoms as keys, and it seems nice to use a real JSON object here 
+instead of a nested array of arrays.</p> 
+ 
+ 
+<h3>Note about Top-Level JSON Objects</h3> 
+ 
+<p>Earlier versions of the JSON grammar required top-level <span class="v">JSON-text</span> 
+instances to be either JSON Objects or Arrays.  This is no longer the case: the 
+latest JSON grammar allows any values at the top level.  If the object we're 
+given is an ordinary ACL2 atom, we just encode it as a JSON string.</p> 
+ 
+<p>We found this to be useful in our client code.  It's nice to create a JSON 
+object that says: the return value is such and so, the standard output was such 
+and so, and the error value was such and so.  In this context, we just want to 
+stitch our ACL2 object into a larger piece of JSON text, and strings are 
+okay.</p> 
+ 
+
+</body>
+</html>

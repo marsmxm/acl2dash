@@ -1,0 +1,234 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Def-partial-measure</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____DEF-PARTIAL-MEASURE">Click for Def-partial-measure in the Full Manual</a></h3>
+
+<p>Introduce measure and termination predicates for a partial function 
+ definition</p><h3>Introduction By Way of an Example</h3> 
+ 
+ <p>We begin with a motivating example.  Suppose we want to admit factorial 
+ without the need to prove termination, as follows.</p> 
+ 
+ <pre class="code">(fact x)
+=
+(<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> x 0)
+    1
+  (<a href="COMMON-LISP_____A2.html">*</a> x (fact (<a href="COMMON-LISP____1-.html">1-</a> x))))</pre> 
+ 
+ <p>Of course, this ``definition'' is non-terminating on negative number 
+ inputs.  But with <span class="v">def-partial-measure</span>, or <span class="v">defpm</span> for short, we can 
+ admit a suitable definition for this partial function as follows.  First, we 
+ define a function to represent the termination test and another function to 
+ represent the actual parameter of the recursive call.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> fact-test (x)
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> x 0))
+(<a href="COMMON-LISP____DEFUN.html">defun</a> fact-step (x)
+  (<a href="COMMON-LISP____1-.html">1-</a> x))</pre> 
+ 
+ <p>Now we can execute our utility: we provide it with the names of the two 
+ functions above, and it generates a measure, a termination predicate, and a 
+ potentially helpful theory, respectively.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFPM.html">defpm</a> fact-test fact-step
+  fact-measure fact-terminates fact-theory)</pre> 
+ 
+ <p>Here are the <a href="ACL2____EVENTS.html">events</a> exported by the <span class="v">defpm</span> call above.</p> 
+ 
+ <pre class="code">; The first three lemmas can be useful for reasoning about the termination
+; predicate, FACT-TERMINATES.
+
+(<a href="ACL2____DEFTHM.html">DEFTHM</a> FACT-TERMINATES-BASE
+  (<a href="ACL2____IMPLIES.html">IMPLIES</a> (FACT-TEST X)
+           (FACT-TERMINATES X)))
+
+(<a href="ACL2____DEFTHM.html">DEFTHM</a> FACT-TERMINATES-STEP
+  (<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____NOT.html">NOT</a> (FACT-TEST X))
+           (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (FACT-TERMINATES (FACT-STEP X))
+                  (FACT-TERMINATES X))))
+
+(<a href="ACL2____DEFTHMD.html">DEFTHMD</a> FACT-TERMINATES-STEP-COMMUTED
+  (<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____AND.html">AND</a> (<a href="ACL2____SYNTAXP.html">SYNTAXP</a> (<a href="COMMON-LISP____SYMBOLP.html">SYMBOLP</a> X))
+                (<a href="COMMON-LISP____NOT.html">NOT</a> (FACT-TEST X)))
+           (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (FACT-TERMINATES X)
+                  (FACT-TERMINATES (FACT-STEP X)))))
+
+(<a href="ACL2____THEORY-INVARIANT.html">THEORY-INVARIANT</a> (<a href="ACL2____INCOMPATIBLE.html">INCOMPATIBLE</a> (:REWRITE FACT-TERMINATES-STEP)
+                                (:REWRITE FACT-TERMINATES-STEP-COMMUTED)))
+
+; The next two lemmas can be useful for defining functions whose termination
+; is ensured by the measure just introduced.
+
+(<a href="ACL2____DEFTHM.html">DEFTHM</a> FACT-MEASURE-TYPE
+  (<a href="ACL2____O-P.html">O-P</a> (FACT-MEASURE X)))
+
+(<a href="ACL2____DEFTHM.html">DEFTHM</a> FACT-MEASURE-DECREASES
+  (<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____AND.html">AND</a> (FACT-TERMINATES X)
+                (<a href="COMMON-LISP____NOT.html">NOT</a> (FACT-TEST X)))
+           (<a href="ACL2____O_C3.html">O&lt;</a> (FACT-MEASURE (FACT-STEP X))
+               (FACT-MEASURE X))))
+
+; Finally, the four enabled rewrite rules above are collected into a theory.
+
+(<a href="ACL2____DEFTHEORY.html">DEFTHEORY</a> FACT-THEORY
+  '(FACT-TERMINATES-BASE FACT-TERMINATES-STEP
+    FACT-MEASURE-TYPE FACT-MEASURE-DECREASES))</pre> 
+ 
+ <p>With the events above, we can introduce the following definition, which in 
+ effect guards the body with the termination predicate.  (Perhaps at some point 
+ we will extend <span class="v">defpm</span> to create this definition automatically.)  The 
+ <span class="v">:</span><span class="tt"><a href="ACL2____IN-THEORY.html">in-theory</a></span> hint below was carefully crafted to allow the proof to 
+ succeed very quickly.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> fact (x)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :measure (fact-measure x)
+                  :hints (("Goal"
+                           :in-theory
+                           (<a href="ACL2____UNION-THEORIES.html">union-theories</a> (<a href="ACL2____THEORY.html">theory</a> 'fact-theory)
+                                           (<a href="ACL2____THEORY.html">theory</a> 'minimal-theory))))))
+  (<a href="COMMON-LISP____IF.html">if</a> (fact-terminates x)
+      (<a href="COMMON-LISP____IF.html">if</a> (fact-test x)
+          1
+        (<a href="COMMON-LISP_____A2.html">*</a> x (fact (fact-step x))))
+    1 ; don't-care
+    ))</pre> 
+ 
+ <p>With the events above (not necessarily including the definition of 
+ <span class="v">fact</span>), we can prove that <span class="v">fact</span> terminates on natural number inputs. 
+ A second macro, <span class="v">defthm-domain</span>, automates much of that task:</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM-DOMAIN.html">defthm-domain</a> fact-terminates-holds-on-natp
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____NATP.html">natp</a> x)
+           (fact-terminates x))
+  :measure (<a href="ACL2____NFIX.html">nfix</a> x))</pre> 
+ 
+ <p>See <a href="ACL2____DEFTHM-DOMAIN.html">defthm-domain</a>.</p> 
+ 
+ <h3>Detailed Documentation</h3> 
+ 
+ <p>General form:</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFPM.html">defpm</a> ; or equivalently, def-partial-measure ; ;
+  TEST STEP
+  MEASURE TERMINATES THEORY
+  :formals FORMALS ; default is (x)
+  :verbose VERBOSE ; default is nil
+  )</pre> 
+ 
+ <p>where there is no output unless <span class="v">VERBOSE</span> is non-<span class="v">nil</span>.  The 
+ remaining arguments are as follows.</p> 
+ 
+ <p>First consider the case that <span class="v">FORMALS</span> is the default, <span class="v">(x)</span>.  The 
+ arguments <span class="v">TEST</span> and <span class="v">STEP</span> are conceptually ``inputs'': they should 
+ name existing functions on the indicated value for formals (which by default 
+ is <span class="v">(x)</span>).  Then <span class="v">defpm</span> will attempt to generate a measure and 
+ termination predicate on those formals, with the indicated names (<span class="v">MEASURE</span> 
+ and <span class="v">TERMINATES</span>, respectively).  These theorems are suitable for admitting 
+ a function of the following form, where capitalized names refer to those in 
+ the <span class="v">defpm</span> call above, and where additional code may appear as indicated 
+ with ``...''.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> foo (x)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :measure (<a href="ACL2____MEASURE.html">MEASURE</a> x)
+                  :hints (("Goal"
+                           :in-theory
+                           (<a href="ACL2____UNION-THEORIES.html">union-theories</a> (<a href="ACL2____THEORY.html">theory</a> 'THEORY)
+                                           (<a href="ACL2____THEORY.html">theory</a> 'minimal-theory))))))
+  (<a href="COMMON-LISP____IF.html">if</a> (TERMINATES x)
+      (<a href="COMMON-LISP____IF.html">if</a> (TEST x)
+          ...
+        (... (fact (STEP x)) ...)
+    ...))</pre> 
+ 
+ <p>The generated <span class="v">THEORY</span> names the four rules generated by the <span class="v">defpm</span> 
+ call, as in the example above.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> TERMINATES-base
+  (<a href="ACL2____IMPLIES.html">implies</a> (TEST x)
+           (TERMINATES x)))
+(<a href="ACL2____DEFTHM.html">defthm</a> TERMINATES-step
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____NOT.html">not</a> (TEST x))
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (TERMINATES (STEP x))
+                  (TERMINATES x))))
+(<a href="ACL2____DEFTHMD.html">defthmd</a> TERMINATES-step-commuted
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">AND</a> (<a href="ACL2____SYNTAXP.html">syntaxp</a> (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> x))
+                (<a href="COMMON-LISP____NOT.html">not</a> (TEST x)))
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (TERMINATES x)
+                  (TERMINATES (STEP x)))))
+(<a href="ACL2____THEORY-INVARIANT.html">theory-invariant</a> (<a href="ACL2____INCOMPATIBLE.html">incompatible</a> (:rewrite TERMINATES-step)
+                                (:rewrite TERMINATES-step-commuted)))
+(<a href="ACL2____DEFTHM.html">defthm</a> MEASURE-type
+  (<a href="ACL2____O-P.html">o-p</a> (<a href="ACL2____MEASURE.html">MEASURE</a> x)))
+(<a href="ACL2____DEFTHM.html">defthm</a> MEASURE-decreases
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (TERMINATES x)
+                (<a href="COMMON-LISP____NOT.html">not</a> (TEST x)))
+           (<a href="ACL2____O_C3.html">o&lt;</a> (<a href="ACL2____MEASURE.html">MEASURE</a> (STEP x))
+               (<a href="ACL2____MEASURE.html">MEASURE</a> x))))
+(<a href="ACL2____DEFTHEORY.html">deftheory</a> THEORY
+  '(TERMINATES-base TERMINATES-step MEASURE-type MEASURE-decreases))</pre> 
+ 
+ <p>For arbitrary formals the situation is similar, except that there is one 
+ step function per formal, obtained by adding the formal name as a suffix to 
+ the specified <span class="v">STEP</span> separated by a hyphen.  Thus we have the following 
+ events when <span class="v">FORMALS</span> is <span class="v">(y1 ... yk)</span>.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> TERMINATES-base
+  (<a href="ACL2____IMPLIES.html">implies</a> (TEST y1 ... yk)
+           (TERMINATES y1 ... yk)))
+(<a href="ACL2____DEFTHM.html">defthm</a> TERMINATES-step
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____NOT.html">not</a> (TEST y1 ... yk))
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (TERMINATES (STEP-y1 y1 ... yk)
+                              ...
+                              (STEP-yk y1 ... yk))
+                  (TERMINATES y1 ... yk))))
+(<a href="ACL2____DEFTHM.html">defthm</a> TERMINATES-step-commuted
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">AND</a> (<a href="ACL2____SYNTAXP.html">syntaxp</a> (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> y1)) ... (<a href="ACL2____SYNTAXP.html">syntaxp</a> (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> yk))
+                (<a href="COMMON-LISP____NOT.html">not</a> (TEST y1 ... yk)))
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (TERMINATES (STEP-y1 y1 ... yk)
+                              ...
+                              (STEP-yk y1 ... yk))
+                  (TERMINATES y1 ... yk))))
+(<a href="ACL2____THEORY-INVARIANT.html">theory-invariant</a> (<a href="ACL2____INCOMPATIBLE.html">incompatible</a> (:rewrite TERMINATES-step)
+                                (:rewrite TERMINATES-step-commuted)))
+(<a href="ACL2____DEFTHM.html">defthm</a> MEASURE-type
+  (<a href="ACL2____O-P.html">o-p</a> (<a href="ACL2____MEASURE.html">MEASURE</a> y1 ... yk)))
+(<a href="ACL2____DEFTHM.html">defthm</a> MEASURE-decreases
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (TERMINATES y1 ... yk)
+                (<a href="COMMON-LISP____NOT.html">not</a> (TEST y1 ... yk)))
+           (<a href="ACL2____O_C3.html">o&lt;</a> (<a href="ACL2____MEASURE.html">MEASURE</a> (STEP-y1 y1 ... yk)
+                        ...
+                        (STEP-yk y1 ... yk))
+               (<a href="ACL2____MEASURE.html">MEASURE</a> y1 ... yk))))
+(<a href="ACL2____DEFTHEORY.html">deftheory</a> THEORY
+  '(TERMINATES-base TERMINATES-step MEASURE-type MEASURE-decreases))</pre> 
+ 
+ <h3>Implementation</h3> 
+ 
+ <p>The implementation of <span class="v">defpm</span> (i.e., <span class="v">def-partial-measure</span> has been 
+ designed to make proofs efficient.  It should be completely unnecessary to 
+ know anything about the implementation in order to use <span class="v">defpm</span> effectively. 
+ If however you are interested, you can execute <span class="v">:</span><span class="tt"><a href="ACL2____TRANS1.html">trans1</a></span> on your 
+ <span class="v">defpm</span> call to see the <a href="ACL2____EVENTS.html">events</a> that it generates.</p> 
+ 
+ <h3>More Information</h3> 
+ 
+ <p>The community book <span class="v">misc/defpm.lisp</span> illustrates how to use <span class="v">defpm</span> 
+ and <span class="v">defthm-domain</span> to define ``partial'' functions.  Search for calls of 
+ <span class="v">my-test</span> in that book to see examples.</p> 
+ 
+ <p>Related work of Dave Greve, in particular his utility <span class="v">def::ung</span>, may be 
+ found in community books directory <span class="v">books/coi/defung/</span>.  Our utilities 
+ <span class="v">def-partial-measure</span> and <span class="tt"><a href="ACL2____DEFTHM-DOMAIN.html">defthm-domain</a></span> were developed 
+ independently using an approach that seems considerably simpler than Greve's 
+ development.  However, his utility is much more powerful in that it generates 
+ a termination test, rather than requiring the user to provide it, and also it 
+ handles reflexive functions — definitions with recursive calls like 
+ <span class="v">(mc91 (mc91 (<a href="COMMON-LISP_____B2.html">+</a> n 11)))</span> — while ours were not designed to do 
+ so.</p>
+</body>
+</html>

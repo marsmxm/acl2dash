@@ -1,0 +1,164 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Vl-make-2^n-bit-dynamic-bitselect</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL2014____VL-MAKE-2_E5N-BIT-DYNAMIC-BITSELECT">Click for Vl-make-2^n-bit-dynamic-bitselect in the Full Manual</a></h3>
+
+<p>Generates a dynamic bit-selection module for wire widths that are 
+powers of 2.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(vl-make-2^n-bit-dynamic-bitselect n) → mods</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">n</span> — <font color="#606060">Guard <span class="v">(<a href="ACL2____NATP.html">natp</a> n)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">mods</span> — A non-empty module list.  The first module in the list 
+                       is the desired module; the other modules are any 
+                       necessary supporting modules.<br>    <font color="#606060">Type <span class="v">(<a href="VL2014____VL-MODULELIST-P.html">vl-modulelist-p</a> mods)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>We construct <span class="v">VL_{2^N}_BIT_DYNAMIC_BITSELECT(out, in, idx)</span>, a 
+conservative approximation of <span class="v">out = in[idx]</span> where <span class="v">in</span> has width 
+<span class="v">2^N</span>.  We generate this module inductively/recursively by using smaller 
+selectors.</p> 
+ 
+<p>As a basis, when N is 0 or 1, we use the 1-bit or 2-bit selectors that we 
+pre-define; see <a href="VL2014_____A2VL-1-BIT-DYNAMIC-BITSELECT_A2.html">*vl-1-bit-dynamic-bitselect*</a> and <a href="VL2014_____A2VL-2-BIT-DYNAMIC-BITSELECT_A2.html">*vl-2-bit-dynamic-bitselect*</a>.</p> 
+ 
+<p>When <span class="v">N &gt; 1</span>, let <span class="v">M</span> be <span class="v">2^N</span> and <span class="v">K</span> be <span class="v">2^(N-1)</span>.  We 
+define <span class="v">VL_M_BIT_DYNAMIC_BITSELECT</span> in Verilog as follows:</p> 
+ 
+<pre class="code">module VL_M_BIT_DYNAMIC_BITSELECT(out, in, idx) ;
+
+   output out;
+   input [M-1:0] in;
+   input [N-1:0] idx;
+
+   wire high; // result assuming idx[N-1] is high
+   wire low;  // result assuming idx[N-1] is low
+
+   VL_K_BIT_DYNAMIC_BITSELECT mk_high (high, in[M-1:K], idx[N-2:0]);
+   VL_K_BIT_DYNAMIC_BITSELECT mk_low  (low,  in[K-1:0], idx[N-2:0]);
+
+   // Choose high or low, per idx[N-1]
+
+   wire idx_bar;
+   wire a;
+   wire b;
+   wire main;
+
+   not (idx_bar, idx[N-1]);
+   and (a, idx[N-1], high) ;
+   and (b, idx_bar, low) ;
+   or  (main, a, b) ;
+
+   // Fix up main so that if idx[N-1] is X we produce X.
+
+   wire idx_x;
+   xor (idx_x, idx[N-1], idx[N-1]);
+   xor (out, idx_x, main);
+
+endmodule</pre> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>vl-make-2^n-bit-dynamic-bitselect</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ vl-make-2^n-bit-dynamic-bitselect (n)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____NATP.html">natp</a> n)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'vl-make-2^n-bit-dynamic-bitselect))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+   (((when (<a href="ACL2____ZP.html">zp</a> n))
+     (<a href="COMMON-LISP____LIST.html">list</a> *vl-1-bit-dynamic-bitselect*))
+    ((when (<a href="COMMON-LISP____EQL.html">eql</a> n 1))
+     (<a href="COMMON-LISP____LIST.html">list</a> *vl-2-bit-dynamic-bitselect*))
+    (m (<a href="COMMON-LISP____EXPT.html">expt</a> 2 n))
+    (k (<a href="COMMON-LISP____EXPT.html">expt</a> 2 (<a href="COMMON-LISP____1-.html">1-</a> n)))
+    (submods (<a href="VL2014____VL-MAKE-2_E5N-BIT-DYNAMIC-BITSELECT.html">vl-make-2^n-bit-dynamic-bitselect</a> (<a href="COMMON-LISP____-.html">-</a> n 1)))
+    (name (<a href="ACL2____HONS-COPY.html">hons-copy</a> (<a href="STR____CAT.html">cat</a> "VL_" (natstr m)
+                          "_BIT_DYNAMIC_BITSELECT")))
+    ((<a href="ACL2____MV.html">mv</a> out-expr
+         out-port out-portdecl out-vardecl)
+     (<a href="VL2014____VL-PRIMITIVE-MKPORT.html">vl-primitive-mkport</a> "out" :vl-output))
+    ((<a href="ACL2____MV.html">mv</a> in-expr in-port in-portdecl in-vardecl)
+     (<a href="VL2014____VL-OCCFORM-MKPORT.html">vl-occform-mkport</a> "in" :vl-input m))
+    ((<a href="ACL2____MV.html">mv</a> idx-expr
+         idx-port idx-portdecl idx-vardecl)
+     (<a href="VL2014____VL-OCCFORM-MKPORT.html">vl-occform-mkport</a> "idx" :vl-input n))
+    ((<a href="ACL2____MV.html">mv</a> high-expr high-vardecl)
+     (<a href="VL2014____VL-PRIMITIVE-MKWIRE.html">vl-primitive-mkwire</a> "high"))
+    ((<a href="ACL2____MV.html">mv</a> low-expr low-vardecl)
+     (<a href="VL2014____VL-PRIMITIVE-MKWIRE.html">vl-primitive-mkwire</a> "low"))
+    ((<a href="ACL2____MV.html">mv</a> ~idx-expr ~idx-vardecl)
+     (<a href="VL2014____VL-PRIMITIVE-MKWIRE.html">vl-primitive-mkwire</a> "idx_bar"))
+    ((<a href="ACL2____MV.html">mv</a> a-expr a-vardecl)
+     (<a href="VL2014____VL-PRIMITIVE-MKWIRE.html">vl-primitive-mkwire</a> "a"))
+    ((<a href="ACL2____MV.html">mv</a> b-expr b-vardecl)
+     (<a href="VL2014____VL-PRIMITIVE-MKWIRE.html">vl-primitive-mkwire</a> "b"))
+    ((<a href="ACL2____MV.html">mv</a> main-expr main-vardecl)
+     (<a href="VL2014____VL-PRIMITIVE-MKWIRE.html">vl-primitive-mkwire</a> "main"))
+    ((<a href="ACL2____MV.html">mv</a> idx_x-expr idx_x-vardecl)
+     (<a href="VL2014____VL-PRIMITIVE-MKWIRE.html">vl-primitive-mkwire</a> "idx_x"))
+    (|in[m-1]:k| (<a href="VL2014____VL-MAKE-PARTSELECT.html">vl-make-partselect</a> in-expr (<a href="COMMON-LISP____-.html">-</a> m 1) k))
+    (|in[k-1:0]| (<a href="VL2014____VL-MAKE-PARTSELECT.html">vl-make-partselect</a> in-expr (<a href="COMMON-LISP____-.html">-</a> k 1) 0))
+    (idx[n-1] (<a href="VL2014____VL-MAKE-BITSELECT.html">vl-make-bitselect</a> idx-expr (<a href="COMMON-LISP____-.html">-</a> n 1)))
+    (|idx[n-2:0]| (<a href="VL2014____VL-MAKE-PARTSELECT.html">vl-make-partselect</a> idx-expr (<a href="COMMON-LISP____-.html">-</a> n 2) 0))
+    (high-inst (<a href="VL2014____VL-SIMPLE-INST.html">vl-simple-inst</a> (<a href="COMMON-LISP____CAR.html">car</a> submods)
+                               "mk_high"
+                               high-expr |in[m-1]:k| |idx[n-2:0]|))
+    (low-inst (<a href="VL2014____VL-SIMPLE-INST.html">vl-simple-inst</a> (<a href="COMMON-LISP____CAR.html">car</a> submods)
+                              "mk_low"
+                              low-expr |in[k-1:0]| |idx[n-2:0]|))
+    (~idx-inst (<a href="VL2014____VL-SIMPLE-INST.html">vl-simple-inst</a> *vl-1-bit-not*
+                               "mk_idx_bar" ~idx-expr idx[n-1]))
+    (a-inst (<a href="VL2014____VL-SIMPLE-INST.html">vl-simple-inst</a> *vl-1-bit-and*
+                            "mk_a" a-expr idx[n-1] high-expr))
+    (b-inst (<a href="VL2014____VL-SIMPLE-INST.html">vl-simple-inst</a> *vl-1-bit-and*
+                            "mk_b" b-expr ~idx-expr low-expr))
+    (main-inst (<a href="VL2014____VL-SIMPLE-INST.html">vl-simple-inst</a> *vl-1-bit-or*
+                               "mk_main" main-expr a-expr b-expr))
+    (idx_x-inst (<a href="VL2014____VL-SIMPLE-INST.html">vl-simple-inst</a> *vl-1-bit-xor* "mk_idx_x"
+                                idx_x-expr idx[n-1] idx[n-1]))
+    (out-inst (<a href="VL2014____VL-SIMPLE-INST.html">vl-simple-inst</a> *vl-1-bit-xor* "mk_out"
+                              out-expr idx_x-expr main-expr)))
+   (<a href="COMMON-LISP____LIST_A2.html">list*</a>
+        (<a href="VL2014____MAKE-VL-MODULE.html">make-vl-module</a>
+             :name name
+             :origname name
+             :ports (<a href="COMMON-LISP____LIST.html">list</a> out-port in-port idx-port)
+             :portdecls (<a href="COMMON-LISP____LIST.html">list</a> out-portdecl in-portdecl idx-portdecl)
+             :vardecls (<a href="COMMON-LISP____LIST.html">list</a> out-vardecl
+                             in-vardecl idx-vardecl high-vardecl
+                             low-vardecl ~idx-vardecl a-vardecl
+                             b-vardecl main-vardecl idx_x-vardecl)
+             :modinsts (<a href="COMMON-LISP____LIST.html">list</a> high-inst low-inst ~idx-inst a-inst
+                             b-inst main-inst idx_x-inst out-inst)
+             :minloc *vl-fakeloc*
+             :maxloc *vl-fakeloc*)
+        *vl-1-bit-not* *vl-1-bit-and*
+        *vl-1-bit-or* *vl-1-bit-xor* submods))))</pre> 
+<p><b>Theorem: </b>vl-modulelist-p-of-vl-make-2^n-bit-dynamic-bitselect</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-modulelist-p-of-vl-make-2^n-bit-dynamic-bitselect
+        (<a href="ACL2____B_A2.html">b*</a> ((mods (<a href="VL2014____VL-MAKE-2_E5N-BIT-DYNAMIC-BITSELECT.html">vl-make-2^n-bit-dynamic-bitselect</a> n)))
+            (<a href="VL2014____VL-MODULELIST-P.html">vl-modulelist-p</a> mods))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>type-of-vl-make-2^n-bit-dynamic-bitselect</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> type-of-vl-make-2^n-bit-dynamic-bitselect
+        (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____TRUE-LISTP.html">true-listp</a> (<a href="VL2014____VL-MAKE-2_E5N-BIT-DYNAMIC-BITSELECT.html">vl-make-2^n-bit-dynamic-bitselect</a> n))
+             (<a href="COMMON-LISP____CONSP.html">consp</a> (<a href="VL2014____VL-MAKE-2_E5N-BIT-DYNAMIC-BITSELECT.html">vl-make-2^n-bit-dynamic-bitselect</a> n)))
+        :rule-classes :type-prescription)</pre> 
+<p><b>Theorem: </b>vl-make-2^n-bit-dynamic-bitselect-of-nfix-n</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-make-2^n-bit-dynamic-bitselect-of-nfix-n
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL2014____VL-MAKE-2_E5N-BIT-DYNAMIC-BITSELECT.html">vl-make-2^n-bit-dynamic-bitselect</a> (<a href="ACL2____NFIX.html">nfix</a> n))
+               (<a href="VL2014____VL-MAKE-2_E5N-BIT-DYNAMIC-BITSELECT.html">vl-make-2^n-bit-dynamic-bitselect</a> n)))</pre> 
+<p><b>Theorem: </b>vl-make-2^n-bit-dynamic-bitselect-nat-equiv-congruence-on-n</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     vl-make-2^n-bit-dynamic-bitselect-nat-equiv-congruence-on-n
+     (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____NAT-EQUIV.html">acl2::nat-equiv</a> n n-equiv)
+              (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL2014____VL-MAKE-2_E5N-BIT-DYNAMIC-BITSELECT.html">vl-make-2^n-bit-dynamic-bitselect</a> n)
+                     (<a href="VL2014____VL-MAKE-2_E5N-BIT-DYNAMIC-BITSELECT.html">vl-make-2^n-bit-dynamic-bitselect</a> n-equiv)))
+     :rule-classes :congruence)</pre> 
+
+</body>
+</html>

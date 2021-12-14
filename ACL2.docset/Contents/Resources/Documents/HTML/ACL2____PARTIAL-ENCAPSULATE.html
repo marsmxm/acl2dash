@@ -1,0 +1,174 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Partial-encapsulate</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____PARTIAL-ENCAPSULATE">Click for Partial-encapsulate in the Full Manual</a></h3>
+
+<p>Introduce functions with some constraints unspecified</p><p>See <a href="ACL2____ENCAPSULATE.html">encapsulate</a> for relevant background. 
+ <span class="v">Partial-encapsulate</span> is a variant of <span class="v">encapsulate</span> for which some of 
+ the constraints are implicit.  This is an advanced capability that is useful 
+ when one installs special-purpose code, possibly in raw Lisp, using a trust 
+ tag (see <a href="ACL2____DEFTTAG.html">defttag</a>).</p> 
+ 
+ <h3>Introduction</h3> 
+ 
+ <p>The syntax for <span class="v">partial-encapsulate</span> is the same as the syntax of 
+ <span class="v">encapsulate</span>, except for the addition of an argument, <span class="v">supporters</span>, 
+ which is described below.</p> 
+ 
+ <pre class="code">General Form:
+(<a href="ACL2____PARTIAL-ENCAPSULATE.html">partial-encapsulate</a> (<a href="ACL2____SIGNATURE.html">signature</a> ... signature)
+  (f1 ... fk) ; supporters
+  ev1
+  ...
+  evn)</pre> 
+ 
+ <p>where, as for <span class="v">encapsulate</span>: each <span class="v">signature</span> is a well-formed <a href="ACL2____SIGNATURE.html">signature</a>, each describing a different function symbol, and each <span class="v">evi</span> is 
+ an embedded event form (see <a href="ACL2____EMBEDDED-EVENT-FORM.html">embedded-event-form</a>).  The additional 
+ argument (shown above) is a true-list of function symbols, the 
+ <i>supporters</i>: it is an error if any such symbol, <span class="v">fi</span>, is not a known 
+ function symbol at the time the <span class="v">partial-encapsulate</span> call is evaluated, 
+ the exception being that <span class="v">fi</span> may be introduced in one of the signatures. 
+ A <span class="v">partial-encapsulate</span> form must satisfy the following three requirements 
+ in addition to those of the corresponding <span class="v">encapsulate</span> form: it must have 
+ at least one signature, it must not occur within any other <span class="v">encapsulate</span> or 
+ <span class="v">partial-encapsulate</span> form that has at least one signature, and every 
+ function symbol that it introduces must be specified in one of the 
+ signatures.</p> 
+ 
+ <p>A call of <span class="v">partial-encapsulate</span> introduces its signature functions 
+ together with its exported theorems, exactly as though it had been the call of 
+ <span class="v">encapsulate</span> with the same signatures and events, however with one 
+ difference: the <span class="v">partial-encapsulate</span> logically incorporates additional 
+ constraints that are not mentioned.  This is discussed further below, but for 
+ now let us note that because of this difference, a successful evaluation of a 
+ <span class="v">partial-encapsulate</span> form results in a special ``unknown-constraints'' 
+ designation for the functions introduced by the signatures.  Any attempt to 
+ access the constraints for those functions will thus fail.  Consider the 
+ following example, which introduces <span class="v">f</span> as a constrained function symbol 
+ that is constrained not only by the property that <span class="v">f</span> returns a boolean, 
+ but also by additional, unspecified (implicit) constraints.</p> 
+ 
+ <pre class="code">(<a href="ACL2____PARTIAL-ENCAPSULATE.html">partial-encapsulate</a>
+ ((f (x) t))
+ nil
+ (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> f (x) (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t)) (<a href="COMMON-LISP____CONSP.html">consp</a> x)))
+ (<a href="ACL2____DEFTHM.html">defthm</a> booleanp-f
+   (<a href="ACL2____BOOLEANP.html">booleanp</a> (f x))
+   :rule-classes :type-prescription))
+
+(<a href="ACL2____DEFTHM.html">defthm</a> symbolp-f
+  (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> (f y)))
+
+(<a href="ACL2____ENCAPSULATE.html">encapsulate</a>
+ ((<a href="ACL2____G.html">g</a> (x) t))
+ (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> g (x) (<a href="COMMON-LISP____CONSP.html">consp</a> x)))
+ (<a href="ACL2____DEFTHM.html">defthm</a> booleanp-g (<a href="ACL2____BOOLEANP.html">booleanp</a> (<a href="ACL2____G.html">g</a> x))))</pre> 
+ 
+ <p>Then the following fails, even though it would succeed if we replace 
+ <span class="v">partial-encapsulate</span> by <span class="v">encapsulate</span> above.  The reason is that the 
+ partial-encapsulate form allows for constraints beyond just the property that 
+ <span class="v">f</span> is boolean.  Imagine that special code had been inserted (using a trust 
+ tag) for reasoning about <span class="v">f</span> when proving a theorem like <span class="v">symbolp-f</span> 
+ that we were now trying to functionally instantiate.</p> 
+ 
+ <pre class="code">; Functional instantiation FAILS because of unknown-constraints on f
+(<a href="ACL2____DEFTHM.html">defthm</a> symbolp-g
+  (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> (<a href="ACL2____G.html">g</a> y))
+  :hints (("Goal" :by (:functional-instance symbolp-f (f g)))))</pre> 
+ 
+ <h3>Supporters and corresponding encapsulate</h3> 
+ 
+ <p>A <span class="v">partial-encapsulate</span> represents any <span class="v">encapsulate</span> form that 
+ introduces the same function symbols, has the same signatures, and extends the 
+ constraints introduced such that every function symbol occurring in at least 
+ one of the additional constraints must either be mentioned in one of the 
+ <span class="v">evi</span> or be among the list of supporters, <span class="v">(f1 ... fk)</span>.  We may refer 
+ to such an <span class="v">encapsulate</span> form as a ``corresponding encapsulate''.  The user 
+ of <span class="v">partial-encapsulate</span> should keep in mind such a set of additional 
+ constraints.  The supporters should thus include all function symbols in the 
+ theorems exported from the intended corresponding encapsulate, except that 
+ signature functions are always included among the supporters whether specified 
+ or not, and hence their inclusion is optional.</p> 
+ 
+ <p>The list of supporters is used for generating proof obligations for a 
+ <span class="v">:functional-instance</span> <a href="ACL2____LEMMA-INSTANCE.html">lemma-instance</a>.  Specifically, the supporters 
+ serve as the ``ancestors'' of the partial encapsulate's signature functions, 
+ in the constraint-generation algorithm described in the documentation for 
+ <a href="ACL2____CONSTRAINT.html">constraint</a>.  Thus, if supporters are missing that occur in the intended 
+ corresponding encapsulate, then functional instantiation may be unsound 
+ because some proof obligations fail to be generated.  Note that in the typical 
+ application described next, where the implicit constraints all specify 
+ evaluation results for calls of signature functions as discussed below, the 
+ specified list of supporters can simply be <span class="v">nil</span>.</p> 
+ 
+ <h3>Applications</h3> 
+ 
+ <p>A trust tag (see <a href="ACL2____DEFTTAG.html">defttag</a>) is not needed for evaluation of a 
+ partial-encapsulate form.  However, for a typical application of 
+ partial-encapsulate — redefinition of a constrained function in raw Lisp 
+ — a trust tag is of course necessary (see <a href="ACL2____DEFTTAG.html">defttag</a>).  In such a 
+ case, the corresponding encapsulate may be viewed as extending the original 
+ partial-encapsulate with all theorems of the form <span class="v">(<a href="COMMON-LISP____EQUAL.html">equal</a> (f a1 ... ak)
+ val)</span>, ranging over all computations <span class="v">(f a1 ... ak)</span> ever to be 
+ evaluated (a finite but potentially huge set) where <span class="v">val</span> is the value 
+ returned for <span class="v">(f a1 ... ak)</span>.  It is the responsibility of the creator of 
+ such an application to ensure that all evaluations satisfy the original 
+ constraints of the partial-encapsulate.</p> 
+ 
+ <p>Note that in this sort of application — that is, where the implicit 
+ constraints all arise from function evaluations — the supporters 
+ argument may soundly be <span class="v">nil</span>, since only the signature functions are 
+ involved in the implicit constraints (and those functions are automatically 
+ included among the supporters, even when not specified by the user).</p> 
+ 
+ <p>For an example of such an application, including explanatory comments, see 
+ <a href="ACL2____COMMUNITY-BOOK.html">community-book</a> <span class="v">books/demos/partial-encapsulate.lisp</span>.</p> 
+ 
+ <p>Partial-encapsulates are, in essence, also used in the implementation of 
+ dependent clause-processors, where the list of supporters might well be 
+ non-<span class="v">nil</span>.  See <a href="ACL2____DEFINE-TRUSTED-CLAUSE-PROCESSOR.html">define-trusted-clause-processor</a>.</p> 
+ 
+ <h3>Implementation</h3> 
+ 
+ <p>This section is provided as a reference for those interested, but can 
+ probably be safely skipped by most readers.</p> 
+ 
+ <p>Consider the following example.</p> 
+ 
+ <pre class="code">ACL2 !&gt;:trans1 (<a href="ACL2____PARTIAL-ENCAPSULATE.html">partial-encapsulate</a>
+                ((f0 (x) t))
+                (g0)
+                (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> f0 (x) x))
+                (<a href="ACL2____DEFTHM.html">defthm</a> f0-prop
+                  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> x)
+                           (<a href="COMMON-LISP____INTEGERP.html">integerp</a> (f0 x)))))
+ (<a href="ACL2____ENCAPSULATE.html">ENCAPSULATE</a> ((F0 (X) T))
+              (<a href="ACL2____LOCAL.html">LOCAL</a> (<a href="COMMON-LISP____DEFUN.html">DEFUN</a> F0 (X) X))
+              (<a href="ACL2____DEFTHM.html">DEFTHM</a> F0-PROP
+                      (<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____INTEGERP.html">INTEGERP</a> X)
+                               (<a href="COMMON-LISP____INTEGERP.html">INTEGERP</a> (F0 X))))
+              (SET-UNKNOWN-CONSTRAINTS-SUPPORTERS G0))
+ACL2 !&gt;</pre> 
+ 
+ <p>This example illustrates that a <span class="v">partial-encapsulate</span> call expands to a 
+ call of <span class="v">encapsulate</span> obtained by removing the supporters argument, but 
+ with the following extra event inserted after given list of events, where 
+ <span class="v">(f1 ... fk)</span> is the specified list of supporters.</p> 
+ 
+ <pre class="code">(set-unknown-constraints-supporters f1 ... fk)</pre> 
+ 
+ <p>The macro, <span class="v">set-unknown-constraints-supporters</span>, extends a table, 
+ <span class="v">unknown-constraints-table</span>.  As evaluation of the partial-encapsulate 
+ concludes, the world is extended so that each signature function has a 
+ <span class="v">'constraint-lst</span> property indicating that its constraints are unknown, but 
+ with supporters (``ancestors'', as discussed above) according to that table. 
+ This macro call can thus be inserted non-<a href="ACL2____LOCAL.html">local</a>ly within an encapsulate, 
+ anywhere after the local function definitions, to make an encapsulate behave 
+ like a partial-encapsulate.</p>
+</body>
+</html>

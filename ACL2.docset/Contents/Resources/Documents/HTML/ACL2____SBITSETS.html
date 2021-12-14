@@ -1,0 +1,130 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Sbitsets</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____SBITSETS">Click for Sbitsets in the Full Manual</a></h3>
+
+<p>Sparse bitsets library: an alternative to <a href="ACL2____BITSETS.html">bitsets</a> for 
+representing finite sets of natural numbers.</p><h3>Introduction</h3> 
+ 
+<p>In the ordinary <a href="ACL2____BITSETS.html">bitsets</a> library, sets of natural numbers are encoded 
+as bignums.  This is perfectly fine when the set elements are relatively small, 
+but it is not an efficient way to deal with sets of large numbers.  For 
+instance, trying to insert a number like 2^30 into an ordinary bitset will 
+probably kill your Lisp.</p> 
+ 
+<p>Sparse bitsets are a more forgiving alternative.  They can handle very large 
+set elements, but still achieve bitset-like efficiencies in many cases.</p> 
+ 
+<p>Sparse bitsets are represented as ordered lists of <span class="v">(offset . block)</span> 
+pairs.  Loosely speaking, each such pair in the set <span class="v">X</span> means that:</p> 
+ 
+<pre class="code">offset*blocksize + 0             \in X  iff  (<a href="COMMON-LISP____LOGBITP.html">logbitp</a> 0 block)
+offset*blocksize + 1             \in X  iff  (<a href="COMMON-LISP____LOGBITP.html">logbitp</a> 1 block)
+  ...
+offset*blocksize + (blocksize-1) \in X  iff  (<a href="COMMON-LISP____LOGBITP.html">logbitp</a> (blocksize-1) block)</pre> 
+ 
+<p>The <span class="v">blocksize</span> is a some constant determined by <a href="BITSETS_____A2SBITSET-BLOCK-SIZE_A2.html">*sbitset-block-size*</a>.  We'll assume it is 60 (which makes each <span class="v">block</span> a 
+fixnum on 64-bit CCL).</p> 
+ 
+<h4>Efficiency Considerations</h4> 
+ 
+<p>Sparse bitsets are essentially a hybrid of ordered sets and bitsets, and 
+their efficiency characteristics are very data dependent.</p> 
+ 
+<p>Sparse bitsets perform best on sets that have "clusters" of nearby 
+members, perhaps separated by wide gaps.  Here, sparse bitsets give you some of 
+the same benefits of bitsets, viz. word-at-a-time operations like union and the 
+space efficiency of using bit masks to represent the set members.</p> 
+ 
+<p>For completely dense sets, e.g., all integers in <span class="v">[0, 1000]</span>, sparse 
+bitsets are:</p> 
+ 
+<ul> 
+ 
+<li>Better than ordered sets, because they get to compress nearby elements into 
+ bitmasks and use word-at-a-time operations.</li> 
+ 
+<li>Somewhat worse than ordinary bitsets.  They are less space efficient due to 
+ the conses and offset numbers.  They are also more expensive for membership 
+ testing: regular bitsets can basically use O(1) array indexing via <a href="COMMON-LISP____LOGBITP.html">logbitp</a>, while sparse bitsets must use an O(n) search for the right 
+ pair.</li> 
+ 
+</ul> 
+ 
+<p>For "cluster-free" sets where the elements are so far apart that they 
+never fall into the same block, sparse bitsets are:</p> 
+ 
+<ul> 
+ 
+<li>Better than bitsets, which perform badly here since they can have large 
+segments of 0 bits that waste space and take time to process during set 
+operations.</li> 
+ 
+<li>Somewhat worse than ordered sets.  For instance, a set like {0, 60, 120} 
+would be encoded as <span class="v">((0 . 1) (1 . 1) (2 . 1))</span>, which is similar to its 
+ordered set representation except for the additional overhead of using <span class="v">(1
+. 1)</span> to represent 60, etc.</li> 
+ 
+</ul> 
+ 
+ 
+<h3>Sparse Bitset Operations</h3> 
+ 
+<p>Convention:</p> 
+ 
+<ul> 
+<li>
+<span class="v">a, b, ...</span> denote set elements</li> 
+<li>
+<span class="v">X, Y, ...</span> denote sets.</li> 
+</ul> 
+ 
+<p>Valid sparse bitsets are recognized by <a href="ACL2____SBITSETP.html">sbitsetp</a>, and there is a 
+standard fixing function, <a href="ACL2____SBITSET-FIX.html">sbitset-fix</a>.</p> 
+ 
+<p>We intend to eventually implement sparse analogues for all of the functions 
+in the <a href="ACL2____BITSETS.html">bitsets</a> library, and analogues for the bitset <a href="BITSETS____REASONING.html">reasoning</a> 
+techniques.  For now we have only finished a few of these operations:</p> 
+ 
+<h5>Sparse Bitset Construtors</h5> 
+ 
+<dl> 
+ 
+<dt><span class="v">(<a href="ACL2____SBITSET-SINGLETON.html">sbitset-singleton</a> a)</span></dt> 
+<dd>Constructs the set <span class="v">{a}</span>
+</dd> 
+ 
+<dt><span class="v">(<a href="ACL2____SBITSET-UNION.html">sbitset-union</a> X Y ...)</span></dt> 
+<dd>Constructs the set <span class="v">X U Y U ...</span>
+</dd> 
+ 
+<dt><span class="v">(<a href="ACL2____SBITSET-INTERSECT.html">sbitset-intersect</a> X Y ...)</span></dt> 
+<dd>Constructs the set <span class="v">X \intersect Y \intersect ...</span>
+</dd> 
+ 
+<dt><span class="v">(<a href="ACL2____SBITSET-DIFFERENCE.html">sbitset-difference</a> X Y)</span></dt> 
+<dd>Constructs the set <span class="v">X - Y</span>
+</dd> 
+ 
+</dl> 
+ 
+<h5>Inspecting Sparse Bitsets</h5> 
+ 
+<dl> 
+<dt>Todo</dt> 
+</dl> 
+ 
+<h5>Enumerating Sparse Bitset Members</h5> 
+ 
+<dl> 
+<dt><span class="v">(<a href="ACL2____SBITSET-MEMBERS.html">sbitset-members</a> X)</span></dt> 
+<dd>Constructs an ordinary ordered set with the elements of X.</dd> 
+<dd>Important in <a href="BITSETS____REASONING.html">reasoning</a> about sparse bitsets.</dd> 
+</dl>
+</body>
+</html>

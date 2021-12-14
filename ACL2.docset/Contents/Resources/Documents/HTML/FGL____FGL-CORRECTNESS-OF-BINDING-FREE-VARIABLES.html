@@ -1,0 +1,130 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Fgl-correctness-of-binding-free-variables</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=FGL____FGL-CORRECTNESS-OF-BINDING-FREE-VARIABLES">Click for Fgl-correctness-of-binding-free-variables in the Full Manual</a></h3>
+
+<p>Discussion of the logical justification for the <a href="FGL____BIND-VAR.html">bind-var</a> feature.</p><p>FGL's <a href="FGL____BIND-VAR.html">bind-var</a> feature can be used to bind a free variable 
+in a rewrite rule to some arbitrary value.  Here we discuss how the correctness 
+of that feature may be formalized.  Note we discuss this with respect to 
+<span class="v">bind-var</span>, but it applies to binder functions generally.</p> 
+ 
+<h3>Requirements and Basic Idea</h3> 
+ 
+<p>First we describe the requirements for using the <span class="v">bind-var</span> feature.  We 
+must first have a rewrite rule containing a call of bind-var in either the RHS 
+or a hyp.  Then, if and when symbolic execution reaches the call of bind-var, 
+it must be the case that the first argument of <span class="v">bind-var</span> is a variable that 
+is not yet bound in the current frame (this is checked in the interpreter).  If 
+this is the case, the interpreter may add a binding for that variable to any 
+object; in particular, it interprets the second argument of <span class="v">bind-var</span> under 
+the trivial equivalence <a href="FGL____UNEQUIV.html">unequiv</a> (meaning that the value returned is 
+not important for soundness) and binds it to that value.</p> 
+ 
+<p>The justification for this is essentially that all free variables in a 
+theorem are universally quantified.  When we apply a rewrite rule, we start 
+with the free variables of the LHS bound to the unifying substitution.  We are 
+free to bind any other variables that are mentioned in the theorem to whatever 
+values we want, because the unifying substitution contains all variables of the 
+LHS, so extending the unifying substitution to include additional variables 
+won't change the value of the LHS under that substitution.</p> 
+ 
+<h3>Technical Problem and Solutions</h3> 
+<p>There is a technical problem with this when these free variables appear 
+inside lambda bodies.  ACL2 term translation ensures that all lambdas bind all 
+the free variables of their bodies -- when it translates a lambda that has free 
+variables in the body, it adds bindings for those variables to themselves.  So 
+if we have a rewrite rule like this:</p> 
+<pre class="code">(<a href="COMMON-LISP____EQUAL.html">equal</a> (foo x)
+       (<a href="COMMON-LISP____LET_A2.html">let*</a> ((a (bar x))
+              (c (<a href="FGL____BIND-VAR.html">bind-var</a> b (baz x a))))
+           ...))</pre> 
+<p>then the outside of the RHS looks like this:</p> 
+<pre class="code">((<a href="COMMON-LISP____LAMBDA.html">lambda</a> (a x b) ...)
+ (bar x) x b)</pre> 
+ 
+<p>We interpret the arguments of a lambda or function call before the body, and 
+normally if we encounter an unbound variable during symbolic execution we 
+produce an error.  Therefore, we would run into an error when we process the 
+argument <span class="v">b</span> of the lambda call.  To avoid this and get the intended 
+behavior of binding <span class="v">b</span> when we arrive at its <span class="v">bind-var</span> form, we 
+preprocess lambdas to remove bindings of variables to themselves, instead 
+carrying forward the existing bindings from the outer context into the lambda 
+body. (See ACL2 community book "centaur/meta/bindinglist.lisp" for the 
+implementation.)</p> 
+ 
+<p>A further complication is that when we bind a free variable due to 
+<span class="v">bind-var</span>, it must be bound in the context of the current rewrite rule 
+application, not just the current lambda body.  To do otherwise would allow 
+that variable to be bound to different objects in a single application of the 
+rule.  To deal with this, we effectively have two levels of variable bindings 
+at any time: the major frame produced by the current rewrite rule 
+application, which has a wholly new namespace for variables, and a minor 
+frameproduced by each nesting of lambdas, which carries forward all 
+variable bindings from the previous minor frame and may shadow variable 
+bindings from the major frame.  When we add a variable binding with 
+<span class="v">bind-var</span>, that binding goes into the bindings of the major frame.</p> 
+ 
+<h3>Statement of Correctness</h3> 
+ 
+<p>Finally we discuss how the <span class="v">bind-var</span> feature affects how we state the 
+correctness of the FGL symbolic interpreter.</p> 
+ 
+<p>The correctness of a typical rewriter that takes an alist of variable 
+bindings is along the lines of:</p> 
+ 
+<pre class="code">(equivalent-under-relation equiv-relation-context
+                           (eval-term input-term (eval-bindings bindings env))
+                           (eval-term result-term env))</pre> 
+ 
+<p>Here equiv-relation-context, input-term, and bindings are inputs to the 
+rewriter, which produces result-term.</p> 
+ 
+<p>The exact such correctness statement for FGL involves various complications 
+that we won't discuss here, such as the distinction between input ACL2 terms 
+and output symbolic objects and various invariants of the interpreter state. 
+The main complication that we will discuss is that, rather than just an input 
+to the rewriter as would be the case in a typical rewriter, the relevant 
+bindings are changed (extended) by the rewriter as it (potentially) adds 
+variable bindings to the major frame due to <span class="v">bind-var</span>.  So the statement we 
+want (again, very approximately) is:</p> 
+ 
+<pre class="code">(equivalent-under-relation
+  equiv-relation-context
+  (eval-term input-term (<a href="COMMON-LISP____APPEND.html">append</a> (eval-bindings output-minor-bindings env)
+                                (eval-bindings output-major-bindings env)))
+  (eval-term result-term env))</pre> 
+ 
+<p>(To simplify this slightly, we do show that the evaluation of the output and 
+input minor bindings is equivalent.)</p> 
+ 
+<p>This is reasonable and true, but it isn't sufficiently strong to be 
+inductively proved.  The problem is that if we successively rewrite two terms, 
+the output major bindings from the second term may be different from those from 
+the first, so the inductive assumption from the first term doesn't help us 
+anymore.</p> 
+ 
+<p>To fix this, we instead prove, approximately:</p> 
+ 
+<pre class="code">(<a href="ACL2____FORALL.html">forall</a> ext
+        (<a href="ACL2____IMPLIES.html">implies</a> (eval-alist-extension-p
+                   ext
+                   (<a href="COMMON-LISP____APPEND.html">append</a> (eval-bindings output-minor-bindings env)
+                           (eval-bindings output-major-bindings env)))
+                 (equivalent-under-relation equiv-relation-context
+                                            (eval-term input-term ext)
+                                            (eval-term result-term env))))</pre> 
+ 
+<p>Where <span class="v">(eval-alist-extension-p a b)</span> holds when <span class="v">a</span> binds all keys 
+present in <span class="v">b</span> to the same values.  Since the rewriter only adds pairs to 
+the major bindings whose keys are not yet bound in either the major or minor 
+bindings, the resulting appended, evaluated minor and major bindings is such an 
+extension of the input appended, evaluated major and minor bindings.  This 
+allows the inductive assumption about the first term to be applied to the 
+bindings resulting from rewriting the second term.</p>
+</body>
+</html>

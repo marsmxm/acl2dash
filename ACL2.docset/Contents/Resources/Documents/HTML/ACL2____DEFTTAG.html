@@ -1,0 +1,245 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Defttag</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____DEFTTAG">Click for Defttag in the Full Manual</a></h3>
+
+<p>Introduce a trust tag (ttag)</p><p><b>Introduction</b>.  This event is intended for advanced users 
+ who, in essence, want to build extensions of ACL2.  The typical intended use 
+ is to create <a href="ACL2____BOOKS.html">books</a> that extend the functionality of ACL2 in ways not 
+ allowed without a so-called ``active trust tag''.  A trust tag thus represents 
+ a contract: The writer of such a book is guaranteeing that the book extends 
+ ACL2 in a ``correct'' way as defined by the writer of the book.  The writer of 
+ the book will often have a small section of the book in the scope of an active 
+ trust tag that can be inspected by potential users of that book:</p> 
+ 
+ <pre class="code">&lt;initial part of book, which does not use trust tags&gt;
+(<a href="ACL2____DEFTTAG.html">defttag</a> :some-ttag) ; install :some-ttag as an active trust tag
+&lt;various code that requires an active trust tag&gt;
+(<a href="ACL2____DEFTTAG.html">defttag</a> nil)        ; remove active trust tag
+&lt;final part of book, which does not use trust tags&gt;</pre> 
+ 
+ <p>Why might trust tags be needed?  The evaluation of certain functions can 
+ introduce bugs and even unsoundness, but can be useful in restricted ways that 
+ avoid such issues.  For example, <span class="tt"><a href="ACL2____SYS-CALL.html">sys-call</a></span> can be used in an unsafe 
+ way, for example to overwrite files, or worse; see <a href="ACL2____SYS-CALL.html">sys-call</a> for a 
+ frightening example from Bob Boyer.  The following example shows that the 
+ function <span class="tt"><a href="ACL2____SYS-CALL.html">sys-call</a></span> is restricted by default, but can be called after 
+ installing an active trust tag.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____SYS-CALL.html">sys-call</a> "pwd" nil)
+
+ACL2 Error in TOP-LEVEL:  The SYS-CALL function cannot be called unless
+a trust tag is in effect.  See :DOC defttag.
+
+ACL2 !&gt;(<a href="ACL2____DEFTTAG.html">defttag</a> t) ; Install :T as an active trust tag.
+
+TTAG NOTE: Adding ttag :T from the top level loop.
+ T
+ACL2 !&gt;(<a href="ACL2____SYS-CALL.html">sys-call</a> "pwd" nil) ; print the current directory and return NIL
+/u/kaufmann
+NIL
+ACL2 !&gt;(<a href="ACL2____DEFTTAG.html">defttag</a> nil) ; Remove the active trust tag (using value NIL).
+ NIL
+ACL2 !&gt;(<a href="ACL2____SYS-CALL.html">sys-call</a> "pwd" nil) ; Now we get the error again:
+
+ACL2 Error in TOP-LEVEL:  The SYS-CALL function cannot be called unless
+a trust tag is in effect.  See :DOC defttag.
+
+ACL2 !&gt;</pre> 
+ 
+ <p>Of course, using <span class="tt"><a href="ACL2____SYS-CALL.html">sys-call</a></span> with the Linux command <span class="v">pwd</span> is not 
+ likely to cause any soundness problems!  So suppose we want to create a 
+ function that prints the working directory.  We might put the following <a href="ACL2____EVENTS.html">events</a> into a book that is to be certified.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____IN-PACKAGE.html">in-package</a> "ACL2")
+(<a href="ACL2____DEFTTAG.html">defttag</a> :pwd-ttag)
+(<a href="COMMON-LISP____DEFUN.html">defun</a> print-working-dir ()
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :mode :program))
+  (<a href="ACL2____SYS-CALL.html">sys-call</a> "pwd" nil))
+(<a href="ACL2____DEFTTAG.html">defttag</a> nil) ; optional (<a href="ACL2____BOOKS.html">books</a> end with this implicitly)</pre> 
+ 
+ <p>We can certify this book with a specification that <span class="v">:pwd-ttag</span> is a 
+ legal trust tag:</p> 
+ 
+ <pre class="code">(<a href="ACL2____CERTIFY-BOOK.html">certify-book</a> "pwd" 0 t :ttags (:pwd-ttag))</pre> 
+ 
+ <p>One can now use this book by executing <span class="tt"><a href="ACL2____INCLUDE-BOOK.html">include-book</a></span> with keyword 
+ parameter <span class="v">:ttags (:pwd-ttag)</span> and then calling function 
+ <span class="v">print-working-dir</span>:</p> 
+ 
+ <pre class="code">(<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "pwd" :ttags (:pwd-ttag))
+(print-working-dir) ; working directory is printed to terminal</pre> 
+ 
+ <p><b>Detailed documentation.</b></p> 
+ 
+ <pre class="code">General Form:
+(<a href="ACL2____DEFTTAG.html">defttag</a> tag-name)</pre> 
+ 
+ <p>where <span class="v">tag-name</span> is a symbol.</p> 
+ 
+ <p>Note however that if <span class="v">tag-name</span> is not <span class="v">nil</span>, then it is converted to 
+ a ``corresponding <a href="COMMON-LISP____KEYWORD.html">keyword</a>'': a symbol in the <span class="v">"KEYWORD"</span> package 
+ with the same <span class="tt"><a href="COMMON-LISP____SYMBOL-NAME.html">symbol-name</a></span> as <span class="v">tag-name</span>.  Thus, for example, 
+ <span class="v">(<a href="ACL2____DEFTTAG.html">defttag</a> foo)</span> is equivalent to <span class="v">(<a href="ACL2____DEFTTAG.html">defttag</a> :foo)</span>.  Moreover, a 
+ non-<span class="v">nil</span> symbol with a <span class="tt"><a href="COMMON-LISP____SYMBOL-NAME.html">symbol-name</a></span> of <span class="v">"NIL"</span> is illegal for 
+ trust tags; thus, for example, <span class="v">(<a href="ACL2____DEFTTAG.html">defttag</a> :nil)</span> is illegal.</p> 
+ 
+ <p>This event introduces or removes a so-called active trust tag (or ``ttag'', 
+ pronounced ``tee tag'').  An active ttag is a <a href="COMMON-LISP____KEYWORD.html">keyword</a> symbol that is 
+ associated with potentially unsafe evaluation.  For example, calls of <span class="tt"><a href="ACL2____SYS-CALL.html">sys-call</a></span> are illegal unless there is an active trust tag.  An active trust 
+ tag can be installed using a <span class="v">defttag</span> event.  If one introduces an active 
+ ttag and then writes definitions that contain calls of <span class="tt"><a href="ACL2____SYS-CALL.html">sys-call</a></span>, 
+ presumably in a defensibly ``safe'' way, then responsibility for those calls 
+ is attributed to that ttag.  This attribution (or blame!) is at the level of 
+ <a href="ACL2____BOOKS.html">books</a>; a book's <a href="ACL2____CERTIFICATE.html">certificate</a> contains a list of ttags that are 
+ active in that book, or in a book that is included (possibly <a href="ACL2____LOCAL.html">local</a>ly), 
+ or in a book included in a book that is included (either inclusion being 
+ potentially <a href="ACL2____LOCAL.html">local</a>), and so on.  We explain all this in more detail 
+ below.</p> 
+ 
+ <p><span class="v">(<a href="ACL2____DEFTTAG.html">Defttag</a> :tag-name)</span> is essentially equivalent to</p> 
+ 
+ <pre class="code">(<a href="ACL2____TABLE.html">table</a> acl2-defaults-table :ttag :tag-name)</pre> 
+ 
+ <p>and hence is <span class="tt"><a href="ACL2____LOCAL.html">local</a></span> to any <a href="ACL2____BOOKS.html">books</a> and <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span> 
+ <a href="ACL2____EVENTS.html">events</a> in which it occurs; see <a href="ACL2____ACL2-DEFAULTS-TABLE.html">ACL2-defaults-table</a>.  We say more 
+ about the scope of <span class="v">defttag</span> forms below.</p> 
+ 
+ <p>Note: This is an event!  It does not print the usual event <a href="ACL2____SUMMARY.html">summary</a> 
+ but nevertheless executes the above <span class="tt"><a href="ACL2____TABLE.html">table</a></span> event and hence changes the 
+ ACL2 logical <a href="ACL2____WORLD.html">world</a>, and is so recorded.  Although no event summary is 
+ printed, it is important to note that the ``TTAG NOTE'', discussed below, is 
+ always printed for a non-nil <span class="v">:tag-name</span> (unless deferred; see <a href="ACL2____SET-DEFERRED-TTAG-NOTES.html">set-deferred-ttag-notes</a>).</p> 
+ 
+ <p><b>Active ttags.</b> Suppose <span class="v">tag-name</span> is a non-<span class="v">nil</span> symbol.  Then 
+ <span class="v">(<a href="ACL2____DEFTTAG.html">defttag</a> :tag-name)</span> sets <span class="v">:tag-name</span> to be the (unique) ``active 
+ ttag.''  There must be an active ttag in order for there to be any mention of 
+ certain function, including <span class="tt"><a href="ACL2____SYS-CALL.html">sys-call</a></span>; evaluate the form <span class="v">(<a href="ACL2____STRIP-CARS.html">strip-cars</a>
+ *ttag-fns*)</span> to see the full list of such symbols.  The macro <span class="tt"><a href="ACL2____PROGN_12.html">progn!</a></span> 
+ similarly requires an active ttag.  On the other hand, <span class="v">(<a href="ACL2____DEFTTAG.html">defttag</a> nil)</span> 
+ removes the active ttag, if any; there is then no active ttag.  The scope of a 
+ <span class="v">defttag</span> form in a book being certified or included is limited to 
+ subsequent forms in the same book before the next <span class="v">defttag</span> (if any) in 
+ that book.  Similarly, if a <span class="v">defttag</span> form is evaluated in the top-level 
+ loop, then its effect is limited to subsequent forms in the top-level loop 
+ before the next <span class="v">defttag</span> in the top-level loop (if any).  Moreover, <span class="tt"><a href="ACL2____CERTIFY-BOOK.html">certify-book</a></span> is illegal when a ttag is active; of course, in such a 
+ circumstance one can execute <span class="v">(<a href="ACL2____DEFTTAG.html">defttag</a> nil)</span> in order to allow book 
+ certification.</p> 
+ 
+ <p><b>Ttag notes and the ``certifier.''</b> When a <span class="v">defttag</span> is executed 
+ with an argument other than <span class="v">nil</span>, output is printed, starting on a fresh 
+ line with: <span class="v">TTAG NOTE</span>.  For example:</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____DEFTTAG.html">defttag</a> :foo)
+
+TTAG NOTE: Adding ttag :FOO from the top level loop.
+ :FOO
+ACL2 !&gt;</pre> 
+ 
+ <p>If the <span class="v">defttag</span> occurs in an included book, the message looks like 
+ this.</p> 
+ 
+ <pre class="code">TTAG NOTE (for included book): Adding ttag :FOO from file /u/smith/acl2/my-book.lisp.</pre> 
+ 
+ <p>The ``<span class="v">TTAG NOTE</span>'' message is always printed on a single line.  The 
+ intention is that one can search the standard output for all such notes in 
+ order to find all <i>defttag</i> events.  In a sense, <i>defttag</i> events 
+ can allow you to define your own system on top of ACL2 (for example, see <a href="ACL2____PROGN_12.html">progn!</a>).  So in order for someone else (who we might call the ``certifier'') 
+ to be confident that your collection of <a href="ACL2____BOOKS.html">books</a> is meaningful, that 
+ certifier should certify all the user-supplied books from scratch and check 
+ either that no <span class="v">:ttags</span> were supplied to <span class="tt"><a href="ACL2____CERTIFY-BOOK.html">certify-book</a></span>, or else look 
+ for every <span class="v">TTAG NOTE</span> in the standard output in order to locate all 
+ <span class="v">defttag</span> <a href="ACL2____EVENTS.html">events</a> with non-<span class="v">nil</span> tag name.  In this way, the 
+ certifier can in principle decide whether to be satisfied that those 
+ <span class="v">defttag</span> events did not allow inappropriate forms in the user-supplied 
+ books.</p> 
+ 
+ <p>In order to eliminate much of the output from <span class="v">TTAG NOTE</span>s, see <a href="ACL2____SET-DEFERRED-TTAG-NOTES.html">set-deferred-ttag-notes</a>.  Note however that the resulting security is 
+ somewhat less; therefore, a <span class="v">TTAG NOTE</span> is printed when invoking 
+ <span class="v">set-deferred-ttag-notes</span> to defer printing of ttag notes.</p> 
+ 
+ <p><b>Allowed ttags when certifying and including books.</b> A <span class="v">defttag</span> 
+ form may not be evaluated unless its argument is a so-called ``allowed'' ttag. 
+ All ttags are allowed in the interactive top-level loop.  However, during 
+ <span class="tt"><a href="ACL2____CERTIFY-BOOK.html">certify-book</a></span> and <span class="tt"><a href="ACL2____INCLUDE-BOOK.html">include-book</a></span>, the set of allowed ttags may be 
+ restricted according to the <span class="v">:ttags</span> keyword argument.  If this argument is 
+ <span class="v">nil</span> then no ttag is allowed, so a <span class="v">defttag</span> call will fail during book 
+ certification or inclusion in this case.  This restriction applies even to 
+ <span class="v">defttag</span> forms already evaluated in the so-called certification <a href="ACL2____WORLD.html">world</a> at the time <span class="tt"><a href="ACL2____CERTIFY-BOOK.html">certify-book</a></span> is called.  But note that <span class="v">(<a href="ACL2____DEFTTAG.html">defttag</a>
+ nil)</span> is always legal.</p> 
+ 
+ <p>A <span class="v">:ttags</span> argument of <span class="tt"><a href="ACL2____CERTIFY-BOOK.html">certify-book</a></span> and <span class="tt"><a href="ACL2____INCLUDE-BOOK.html">include-book</a></span> can 
+ have value <span class="v">:all</span>, indicating that every ttag is allowed, i.e., no 
+ restriction is being placed on the arguments, just as in the interactive 
+ top-level loop.  In the case of <span class="v">include-book</span>, an omitted <span class="v">:ttags</span> 
+ argument or an argument of <span class="v">:default</span> is treated as <span class="v">:all</span>, except that 
+ warnings will occur when the book's <a href="ACL2____CERTIFICATE.html">certificate</a> includes ttags; but for 
+ <span class="v">certify-book</span>, an omitted <span class="v">ttags</span> argument is treated as <span class="v">nil</span>. 
+ Otherwise, if the <span class="v">:ttags</span> argument is supplied but not <span class="v">:all</span>, then its 
+ value is a true list of ttag specifications, each having one of the following 
+ forms, where <span class="v">sym</span> is a non-<span class="v">nil</span> symbol which is treated as the 
+ corresponding <a href="COMMON-LISP____KEYWORD.html">keyword</a>.</p> 
+ 
+ <blockquote> 
+ 
+ <p>(1) <span class="v">:sym</span></p> 
+ 
+ <p>(2) <span class="v">(:sym)</span></p> 
+ 
+ <p>(3) <span class="v">(:sym x1 x2 ... xk)</span>, where k &gt; 0 and each <span class="v">xi</span> is a string, 
+ except that one <span class="v">xi</span> may be <span class="v">nil</span>.</p>
+</blockquote> 
+ 
+ <p>In Case (1), <span class="v">(<a href="ACL2____DEFTTAG.html">defttag</a> :sym)</span> is allowed to occur in at most one book or 
+ else in the top-level loop (i.e., the certification world for a book under 
+ certification or a book being included).  Case (2) allows <span class="v">(<a href="ACL2____DEFTTAG.html">defttag</a> :sym)</span> 
+ to occur in an unlimited number of books.  For case (3) the <span class="v">xi</span> specify 
+ where <span class="v">(<a href="ACL2____DEFTTAG.html">defttag</a> :sym)</span> may occur, as follows.  The case that <span class="v">xi</span> is 
+ <span class="v">nil</span> refers to the top-level loop, while all other <span class="v">xi</span> are filenames, 
+ where the <span class="v">".lisp"</span> extension is optional and relative pathnames are 
+ considered to be relative to the connected book directory (see <a href="ACL2____CBD.html">cbd</a>). 
+ Note that the restrictions on <span class="v">(<a href="ACL2____DEFTTAG.html">defttag</a> :sym)</span> apply equally to any 
+ equivalent for based on the notion of ``corresponding keyword'' discussed 
+ above, e.g., <span class="v">(<a href="ACL2____DEFTTAG.html">defttag</a> acl2::sym)</span>.</p> 
+ 
+ <p>An error message, as shown below, illustrates how ACL2 enforces the notion 
+ of allowed ttags.  Suppose that you call <span class="tt"><a href="ACL2____CERTIFY-BOOK.html">certify-book</a></span> with argument 
+ <span class="v">:ttags (:foo)</span>, where you have already executed <span class="v">(<a href="ACL2____DEFTTAG.html">defttag</a> :foo)</span> in the 
+ certification world (i.e., before calling <span class="tt"><a href="ACL2____CERTIFY-BOOK.html">certify-book</a></span>).  Then ACL2 
+ immediately associates the ttag <span class="v">:foo</span> with <span class="v">nil</span>, where again, <span class="v">nil</span> 
+ refers to the top-level loop.  If ACL2 then encounters <span class="v">(<a href="ACL2____DEFTTAG.html">defttag</a> foo)</span> 
+ inside that book, you will get the following error (using the full book name 
+ for the book, as shown):</p> 
+ 
+ <pre class="code">ACL2 Error in ( TABLE ACL2-DEFAULTS-TABLE ...):  The ttag :FOO associated
+with file /u/smith/work/my-book.lisp is not among the set of ttags permitted
+in the current context, specified as follows:
+  ((:FOO NIL)).
+See :DOC defttag.</pre> 
+ 
+ <p>In general the structure displayed by the error message, which is <span class="v">((:FOO
+ NIL))</span> in this case, represents the currently allowed ttags with elements as 
+ discussed in (1) through (3) above.  In this case, that list's unique element 
+ is <span class="v">(:FOO NIL)</span>, meaning that ttag <span class="v">:FOO</span> is only allowed at the top 
+ level (as represented by <span class="v">NIL</span>).</p> 
+ 
+ <p><b>Associating ttags with books and with the top-level loop.</b> When a 
+ book is certified, each form <span class="v">(<a href="ACL2____DEFTTAG.html">defttag</a> tag)</span> that is encountered for 
+ non-<span class="v">nil</span> <span class="v">tag</span> in that book or an included book is recorded in the 
+ generated <a href="ACL2____CERTIFICATE.html">certificate</a>, which associates the keyword corresponding to 
+ <span class="v">tag</span> with the <a href="ACL2____FULL-BOOK-NAME.html">full-book-name</a> of the book containing that 
+ <span class="v">defttag</span>.  If such a <span class="v">defttag</span> form is encountered outside a book, hence 
+ in the <a href="ACL2____PORTCULLIS.html">portcullis</a> of the book being certified or one of its included 
+ books, then that keyword is associated with <span class="v">nil</span> in the generated <a href="ACL2____CERTIFICATE.html">certificate</a>.  Note that the notion of ``included book'' here applies to the 
+ recursive notion of a book either included directly in the book being 
+ certified or else included in such a book, where we account even for <a href="ACL2____LOCAL.html">local</a>ly included books.</p> 
+ 
+ <p>For examples of ways to take advantage of ttags, see <a href="ACL2____HACKER.html">hacker</a>, <a href="ACL2____INCLUDE-RAW.html">include-raw</a>, <a href="ACL2____QUICKLISP.html">quicklisp</a>, and more generally <a href="ACL2____INTERFACING-TOOLS.html">interfacing-tools</a>. 
+ See also <a href="ACL2____TTAGS-SEEN.html">ttags-seen</a>, <a href="ACL2____PROGN_12.html">progn!</a>, <a href="ACL2____REMOVE-UNTOUCHABLE.html">remove-untouchable</a>, <a href="ACL2____SET-RAW-MODE.html">set-raw-mode</a>, and <a href="ACL2____SYS-CALL.html">sys-call</a>.</p>
+</body>
+</html>

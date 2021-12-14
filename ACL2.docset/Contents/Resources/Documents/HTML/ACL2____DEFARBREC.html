@@ -1,0 +1,331 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Defarbrec</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____DEFARBREC">Click for Defarbrec in the Full Manual</a></h3>
+
+<p>Introduce an arbitrarily recursive function.</p><h3>Introduction</h3><p>Given a recursive program-mode function 
+      that only calls logic-mode functions (besides calling itself) 
+      and that may not terminate, 
+      it is possible (under some conditions) 
+      to construct a logic-mode ``version'' of that function 
+      by explicitly testing for termination, via a non-executable predicate. 
+      The resulting logic-mode function is ``equivalent'' 
+      to the program-mode function when the latter terminates.</p><p>The resulting logic-mode function can be subjected to 
+      formal verification and <a href="APT____APT.html">transformation</a>. In particular, if it can be proved that 
+      the termination test holds on every argument value, 
+      then the termination test can be transformed away 
+      (e.g. via a simplification transformation), 
+      obtaining a simpler, provably equivalent logic-mode function, 
+      which may be executable 
+      if the initial program-mode function was executable. 
+      If termination can be proved only on some argument values instead, 
+      the domain of the function can be restricted to those values 
+      (e.g. via <span class="tt"><a href="APT____RESTRICT.html">apt::restrict</a></span>), 
+      and then the termination test can be transformed away 
+      in the restricted domain.</p><p>Constructing the logic-mode function with the explicit termination test 
+      may be useful in program verification. 
+      The starting program-mode function could be the object of verification, 
+      or it may represent, in ACL2, 
+      a recursive or iterative program (fragment), in some programming language, 
+      that is the object of verification. 
+      Instead of having to prove termination right away 
+      in order to make the function amenable to any formal verification in ACL2, 
+      constructing a logic-mode function with an explicit termination test 
+      enables the ``deferral'' of the termination proof. 
+      The termination of certain programs may depend on 
+      fairly deep semantic properties of the programs 
+      (to the point of being inter-related with functional correctness): 
+      in these cases, 
+      it may be natural to prove these properties along with termination, 
+      instead of having to prove termination alone first.</p><p>The <span class="v">defarbrec</span> macro 
+      (for `<b>def</b>ine <b>arb</b>itrary <b>rec</b>ursion') 
+      constructs the logic-mode function with the explicit termination test, 
+      from a specified program-mode function. 
+      The program-mode function is specified as 
+      a name, a list of arguments, and a body (as in <span class="tt"><a href="COMMON-LISP____DEFUN.html">defun</a></span>): 
+      <span class="v">defarbrec</span> constructs the program-mode function on the fly, 
+      uses it to construct the logic-mode function, 
+      which has the same name and arguments, 
+      discards the program-mode function 
+      (absent from the <a href="ACL2____WORLD.html">world</a> after <span class="v">defarbrec</span> completes), 
+      and retains the logic-mode function 
+      (present in the <a href="ACL2____WORLD.html">world</a> after <span class="v">defarbrec</span> completes).</p><p>The current implementation only works 
+      with program-mode functions that make one recursive call 
+      (so in this sense it does not support truly arbitrary recursion, 
+      but the `arbitrary' here refers to avoiding to prove termination), 
+      but it should be possible to extend the macro to handle functions that 
+      make multiple different recursive calls. 
+      The current implementation does not support guards yet, 
+      but it should be possible to add suitable support.</p><p>The fact that the program-mode function is constructed by <span class="v">defarbrec</span> 
+      ensures that it satisfies certain well-formedness constraints, 
+      e.g. calling only existing functions 
+      with arguments whose numbers match the functions' arities. 
+      This ensures that the generated logic-mode function 
+      satisfies the same well-formedness constraints.</p><p>These <a href="res/kestrel-std-util-design-notes/defarbrec.pdf" target="_blank"><nobr>design notes<img src="../Icon_External_Link.png" title="External link to res/kestrel-std-util-design-notes/defarbrec.pdf"></nobr></a>, which use <a href="res/kestrel-design-notes/notation.pdf" target="_blank"><nobr>this notation<img src="../Icon_External_Link.png" title="External link to res/kestrel-design-notes/notation.pdf"></nobr></a>, provide the mathematical concepts and template proofs 
+      upon which this tool is based. 
+      These notes should be read alongside this reference documentation, 
+      which refers to the them in numerous places.</p><h3>General Form</h3><pre class="code">(<a href="ACL2____DEFARBREC.html">defarbrec</a> fn (x1 ... xn)
+  body
+  :update-names    ...  ; default nil
+  :terminates-name ...  ; default nil
+  :measure-name    ...  ; default nil
+  :nonterminating  ...  ; default :nonterminating
+  :print           ...  ; default :result
+  :show-only       ...  ; default nil
+  )</pre><h3>Inputs</h3><p><span class="v">fn</span></p><blockquote>
+<p>Name of the function to introduce.</p>
+<p>This is as in <span class="tt"><a href="COMMON-LISP____DEFUN.html">defun</a></span>.</p>
+<p>In the <a href="res/kestrel-std-util-design-notes/defarbrec.pdf" target="_blank"><nobr>design notes<img src="../Icon_External_Link.png" title="External link to res/kestrel-std-util-design-notes/defarbrec.pdf"></nobr></a>, 
+       the program-mode <span class="v">fn</span> is denoted by f, 
+       while the logic-mode <span class="v">fn</span> is denoted by \hat{f}.</p>
+</blockquote><p><span class="v">x1 ... xn</span></p><blockquote>
+<p>Formal arguments of the function to introduce.</p>
+<p>These are as in <span class="tt"><a href="COMMON-LISP____DEFUN.html">defun</a></span>, 
+       but in addition they must not include any<a href="ACL2____STOBJ.html">stobjs</a>.</p>
+<p>In the <a href="res/kestrel-std-util-design-notes/defarbrec.pdf" target="_blank"><nobr>design notes<img src="../Icon_External_Link.png" title="External link to res/kestrel-std-util-design-notes/defarbrec.pdf"></nobr></a>, 
+       <span class="v">x1</span>, ..., <span class="v">xn</span> are denoted by x_1,\ldots,x_n, 
+       or \overline{x} as a whole.</p>
+</blockquote><p><span class="v">body</span></p><blockquote>
+<p>Body of the program-mode function; 
+       the logic-mode function has a body based on this one.</p>
+<p>This is as in <span class="tt"><a href="COMMON-LISP____DEFUN.html">defun</a></span>, 
+       but with the following additional constraints.</p>
+<p>The program-mode function must 
+       contain a single recursive call, 
+       only call logic-mode functions (besides itself), 
+       return a non-<a href="ACL2____MV.html">multiple</a> value, and 
+       have no input or output <a href="ACL2____STOBJ.html">stobjs</a>.</p>
+<p>In the rest of this documentation page, for expository convenience, 
+       it is assumed that the program-mode function has the following form:</p>
+<pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> fn (x1 ... xn)
+  (<a href="COMMON-LISP____IF.html">if</a> test&lt;x1,...,xn&gt;
+      base&lt;x1,...,xn&gt;
+    combine&lt;x1,...,xn,(fn update-x1&lt;x1,...,xn&gt;
+                          ...
+                          update-xn&lt;x1,...,xn&gt;)&gt;))</pre>
+<p>In the <a href="res/kestrel-std-util-design-notes/defarbrec.pdf" target="_blank"><nobr>design notes<img src="../Icon_External_Link.png" title="External link to res/kestrel-std-util-design-notes/defarbrec.pdf"></nobr></a>, 
+       <span class="v">test&lt;x1,...,xn&gt;</span> is denoted by a(\overline{x}), 
+       <span class="v">base&lt;x1,...,xn&gt;</span> is denoted by b(\overline{x}), 
+       <span class="v">combine&lt;x1,...,xn,y&gt;</span> is denoted by c(\overline{x},y), and 
+       each <span class="v">update-xi&lt;x1,...,xn&gt;</span> is denoted by d_i(\overline{x}) 
+       for 1 \leq i \leq n.</p>
+</blockquote><p><span class="v">:update-names</span> — default <span class="v">nil</span></p><blockquote>
+<p>Determines the names of the generated iterated argument update functions, 
+       i.e. the functions that iterate the updates of the arguments 
+       in the recursive call of the program-mode function 
+       (see the `Generated Functions' section below).</p>
+<p>It must be one of the following:</p>
+<ul>
+<li>
+<span class="v">nil</span>, to use, for each argument <span class="v">xi</span>: 
+        <span class="v">fn</span>, 
+        followed by <span class="v">-</span>, 
+        followed by <span class="v">xi</span>, 
+        followed by <span class="v">*</span>; 
+        the symbols are in the same package as <span class="v">fn</span>.</li>
+<li>A <span class="v">nil</span>-terminated list of <span class="v">n</span> distinct symbols 
+        (that are not in the main Lisp package and that are not keywords), 
+        to use as the names of the functions.</li>
+</ul>
+<p>In the rest of this documentation page, 
+       let <span class="v">update*-x1</span>, ..., <span class="v">update*-xn</span> be 
+       the names of these functions.</p>
+</blockquote><p><span class="v">:terminates-name</span> — default <span class="v">nil</span></p><blockquote>
+<p>Determines the name of the generated predicate 
+       that tests whether the program-mode function terminates.</p>
+<p>It must be one of the following:</p>
+<ul>
+<li>
+<span class="v">nil</span>, to use <span class="v">fn</span> followed by <span class="v">-terminates</span>; 
+        the symbol is in the same package as <span class="v">fn</span>.</li>
+<li>Any other symbol 
+        (that is not in the main Lisp package and that is not a keyword), 
+        to use as the name of the predicate.</li>
+</ul>
+<p>In the rest of this documentation page, 
+       let <span class="v">terminates</span> be the name of this predicate.</p>
+</blockquote><p><span class="v">:measure-name</span> — default <span class="v">nil</span></p><blockquote>
+<p>Determines the name of the generated measure function 
+       of the logic-mode function.</p>
+<p>It must be one of the following:</p>
+<ul>
+<li>
+<span class="v">nil</span>, to use <span class="v">fn</span> followed by <span class="v">-measure</span>; 
+        the symbol is in the same package as <span class="v">fn</span>.</li>
+<li>Any other symbol 
+        (that is not in the main Lisp package and that is not a keyword), 
+        to use as the name of the measure function.</li>
+</ul>
+<p>In the rest of this documentation page, 
+       let <span class="v">measure</span> be the name of this function.</p>
+</blockquote><p><span class="v">:nonterminating</span> — default <span class="v">:nonterminating</span></p><blockquote>
+<p>Specifies the value that the logic-mode function returns 
+       when the program-mode function does not terminate.</p>
+<p>It must be a term 
+       that includes no free variables other than <span class="v">x1</span>, ..., <span class="v">xn</span>, 
+       that only calls logic-mode functions, 
+       that returns a non-<a href="ACL2____MV.html">multiple</a> value, 
+       and that has no output <a href="ACL2____STOBJ.html">stobjs</a>.</p>
+<p>In the rest of this documentation page, 
+       let <span class="v">nonterminating</span> be this term.</p>
+</blockquote><p><span class="v">:print</span> — default <span class="v">:result</span></p><blockquote>
+<p>Customizes the screen output.</p>
+<p>It must be one of the following:</p>
+<ul>
+<li>
+<span class="v">nil</span>, to print nothing.</li>
+<li>
+<span class="v">:error</span>, to print only error output.</li>
+<li>
+<span class="v">:result</span>, to print, besides error output, 
+        the functions described in the `Generated Functions' section below, 
+        i.e. the result of <span class="v">defarbrec</span>.</li>
+<li>
+<span class="v">:all</span>, to print, 
+        besides error output and the result (see <span class="v">:result</span> above), 
+        ACL2's output in response to all the submitted events 
+        (the ones that form the result as well as some ancillary ones).</li>
+</ul>
+<p>If the call to <span class="v">defarbrec</span> is redundant 
+       (see the `Redundancy' section below), 
+       a message to that effect is printed on the screen, 
+       unless <span class="v">:print</span> is <span class="v">nil</span>.</p>
+</blockquote><p><span class="v">:show-only</span> — default <span class="v">nil</span></p><blockquote>
+<p>Determines whether the event expansion of <span class="v">defarbrec</span> 
+      is submitted to ACL2 or printed on the screen:</p>
+<ul>
+<li>
+<span class="v">nil</span>, to submit it.</li>
+<li>
+<span class="v">t</span>, to print it. 
+        In this case: 
+        the event expansion is printed even if <span class="v">:print</span> is <span class="v">nil</span>; 
+        the generated functions are not printed separately 
+        (other than their appearance in the event expansion), 
+        even if <span class="v">:print</span> is <span class="v">:result</span> or <span class="v">:all</span>; 
+        no ACL2 output is printed even if <span class="v">:print</span> is <span class="v">:all</span> 
+        (because the event expansion is not submitted). 
+        If the call to <span class="v">defarbrec</span> is redundant 
+        (see the `Redundancy' section below), 
+        the event expansion generated by the existing call is printed.</li>
+</ul>
+</blockquote><h3>Generated Events</h3><p><span class="v">update*-x1</span>, ..., <span class="v">update*-xn</span></p><blockquote>
+<p>The iterated argument update functions:</p>
+<pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> update*-xi (k x1 ... xn)
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2____ZP.html">zp</a> k)
+      xi
+    (update*-xi (<a href="COMMON-LISP____1-.html">1-</a> k)
+                update-x1&lt;x1,...,xn&gt;
+                ...
+                update-xn&lt;x1,...,xn&gt;)))</pre>
+<p>In the <a href="res/kestrel-std-util-design-notes/defarbrec.pdf" target="_blank"><nobr>design notes<img src="../Icon_External_Link.png" title="External link to res/kestrel-std-util-design-notes/defarbrec.pdf"></nobr></a>, 
+       <span class="v">(update*-xi k x1 ... xn)</span> is denoted by d_i^{k}(\overline{x}) 
+       for 1 \leq i \leq n.</p>
+</blockquote><p><span class="v">terminates</span></p><blockquote>
+<p>The predicate that tests the termination of the program-mode function:</p>
+<pre class="code">(<a href="ACL2____DEFUN-SK.html">defun-sk</a> terminates (x1 ... xn)
+  (<a href="ACL2____EXISTS.html">exists</a> k test&lt;(update*-x1 k x1 ... xn),
+                 ...
+                 (update*-xn k x1 ... xn)&gt;))</pre>
+<p>In the <a href="res/kestrel-std-util-design-notes/defarbrec.pdf" target="_blank"><nobr>design notes<img src="../Icon_External_Link.png" title="External link to res/kestrel-std-util-design-notes/defarbrec.pdf"></nobr></a>, 
+       <span class="v">terminates</span> is denoted by t, 
+       and <span class="v">terminates-witness</span> is denoted by \epsilon_t.</p>
+</blockquote><p><span class="v">measure</span></p><blockquote>
+<p>The measure function for the logic-mode function:</p>
+<pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> measure (x1 ... xn k)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :measure (<a href="ACL2____NFIX.html">nfix</a> (<a href="COMMON-LISP____-.html">-</a> (terminates-witness x1 ... xn)
+                                    (<a href="ACL2____NFIX.html">nfix</a> k)))))
+  (<a href="COMMON-LISP____LET.html">let</a> ((k (<a href="ACL2____NFIX.html">nfix</a> k)))
+    (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____OR.html">or</a> test&lt;(update*-x1 k x1 ... xn),
+                 ...,
+                 (update*-xn k x1 ... xn)&gt;
+            (<a href="COMMON-LISP_____E3_D3.html">&gt;=</a> k (<a href="ACL2____NFIX.html">nfix</a> (terminates-witness x1 ... xn))))
+        k
+      (<a href="ACL2____MEASURE.html">measure</a> x1 ... xn (<a href="COMMON-LISP____1_B2.html">1+</a> k)))))</pre>
+<p>In the <a href="res/kestrel-std-util-design-notes/defarbrec.pdf" target="_blank"><nobr>design notes<img src="../Icon_External_Link.png" title="External link to res/kestrel-std-util-design-notes/defarbrec.pdf"></nobr></a>, 
+       <span class="v">measure</span> is denoted by \nu, 
+       and <span class="v">nfix</span> is denoted by \phi.</p>
+</blockquote><p><span class="v">fn</span></p><blockquote>
+<p>The logic-mode function:</p>
+<pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> fn (x1 ... xn)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :measure (<a href="ACL2____MEASURE.html">measure</a> x1 ... xn 0)
+                  :well-founded-relation o&lt;))
+  (<a href="COMMON-LISP____IF.html">if</a> (terminates x1 ... xn)
+      (<a href="COMMON-LISP____IF.html">if</a> test&lt;x1,...,xn&gt;
+          base&lt;x1,...,xn&gt;
+        combine&lt;x1,...,xn,(fn update-x1&lt;x1,...,xn&gt;
+                              ...
+                              update-xn&lt;x1,...,xn&gt;)&gt;)
+    nonterminating))</pre>
+<p>In the <a href="res/kestrel-std-util-design-notes/defarbrec.pdf" target="_blank"><nobr>design notes<img src="../Icon_External_Link.png" title="External link to res/kestrel-std-util-design-notes/defarbrec.pdf"></nobr></a>, 
+       this logic-mode function <span class="v">fn</span> is denoted by \hat{f}.</p>
+</blockquote><h3>Redundancy</h3><p>A call of <span class="v">defarbrec</span> is redundant if and only if 
+     it is identical to a previous successful call of <span class="v">defarbrec</span> 
+     whose <span class="v">:show-only</span> is not <span class="v">t</span>, 
+     except that the two calls may differ in 
+     their <span class="v">:print</span> and <span class="v">:show-only</span> options. 
+     These options do not affect the generated events, 
+     and thus they are ignored for the purpose of redundancy.</p><p>A call to <span class="v">defarbrec</span> whose <span class="v">:show-only</span> is <span class="v">t</span> 
+     does not generate any event. 
+     No successive call may be redundant with such a call.</p><p>If a call to <span class="v">defarbrec</span> has the same <span class="v">fn</span> 
+     as a previous call whose <span class="v">:show-only</span> is not <span class="v">t</span>, 
+     but the two calls are not identical 
+     (ignoring the <span class="v">:print</span> and <span class="v">:show-only</span> options), 
+     the second call causes an error.</p><h3>Related Tools</h3><p><span class="v">defarbrec</span> is related to the tools listed below, 
+     which also allow the introduction of functions in logic mode 
+     that may not terminate for all argument values. 
+     For the use case described in the `Introduction' section above 
+     (namely, verification via transformation), 
+     <span class="v">defarbrec</span> seems preferable to the existing tools, as explained below. 
+     However, for different use cases, 
+     some of the existing tools may be preferable to <span class="v">defarbrec</span>. 
+     In particular, the function generated by <span class="v">defarbrec</span> 
+     is not executable due to the termination test; 
+     it may be transformed into an executable function 
+     by transforming away the termination test (possibly in a restricted domain) 
+     as explained in the `Introduction' section, 
+     but some of the existing tools 
+     immediately produce executable functions instead.</p><p><span class="tt"><a href="ACL2____DEFPUN.html">defpun</a></span> produces a constrained (not defined) function. 
+     Since APT transformations operate on defined functions, 
+     having <span class="v">defarbrec</span> generate a defined function 
+     makes the function amenable to transformations. 
+     <span class="tt"><a href="ACL2____DEFPUN.html">defpun</a></span> produces only tail-recursive functions, 
+     while <span class="v">defarbrec</span> can produce non-tail-recursive functions.</p><p><span class="v">defp</span> (see the final part of the <span class="tt"><a href="ACL2____DEFPUN.html">defpun</a></span> documentation) 
+     is a generalization of <span class="tt"><a href="ACL2____DEFPUN.html">defpun</a></span>, 
+     but it still produces 
+     a constrained (not defined) tail-recursive-only function.</p><p><span class="v">defpun-exec</span> (see the final part of the <span class="tt"><a href="ACL2____DEFPUN.html">defpun</a></span> documentation) 
+     extends <span class="tt"><a href="ACL2____DEFPUN.html">defpun</a></span> with executability, 
+     but its use of <span class="tt"><a href="ACL2____DEFEXEC.html">defexec</a></span> requires 
+     that the domain over which the function terminates be provided right away, 
+     and that the termination be proved right away. 
+     Both things are deferred with <span class="v">defarbrec</span>.</p><p><span class="tt"><a href="ACL2____DEFPM.html">defpm</a></span> produces a measure, termination predicate, and some theorems 
+     that can be used to introduce a tail-recursive logic-mode function 
+     similar to the one produced by <span class="v">defarbrec</span>; 
+     the companion tool <span class="tt"><a href="ACL2____DEFTHM-DOMAIN.html">defthm-domain</a></span> serves to show that 
+     the termination predicate holds in suitable domains. 
+     However, the  termination predicate generated by <span class="tt"><a href="ACL2____DEFPM.html">defpm</a></span> 
+     is constrained, not defined; 
+     in constrast, 
+     the termination predicate generated by <span class="v">defarbrec</span> is defined, 
+     and thus amenable to APT transformations. 
+     <span class="v">defarbrec</span> generates the recursive function, 
+     while <span class="tt"><a href="ACL2____DEFPM.html">defpm</a></span> provides the components for defining it manually.</p><p><span class="v">def::ung</span> (see the final part of the <span class="tt"><a href="ACL2____DEFPM.html">defpm</a></span> documentation), 
+     which supersedes <span class="v">def::un</span> in <span class="v">books/coi/termination/assuming</span>, 
+     produces a logic-mode defined function that may be even reflexive 
+     (i.e. it may have recursive calls like <span class="v">(mc91 (mc91 (<a href="COMMON-LISP_____B2.html">+</a> n 11)))</span>), 
+     while the current implementation of <span class="v">defarbrec</span> 
+     does not support reflexive functions. 
+     The function produced by <span class="v">def::ung</span> has a more complex definition 
+     than the function produced by <span class="v">defarbrec</span>: 
+     the former has several ``layers'' of sub-functions, 
+     while the latter has just the form shown 
+     in the `Generated Functions' section above. 
+     The simpler definition eases the application of transformations to it, 
+     as opposed to transforming several sub-functions.</p>
+</body>
+</html>

@@ -1,0 +1,139 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Dealing-with-tau-problems</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____DEALING-WITH-TAU-PROBLEMS">Click for Dealing-with-tau-problems in the Full Manual</a></h3>
+
+<p>Some advice on dealing with problems caused by the tau system</p><p>For background on the tau system, see <a href="ACL2____INTRODUCTION-TO-THE-TAU-SYSTEM.html">introduction-to-the-tau-system</a>.  The two most common problems caused by the 
+ tau system have to do with the system's interaction with ``legacy'' proof 
+ scripts.  Such scripts may suffer because they were not designed to exploit 
+ tau reasoning and which may configure the tau database in quite incomplete and 
+ arbitrary ways.  The two most common problems we have seen are (a) significant 
+ slow downs in a few proofs and (b) failed proof attempts due to hints being 
+ misapplied because the tau system caused subgoals to be renumbered.</p> 
+ 
+ <p>We discuss the rather limited means of dealing with these problems here. 
+ In <a href="ACL2____FUTURE-WORK-RELATED-TO-THE-TAU-SYSTEM.html">future-work-related-to-the-tau-system</a> we list some major 
+ inadequacies of the tau system.</p> 
+ 
+ <p>If the tau system contributes to a proof, the <a href="ACL2____RUNE.html">rune</a> <span class="v">(:</span><span class="tt"><a href="ACL2____EXECUTABLE-COUNTERPART.html">executable-counterpart</a></span><span class="v"> tau-system)</span> will be listed among the Rules in the 
+ <a href="ACL2____SUMMARY.html">Summary</a>.  However, merely by being attempted the tau system can slow 
+ down proofs in which it makes no contribution.</p> 
+ 
+ <p>The most brutal and fool-proof way to isolate a proof from the tau system 
+ is to disable the entire system.  This can be done globally by</p> 
+ 
+ <pre class="code">(<a href="ACL2____IN-THEORY.html">in-theory</a> (<a href="ACL2____DISABLE.html">disable</a> (<a href="ACL2____TAU-SYSTEM.html">tau-system</a>)))  ; (:executable-counterpart tau-system)</pre> 
+ 
+ <p>or locally with a subgoal specific hint:</p> 
+ 
+ <pre class="code">...
+:hints (("...subgoal id..." :in-theory (<a href="ACL2____DISABLE.html">disable</a> (<a href="ACL2____TAU-SYSTEM.html">tau-system</a>))))</pre> 
+ 
+ <p>Conducting a proof with and without the participation of the tau system can 
+ help you determine whether tau reasoning is helping or hurting.</p> 
+ 
+ <p><i>Dealing with Slowdowns</i></p> 
+ 
+ <p>The <span class="tt"><a href="ACL2____TIME-TRACKER.html">time-tracker</a></span> utility was added to allow users to investigate 
+ whether excessive amounts of time are being spent in a given function.  It was 
+ then used to annotate the code for the tau system as described in <a href="ACL2____TIME-TRACKER-TAU.html">time-tracker-tau</a>.  The result is that if ``excessive'' time is spent in tau 
+ reasoning, messages to that effect will be printed to the proof log.  The 
+ question is: aside from disabling the tau system how can the proof be sped 
+ up?</p> 
+ 
+ <p>There are two common causes of slowdown in the tau system.  The first stems 
+ from the system's use of <span class="v">:</span><span class="tt"><a href="ACL2____EXECUTABLE-COUNTERPART.html">executable-counterpart</a></span>s to determine 
+ whether a constant has a given tau.  Recall that a tau is a conjunction of 
+ monadic predicates.  To determine whether some constant satisfies the tau, the 
+ predicates are executed.  If you have a hard-to-compute predicate this can be 
+ very slow.  The most typical such predicates in ACL2 applications are those 
+ that check invariants, e.g., that recognize ``good states'' or ``well-formed 
+ data.''  These are often written inefficiently because they are intended only 
+ for used in theorems and, before the tau system was added, they may have never 
+ been applied to constants.  The most common constants tau predicates are 
+ applied to are <span class="v">0</span>, <span class="v">T</span>, and <span class="v">NIL</span>, although different models may 
+ stress other constants.  To understand why <span class="v">NIL</span> for example is frequently 
+ tested, if the test of an <span class="v">IF</span>-expression is computed to have tau <i>s</i> 
+ then the next question we ask is ``does <span class="v">nil</span> satisfy <i>s</i>?''</p> 
+ 
+ <p>You may determine whether the tau system is spending time executing tau 
+ predicates by observing the rewriter — see <a href="ACL2____DMR.html">dmr</a> — or by 
+ interrupting the system and getting a backtrace (see <a href="ACL2____SET-DEBUGGER-ENABLE.html">set-debugger-enable</a>).</p> 
+ 
+ <p>If excessive time is being spent in a tau predicate, a draconian solution 
+ is to disable the <span class="v">:</span><span class="tt"><a href="ACL2____EXECUTABLE-COUNTERPART.html">executable-counterpart</a></span> of that predicate, for 
+ example in either of these equivalent ways.  The tau system does not execute 
+ disabled <span class="v">:</span><span class="tt"><a href="ACL2____EXECUTABLE-COUNTERPART.html">executable-counterpart</a></span>s.</p> 
+ 
+ <pre class="code">(<a href="ACL2____IN-THEORY.html">in-theory</a> (<a href="ACL2____DISABLE.html">disable</a> (:executable-counterpart foo)))
+(<a href="ACL2____IN-THEORY.html">in-theory</a> (<a href="ACL2____DISABLE.html">disable</a> (foo)))</pre> 
+ 
+ <p>In either case above, you may prefer to provide local <span class="v">:</span><span class="tt"><a href="ACL2____IN-THEORY.html">in-theory</a></span> <span class="v">:</span><span class="tt"><a href="ACL2____HINTS.html">hints</a></span> rather than <span class="v">:in-theory</span> <a href="ACL2____EVENTS.html">events</a>.</p> 
+ 
+ <p>Disabling the executable-counterpart of expensive tau predicates will 
+ weaken the tau system, probably only negligibly, because it can no longer run 
+ the predicates to determine whether they admits given constants.</p> 
+ 
+ <p>A more sophisticated solution is to make the tau system record values of 
+ the <span class="v">:</span><span class="tt"><a href="ACL2____LOGIC.html">logic</a></span>-mode function in question, so that the system will 
+ look up the necessary values rather than running the function every time the 
+ question arises.  It will look up recorded values whether the 
+ executable-counterpart of the tau predicate is enabled or disabled.  Here is 
+ an example of a lemma that can provide such a solution.  See the discussion of 
+ the <i>Eval</i> form of <span class="v">:</span><span class="tt"><a href="ACL2____TAU-SYSTEM.html">tau-system</a></span> rules.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> lemma
+  (<a href="COMMON-LISP____AND.html">and</a> (foo 0)
+       (foo 17)
+       (foo t)
+       (<a href="COMMON-LISP____NOT.html">not</a> (foo '(a b c))))
+  :rule-classes :tau-system)</pre> 
+ 
+ <p>It might be difficult to determine <i>which</i> constants are being 
+ repeatedly tested, although tracing (<span class="tt"><a href="ACL2____TRACE_42.html">trace$</a></span>) suspected tau predicates 
+ will show what they are being called on.</p> 
+ 
+ <p>At the moment there are no better user-level tools to discover this. 
+ However, some users may wish to consider the following hack: In the ACL2 
+ source file <span class="v">tau.lisp</span>, immediately after the definition of the system 
+ function <span class="v">ev-fncall-w-tau-recog</span>, there is a comment which contains some 
+ raw Lisp code that can be used to investigate whether tau's use of evaluation 
+ on constants is causing a problem and to determine which constants are 
+ involved.</p> 
+ 
+ <p>The second main cause of slowdowns by the tau system is that the system 
+ contains ``too many'' conjunctive rules (see the <i>Conjunctive</i> form in 
+ <span class="tt"><a href="ACL2____TAU-SYSTEM.html">tau-system</a></span>).  Unfortunately, we have no tools for either identifying 
+ the problem or addressing it!  That said, let us tell you what we do know!</p> 
+ 
+ <p>Conjunctive rules are used to ``complete'' each tau as it is built. 
+ Referring to the <span class="v">weekdayp</span> example in <span class="tt"><a href="ACL2____TAU-SYSTEM.html">tau-system</a></span>, if a tau is 
+ constructed that recognizes weekdays but not <span class="v">MON</span>, <span class="v">TUE</span>, <span class="v">THU</span>, or 
+ <span class="v">FRI</span>, it is completed by adding that the tau recognizes (only) <span class="v">WED</span>. 
+ This means that when we construct a tau we scan all known conjunctive rules 
+ and see whether all but one of the literals of any conjunctive rule are 
+ present.  This can be expensive.  To mitigate this expense, the tau system 
+ caches the computation on a per proof basis (the cache is cleared after every 
+ proof).</p> 
+ 
+ <p>To learn what conjunctive rules there are in your system, evaluate</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____ASSOC.html">assoc</a> 'tau-conjunctive-rules (<a href="ACL2____TAU-DATABASE.html">tau-database</a> (<a href="ACL2____W.html">w</a> state)))</pre> 
+ 
+ <p>Perhaps by sending the implementors that list, we can think of ways to 
+ index the conjunctive rules to save time.</p> 
+ 
+ <p><i>Dealing with Misapplied Hints</i></p> 
+ 
+ <p>The second common problem caused by the tau system in legacy proof scripts 
+ is that it can cause subgoals to be renumbered and thus cause hints to be 
+ missed.  The only ways to address this problem is either to disable the tau 
+ system (locally or globally by disabling <span class="v">(:executable-counterpart
+ tau-system)</span>) or change the legacy hints to use the new subgoal names.</p>
+</body>
+</html>

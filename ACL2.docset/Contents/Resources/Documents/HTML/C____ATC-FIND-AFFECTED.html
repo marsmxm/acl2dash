@@ -1,0 +1,162 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Atc-find-affected</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=C____ATC-FIND-AFFECTED">Click for Atc-find-affected in the Full Manual</a></h3>
+
+<p>Find the variables affected by a term.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(atc-find-affected fn term typed-formals prec-fns ctx state) 
+  → 
+(mv erp affected state)</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">fn</span> — <font color="#606060">Guard <span class="v">(<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> fn)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">term</span> — <font color="#606060">Guard <span class="v">(<a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a> term)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">typed-formals</span> — <font color="#606060">Guard <span class="v">(<a href="C____ATC-SYMBOL-TYPE-ALISTP.html">atc-symbol-type-alistp</a> typed-formals)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">prec-fns</span> — <font color="#606060">Guard <span class="v">(<a href="C____ATC-SYMBOL-FNINFO-ALISTP.html">atc-symbol-fninfo-alistp</a> prec-fns)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">ctx</span> — <font color="#606060">Guard <span class="v">(<a href="ACL2____CTXP.html">ctxp</a> ctx)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">affected</span> — <font color="#606060">Type <span class="v">(<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> affected)</span>, given <span class="v">(<a href="C____ATC-SYMBOL-TYPE-ALISTP.html">atc-symbol-type-alistp</a> typed-formals)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>This is used on the body of each non-recursive target function <span class="v">fni</span>, 
+     in order to determine the variables affected by it, 
+     according to the nomenclature in the user documentation. 
+     We visit the leaves of the term 
+     according to the <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span> and <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span> structure, 
+     and ensure that they all have the same form, 
+     which must be one of the following forms:</p><ul>
+<li>A call of a (recursive or non-recursive) target function <span class="v">fnj</span> 
+      with <span class="v">j &lt; i</span>. 
+      In this case, <span class="v">term</span> affects the same variables as <span class="v">fnj</span>. 
+      We use <span class="tt"><a href="C____ATC-CHECK-CFUN-CALL.html">atc-check-cfun-call</a></span> and <span class="tt"><a href="C____ATC-CHECK-LOOP-CALL.html">atc-check-loop-call</a></span> 
+      to check if the term is a call of a target function 
+      and to retrieve that function's affected variables: 
+      we pass <span class="v">nil</span> as the variable-term alist, 
+      because it does not change the returned affected variables, 
+      which is the only thing we care about here, 
+      ignoring all the other results.</li>
+<li>A formal parameter <span class="v">var</span> of <span class="v">fni</span> with pointer type. 
+      In this case, <span class="v">term</span> affects the list of variables <span class="v">(var)</span>.</li>
+<li>A term <span class="v">ret</span> that is not a call of <span class="v">fnj</span> as above 
+      and is not a formal parameter of <span class="v">fni</span> of pointer type. 
+      In this case, <span class="v">term</span> affects no variables.</li>
+<li>A term <span class="v">(<a href="ACL2____MV.html">mv</a> var1 ... varn)</span> where each <span class="v">vari</span> is 
+      a formal parameter of the function that has pointer type. 
+      In this case, <span class="v">term</span> affects 
+      the list of variables <span class="v">(var1 ... varn)</span>.</li>
+<li>A term <span class="v">(<a href="ACL2____MV.html">mv</a> ret var1 ... varn)</span> where each <span class="v">vari</span> is 
+      a formal parameter of the function that has pointer type 
+      and <span class="v">ret</span> is not. 
+      In this case, <span class="v">term</span> affects 
+      the list of variables <span class="v">(var1 ... varn)</span>.</li>
+</ul><p>In checking that the terms at the leaves have the same form, 
+     we allow <span class="v">ret</span> to vary, but the other parts must coincide.</p><p>When we encounter <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span>s with <span class="tt"><a href="ACL2____MBT.html">mbt</a></span> or <span class="tt"><a href="ACL2____MBT_42.html">mbt$</a></span> tests, 
+     we recursively process the `then' branch, skipping the `else' branch. 
+     This is because only the `then' branch represents C code.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>atc-find-affected</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ atc-find-affected
+ (fn term typed-formals prec-fns ctx state)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (<a href="ACL2____STATE.html">state</a>)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> fn)
+                             (<a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a> term)
+                             (<a href="C____ATC-SYMBOL-TYPE-ALISTP.html">atc-symbol-type-alistp</a> typed-formals)
+                             (<a href="C____ATC-SYMBOL-FNINFO-ALISTP.html">atc-symbol-fninfo-alistp</a> prec-fns)
+                             (<a href="ACL2____CTXP.html">ctxp</a> ctx))))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'atc-find-affected))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+   (((<a href="ACL2____MV.html">mv</a> okp test then else)
+     (<a href="C____FTY-CHECK-IF-CALL.html">fty-check-if-call</a> term))
+    ((when okp)
+     (<a href="ACL2____B_A2.html">b*</a>
+      (((<a href="ACL2____MV.html">mv</a> mbtp &amp;) (<a href="ACL2____CHECK-MBT-CALL.html">check-mbt-call</a> test))
+       ((when mbtp)
+        (<a href="C____ATC-FIND-AFFECTED.html">atc-find-affected</a> fn
+                           then typed-formals prec-fns ctx state))
+       ((<a href="ACL2____MV.html">mv</a> mbt$p &amp;) (<a href="ACL2____CHECK-MBT_42-CALL.html">check-mbt$-call</a> test))
+       ((when mbt$p)
+        (<a href="C____ATC-FIND-AFFECTED.html">atc-find-affected</a> fn
+                           then typed-formals prec-fns ctx state))
+       ((<a href="ACL2____ER.html">er</a> then-affected)
+        (<a href="C____ATC-FIND-AFFECTED.html">atc-find-affected</a> fn
+                           then typed-formals prec-fns ctx state))
+       ((<a href="ACL2____ER.html">er</a> else-affected)
+        (<a href="C____ATC-FIND-AFFECTED.html">atc-find-affected</a> fn
+                           else typed-formals prec-fns ctx state)))
+      (<a href="COMMON-LISP____IF.html">if</a>
+       (<a href="COMMON-LISP____EQUAL.html">equal</a> then-affected else-affected)
+       (<a href="ACL2____VALUE.html">acl2::value</a> then-affected)
+       (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
+        ctx t nil
+        "When generating code for function ~x0, ~
+                       an IF branch affects variables ~x1, ~
+                       while the other branch affects variables ~x2: ~
+                       this is disallowed."
+        fn then-affected else-affected))))
+    ((<a href="ACL2____MV.html">mv</a> okp &amp; body &amp;)
+     (<a href="C____FTY-CHECK-LAMBDA-CALL.html">fty-check-lambda-call</a> term))
+    ((when okp)
+     (<a href="C____ATC-FIND-AFFECTED.html">atc-find-affected</a> fn
+                        body typed-formals prec-fns ctx state))
+    ((<a href="ACL2____MV.html">mv</a> okp &amp; &amp; &amp; &amp; affected &amp;)
+     (<a href="C____ATC-CHECK-CFUN-CALL.html">atc-check-cfun-call</a> term nil prec-fns (<a href="ACL2____W.html">w</a> state)))
+    ((when okp) (<a href="ACL2____VALUE.html">acl2::value</a> affected))
+    ((<a href="ACL2____MV.html">mv</a> okp &amp; &amp; &amp; affected &amp; &amp;)
+     (<a href="C____ATC-CHECK-LOOP-CALL.html">atc-check-loop-call</a> term nil prec-fns))
+    ((when okp) (<a href="ACL2____VALUE.html">acl2::value</a> affected))
+    ((when (<a href="ACL2____PSEUDO-TERM-CASE.html">pseudo-term-case</a> term :var))
+     (<a href="ACL2____B_A2.html">b*</a> ((var (<a href="ACL2____PSEUDO-TERM-VAR-_E3NAME.html">pseudo-term-var-&gt;name</a> term)))
+         (<a href="COMMON-LISP____IF.html">if</a> (<a href="C____ATC-FORMAL-POINTERP.html">atc-formal-pointerp</a> var typed-formals)
+             (<a href="ACL2____VALUE.html">acl2::value</a> (<a href="COMMON-LISP____LIST.html">list</a> var))
+             (<a href="ACL2____VALUE.html">acl2::value</a> nil))))
+    ((<a href="ACL2____MV.html">mv</a> okp terms)
+     (<a href="C____FTY-CHECK-LIST-CALL.html">fty-check-list-call</a> term))
+    ((when okp)
+     (<a href="COMMON-LISP____COND.html">cond</a>
+      ((<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> terms)
+            (<a href="C____ATC-FORMAL-POINTER-LISTP.html">atc-formal-pointer-listp</a> terms typed-formals))
+       (<a href="ACL2____VALUE.html">acl2::value</a> terms))
+      ((<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> (<a href="COMMON-LISP____CDR.html">cdr</a> terms))
+            (<a href="C____ATC-FORMAL-POINTER-LISTP.html">atc-formal-pointer-listp</a> (<a href="COMMON-LISP____CDR.html">cdr</a> terms)
+                                      typed-formals))
+       (<a href="ACL2____VALUE.html">acl2::value</a> (<a href="COMMON-LISP____CDR.html">cdr</a> terms)))
+      (t
+       (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
+        ctx t nil
+        "When generating code for function ~x0, ~
+                            a term ~x1 was encountered that ~
+                            returns multiple values but they, ~
+                            or at least all of them except the first one, ~
+                            are not all formal parameters of ~x0 ~
+                            of pointer type."
+        fn term)))))
+   (<a href="ACL2____VALUE.html">acl2::value</a> nil))))</pre> 
+<p><b>Theorem: </b>symbol-listp-of-atc-find-affected.affected</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ symbol-listp-of-atc-find-affected.affected
+ (<a href="ACL2____IMPLIES.html">implies</a>
+   (<a href="C____ATC-SYMBOL-TYPE-ALISTP.html">atc-symbol-type-alistp</a> typed-formals)
+   (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?erp ?affected acl2::?state)
+         (<a href="C____ATC-FIND-AFFECTED.html">atc-find-affected</a> fn
+                            term typed-formals prec-fns ctx state)))
+       (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> affected)))
+ :rule-classes :rewrite)</pre> 
+
+</body>
+</html>

@@ -1,0 +1,121 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Include-book-paths</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____INCLUDE-BOOK-PATHS">Click for Include-book-paths in the Full Manual</a></h3>
+
+<p>List paths via <span class="tt"><a href="ACL2____INCLUDE-BOOK.html">include-book</a></span> down to a given book</p><pre class="code">General Form:
+
+(<a href="ACL2____INCLUDE-BOOK-PATHS.html">include-book-paths</a> book
+                    &amp;key
+                    excluded-books ; default nil
+                    dir ; default (<a href="ACL2____CBD.html">cbd</a>)
+                    verbose ; default t
+                    return  ; default *include-book-paths-default-count*
+                    )</pre> 
+ 
+ <p>where all arguments are evaluated.  The value of the first argument, 
+ <span class="v">book</span>, evaluates to a string that is interpreted as a book name, where the 
+ <span class="v">".lisp"</span> suffix is optional.  <span class="v">Excluded-books</span> evaluates to a list of 
+ such strings.  Note that in this context, a book name can be an absolute 
+ pathname or it can be relative to the directory <span class="v">dir</span>, which by default is 
+ the <span class="tt"><a href="ACL2____CBD.html">cbd</a></span> but can be any directory name or any legal value of the 
+ <span class="v">:dir</span> argument for <span class="tt"><a href="ACL2____INCLUDE-BOOK.html">include-book</a></span>, e.g., <span class="v">:dir :system</span>.  By 
+ default some progress messages are printed; use <span class="v">:verbose nil</span> to turn them 
+ off.  We describe the <span class="v">:return</span> keyword argument later below.</p> 
+ 
+ <pre class="code">Example Form:
+
+(<a href="ACL2____INCLUDE-BOOK-PATHS.html">include-book-paths</a> "cowles/acl2-asg.lisp"
+                    :dir "/projects/acl2/acl2/books"
+                    :excluded-books '("meta/meta-times-equal")
+                    :verbose nil
+                    :return t)</pre> 
+ 
+ <h3>Description</h3> 
+ 
+ <p>Evaluation of the form <span class="v">(<a href="ACL2____INCLUDE-BOOK-PATHS.html">include-book-paths</a> A)</span> returns an <a href="ACL2____ERROR-TRIPLE.html">error-triple</a>.  In the case of no error, the value is a list consisting of 
+ maximal paths through the ``immediately included by'' relation, defined below, 
+ that terminate in the given book name, <span class="v">A</span>.  The form 
+ <span class="v">(<a href="ACL2____INCLUDE-BOOK-PATHS.html">include-book-paths</a> A :excluded-books (<a href="COMMON-LISP____LIST.html">list</a> B1 ... Bn))</span> produces a 
+ similar result, except that all paths that contain any <span class="v">Bi</span> are excluded 
+ from the result.  This supports the motivation for writing this tool, which is 
+ to reduce the set of books on which a given book depends (via 
+ <span class="v">include-book</span>, hereditarily).  If you are contemplating the possibility of 
+ removing dependence on each <span class="v">Bi</span>, then <span class="v">(<a href="ACL2____INCLUDE-BOOK-PATHS.html">include-book-paths</a> A (<a href="COMMON-LISP____LIST.html">list</a> B1
+ ... Bn))</span> will give you remaining paths that cause the current session to 
+ depend on book <span class="v">A</span>.</p> 
+ 
+ <p>By default, the maximum number of paths returned is the value of the 
+ constant <span class="v">*include-book-paths-default-count*</span>, which is 
+ <span class="v">100</span>.  If the value of keyword <span class="v">:return</span> 
+ is a natural number, then this number is used in place of that default.  If 
+ the number of maximal paths exceeds this number, only the first 
+ <span class="v">100</span> are returned; otherwise all such paths 
+ are returned.  Regardless, the full list of maximal paths is stored in <a href="ACL2____STATE.html">state</a> global variable <span class="v">include-book-paths-last</span>.  If the value of keyword 
+ argument <span class="v">:return</span> is supplied as other than a natural number, then all 
+ such maximal paths are returned, except that if the value is <span class="v">nil</span>, then no 
+ paths are returned.</p> 
+ 
+ <h3>Details: the algorithm and the notion of ``immediately included by''</h3> 
+ 
+ <p>The algorithm is based on the binary relation ``A is immediately included 
+ by B'', defined as follows.  First let us say that ``A is included by B'' (or 
+ ``B includes A'') if within the book B or its <a href="ACL2____PORTCULLIS.html">portcullis</a> <a href="ACL2____COMMAND.html">command</a>s there is an <a href="ACL2____INCLUDE-BOOK.html">include-book</a> of A, which may be <a href="ACL2____LOCAL.html">local</a>. 
+ Then A is immediately included by B (or, B immediately includes A) when B 
+ includes A but there is no book C such that B includes C and C includes A. 
+ Suppose for example that book B contains the following forms, where also book 
+ C includes book A.</p> 
+ 
+ <pre class="code">(<a href="ACL2____INCLUDE-BOOK.html">include-book</a> A)
+(<a href="ACL2____INCLUDE-BOOK.html">include-book</a> C) ; where C includes A</pre> 
+ 
+ <p>This is equivalent to the following — and they are equivalent from a 
+ dependency standpoint even if either or both of the include-book forms are 
+ local.</p> 
+ 
+ <pre class="code">(<a href="ACL2____INCLUDE-BOOK.html">include-book</a> C) ; where C includes A</pre> 
+ 
+ <p>Even though B includes A, nevertheless, since also B includes C which 
+ includes A, then A is not <i>immediately included</i> by B.  The result of 
+ <span class="v">include-book-paths</span> will include at least one path from B through C to A, 
+ but no path for which B is adjacent to A.  Our contention is that 
+ ``immediately includes'' is the right notion for dependency analysis since 
+ seeing two paths with B connected to A — one with B adjacent to A and 
+ one with B connected to C, which is connected to A — isn't particularly 
+ helpful, and is perhaps misleading (given the equivalent displays above).</p> 
+ 
+ <h3>The ``immediately included by'' directed acyclic graph, <span class="v">iib-dag</span>
+</h3> 
+ 
+ <p>The ``immediately included by'' relation is actually a directed acyclic 
+ graph, which we call the ``iib-dag''.  The first step in the 
+ <span class="v">include-book-paths</span> algorithm is to build the iib-dag from the <a href="ACL2____CERTIFICATE.html">certificate</a>s of all books included in the current ACL2 <a href="ACL2____WORLD.html">world</a> (<a href="ACL2____LOCAL.html">local</a>ly or not).  You can compute the iib-dag yourself by evaluating the 
+ form</p> 
+ 
+ <pre class="code">(include-book-dag ctx state)</pre> 
+ 
+ <p>where <span class="v">ctx</span> is a <a href="ACL2____CONTEXT.html">context</a> for error messages and <span class="v">state</span> is the 
+ ACL2 <a href="ACL2____STATE.html">state</a>, and the result is an <a href="ACL2____ERROR-TRIPLE.html">error-triple</a> whose value in the 
+ non-error case is the current iib-dag.</p> 
+ 
+ <p>The iib-dag is actually cached in the <a href="ACL2____STATE.html">state</a> global variable 
+ <span class="v">include-book-dag-cache</span>, whose value is either <span class="v">nil</span> or of the form 
+ <span class="v">(<a href="COMMON-LISP____CONS.html">cons</a> include-book-alist-all iib-dag)</span> where <span class="v">iib-dag</span> is the iib-dag 
+ computed in a world <span class="v">w</span> for which <span class="v">include-book-alist-all</span> is the value 
+ of <span class="v">(global-val 'include-book-alist-all w)</span>.  Thus, if no <span class="tt"><a href="ACL2____INCLUDE-BOOK.html">include-book</a></span> events have been evaluated or undone since the last time the 
+ iib-dag was computed, then the iib-dag will simply be looked up in the cache. 
+ This is an important optimization, since building the iib-dag is probably the 
+ most time-consuming part of the <span class="v">include-book-paths</span> algorithm.</p> 
+ 
+ <p>Remark.  As noted above, the iib-dag is computed from the <a href="ACL2____CERTIFICATE.html">certificate</a>s of all of the books included in the session (<a href="ACL2____LOCAL.html">local</a>ly or 
+ not).  A duplicate-free list of all such books can be computed as follows.</p> 
+ 
+ <pre class="code">(<a href="ACL2____REMOVE-DUPLICATES-EQUAL.html">remove-duplicates-equal</a>
+ (<a href="ACL2____STRIP-CARS.html">strip-cars</a> (global-val 'include-book-alist-all (<a href="ACL2____W.html">w</a> state))))</pre>
+</body>
+</html>

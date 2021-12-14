@@ -1,0 +1,199 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Prohibition-of-loop$-and-lambda$</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____PROHIBITION-OF-LOOP_42-AND-LAMBDA_42">Click for Prohibition-of-loop$-and-lambda$ in the Full Manual</a></h3>
+
+<p>Certain events do not allow <span class="tt"><a href="ACL2____LOOP_42.html">loop$</a></span>s or <span class="tt"><a href="ACL2____LAMBDA_42.html">lambda$</a></span>s</p><p>Certain events, including <span class="tt"><a href="ACL2____DEFCONST.html">defconst</a></span>, <span class="tt"><a href="COMMON-LISP____DEFMACRO.html">defmacro</a></span>, and 
+  <span class="tt"><a href="ACL2____DEFPKG.html">defpkg</a></span>, prohibit the use of <span class="tt"><a href="ACL2____LOOP_42.html">loop$</a></span> and <span class="tt"><a href="ACL2____LAMBDA_42.html">lambda$</a></span>.  The 
+  prohibition of <span class="v">loop$</span>s is due to their use of <span class="v">lambda$</span>s, so we 
+  focus on why <span class="v">lambda$</span>s are prohibited here.</p> 
+ 
+  <p><span class="v">Lambda$</span> is prohibited in these events because of the way <a href="ACL2____BOOKS.html">books</a> 
+  are loaded.  To speed up the execution of <span class="v">include-book</span> the compiled file 
+  for a book is loaded before the events in the book are processed.  But the 
+  evaluation of <span class="v">lambda$</span> expressions in raw Lisp depends on the 
+  <span class="v">lambda$</span>s having been translated and recorded in the logical world and in 
+  the lambda cache (see <span class="tt"><a href="ACL2____PRINT-CL-CACHE.html">print-cl-cache</a></span>).  So the execution of these 
+  events can't depend on <span class="v">lambda$</span>.</p> 
+ 
+  <p>If you have submitted an event that provoked an error citing this topic 
+  you must restate the event to avoid those prohibited constructions. 
+  <i>Unfortunately, you must also consider ancestral occurrences of the prohibited 
+  constructions!</i>  We first give two examples of the problem to drive home the 
+  message and then we discuss various ways the problem can be dealt with.</p> 
+ 
+  <h3>Examples of Prohibited Forms</h3> 
+ 
+  <pre class="code">ACL2 !&gt;(<a href="ACL2____DEFCONST.html">defconst</a> *2^10* (<a href="ACL2____APPLY_42.html">apply$</a> (<a href="ACL2____LAMBDA_42.html">lambda$</a> (x) (<a href="COMMON-LISP____EXPT.html">expt</a> 2 x)) '(10)))
+
+ACL2 Error in ( DEFCONST *2^10* ...):  We prohibit certain events,
+including DEFCONST, DEFPKG, and DEFMACRO, from being ancestrally dependent
+on loop$ and lambda$ expressions.  But at least one of these prohibited
+expressions occurs in this event.  See :DOC prohibition-of-loop$-and-
+lambda$.</pre> 
+ 
+  <p>We will discuss how to avoid such errors in the next section.</p> 
+ 
+  <p>Here is an example of an ancestral use of <span class="v">lambda$</span> in a macro. 
+  Suppose we wish to define the macro <span class="v">rat</span> so that <span class="v">(rat "123.4567")</span> 
+  expands to the rational <span class="v">1234567/10000</span>.  Our idea is to use <span class="v">loop$</span> in 
+  the definition of the function <span class="v">string-to-rat</span> and then to call 
+  <span class="v">string-to-rat</span> in our macro.  (We don't recommend this particular use of 
+  <span class="v">loop$</span>s to parse a string into a rational but we use it here to make a 
+  point later.)</p> 
+ 
+  <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> string-to-rat (str)
+  (<a href="COMMON-LISP____LET_A2.html">let*</a> ((lst (<a href="COMMON-LISP____COERCE.html">coerce</a> str 'list))
+         (right-of-pt (<a href="COMMON-LISP____LENGTH.html">length</a> (<a href="COMMON-LISP____CDR.html">cdr</a> (<a href="ACL2____LOOP_42.html">loop$</a> for d in lst
+                                          as tail on lst
+                                          thereis
+                                          (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQL.html">eql</a> #. d) tail nil))))))
+    (<a href="ACL2____LOOP_42.html">loop$</a> for tail on lst
+           when (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQL.html">eql</a> (<a href="COMMON-LISP____CAR.html">car</a> tail) #.))
+           sum
+           (<a href="COMMON-LISP_____A2.html">*</a> (<a href="COMMON-LISP____-.html">-</a> (<a href="COMMON-LISP____CHAR-CODE.html">char-code</a> (<a href="COMMON-LISP____CAR.html">car</a> tail)) 48)
+              (<a href="COMMON-LISP____EXPT.html">expt</a> 10
+                    (<a href="COMMON-LISP____-.html">-</a> (<a href="ACL2____LOOP_42.html">loop$</a> for d in tail sum (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQL.html">eql</a> d #.) 0 1))
+                       (<a href="COMMON-LISP_____B2.html">+</a> 1 right-of-pt)))))))
+
+(<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> rat (str) (string-to-rat str))</pre> 
+ 
+  <p>The attempt to define the macro will provoke the error shown above for 
+  <span class="v">(<a href="ACL2____DEFCONST.html">defconst</a> *2^10* ...)</span>.</p> 
+ 
+  <h3>Avoiding These Errors</h3> 
+ 
+  <p>The only way to avoid these errors is to not use <span class="v">lambda$</span> or 
+  <span class="v">loop$</span> in these events!  We can fix the particular <span class="v">defconst</span> example 
+  above simply with</p> 
+ 
+  <pre class="code">(<a href="ACL2____DEFCONST.html">defconst</a> *2^10* (<a href="ACL2____APPLY_42.html">apply$</a> 'expt '(2 10)))</pre> 
+  <p>or, better yet, by</p> 
+  <pre class="code">(<a href="ACL2____DEFCONST.html">defconst</a> *2^10* (<a href="COMMON-LISP____EXPT.html">expt</a> 2 10))</pre> 
+ 
+  <p>since there is reason <span class="v">apply$</span> is involved at all.</p> 
+ 
+  <p>When it is hard to avoid the prohibited constructs you might be able to 
+  use <span class="v">make-event</span> to do the necessary computation during the creation of 
+  the event, though this technique seems mainly applicable to <span class="v">defconst</span> and 
+  much less useful to the <span class="v">defmacro</span> case.</p> 
+ 
+  <pre class="code">(<a href="ACL2____MAKE-EVENT.html">make-event</a>
+  `(<a href="ACL2____DEFCONST.html">defconst</a> *2^10*
+    ',(<a href="ACL2____APPLY_42.html">apply$</a> (<a href="ACL2____LAMBDA_42.html">lambda$</a> (x) (<a href="COMMON-LISP____EXPT.html">expt</a> 2 x)) '(10))))</pre> 
+ 
+  <p>However, in general, removing all uses of <span class="v">loop$</span> and <span class="v">lambda$</span> can 
+  require a lot of re-coding.  For example, fixing the <span class="v">rat</span> macro requires 
+  several old-fashioned recursive definitions to carry out the iterations done 
+  with <span class="v">loop$</span>.</p> 
+ 
+  <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> old-fashioned-string-to-rat1 (lst power)
+  (<a href="COMMON-LISP____COND.html">cond</a>
+   ((<a href="COMMON-LISP____ENDP.html">endp</a> lst) 0)
+   ((<a href="COMMON-LISP____EQL.html">eql</a> (<a href="COMMON-LISP____CAR.html">car</a> lst) #.)
+    (old-fashioned-string-to-rat1 (<a href="COMMON-LISP____CDR.html">cdr</a> lst) power))
+   (t (<a href="COMMON-LISP_____B2.html">+</a> (<a href="COMMON-LISP_____A2.html">*</a> (<a href="COMMON-LISP____-.html">-</a> (<a href="COMMON-LISP____CHAR-CODE.html">char-code</a> (<a href="COMMON-LISP____CAR.html">car</a> lst)) 48)
+            (<a href="COMMON-LISP____EXPT.html">expt</a> 10 power))
+         (old-fashioned-string-to-rat1 (<a href="COMMON-LISP____CDR.html">cdr</a> lst) (<a href="COMMON-LISP____-.html">-</a> power 1))))))
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> left-of-pt (lst)
+  (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____ENDP.html">endp</a> lst) 0)
+        ((<a href="COMMON-LISP____EQL.html">eql</a> (<a href="COMMON-LISP____CAR.html">car</a> lst) #.) 0)
+        (t (<a href="COMMON-LISP_____B2.html">+</a> 1 (left-of-pt (<a href="COMMON-LISP____CDR.html">cdr</a> lst))))))
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> old-fashioned-string-to-rat (str)
+  (<a href="COMMON-LISP____LET.html">let</a> ((lst (<a href="COMMON-LISP____COERCE.html">coerce</a> str 'list)))
+    (old-fashioned-string-to-rat1 lst (<a href="COMMON-LISP____-.html">-</a> (left-of-pt lst) 1))))
+
+(<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> rat (str) (old-fashioned-string-to-rat str))</pre> 
+ 
+  <p>Another way to eliminate <span class="v">loop$</span> and <span class="v">lambda$</span> is to replace the 
+  offending expressions with their translations.  There is no prohibition of 
+  fully-translated quoted <span class="tt"><a href="COMMON-LISP____LAMBDA.html">lambda</a></span> objects, just of <span class="v">lambda$</span> 
+  expressions.</p> 
+ 
+  <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> string-to-rat (str)
+  ((<a href="COMMON-LISP____LAMBDA.html">LAMBDA</a>
+    (LST)
+    ((<a href="COMMON-LISP____LAMBDA.html">LAMBDA</a>
+      (RIGHT-OF-PT LST)
+      (<a href="ACL2____SUM_42_B2.html">SUM$+</a>
+       '(<a href="COMMON-LISP____LAMBDA.html">LAMBDA</a>
+         (LOOP$-GVARS LOOP$-IVARS)
+         (<a href="COMMON-LISP____DECLARE.html">DECLARE</a> (<a href="COMMON-LISP____IGNORABLE.html">IGNORABLE</a> LOOP$-GVARS LOOP$-IVARS))
+         ((<a href="COMMON-LISP____LAMBDA.html">LAMBDA</a>
+           (RIGHT-OF-PT TAIL)
+           (<a href="ACL2____BINARY-_A2.html">BINARY-*</a>
+            (<a href="ACL2____BINARY-_B2.html">BINARY-+</a> '-48 (<a href="COMMON-LISP____CHAR-CODE.html">CHAR-CODE</a> (<a href="COMMON-LISP____CAR.html">CAR</a> TAIL)))
+            (<a href="COMMON-LISP____EXPT.html">EXPT</a>
+             '10
+             (<a href="ACL2____BINARY-_B2.html">BINARY-+</a>
+              (<a href="ACL2____SUM_42.html">SUM$</a>
+               '(<a href="COMMON-LISP____LAMBDA.html">LAMBDA</a> (LOOP$-IVAR)
+                        (<a href="COMMON-LISP____DECLARE.html">DECLARE</a> (<a href="COMMON-LISP____IGNORABLE.html">IGNORABLE</a> LOOP$-IVAR))
+                        ((<a href="COMMON-LISP____LAMBDA.html">LAMBDA</a> (D) (<a href="COMMON-LISP____IF.html">IF</a> (<a href="COMMON-LISP____EQL.html">EQL</a> D '#.) '0 '1))
+                         LOOP$-IVAR))
+               TAIL)
+              (<a href="ACL2____UNARY--.html">UNARY--</a> (<a href="ACL2____BINARY-_B2.html">BINARY-+</a> '1 RIGHT-OF-PT))))))
+          (<a href="COMMON-LISP____CAR.html">CAR</a> LOOP$-GVARS)
+          (<a href="COMMON-LISP____CAR.html">CAR</a> LOOP$-IVARS)))
+       (<a href="COMMON-LISP____CONS.html">CONS</a> RIGHT-OF-PT 'NIL)
+       (<a href="ACL2____WHEN_42_B2.html">WHEN$+</a>
+        '(<a href="COMMON-LISP____LAMBDA.html">LAMBDA</a>
+          (LOOP$-GVARS LOOP$-IVARS)
+          (<a href="COMMON-LISP____DECLARE.html">DECLARE</a> (<a href="COMMON-LISP____IGNORABLE.html">IGNORABLE</a> LOOP$-GVARS LOOP$-IVARS))
+          ((<a href="COMMON-LISP____LAMBDA.html">LAMBDA</a> (TAIL)
+                   (<a href="COMMON-LISP____NOT.html">NOT</a> (<a href="COMMON-LISP____EQL.html">EQL</a> (<a href="COMMON-LISP____CAR.html">CAR</a> TAIL) '#.)))
+           (<a href="COMMON-LISP____CAR.html">CAR</a> LOOP$-IVARS)))
+        'NIL
+        (LOOP$-AS (<a href="COMMON-LISP____CONS.html">CONS</a> (TAILS LST) 'NIL)))))
+     (<a href="COMMON-LISP____LENGTH.html">LENGTH</a>
+      (<a href="COMMON-LISP____CDR.html">CDR</a>
+       (<a href="ACL2____THEREIS_42_B2.html">THEREIS$+</a>
+        '(<a href="COMMON-LISP____LAMBDA.html">LAMBDA</a>
+          (LOOP$-GVARS LOOP$-IVARS)
+          (<a href="COMMON-LISP____DECLARE.html">DECLARE</a> (<a href="COMMON-LISP____IGNORABLE.html">IGNORABLE</a> LOOP$-GVARS LOOP$-IVARS))
+          ((<a href="COMMON-LISP____LAMBDA.html">LAMBDA</a> (D TAIL)
+                   (<a href="COMMON-LISP____IF.html">IF</a> (<a href="COMMON-LISP____EQL.html">EQL</a> '#. D) TAIL 'NIL))
+           (<a href="COMMON-LISP____CAR.html">CAR</a> LOOP$-IVARS)
+           (<a href="COMMON-LISP____CAR.html">CAR</a> (<a href="COMMON-LISP____CDR.html">CDR</a> LOOP$-IVARS))))
+        'NIL
+        (LOOP$-AS (<a href="COMMON-LISP____CONS.html">CONS</a> LST (<a href="COMMON-LISP____CONS.html">CONS</a> (TAILS LST) 'NIL))))))
+     LST))
+   (<a href="COMMON-LISP____COERCE.html">COERCE</a> STR 'LIST)))</pre> 
+ 
+  <p>If we define <span class="v">string-to-rat</span> as above then we can define the <span class="v">rat</span> 
+  macro as originally desired and the <span class="v">defmacro</span> is accepted.</p> 
+ 
+  <p>But there are several arguments against this approach in general:</p> 
+  <ul> 
+ 
+  <li><p><span class="v">Defconst</span>, <span class="v">defmacro</span> and <span class="v">defpkg</span> not only prohibit 
+  <span class="v">loop$</span> and <span class="v">lambda$</span> but also prohibit all uses of <span class="v">apply$</span> and 
+  scions if user-defined functions are involved in the function objects.  This 
+  is because to compute logically with them one must have <a href="ACL2____WARRANT.html">warrant</a> 
+  hypotheses and there is no provision for supplying warrants with these 
+  events.  See <a href="ACL2____IGNORED-ATTACHMENT.html">ignored-attachment</a>.  It turns out that the hideous 
+  example above does not mention any user-defined functions in the function 
+  objects, so this restriction doesn't stop us here.</p></li> 
+ 
+  <li><p>Eliminating <span class="v">loop$</span> in favor of scions sacrifices execution speed 
+  if the <span class="v">loop$</span>s are guard verified.  A guard-verified <span class="v">loop$</span> executes 
+  in raw Lisp as a Common Lisp <span class="v">loop</span>, whereas its translation into nested 
+  calls of <span class="v">loop$</span> scions, even if guard verified, involves far more 
+  function calls.</p></li> 
+ 
+  <li><p>It is much harder to ``maintain'' code derived this way!</p></li> 
+  </ul> 
+ 
+  <p>There may be cases where no user-defined functions are involved, 
+  efficiency doesn't matter, and the <span class="v">loop$</span> scion translation of a 
+  <span class="v">loop$</span> is as perspicuous as the <span class="v">loop$</span> itself.  So don't dismiss this 
+  approach out of hand.</p>
+</body>
+</html>

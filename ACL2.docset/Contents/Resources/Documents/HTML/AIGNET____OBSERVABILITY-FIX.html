@@ -1,0 +1,143 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Observability-fix</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=AIGNET____OBSERVABILITY-FIX">Click for Observability-fix in the Full Manual</a></h3>
+
+<p>Transform the aignet so that some observability don't-care conditions 
+          don't affect the logical equivalence of nodes.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(observability-fix aignet aignet2 config state) 
+  → 
+(mv new-aignet2 new-state)</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">aignet</span> — Input aignet.</dd> 
+  <dd>
+<span class="tt">aignet2</span> — New aignet -- will be emptied.</dd> 
+  <dd>
+<span class="tt">config</span> — Settings for the transform.<br>    <font color="#606060">Guard <span class="v">(<a href="AIGNET____OBSERVABILITY-CONFIG-P.html">observability-config-p</a> config)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>This is mainly intended to be used on a single-output aignet, and 
+mainly as a precursor to fraiging.  Settings for the transform can be tweaked 
+using the <span class="v">config</span> input, which is an <a href="AIGNET____OBSERVABILITY-CONFIG.html">observability-config</a> 
+object.</p> 
+ 
+<p>Suppose we have a single-output AIG whose function is <span class="v">A &amp; B</span>, and that 
+<span class="v">A</span> is a small, simple function and <span class="v">B</span> a large, complicated function. 
+Sometimes it is the case that within <span class="v">B</span> there are nodes that are logically 
+inequivalent, but are equivalent when <span class="v">A</span> is assumed.  We'd like to be able 
+to apply <a href="AIGNET____FRAIG.html">fraig</a>ing and get rid of these redundancies.  But they aren't 
+strictly equivalent, just equivalent under an observability condition.</p> 
+ 
+<p>The observability transform detects such situations and applies the 
+following transform, which restricts the inputs to <span class="v">B</span> so that it only sees 
+inputs satisfying <span class="v">A</span>.  This makes such observability-equivalent nodes truly 
+equivalent and allows fraiging to collapse them together.</p> 
+ 
+<p>First, decompose the topmost AND in the output and sort conjuncts into small 
+and large ones according to some thresholds.  The small ones are conjoined 
+together as <span class="v">A</span> and the large ones as <span class="v">B</span>.  If no conjuncts are smaller 
+enough, the transform exits without doing anything.</p> 
+ 
+<p>Next, find a satisfying assignment for <span class="v">A</span>.  (If it is unsatisfiable, the 
+output is constant false.)  For each combinational input <span class="v">i</span> that is in the 
+minimized satisfying assignment with value <span class="v">v</span>, make a mux <span class="v">A ? i : v</span>. 
+Then replace the occurrences of these inputs in <span class="v">B</span> with these muxes. 
+Finally, conjoin this modified copy of <span class="v">B</span> with <span class="v">A</span>.</p> 
+ 
+<p>This provably produces a combinationally equivalent network, since <span class="v">B</span> is 
+only changed in cases where <span class="v">A</span> des not hold:</p> 
+ 
+<p><b>Theorem: </b>observability-fix-comb-equivalent</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> observability-fix-comb-equivalent
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?new-aignet2 ?new-state)
+              (<a href="AIGNET____OBSERVABILITY-FIX.html">observability-fix</a> aignet aignet2 config state)))
+            (<a href="AIGNET____COMB-EQUIV.html">comb-equiv</a> new-aignet2 aignet)))</pre> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>observability-fix</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ observability-fix
+ (<a href="ACL2____AIGNET.html">aignet</a> aignet2 config state)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (<a href="ACL2____AIGNET.html">aignet</a> aignet2 state)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="AIGNET____OBSERVABILITY-CONFIG-P.html">observability-config-p</a> config)))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'observability-fix))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+   (((local-stobjs aignet-tmp)
+     (<a href="ACL2____MV.html">mv</a> aignet2 aignet-tmp state))
+    (aignet2 (aignet-raw-copy aignet aignet2))
+    ((<a href="ACL2____MV.html">mv</a> aignet-tmp aignet2 state)
+     (<a href="AIGNET____OBSERVABILITY-FIX-CORE.html">observability-fix-core</a> aignet2 aignet-tmp config state))
+    (aignet2
+       (aignet-prune-comb aignet-tmp aignet2
+                          (<a href="AIGNET____OBSERVABILITY-CONFIG-_E3GATESIMP.html">observability-config-&gt;gatesimp</a> config))))
+   (<a href="ACL2____MV.html">mv</a> aignet2 aignet-tmp state))))</pre> 
+<p><b>Theorem: </b>num-ins-of-observability-fix</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> num-ins-of-observability-fix
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?new-aignet2 ?new-state)
+              (<a href="AIGNET____OBSERVABILITY-FIX.html">observability-fix</a> aignet aignet2 config state)))
+            (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="AIGNET____STYPE-COUNT.html">stype-count</a> :pi new-aignet2)
+                   (<a href="AIGNET____STYPE-COUNT.html">stype-count</a> :pi aignet))))</pre> 
+<p><b>Theorem: </b>num-regs-of-observability-fix</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> num-regs-of-observability-fix
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?new-aignet2 ?new-state)
+              (<a href="AIGNET____OBSERVABILITY-FIX.html">observability-fix</a> aignet aignet2 config state)))
+            (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="AIGNET____STYPE-COUNT.html">stype-count</a> :reg new-aignet2)
+                   (<a href="AIGNET____STYPE-COUNT.html">stype-count</a> :reg aignet))))</pre> 
+<p><b>Theorem: </b>num-outs-of-observability-fix</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> num-outs-of-observability-fix
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?new-aignet2 ?new-state)
+              (<a href="AIGNET____OBSERVABILITY-FIX.html">observability-fix</a> aignet aignet2 config state)))
+            (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="AIGNET____STYPE-COUNT.html">stype-count</a> :po new-aignet2)
+                   (<a href="AIGNET____STYPE-COUNT.html">stype-count</a> :po aignet))))</pre> 
+<p><b>Theorem: </b>observability-fix-comb-equivalent</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> observability-fix-comb-equivalent
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?new-aignet2 ?new-state)
+              (<a href="AIGNET____OBSERVABILITY-FIX.html">observability-fix</a> aignet aignet2 config state)))
+            (<a href="AIGNET____COMB-EQUIV.html">comb-equiv</a> new-aignet2 aignet)))</pre> 
+<p><b>Theorem: </b>normalize-input-of-observability-fix</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     normalize-input-of-observability-fix
+     (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____SYNTAXP.html">syntaxp</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> aignet2 ''nil)))
+              (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="AIGNET____OBSERVABILITY-FIX.html">observability-fix</a> aignet aignet2 config state)
+                     (<a href="AIGNET____OBSERVABILITY-FIX.html">observability-fix</a> aignet nil config state))))</pre> 
+<p><b>Theorem: </b>w-state-of-observability-fix</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> w-state-of-observability-fix
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?new-aignet2 ?new-state)
+              (<a href="AIGNET____OBSERVABILITY-FIX.html">observability-fix</a> aignet aignet2 config state)))
+            (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____W.html">w</a> new-state) (<a href="ACL2____W.html">w</a> state))))</pre> 
+<p><b>Theorem: </b>observability-fix-of-node-list-fix-aignet</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> observability-fix-of-node-list-fix-aignet
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="AIGNET____OBSERVABILITY-FIX.html">observability-fix</a> (<a href="AIGNET____NODE-LIST-FIX.html">node-list-fix</a> aignet)
+                                  aignet2 config state)
+               (<a href="AIGNET____OBSERVABILITY-FIX.html">observability-fix</a> aignet aignet2 config state)))</pre> 
+<p><b>Theorem: </b>observability-fix-node-list-equiv-congruence-on-aignet</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ observability-fix-node-list-equiv-congruence-on-aignet
+ (<a href="ACL2____IMPLIES.html">implies</a>
+      (<a href="AIGNET____NODE-LIST-EQUIV.html">node-list-equiv</a> aignet aignet-equiv)
+      (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="AIGNET____OBSERVABILITY-FIX.html">observability-fix</a> aignet aignet2 config state)
+             (<a href="AIGNET____OBSERVABILITY-FIX.html">observability-fix</a> aignet-equiv aignet2 config state)))
+ :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>observability-fix-of-node-list-fix-aignet2</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> observability-fix-of-node-list-fix-aignet2
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="AIGNET____OBSERVABILITY-FIX.html">observability-fix</a> aignet (<a href="AIGNET____NODE-LIST-FIX.html">node-list-fix</a> aignet2)
+                                  config state)
+               (<a href="AIGNET____OBSERVABILITY-FIX.html">observability-fix</a> aignet aignet2 config state)))</pre> 
+<p><b>Theorem: </b>observability-fix-node-list-equiv-congruence-on-aignet2</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ observability-fix-node-list-equiv-congruence-on-aignet2
+ (<a href="ACL2____IMPLIES.html">implies</a>
+      (<a href="AIGNET____NODE-LIST-EQUIV.html">node-list-equiv</a> aignet2 aignet2-equiv)
+      (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="AIGNET____OBSERVABILITY-FIX.html">observability-fix</a> aignet aignet2 config state)
+             (<a href="AIGNET____OBSERVABILITY-FIX.html">observability-fix</a> aignet aignet2-equiv config state)))
+ :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>observability-fix-of-observability-config-fix-config</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> observability-fix-of-observability-config-fix-config
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="AIGNET____OBSERVABILITY-FIX.html">observability-fix</a> aignet aignet2
+                                  (<a href="AIGNET____OBSERVABILITY-CONFIG-FIX.html">observability-config-fix</a> config)
+                                  state)
+               (<a href="AIGNET____OBSERVABILITY-FIX.html">observability-fix</a> aignet aignet2 config state)))</pre> 
+<p><b>Theorem: </b>observability-fix-observability-config-equiv-congruence-on-config</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ observability-fix-observability-config-equiv-congruence-on-config
+ (<a href="ACL2____IMPLIES.html">implies</a>
+      (<a href="AIGNET____OBSERVABILITY-CONFIG-EQUIV.html">observability-config-equiv</a> config config-equiv)
+      (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="AIGNET____OBSERVABILITY-FIX.html">observability-fix</a> aignet aignet2 config state)
+             (<a href="AIGNET____OBSERVABILITY-FIX.html">observability-fix</a> aignet aignet2 config-equiv state)))
+ :rule-classes :congruence)</pre> 
+
+</body>
+</html>

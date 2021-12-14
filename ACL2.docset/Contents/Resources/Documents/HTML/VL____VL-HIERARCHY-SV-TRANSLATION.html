@@ -1,0 +1,200 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Vl-hierarchy-sv-translation</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL____VL-HIERARCHY-SV-TRANSLATION">Click for Vl-hierarchy-sv-translation in the Full Manual</a></h3>
+
+<p>Discussion of the strategy for translating VL modules (and structs, 
+interfaces, etc.) to SV modules.</p><p>This topic covers the general idea of how we translate a simplified 
+VL design into an SV module alist.  The top-level function for this is <a href="VL____VL-DESIGN-_E3SVEX-MODALIST.html">vl-design-&gt;svex-modalist</a>, not to be confused with <a href="VL____VL-DESIGN-_E3SV-DESIGN.html">vl-design-&gt;sv-design</a> which additionally runs the series of transforms 
+necessary to simplify a design once loaded.</p> 
+ 
+<p>The input to this translation is a VL design which has had module parameters 
+and generate blocks resolved, expressions sized, and always blocks eliminated, 
+among other requirements.  (<a href="VL____VL-DESIGN-_E3SV-DESIGN.html">Vl-design-&gt;sv-design</a> performs the 
+necessary transforms before calling <a href="VL____VL-DESIGN-_E3SVEX-MODALIST.html">vl-design-&gt;svex-modalist</a>.)</p> 
+ 
+<p>The crux of this translation is the translation of VL expressions to svex 
+expressions, which is discussed in <a href="VL____VL-EXPR-SVEX-TRANSLATION.html">vl-expr-svex-translation</a>.  Here we'll 
+discuss how these expressions are built into an SVEX module hierarchy to 
+mirror (and sometimes expand on) the VL hierarchy, in such a way that these 
+modules can then be flattened and compiled into an SVEX-based FSM (see <a href="SV____SVEX-COMPILATION.html">sv::svex-compilation</a>).</p> 
+ 
+<h3>Hierarchy and Data Types</h3> 
+ 
+<p>The final goal of the SVEX translation and compilation process is to obtain 
+a FSM-style flat table of expressions that gives formulas for wire values and 
+next-states of stateholding elements.  To do this, one of the major challenges 
+is flattening a module hierarchy so that all the possible ways of referring to 
+a given wire collapse into one canonical one.  For example, take the following 
+module hierarchy:</p> 
+<pre class="code">module c (input [3:0] ci, output [5:3] co);
+endmodule
+
+module b (input [5:2] bi, output [4:0] bo);
+   c cinst (.ci(bi[5:4]+4'b10</pre>, .co(bo[4:2])); 
+  endmodule 
+ 
+  module a (); 
+    wire [3:11] w; 
+    b binst (.bi(w[3:6]), .bo({w[9:11], w[7:8]})); 
+  endmodule 
+ }) 
+ 
+<p>Here, the following expressions all refer to the same 3-bit chunk:</p> 
+<pre class="code">w[9:11]
+binst.bo[4:2]
+binst.cinst.co[5:3]</pre> 
+ 
+<p>To make sense of these modules, if we have expressions within module <span class="v">c</span> 
+that refer to <span class="v">co</span>, we need to be able to reduce these, once the module 
+hierarchy is flattened, to refer instead to <span class="v">w</span> -- or vice versa; it's not 
+so important which direction as long as there's a canonical form.</p> 
+ 
+<p>The svex compilation process (see <a href="SV____SVEX-COMPILATION.html">sv::svex-compilation</a>) deals with 
+this by collecting a table of aliases among wires, and then using a 
+union-find-like algorithm to find a canonical form for each wire (see <a href="SV____ALIAS-NORMALIZATION.html">sv::alias-normalization</a>).  The input for this algorithm that we want to 
+collect for the above module hierarchy is the following list of alias 
+pairings:</p> 
+ 
+<pre class="code">w[3:6]               &lt;--&gt;    binst.bi[5:2]
+{w[9:11], w[7:8]}    &lt;--&gt;    binst.bo[4:0]
+binst.bo[4:2]        &lt;--&gt;    binst.cinst.co[5:3]</pre> 
+ 
+<p>(Note: We have one alias pair for each port connection except for the <span class="v">ci</span> 
+input of <span class="v">cinst</span> in b.  Because the expression connected to this port is not 
+simply a concatenation of other wires, we want an assignment instead.)</p> 
+ 
+<p>These names are shown relative to the top-level module, but initially, in 
+<a href="VL____VL-DESIGN-_E3SVEX-MODALIST.html">vl-design-&gt;svex-modalist</a>, aliases are associated with the module in 
+which they were generated and the names in those aliases are relative to that 
+module.  So we generate a module hierarchy something like this:</p> 
+ 
+<pre class="code"> module c ();
+  wire [3:0] ci;
+  wire [5:3] co;
+ endmodule
+
+ module b ();
+  wire [5:2] bi;
+  wire [4:0] bo;
+  c cinst ();
+  assign cinst.ci[3:0] = bi[5:4]+4'b10;
+  alias bo[4:2] = cinst.co[5:3];
+endmodule
+
+module a ();
+  wire [3:11] w;
+  b binst ();
+  alias w[3:6] = binst.bi[5:2];
+  alias {w[9:11], w[7:8]} = binst.bo[4:0];
+endmodule</pre> 
+ 
+<p>With this approach, relative-scoped hierarchical identifiers are dealt with 
+automatically by alias normalization.  This approach to aliasing lends itself 
+rather naturally to dealing with complex datatypes and interfaces.  We turn 
+structs, unions, arrays, and interfaces into "modules" that each have some 
+internal aliases to set up the relationships among the local wires.  For 
+example, suppose we have the following module with a struct-typed variable:</p> 
+ 
+<pre class="code">typedef struct { logic [3:0] a; logic [2:4] b; } mystruct;
+
+module a ();
+ mystruct m;
+endmodule</pre> 
+ 
+<p>This gets turned into a module hierarchy as follows:</p> 
+ 
+<pre class="code">module struct##mystruct ();
+   logic [6:0] __self;   // represents the whole struct
+   logic [3:0] a;
+   logic [2:4] b;
+
+   alias __self[6:3] = a[3:0];
+   alias __self[2:0] = b[2:4];
+endmodule
+
+module a ();
+ // m becomes both a wire and also a module instance:
+ logic [6:0] m;
+ struct##mystruct m ();
+
+ alias m = m.__self;
+
+endmodule</pre> 
+ 
+<p>It wouldn't be possible in Verilog to have <span class="v">m</span> be the name of both a 
+variable and a module instance, but this is allowed in svex modules.  This 
+allows us to view struct indexing as just another form of relative hierarchical 
+reference.  Arrays become another kind of module, where the wires inside are 
+the array's indices.  Nested data structures become data-structure modules that 
+instantiate other data-structure modules.  Interfaces are treated as a 
+combination of struct variable and module instance.</p> 
+ 
+<p>This approach to array indexing also lets us deal straightforwardly with 
+instance arrays; see <a href="VL____VL-INSTARRAY-NESTED-ALIASES.html">vl-instarray-nested-aliases</a> for details.</p> 
+ 
+<h3>Scopes</h3> 
+ 
+<p>Given a module hierarchy like the examples from the previous section, it is 
+straightforward to flatten the hierarchy into a list of assignments and 
+aliases.  Then the alias normalization algorithm is able to compute canonical 
+forms for all aliased wires, and the names used in the assignments can be 
+normalized.</p> 
+ 
+<p>One complication of this picture is that modules may contain nested scopes, 
+in which variable names may shadow those in higher scopes.  For example, 
+generate blocks produce scopes within modules:</p> 
+<pre class="code">module a ();
+  wire wa;
+  wire wb = 1;
+  if (1) begin : myblock
+     wire wb = 0;  // shadows module-global binding
+     assign wa = wb;
+  end
+
+  wire wc = myblock.wb;
+
+  // test:
+  initial begin
+    #10;
+    $display("wa: %b", wa);
+    $display("wb: %b", wb);
+    $display("wc: %b", wc);
+  end
+
+endmodule</pre> 
+ 
+<p>This shows the 0,1,0 as the values of <span class="v">wa, wb, wc</span> respectively.  In 
+order to support this, we want to first turn the <span class="v">myblock</span> scope into a 
+module instance inside module <span class="v">a</span> so that the reference to <span class="v">myblock.wb</span> 
+will work.  But we also need to resolve the reference to <span class="v">wa</span> inside 
+<span class="v">myblock</span> to the wire <span class="v">wa</span> in its containing module.  To handle this, we 
+use a variable naming convention that distinguishes between hierarchical names 
+relative to the current scope, and those relevant to some higher scope.  We'll 
+write this for now in pseudo-Verilog as <span class="v">$upscope(n, a.b.c)</span>, where 
+<span class="v">a.b.c</span> is a path that is relative to the module <span class="v">n</span> scopes above the 
+current one.  We translate module <span class="v">a</span> as follows:</p> 
+ 
+<pre class="code">module genblock##a.myblock ();
+  wire wb;
+  assign wb = 0;
+  assign $upscope(1, wa) = wb;
+endmodule
+
+module a ();
+  wire wa;
+  wire wb;
+  wire wc;
+
+  genblock##a.myblock myblock ();
+
+  assign wb = 1;
+  assign wc = myblock.wb;
+endmodule</pre>
+</body>
+</html>

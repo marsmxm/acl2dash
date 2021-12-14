@@ -1,0 +1,100 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Guard-debug</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____GUARD-DEBUG">Click for Guard-debug in the Full Manual</a></h3>
+
+<p>Generate markers to indicate sources of <a href="ACL2____GUARD.html">guard</a> proof obligations</p><p>ACL2 guard verification (see <a href="ACL2____GUARD.html">guard</a>) is often best avoided by 
+ beginning users of ACL2.  When guard verification is employed, it can generate 
+ numerous goals, some of which may not be theorems if the definition being 
+ processed has bugs.  It can be difficult to find such bugs.  This <a href="COMMON-LISP____DOCUMENTATION.html">documentation</a> topic explains a capability provided by ACL2 to help find such 
+ bugs.</p> 
+ 
+ <p>For a similar utility appropriate for proving <a href="ACL2____MEASURE.html">measure</a> conjectures 
+ (that is, for termination proofs), see <a href="ACL2____MEASURE-DEBUG.html">measure-debug</a>.</p> 
+ 
+ <p>We begin with the following example.  Although it is contrived and a bit 
+ simplistic, it illustrates how the guard-debug utility works.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> length-repeat (x)
+  (<a href="COMMON-LISP____LENGTH.html">length</a> (<a href="COMMON-LISP____APPEND.html">append</a> x x)))
+(<a href="ACL2____VERIFY-GUARDS.html">verify-guards</a> length-repeat :guard-debug t)</pre> 
+ 
+ <p>The output produces two top-level key checkpoints, as follows.</p> 
+ 
+ <pre class="code">Subgoal 2
+(<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="ACL2____EXTRA-INFO.html">EXTRA-INFO</a> '(:GUARD (:BODY LENGTH-REPEAT))
+                     '(<a href="COMMON-LISP____APPEND.html">APPEND</a> X X))
+         (<a href="ACL2____TRUE-LISTP.html">TRUE-LISTP</a> X))
+
+Subgoal 1
+(<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____AND.html">AND</a> (<a href="ACL2____EXTRA-INFO.html">EXTRA-INFO</a> '(:GUARD (:BODY LENGTH-REPEAT))
+                          '(<a href="COMMON-LISP____LENGTH.html">LENGTH</a> (<a href="COMMON-LISP____APPEND.html">APPEND</a> X X)))
+              (<a href="COMMON-LISP____NOT.html">NOT</a> (<a href="ACL2____TRUE-LISTP.html">TRUE-LISTP</a> (<a href="COMMON-LISP____APPEND.html">APPEND</a> X X))))
+         (<a href="COMMON-LISP____STRINGP.html">STRINGP</a> (<a href="COMMON-LISP____APPEND.html">APPEND</a> X X)))</pre> 
+ 
+ <p>The upper subgoal (numbered 2) says that the body of the definition of 
+ <span class="v">length-repeat</span> contains a call <span class="v">(<a href="COMMON-LISP____APPEND.html">APPEND</a> X X)</span>, which is the source of 
+ the goal.  In this case, that makes sense: the <a href="ACL2____GUARD.html">guard</a> for a call 
+ <span class="v">(<a href="COMMON-LISP____APPEND.html">append</a> arg1 arg2)</span> is <span class="v">(<a href="ACL2____TRUE-LISTP.html">true-listp</a> arg1)</span>, which in this case is 
+ <span class="v">(<a href="ACL2____TRUE-LISTP.html">TRUE-LISTP</a> X)</span>.  The lower subgoal (numbered 1) says that the same 
+ definition contains the call <span class="v">(<a href="COMMON-LISP____LENGTH.html">LENGTH</a> (<a href="COMMON-LISP____APPEND.html">APPEND</a> X X))</span>, which generates the 
+ proof obligation that if <span class="v">(<a href="COMMON-LISP____APPEND.html">APPEND</a> X X)</span> does not satisfy <span class="v">true-listp</span>, 
+ then it must satisfy <span class="v">stringp</span>.  That proof obligation comes directly from 
+ the <a href="ACL2____GUARD.html">guard</a> for <span class="tt"><a href="COMMON-LISP____LENGTH.html">length</a></span>.</p> 
+ 
+ <p>Of course, the example above is a bit obvious.  But for large definitional 
+ bodies such information can be very helpful.  Note that guard-debug can be 
+ specified not only in <span class="tt"><a href="ACL2____VERIFY-GUARDS.html">verify-guards</a></span> events but also in <span class="tt"><a href="ACL2____XARGS.html">xargs</a></span> 
+ <span class="tt"><a href="COMMON-LISP____DECLARE.html">declare</a></span> forms of <span class="tt"><a href="COMMON-LISP____DEFUN.html">defun</a></span> events.</p> 
+ 
+ <p>We now describe the guard-debug utility in some detail.</p> 
+ 
+ <p><span class="v">(<a href="ACL2____EXTRA-INFO.html">Extra-info</a> x y)</span> always returns <span class="v">t</span> by definition.  However, if 
+ <a href="ACL2____GUARD.html">guard</a> verification takes place with a non-<span class="v">nil</span> setting of 
+ <span class="v">guard-debug</span> (see below), then the goals generated for guard verification 
+ can include hypotheses that are calls of <span class="v">extra-info</span>.  Typically, such a 
+ hypothesis is of the following form:</p> 
+ 
+ <pre class="code">(<a href="ACL2____EXTRA-INFO.html">extra-info</a> '(:guard (:body F))
+            '(<a href="ACL2____G.html">G</a> ARG1 ... ARGk))</pre> 
+ 
+ <p>The above form indicates that the goal in which it occurs was generated to 
+ verify that the <a href="ACL2____GUARD.html">guard</a> of the function <span class="v">F</span> is satisfied by the 
+ arguments <span class="v">ARG1</span> through <span class="v">ARGk</span>, where the term <span class="v">(<a href="ACL2____G.html">G</a> ARG1 ... ARGk)</span> 
+ occurs in the body of the function <span class="v">F</span> whose guard verification is in 
+ progress.  If however the above call of <span class="v">G</span> occurs in the guard of <span class="v">F</span> 
+ instead of the body of <span class="v">F</span>, then <span class="v">:body</span> is replaced by <span class="v">:guard</span> 
+ above:</p> 
+ 
+ <pre class="code">(<a href="ACL2____EXTRA-INFO.html">extra-info</a> '(:guard (:guard F))
+            '(<a href="ACL2____G.html">G</a> ARG1 ... ARGk))</pre> 
+ 
+ <p>If the same proof obligation (goal clause) arises from more than one 
+ occurrence of the same call, then a single goal will be generated, which has 
+ several <span class="v">extra-info</span> hypotheses added to show the multiple sources of that 
+ proof obligation.</p> 
+ 
+ <p>All rules (see <a href="ACL2____RUNE.html">rune</a>) associated with <span class="v">extra-info</span> are <a href="ACL2____DISABLE.html">disable</a>d by default, so that hypotheses of the form described above are not 
+ simplified to <span class="v">t</span>.  These hypotheses are intended to ride along for free: 
+ you can generally expect the proof to have the same structure whether or not 
+ the <span class="v">:guard-debug</span> option is supplied, though on rare occasions the proofs 
+ may diverge.</p> 
+ 
+ <p>It remains to explain the notion of a <span class="v">guard-debug</span> setting of <span class="v">t</span>, 
+ that is, to explain how to obtain the additional hypotheses described above. 
+ If guards are being verified during processing of a <span class="tt"><a href="COMMON-LISP____DEFUN.html">defun</a></span> event 
+ (whether or not inside a call of <span class="tt"><a href="ACL2____MUTUAL-RECURSION.html">mutual-recursion</a></span>), then one specifies 
+ <span class="v">:guard-debug t</span> in an <span class="tt"><a href="ACL2____XARGS.html">xargs</a></span> declaration of a <span class="tt"><a href="COMMON-LISP____DECLARE.html">declare</a></span> form; 
+ see <a href="ACL2____XARGS.html">xargs</a>.  If however the guard verification is on behalf of a <span class="tt"><a href="ACL2____VERIFY-GUARDS.html">verify-guards</a></span> call, whether for a definition or a theorem, then one specifies 
+ the keyword argument <span class="v">:guard-debug t</span>.</p> 
+ 
+ <p>Also see <a href="ACL2____PRINT-GV.html">print-gv</a> for a utility for debugging guard violations, in 
+ contrast to the above guard-debug mechanism, which is for debugging failed 
+ proofs arising from guard verification.</p>
+</body>
+</html>

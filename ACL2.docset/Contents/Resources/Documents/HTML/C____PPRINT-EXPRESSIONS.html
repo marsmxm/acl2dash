@@ -1,0 +1,160 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Pprint-expressions</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=C____PPRINT-EXPRESSIONS">Click for Pprint-expressions in the Full Manual</a></h3>
+
+<p>Pretty-printing of expressions.</p><p>The tree structure of the abstract syntax of C expressions 
+     describes the grouping of nested subexpressions. 
+     For instance, the tree</p><pre class="code">(<a href="C____EXPR-BINARY.html">expr-binary</a> (<a href="C____BINOP-MUL.html">binop-mul</a>)
+             (<a href="C____EXPR-BINARY.html">expr-binary</a> (<a href="C____BINOP-ADD.html">binop-add</a>)
+                          (<a href="C____EXPR-IDENT.html">expr-ident</a> (<a href="C____MAKE-IDENT.html">make-ident</a> :name "x"))
+                          (<a href="C____EXPR-IDENT.html">expr-ident</a> (<a href="C____MAKE-IDENT.html">make-ident</a> :name "y")))
+             (<a href="C____EXPR-IDENT.html">expr-ident</a> (<a href="C____MAKE-IDENT.html">make-ident</a> :name "z")))</pre><p>represents the expression <span class="v">(x + y) * z</span>. 
+     Note that, when this expression is written in concrete syntax as just done, 
+     parentheses must be added, 
+     because <span class="v">*</span> binds tighter (i.e. has a higher priority) than <span class="v">+</span> 
+     in C.</p><p>The relative priorities of C operators are implicitly defined 
+     by the C grammar of expressions, 
+     which also defines the left vs. right associativity 
+     of binary operators. 
+     For instance, the rules in [C:6.5.5] and [C:6.5.6] tell us that 
+     (i) <span class="v">+</span> binds tighter than <span class="v">*</span> and 
+     (ii) <span class="v">+</span> is left-associative:</p><ul>
+<li>Consider an expression <span class="v">x + y * z</span>. 
+      In order to parse this as a <i>multiplicative-expression</i>, 
+      <span class="v">x + y</span> would have to be a <i>multiplicative-expression</i>), 
+      which is not. 
+      Thus, the original expression can only be parsed 
+      as an <i>additive-expression</i>.</li>
+<li>Consider an expression <span class="v">x * y + z</span>. 
+      In order to parse this as a <i>multiplicative-expression</i>, 
+      <span class="v">y + z</span> would have to be a <i>cast-expression</i>, 
+      which is not. 
+      Thus, the original expression can only be parsed 
+      as an <i>additive-expression</i>.</li>
+<li>Consider an expression <span class="v">x + y + z</span>. 
+      In order to right-associate it (i.e. <span class="v">x + (y + z)</span>), 
+      <span class="v">y + z</span> would have to be a <i>multiplicative-expression</i>, 
+      which is not. 
+      Thus, the original expression can only be left-associated 
+      (i.e. <span class="v">(x + y) + z</span>).</li>
+</ul><p>Our pretty-printer adds parentheses 
+     based on the relative priorities of the C operators 
+     and the left or right associativity of the C binary operators, 
+     following the grammar. 
+     The approach is explained in the following paragraphs.</p><p>We define `grades' of expressions 
+     that correspond to certain nonterminals of the C grammar, 
+     such as a the grade of additive expressions 
+     corresponding to the nonterminal <i>additive-expression</i>. 
+     We define a mapping from the expressions of our abstract syntax 
+     to their grades, 
+     e.g. <span class="v">(<a href="C____EXPR-BINARY.html">expr-binary</a> (<a href="C____BINOP-ADD.html">binop-add</a>) ... ...)</span> 
+     and <span class="v">(<a href="C____EXPR-BINARY.html">expr-binary</a> (<a href="C____BINOP-SUB.html">binop-sub</a>) ... ...)</span> 
+     are mapped to the grade of additive expressions.</p><p>We define a total order on expression grades that is 
+     the reflexive and transitive closure of the binary relation 
+     that consists of the pairs <span class="v">grade1 &lt; grade2</span> such that 
+     there is a grammar (sub)rule <i>nonterm2: nonterm1</i> 
+     saying that the nonterminal <i>nonterm2</i> corresponding to <span class="v">grade2</span> 
+     may expand to the nonterminal <i>nonterm1</i> corresponding to <span class="v">grade1</span>. 
+     For instance, <span class="v">grade1</span> is the grade of multiplicative expressions 
+     and <span class="v">grade2</span> is the grade of additive expressions, 
+     because there is a (sub)rule 
+     <i>additive-expression: multiplicative-expression</i> in the grammar. 
+     (Here by 'subrule' we mean a rule not necessarily in the grammar 
+     but obtainable by selecting just some of the alternatives in the definiens 
+     that are on different lines in [C].) 
+     The nonterminal <i>additive-expression</i> also has other alternatives, 
+     but those are not single nonterminals; 
+     here we are only concerned with single nonterminals as rule definientia. 
+     The reason is explained below.</p><p>Besides the abstract syntactic expression to pretty-print, 
+     the pretty-printer for expression has an argument 
+     that is the grade of expression that must be pretty-printed 
+     at that point. 
+     At the top level, this second argument is 
+     the grade of top-level expressions, 
+     i.e. the grade that corresponds to 
+     the nonterminal <i>expression</i> [C:6.5.17]. 
+     As the pretty-printer descends into subexpressions, 
+     the second argument is changed according to 
+     the grammar rule corresponding to the super-expressions. 
+     For instance, when pretty-printing the left and right subexpressions 
+     of a super-expression <span class="v">(binary-expr (<a href="C____BINOP-ADD.html">binop-add</a>) left right)</span>, 
+     we recursively call the pretty-printer twice, 
+     once on <span class="v">left</span> and once on <span class="v">right</span>. 
+     Because of the grammar rule 
+     <i>additive-expression: 
+        additive-expression <span class="tt">+</span> multiplicative-expression</i> 
+     that corresponds to the super-expression, 
+     the recursive call on <span class="v">left</span> will have as second argument 
+     the grade of <i>additive-expression</i>, 
+     while the recursive call on <span class="v">right</span> will have as second argument 
+     the grade of <i>multiplicative-expression</i>. 
+     The second argument of the pretty-printer is used as follows: 
+     the pretty-printer compares the second argument 
+     (i.e. the expected grade of expression) 
+     with the grade of the expression passed as first argument 
+     (i.e. the actual grade of expression), 
+     according to the total order on expression grades described above; 
+     if the actual grade is less than or equal to the expected grade, 
+     the expression is pretty-printed without parentheses, 
+     otherwise parentheses are added. 
+     The reason why no parentheses are needed in the first case is that 
+     the nonterminal for the expected grade can be expanded, 
+     possibly in multiple steps, 
+     into the nonterminal for the actual grade: 
+     or conversely, the actual expression can be parsed 
+     into an expression of the expected grade. 
+     On the other hand, if the actual grade is greater than the expected grade, 
+     there is no such possibility; 
+     by adding parentheses, we change the grade of the actual expression 
+     into the one at the bottom of the total order, 
+     i.e. the grade corresponding to <i>primary-expression</i>, 
+     which again lets the parenthesized expression be parsed 
+     into an expression of the expected grade.</p><p>For instance, consider the abstract syntax tree for <span class="v">(x + y) * z</span>, 
+     shown earlier as motivating example. 
+     Assume that it is pretty-printed as a top-level expression, 
+     i.e. that the second argument is the grade of <i>expression</i> 
+     (the expected grade). 
+     Since the actual grade of the expression is 
+     the one for <i>multiplicative-expression</i>, 
+     which is less than or equal to the one for <i>expression</i> 
+     (via 
+     <i>assignment-expression</i>, 
+     <i>conditional-expression</i>, 
+     <i>logical-OR-expression</i>, 
+     <i>logical-AND-expression</i>, 
+     <i>inclusive-OR-expression</i>, 
+     <i>exclusive-OR-expression</i>, 
+     <i>AND-expression</i>, 
+     <i>equality-expression</i>, 
+     <i>relational-expression</i>, 
+     <i>shift-expression</i>, and 
+     <i>additive-expression</i>), 
+     no parentheses are printed at the top level. 
+     When pretty-printing the left subexpression <span class="v">x + y</span>, 
+     the expected grade is <i>multiplicative-expression</i>: 
+     since the actual grade of <span class="v">x + y</span> is <i>additive-expression</i>, 
+     which is greater than the expected grade, 
+     parentheses must be added, 
+     as mentioned when the example was first presented. 
+     On the other hand, when pretty-printing the right subexpression <span class="v">z</span>, 
+     the expected grade is <i>cast-expression</i>: 
+     since the actual grade of <span class="v">z</span> is <i>primary-expression</i>, 
+     which is less than the expected grade, 
+     no parentheses are printed.</p><p>The total order on expression grades only considers, as mentioned, 
+     (sub)rules of the form <i>nonterm2: nonterm1</i> 
+     where <i>nonterm1</i> is a single nonterminal. 
+     Rule definientia that are not single terminals 
+     are captured as tree structures in our abstract syntax, 
+     and thus have their own explicit grade. 
+     On the other hand, single-nonterminal definientia 
+     do not correspond to any tree structure, 
+     but rather allow the same expression to have, in effect, 
+     different grades (a form of subtyping).</p>
+</body>
+</html>

@@ -1,0 +1,195 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Introduction-to-rewrite-rules-part-1</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____INTRODUCTION-TO-REWRITE-RULES-PART-1">Click for Introduction-to-rewrite-rules-part-1 in the Full Manual</a></h3>
+
+<p>Introduction to ACL2's notion of rewrite rules</p><p>This topic is an introduction to rewrite rules in ACL2 and is 
+ intended for the newcomer to ACL2.  The slightly more experienced user might 
+ benefit from reading <a href="ACL2____RANDOM-REMARKS-ON-REWRITING.html">random-remarks-on-rewriting</a> instead.</p> 
+ 
+ <p>Rewrite rules make ACL2 replace one term by another.  This is done 
+ by the rewriter, which is part of ACL2's simplifier.  The rewriter sweeps 
+ through the goal formula trying all the <a href="ACL2____REWRITE.html">rewrite</a>, <a href="ACL2____DEFINITION.html">definition</a>, and 
+ <a href="ACL2____META.html">meta</a> rules it knows, in order from the most recently submitted rule to 
+ the oldest, until it finds one to apply.</p> 
+ 
+ <p>Here's an example.  Just pretend that you have made a rewrite rule from the 
+ formula below.</p> 
+ 
+ <pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____NATP.html">natp</a> i)
+              (<a href="COMMON-LISP_____C3.html">&lt;</a> i (<a href="ACL2____LEN.html">len</a> a)))
+         (<a href="COMMON-LISP____EQUAL.html">equal</a> (put i v (<a href="COMMON-LISP____APPEND.html">append</a> a b))
+                (<a href="COMMON-LISP____APPEND.html">append</a> (put i v a) b)))</pre> 
+ 
+ <p>Then every time the rewriter sees a target term that <i>matches</i></p> 
+ 
+ <pre class="code">(put i v (<a href="COMMON-LISP____APPEND.html">append</a> a b))</pre> 
+ 
+ <p>it considers the rule, with the variables <span class="v">i</span>, <span class="v">v</span>, <span class="v">a</span>, and 
+ <span class="v">b</span> of the rule <i>bound</i> to whatever terms matched them in the target, 
+ say the terms <i>i</i>, <i>v</i>, <i>a</i>, and <i>b</i>.  To consider the 
+ rule, the rewriter first tries to establish (``relieve'') the hypotheses.  In 
+ particular, it rewrites:</p> 
+ 
+ <pre class="code">(natp <i>i</i>)           ; <i>hyp 1</i> 
+</pre> 
+ 
+ <p>and</p> 
+ 
+ <pre class="code">(&lt; <i>i</i> (len <i>a</i>)). ; <i>hyp 2</i> 
+</pre> 
+ 
+ <p>If both hypotheses rewrite to true, then the rule <i>fires</i> and replaces 
+ the target by:</p> 
+ 
+ <pre class="code">(append (put <i>i</i> <i>v</i> <i>a</i>) <i>b</i>). 
+</pre> 
+ 
+ <p>In short, rewrite rules direct ACL2 to rearrange the terms in the goal 
+ formulas.</p> 
+ 
+ <p>We are more precise later, but for now we turn to the question of how do 
+ you make a rewrite rule from a formula?  The answer is, you prove the formula 
+ with the <span class="v">defthm</span> command.  Recall that</p> 
+ 
+ <pre class="code">(defthm <i>name</i> 
+        <i>formula</i> 
+        ...) 
+</pre> 
+ 
+ <p>commands ACL2 to try to prove <i>formula</i> and, if successful, build it 
+ into the database as a rule according to your specification in the 
+ <i>rule-classes</i> argument of the ... part of the command.</p> 
+ 
+ <p>To make it easy for you to generate rewrite rules, <span class="v">defthm</span> has a simple 
+ heuristic: if you don't tell it what kind of rule to generate from 
+ <i>formula</i>, it generates a rewrite rule!  Thus, if this command</p> 
+ 
+ <pre class="code">(defthm <i>name</i> 
+        <i>formula</i>) 
+</pre> 
+ 
+ <p>is successful, ACL2 will have a new rewrite rule in the database, even 
+ though you did not <i>explicitly</i> tell it to add a rule.</p> 
+ 
+ <p>A common mistake for new users is to forget that the above command adds a 
+ rewrite rule.  This often results in a tangle of rules that lead nowhere or to 
+ infinite rewriting that you will have to interrupt.  It is also good to 
+ remember that the command <i>only</i> adds a rule.  It does not magically make 
+ ACL2 aware of all the mathematical consequences of the formula: it just makes 
+ a rewrite rule.</p> 
+ 
+ <p>When you prove a theorem with <span class="v">defthm</span> you are <i>programming</i> ACL2. 
+ Being careless in your statement of lemmas is tantamount to being careless in 
+ your programming.</p> 
+ 
+ <p>ACL2 can generate rewrite rules from formulas that look like this:</p> 
+ 
+ <pre class="code">(IMPLIES (AND <i>hyp1</i> ... <i>hypk</i>) 
+         (<i>eqv</i> <i>lhs</i> <i>rhs</i>)) 
+</pre> 
+ 
+ <p>where <i>eqv</i> is either <span class="v">EQUAL</span> or <span class="v">IFF</span>, and <i>lhs</i> is not a 
+ variable symbol, not a constant, and not a call of the function <span class="v">IF</span>, and 
+ not a call of an abbreviation (``macro'') that expands to any of these.  So 
+ illegal <i>lhs</i> include <span class="v">X</span>, <span class="v">0</span>, <span class="v">(<a href="COMMON-LISP____IF.html">IF</a> X Y Y)</span>, and <span class="v">(<a href="COMMON-LISP____OR.html">OR</a> p q)</span>. 
+ The last is illegal because <span class="v">OR</span> is just an abbreviation for a certain 
+ <span class="v">IF</span>-expression.</p> 
+ 
+ <p>Technical Note: This tutorial introduction to the theorem prover takes 
+ liberties with the truth!  We are trying to give you a useful predictive model 
+ of the system without burdening you with all the details, which are discussed 
+ in the ACL2 User's Manual.  For example, using directives in the rule-classes 
+ you can rearrange the proved formula into the form you want your rule to take, 
+ and you can make ACL2 take advantage of equivalence relations <i>eqv</i> other 
+ than just <span class="v">EQUAL</span> and <span class="v">IFF</span>.  But we'll ignore these fine points for 
+ now.</p> 
+ 
+ <p>We call the <i>hyp</i> terms the <i>hypotheses</i> of the rule.  We call 
+ <i>lhs</i> the <i>left-hand side</i> of the rule, and we call <i>rhs</i> the 
+ <i>right-hand side</i> of the rule.  If the conclusion of the rule is an 
+ <span class="v">EQUAL</span> term we call it an <i>equality</i> rule.  Otherwise, it is a 
+ <i>propositional equivalence</i> rule.  If there are no hypotheses, 
+ <i>k</i>=0, we say the rule is an <i>unconditional</i> rewrite rule; otherwise 
+ it is <i>conditional</i>.</p> 
+ 
+ <p>ACL2 allows several special cases of the shapes above.  See <a href="ACL2____SPECIAL-CASES-FOR-REWRITE-RULES.html">special-cases-for-rewrite-rules</a>, but come back here and continue.</p> 
+ 
+ <p>A rewrite rule makes ACL2 seek out occurrences of terms that match the 
+ left-hand side of the rule and replace those occurrences using the right-hand 
+ side, provided all the hypotheses rewrite to true in the context of the 
+ application of the rule.</p> 
+ 
+ <p>That is, the left-hand side is treated as a <i>pattern</i> that triggers 
+ the rule.  The hypotheses are <i>conditions</i> that have to be proved in 
+ order for the rule to fire.  The right-hand side is the <i>replacement</i> and 
+ is put into the formula where the pattern occurred.</p> 
+ 
+ <p>Now for some clarifications. ACL2 only considers enabled rules.  And ACL2 
+ will use a propositional rule to replace a target only if the target occurs in 
+ a propositional place in the formula.  Generally that means it occurs in the 
+ argument of a propositional connective, like <span class="v">AND</span>, <span class="v">OR</span>, <span class="v">NOT</span>, 
+ <span class="v">IMPLIES</span>, and <span class="v">IFF</span>, or in the test of an <span class="v">IF</span>.  When we say that 
+ the left-hand side of the rule must <i>match</i> the target we mean that we 
+ can instantiate the variables in the rule to make the left-hand side identical 
+ to the target.  To <i>relieve</i> or establish the hypotheses of the rule, 
+ ACL2 just applies other rewrite rules to try to prove the instantiated 
+ hypotheses from the assumptions governing the occurrence of the target.  When 
+ ACL2 replaces the target, it replaces it with the instantiated right-hand side 
+ of the rule and then applies rewrite rules to that.</p> 
+ 
+ <p>If a hypothesis has variables that do not occur in the left-hand side of 
+ the rule, then the pattern matching process won't find values for those 
+ variables.  We call those <i>free variables</i>.  They must be instantiated 
+ before ACL2 can relieve that hypothesis.  To instantiate them, ACL2 has to 
+ guess values that would make the hypothesis true in this context, i.e., true 
+ given the assumptions of the goal theorem.  So if you're trying to prove</p> 
+ 
+ <pre class="code">(<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____AND.html">AND</a> (<a href="ACL2____TRUE-LISTP.html">TRUE-LISTP</a> A)
+              (<a href="COMMON-LISP____MEMBER.html">MEMBER</a> (<a href="COMMON-LISP____CAR.html">CAR</a> P) A)
+              (<a href="COMMON-LISP____MEMBER.html">MEMBER</a> (<a href="COMMON-LISP____CDR.html">CDR</a> P) A))
+         ...)</pre> 
+ 
+ <p>and the target you're rewriting is in the ``...'' part of the formula, the 
+ rewriter knows that <span class="v">(<a href="ACL2____TRUE-LISTP.html">TRUE-LISTP</a> A)</span> <span class="v">(<a href="COMMON-LISP____MEMBER.html">MEMBER</a> (<a href="COMMON-LISP____CAR.html">CAR</a> P) A)</span> and <span class="v">(<a href="COMMON-LISP____MEMBER.html">MEMBER</a>
+ (<a href="COMMON-LISP____CDR.html">CDR</a> P) A)</span> are true.  So if a rewrite rule is considered and the rule has 
+ <span class="v">(<a href="COMMON-LISP____MEMBER.html">member</a> e x)</span> as a hypothesis, where <span class="v">e</span> is a free variable but <span class="v">x</span> 
+ was bound to <span class="v">A</span> in the pattern matching, then it will guess that <span class="v">e</span> 
+ must be <span class="v">(<a href="COMMON-LISP____CAR.html">CAR</a> P)</span> or <span class="v">(<a href="COMMON-LISP____CDR.html">CDR</a> P)</span>, even though there are many other 
+ possibilities that would make <span class="v">(<a href="COMMON-LISP____MEMBER.html">MEMBER</a> e A)</span> true.  Of course, whatever 
+ guess it makes must also satisfy all the other hypotheses that mention <span class="v">e</span> 
+ in the rule.  It simply isn't very imaginative at guessing!</p> 
+ 
+ <p>The most predictable rewrite rules have no free variables.  You can add 
+ pragmatic advice to help ACL2 with free variables, telling it to try all the 
+ possibilities it finds, to try just the first, or even to compute a 
+ ``creative'' guess.</p> 
+ 
+ <p>It is possible to make the rewriting process loop forever, e.g., by 
+ rewriting <i>alpha</i> to <i>beta</i> with one set of rules and rewriting 
+ <i>beta</i> to <i>alpha</i> with another.  Even a single rule can make the 
+ process loop; we'll show you an example of that later in the tutorial.  ACL2 
+ can handle commutativity rules without looping.  It uses <span class="v">(<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP_____B2.html">+</a> x y) (<a href="COMMON-LISP_____B2.html">+</a>
+ y x))</span> to replace <span class="v">(<a href="COMMON-LISP_____B2.html">+</a> B A)</span> by <span class="v">(<a href="COMMON-LISP_____B2.html">+</a> A B)</span>, but not vice versa.  (It is 
+ sensitive to alphabetic ordering when dealing with <i>permutative</i> 
+ rules.)</p> 
+ 
+ <p>Logically equivalent formulas can generate radically different rewrite 
+ rules!  Rearranging the propositional structure of the formula or swapping the 
+ left and right sides of an equality — while having no effect on the 
+ mathematical meaning of a formula — can have a drastic impact on the 
+ pragmatic meaning as a rule.  To see an illustration of this, see <a href="ACL2____EQUIVALENT-FORMULAS-DIFFERENT-REWRITE-RULES.html">equivalent-formulas-different-rewrite-rules</a>.</p> 
+ 
+ <p>Developing an effective set of rewrite rules is key to success at using 
+ ACL2.  We'll look more at this later in the tutorial.</p> 
+ 
+ <p>If you are working your way through the tutorial for the theorem prover, 
+ use your browser's <b>Back Button</b> now to return to <a href="ACL2____INTRODUCTION-TO-THE-THEOREM-PROVER.html">introduction-to-the-theorem-prover</a>.  If you are reading just about how to 
+ make effective rewrite rules, go on to <a href="ACL2____INTRODUCTION-TO-REWRITE-RULES-PART-2.html">introduction-to-rewrite-rules-part-2</a>.</p>
+</body>
+</html>

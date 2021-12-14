@@ -1,0 +1,86 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Caseelim</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL2014____CASEELIM">Click for Caseelim in the Full Manual</a></h3>
+
+<p>Replace <a href="VL2014____VL-CASESTMT.html">vl-casestmt</a>s with equivalent <a href="VL2014____VL-IFSTMT.html">vl-ifstmt</a>s.</p><p>This rewrite rewrites case statements into if statements.  It 
+requires that sizes have been computed that the test expressions and match 
+expressions agree on their sizes.  If these conditions are not met, it may 
+issue non-fatal warnings and fail to rewrite the case statements.</p> 
+ 
+<p>This transform is practically useful for supporting designs that involve 
+case statements and we believe it is basically reasonable.  But Verilog's case 
+statements have <b>significant problems</b> with regards to the handling of X 
+and Z values.  There are, therefore, many cases where this translation will 
+change a module's simulation semantics.  More information about these problems 
+can be found in <a href="VL2014____CASE-STATEMENT-PROBLEMS.html">case-statement-problems</a>.</p> 
+ 
+<p>The basic idea of the transform is just to rewrite, e.g., for plain 
+<span class="v">case</span> statements:</p> 
+ 
+<pre class="code">case (&lt;test&gt;)
+ &lt;match-1&gt;: &lt;body-1&gt;
+ &lt;match-2&gt;: &lt;body-2&gt;
+ ...
+ &lt;match-n&gt;: &lt;body-N&gt;
+ default:   &lt;default-body&gt;
+endcase
+
+   --&gt;
+
+if (&lt;test&gt; === &lt;match-1&gt;)      &lt;body-1&gt;
+else if (&lt;test&gt; === &lt;match-2&gt;) &lt;body-2&gt;
+...
+else if (&lt;test&gt; === &lt;body-n&gt;)  &lt;body-n&gt;
+else                           &lt;default-body&gt;</pre> 
+ 
+<p>This rewrite is intuitively correct, and appears to produce identical 
+results in some test simulations on NCVerilog and Verilog-XL.</p> 
+ 
+<p>This transform isn't quite correct if <span class="v">test</span> can cause side-effects.  The 
+Verilog standard says that <span class="v">test</span> should be evaluated only once, before the 
+<span class="v">match</span> expressions.  In our transformed code, <span class="v">test</span> may be evaluated 
+multiple times.  This is not a problem for back-end tools like <a href="ACL2____ESIM.html">esim</a> 
+where there is no such notion of evaluation.</p> 
+<p>We considered doing something more sophisticated to avoid replicating the 
+<span class="v">test</span> expression, which would avoid this problem.  It would be easy enough 
+to simply assign the test expression to some temporary wire, then check 
+<span class="v">temp</span> against each match expression.  But we might then need to also 
+include this new wire in the sensitivity list for the always block, which could 
+become tricky/messy.  So for now, our transform really is just as naive as the 
+above suggests.</p> 
+ 
+<p>Our support for <span class="v">casex</span> and <span class="v">casez</span> statements is somewhat more 
+limited.  Here, we require that each <span class="v">match</span> expression be some simple, 
+atomic <a href="VL2014____VL-CONSTINT-P.html">vl-constint-p</a> or <a href="VL2014____VL-WEIRDINT-P.html">vl-weirdint-p</a> expression.  These 
+constraints allow us to carry out the following transform 
+e.g.,:</p> 
+ 
+<pre class="code">casez (<a href="SET____IN.html">in</a>)
+  4'b001?: &lt;body-1&gt;
+  4'b01??: &lt;body-2&gt;
+  4'b1???: &lt;body-3&gt;
+  default: &lt;default-body&gt;
+endcase
+   --&gt;
+if      ( (<a href="SET____IN.html">in</a> &amp; 4'b1110) === (4'b001z &amp; 4'b1110) )    &lt;body-1&gt;
+else if ( (<a href="SET____IN.html">in</a> &amp; 4'b1100) === (4'b01zz &amp; 4'b1100) )    &lt;body-2&gt;
+else if ( (<a href="SET____IN.html">in</a> &amp; 4'b1000) === (4'b1zzz &amp; 4'b1000) )    &lt;body-2&gt;
+else if (in[3] === 1'b0 &amp; in[2] === 1'b1)              &lt;body-2&gt;
+else if (in[3] === 1'b1)                               &lt;body-3&gt;
+else                                                   &lt;default-body&gt;</pre> 
+ 
+<p>That is, our <span class="v">if</span> statement conditions simply mask out the x/z/? bits as 
+appropriate, and check that the other bits are matched.</p> 
+ 
+<p>Unfortunately, this transformation is <b>completely wrong</b> in the case 
+where <span class="v">data</span> has X or Z bits, because in the Verilog semantics these bits 
+are not to be tested.  On the other hand, these are terrible, non-conservative 
+semantics, and we think our behavior is about as reasonable as possible.</p>
+</body>
+</html>

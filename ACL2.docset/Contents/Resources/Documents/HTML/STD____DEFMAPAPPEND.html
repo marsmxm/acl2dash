@@ -1,0 +1,130 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Defmapappend</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=STD____DEFMAPAPPEND">Click for Defmapappend in the Full Manual</a></h3>
+
+<p>Append transformations of list elements.</p><p>Defmapappend allows you to quickly introduce a function like</p> 
+ 
+<pre class="code">(loop for elem in x append (f elem))</pre> 
+ 
+<p>and produces some basic theorems about this new function.</p> 
+ 
+<p>General form:</p> 
+ 
+<pre class="code">(<a href="STD____DEFMAPAPPEND.html">defmapappend</a> name formals
+   transform
+   &amp;key guard                   ; t by default
+        verify-guards           ; t by default
+        transform-exec          ; nil by default
+        transform-true-list-p   ; nil by default
+        mode                    ; default defun-mode by default
+        parents                 ; nil by default
+        short                   ; nil by default
+        long                    ; nil by default
+        rest                    ; nil by default
+        already-definedp        ; nil by default
+        )</pre> 
+ 
+<p>For instance,</p> 
+ 
+<pre class="code">(<a href="STD____DEFMAPAPPEND.html">defmapappend</a> append-square-lists (x)
+   (square-lists x)
+   :guard (integer-list-listp x))</pre> 
+ 
+<p>would introduce a new function, <span class="v">append-square-lists</span>, that applies 
+<span class="v">square-lists</span> to every element of its argument and appends together all of 
+the results.</p> 
+ 
+<p>Note that <b>x</b> is treated in a special way: it refers to the whole list 
+in the formals and guards, but refers to the individual elements of the list in 
+the <span class="v">element</span> portion.  This is similar to how other macros like <a href="STD____DEFLIST.html">deflist</a>, <a href="STD____DEFALIST.html">defalist</a>, and <a href="STD____DEFPROJECTION.html">defprojection</a> handle <span class="v">x</span>.</p> 
+ 
+ 
+ 
+<h3>Usage and Arguments</h3> 
+ 
+<p>Let <span class="v">pkg</span> be the package of <span class="v">name</span>.  All functions, theorems, and 
+variables are created in this package.  One of the formals must be <span class="v">pkg::x</span>, 
+and this argument represents the list that will be transformed.  Otherwise, the 
+only restriction on formals is that you may not use the names <span class="v">pkg::a</span>, 
+<span class="v">pkg::y</span>, and <span class="v">pkg::acc</span>, because we use these variables in the theorems 
+we generate.</p> 
+ 
+<p>The <span class="v">transform</span> should indicate an element transforming function that 
+produces a list of some kind as its output.  Adopting an ML-like syntax, 
+<span class="v">transform</span> should have a signature such as the following:</p> 
+ 
+<pre class="code">transform : elem -&gt; A list</pre> 
+ 
+<p>We produce a new function of the given <span class="v">name</span>, which has the 
+signature:</p> 
+ 
+<pre class="code">name : elem list -&gt; A list</pre> 
+ 
+<p>Our new function applies <span class="v">transform</span> to every element in its input list, 
+and appends together all of the results.  That is, the logical definition of 
+the new function we introduce is as follows:</p> 
+ 
+<pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> name (x)
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ATOM.html">atom</a> x)
+      nil
+    (<a href="COMMON-LISP____APPEND.html">append</a> (transform (<a href="COMMON-LISP____CAR.html">car</a> x))
+            (name (<a href="COMMON-LISP____CDR.html">cdr</a> x)))))</pre> 
+ 
+<p>The new function will be more efficient than the above.  In particular, we 
+write a <span class="v">mappappend-exec</span> function that builds the answer in reverse using 
+revappend and reverses it at the end.  An even more efficient version is 
+possible when the <span class="v">:transform-exec</span> option is provided; see below for 
+details.</p> 
+ 
+<p>The optional <span class="v">:guard</span> and <span class="v">:verify-guards</span> are given to the 
+<span class="v">defund</span> event that we introduce.  Often <a href="STD____DEFLIST.html">deflist</a> is convenient for 
+introducing the necessary guard.</p> 
+ 
+<p>The optional <span class="v">:mode</span> keyword can be set to <span class="v">:logic</span> or <span class="v">:program</span> 
+to introduce the recognizer in logic or program mode.  The default is whatever 
+the current default defun-mode is for ACL2, i.e., if you are already in program 
+mode, it will default to program mode, etc.</p> 
+ 
+<p>The optional <span class="v">:already-definedp</span> keyword can be set if you have already 
+defined the function.  This can be used to generate all of the ordinary 
+<span class="v">defmapappend</span> theorems without generating a <span class="v">defund</span> event, and is 
+useful when you are dealing with mutually recursive transformations.</p> 
+ 
+<p>The optional <span class="v">:transform-true-list-p</span> argument can be set to <span class="v">t</span> 
+whenever the transformation is known to unconditionally produce a true list, 
+and allows us to slightly optimize our function.</p> 
+ 
+<h4>The :transform-exec argument</h4> 
+ 
+<p>When provided, the optional <span class="v">:transform-exec</span> argument should be the name 
+of a function that satisfies the following property:</p> 
+ 
+<pre class="code">(<a href="COMMON-LISP____EQUAL.html">equal</a> (transform-exec x acc)
+       (<a href="COMMON-LISP____REVAPPEND.html">revappend</a> (transform x)))</pre> 
+ 
+<p>Note that such functions are automatically introduced by <a href="STD____DEFPROJECTION.html">defprojection</a>.  For instance,</p> 
+ 
+<pre class="code">(<a href="STD____DEFPROJECTION.html">defprojection</a> square-list (x)
+  (square x))</pre> 
+ 
+<p>generates a suitable function named <span class="v">square-list-exec</span>.  Amusingly, 
+suitable functions are also generated by defmapappend, itself.</p> 
+ 
+<p>When such a function is provided, we can use it to generate a more efficient 
+implementation, which uses the tail-recursive function to build the answer in 
+reverse, and then reverses it at the very end, avoiding even the intermediate 
+computation of the lists emitted by <span class="v">transform</span>.</p> 
+ 
+<p>The optional <span class="v">:parents</span>, <span class="v">:short</span>, and <span class="v">:long</span> options are as in 
+<a href="ACL2____XDOC.html">xdoc</a>, and are analogous to those of <a href="STD____DEFLIST.html">deflist</a> or <a href="STD____DEFPROJECTION.html">defprojection</a>.</p> 
+ 
+<p>The optional <span class="v">:rest</span> option is as in <a href="STD____DEFLIST.html">deflist</a>, and allows you to 
+add theorems into the same section.</p>
+</body>
+</html>

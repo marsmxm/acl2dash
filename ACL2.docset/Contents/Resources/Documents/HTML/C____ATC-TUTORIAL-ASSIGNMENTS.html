@@ -1,0 +1,87 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Atc-tutorial-assignments</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=C____ATC-TUTORIAL-ASSIGNMENTS">Click for Atc-tutorial-assignments in the Full Manual</a></h3>
+
+<p>ATC tutorial: ACL2 representation of C assignments.</p><p>In <a href="C____ATC-TUTORIAL-LOCAL-VARIABLES.html">atc-tutorial-local-variables</a> it was described 
+    how to represent C local variable declarations 
+    and use the variables in C expressions. 
+    This tutorial page explains how to represent 
+    assignments to these variables in ACL2.</p><p>In C, assignments are expressions that may occur at any level, 
+    i.e. assignments may be sub-expressions of other expressions at any depth. 
+    ATC only supports assignments that are full expressions [C:6.8/4], 
+    i.e. expressions at the top level, not sub-expressions of other expressions. 
+    Specifically, ATC supports expression statements [C:6.8.3] 
+    whose expression is an assignment: 
+    this way, assignments are treated as if they were statements, 
+    keeping most expressions pure (i.e. side-effect-free) 
+    and thus simplifying the formal model of C and generated proofs.</p><p>A C local variable assignment is represented by an ACL2 <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span> 
+    that binds a variable already bound, i.e. already in scope, 
+    and where the term to which the variable is bound 
+    is wrapped by the function <span class="tt"><a href="C____ASSIGN.html">assign</a></span>. 
+    For example, the ACL2 function</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> |f| (|x| |y|)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="C____SINTP.html">c::sintp</a> |x|)
+                              (<a href="C____SINTP.html">c::sintp</a> |y|))
+                  :guard-hints (("Goal" :in-theory (<a href="ACL2____ENABLE.html">enable</a> c::declar
+                                                             c::assign)))))
+  (<a href="COMMON-LISP____LET_A2.html">let*</a> ((|a| (c:;declar (<a href="C____BITAND-SINT-SINT.html">c::bitand-sint-sint</a> |x| |y|)))
+         (|a| (<a href="C____ASSIGN.html">c::assign</a> (<a href="C____BITNOT-SINT.html">c::bitnot-sint</a> |a|))))
+    (<a href="C____GT-SINT-SINT.html">c::gt-sint-sint</a> |a| (<a href="C____SINT-DEC-CONST.html">c::sint-dec-const</a> 0))))</pre><p>represents the C function</p><pre class="code">int f(int x, int y) {
+    int a = x &amp; y;
+    a = ~a;
+    return a &gt; 0;
+}</pre><p>Recall that the <span class="tt"><a href="COMMON-LISP____LET_A2.html">let*</a></span> expands to two nested <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span>s. 
+    The first one, as explained in <a href="C____ATC-TUTORIAL-LOCAL-VARIABLES.html">atc-tutorial-local-variables</a>, 
+    represents the local variable declaration with initializer; 
+    the second one represents the assignment, 
+    which in this case mentions the variable in the right sub-expression, 
+    but of course it may contain any expression. 
+    The point is that the second <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span> binds an ACL2 variable symbol 
+    that is the same as the one bound by the first <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span>. 
+    These are two homonymous but different variables in ACL2: 
+    the second one shadows the first one. 
+    However, we use the homonymy of the two ACL2 variables 
+    to represent them as the same variable in C, 
+    i.e. to regard the second <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span> as an assignment 
+    rather than a declaration. 
+    After all, the C scoping rules differ from the ACL2 scoping rules: 
+    C disallows a variable declaration with the same name as 
+    another variable in the same scope 
+    (but it allows shadowing in an inner scope).</p><p>The wrapper <span class="tt"><a href="C____ASSIGN.html">assign</a></span> is the identity function, 
+    whose sole purpose is to indicate to ATC 
+    that the <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span> represents a local variable assignment 
+    as opposed to a local variable declaration 
+    (described in <a href="C____ATC-TUTORIAL-LOCAL-VARIABLES.html">atc-tutorial-local-variables</a>); 
+    this wrapper should be normally enabled in proofs.</p><p>In ATC, we can also represent assignments to C function parameters 
+    via <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span> that bind variables 
+    with the same names as the ACL2 function parameters, 
+    and with the terms bound to the variables 
+    wrapped with <span class="tt"><a href="C____ASSIGN.html">assign</a></span>. 
+    For example, the ACL2 function</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> |g| (|a| |b|)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="C____SINTP.html">c::sintp</a> |a|)
+                              (<a href="C____SINTP.html">c::sintp</a> |b|)
+                              ;; 0 &lt;= a &lt;= 100:
+                              (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> 0 (<a href="C____SINT-_E3GET.html">c::sint-&gt;get</a> |a|))
+                              (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> (<a href="C____SINT-_E3GET.html">c::sint-&gt;get</a> |a|) 100))
+                  :guard-hints (("Goal"
+                                 :in-theory
+                                 (<a href="ACL2____ENABLE.html">enable</a> c::assign
+                                         c::add-sint-sint-okp
+                                         c::sint-integerp-alt-def)))))
+  (<a href="COMMON-LISP____LET.html">let</a> ((|a| (<a href="C____ASSIGN.html">c::assign</a> (<a href="C____ADD-SINT-SINT.html">c::add-sint-sint</a> |a| (<a href="C____SINT-DEC-CONST.html">c::sint-dec-const</a> 200)))))
+    (<a href="C____LT-SINT-SINT.html">c::lt-sint-sint</a> |b| |a|)))</pre><p>represents the C function</p><pre class="code">int g(int a, int b) {
+    a = a + 200;
+    return b &lt; a;
+}</pre><p>Even though the <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span> in the function above 
+    is not nested under another <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span>, 
+    the fact remains that it binds an ACL2 variable 
+    with the same symbol as a variable in the same scope. 
+    (An ACL2 function parameter is, in a way, implicitly bound.) 
+    Thus, ATC treats that as an assignment instead of a variable declaration.</p><div class="box"></div><p><b>Previous:</b> <a href="C____ATC-TUTORIAL-LOCAL-VARIABLES.html">ACL2 representation of C local variables</a></p><p><b>Next:</b> <a href="C____ATC-TUTORIAL-CONDITIONAL-STATEMENTS.html">ACL2 representation of C conditional statements</a></p>
+</body>
+</html>

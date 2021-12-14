@@ -1,0 +1,176 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Hid-tools</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL2014____HID-TOOLS">Click for Hid-tools in the Full Manual</a></h3>
+
+<p>Functions for recognizing and following well-formed hierarchical 
+identifiers, scoped identifiers, and indexing expressions.</p><h3>VL Terminology</h3> 
+ 
+<p>SystemVerilog provides a very rich syntax for referring to objects in 
+different scopes and throughout the module hierarchy.  To deal with this rich 
+syntax, we will need a bit of jargon.  These terms are well-defined notions in 
+VL, but may not necessarily be found or used in the same way in the 
+Verilog/SystemVerilog standards.</p> 
+ 
+<p><u>Identifiers.</u> We say the following expressions are just 
+<b>identifiers</b>.  Note that the Verilog/SystemVerilog standards sometimes 
+distinguish between plain and escaped identifiers.  While our <a href="VL2014____LEXER.html">lexer</a> 
+needs to understand these as different notions, internally there is no 
+difference.</p> 
+ 
+<pre class="code">foo
+\foo$bar</pre> 
+ 
+<p>Note that any indexing/selection operations after an identifier is 
+<b>not</b> part of the identifier.  For instance, <span class="v">foo[3]</span> and <span class="v">foo[3:0]</span> 
+are not identifiers: they are index/selection operations applied to the 
+identifier <span class="v">foo</span>.  (This may seem obvious, but we draw your attention to it 
+because it is less obvious for hierarchical identifiers.)</p> 
+ 
+<p><u>Hierarchical identifiers</u>.  Identifiers can be chained together, 
+perhaps with indexing, to form <b>hierarchical identifiers</b>.  Here are 
+examples of hierarchical identifiers:</p> 
+ 
+<pre class="code">foo                     // any ID is a HID
+\foo$bar
+
+foo.bar                 // fancier HIDs
+foo.bar.baz
+
+foo.bar[3].baz          // Verilog-2005 or SystemVerilog-2012
+foo.bar[3][4].baz       // SystemVerilog-2012</pre> 
+ 
+<p>Hierarchical identifiers may have internal indexing expressions.  However, 
+any subsequent indexing/selection operations are <b>not</b> part of the HID 
+itself.  For instance, we say that <span class="v">foo.bar[3].baz[2]</span> and 
+<span class="v">foo.bar[3].baz[3:0]</span> are <b>not</b> a hierarchical identifiers.  Instead, 
+these are indexing/selection operators applied to a HID.</p> 
+ 
+<p><u>Scope expressions</u>.  Hierarchical identifiers can be prefixed with 
+scoping operations, e.g., for packages.  Here are some examples of scope 
+expressions:</p> 
+ 
+<pre class="code">foo                             // any ID is a scope expression
+\foo$bar
+
+foo.bar                         // any HID is a scope expression
+foo.bar.baz
+foo.bar[3].baz
+foo.bar[3][4].baz
+
+mypkg::foo                      // fancier scope expressions
+mypkg::foo.bar
+$unit::foo::bar.baz[3].beep</pre> 
+ 
+<p>As with ordinary identifiers and hierarchical identifiers, scope expressions 
+do <b>not</b> have any indexing/selection operators.  For example, 
+<span class="v">mypkg::foo[3]</span> is not a scope expression, but is instead an indexing 
+operator applied to the scope expression <span class="v">mypkg::foo</span>.</p> 
+ 
+<p><u>Index expressions</u>.  Scope expressions can be indexed into by some 
+number of individual bit/array-indexing operations.  Here are some examples of 
+index expressions:</p> 
+ 
+<pre class="code">foo                             // any ID is an index expression
+\foo$bar
+
+foo.bar                         // any HID is an index expression
+foo.bar.baz
+foo.bar[3].baz
+foo.bar[3][4].baz
+
+mypkg::foo                      // any scope expression is an index expression
+mypkg::foo.bar
+$unit::foo::bar.baz[3].beep
+
+foo[3]                          // fancier index expressions
+foo[3][4][5]
+foo.bar[3]
+mypkg::foo[3][4][5]
+$unit::foo::bar.baz[3].beep[2][1][0]</pre> 
+ 
+<p>Note that an index expression does <b>not</b> have any part/range selects in 
+it.  That is, an expression like <span class="v">foo[3][5:0]</span> is not an index expression; 
+instead it is a part-selection operator applied to the index expression 
+<span class="v">foo[3]</span>.</p> 
+ 
+<p>Note that part/range selection operations, like <span class="v">foo[3:0]</span>, are just an 
+ordinary operator and we do not give them any special designation.  Why, then, 
+do we give special treatment to indexing?  In short, part-selection is simpler 
+than indexing because there can be at most a single part-select.  In contrast, 
+there can be many levels of array indexing, and so typically indexing needs to 
+be handled recursively.</p> 
+ 
+<h3>Low Level Representation</h3> 
+ 
+<p>VL internally represents hierarchical identifiers as compound <a href="VL2014____VL-EXPR-P.html">vl-expr-p</a> objects.  To understand the structure, consider a very complex index 
+expression such as:</p> 
+ 
+<pre class="code">ape::bat::cat.dog[3][2][1].elf[7][6][5]</pre> 
+ 
+<p>We expect to represent this sort of expression by nesting operations as 
+suggested by the parentheses below.  This arrangement matches the jargon 
+above.</p> 
+ 
+<pre class="code">Indexing is the outermost operation:
+
+  (((  ape::bat::cat.dog[3][2][1].elf     )[7] )[6] )[5]
+       ------------------------------   -------------------
+                a scopexpr              recursive indexing
+
+
+Followed by scoping:
+
+             ape::(bat::         (cat.dog[3][2][1].elf)  )
+       ---------------------      --------------------
+         recursive scoping              a hidexpr
+
+
+Followed by hierarchy:
+
+                     cat . ((dog [3][2][1]) . elf)
+                           -----------------------
+                                sub hidexpr
+
+With hierarchical indexing going from outermost to innermost:
+
+                           ((dog [3])[2])[1]
+                           -----------------
+                              a hidindex</pre> 
+ 
+<p>Where each <span class="v">.</span> is represented by a <span class="v">:vl-hid-dot</span> operator, each 
+<span class="v">[]</span> by a <span class="v">:vl-index</span> operator, each <span class="v">::</span> by a <span class="v">:vl-scope</span> 
+operator, and the names are represented as <a href="VL2014____VL-HIDPIECE-P.html">vl-hidpiece-p</a> atoms.</p> 
+ 
+<h3>Abstract Representation</h3> 
+ 
+<p>The low-level <a href="VL2014____VL-EXPR-P.html">vl-expr-p</a> representation is not very strongly typed and 
+permits nonsensical expressions like <span class="v">foo.5.bar.(1+2)</span>, which should never 
+be produced by our parser or by well-behaving internal VL code.  Because of 
+this, most functions for working with HIDs should not and do not use the 
+internal representation directly.</p> 
+ 
+<p>Instead, in <a href="VL2014____ABSTRACT-HIDS.html">abstract-hids</a>, we set up wrapper functions that provide 
+an interface for working with hierarchical identifier expressions at a somewhat 
+higher level.  These wrapper functions include stronger recognizers that ensure 
+that an expression is a well-formed hierarchical identifier, scope expression, 
+or index expression that meets our usual expectations.  It also provides 
+convenient accessor functions for traversing well-formed expressions.</p> 
+ 
+<h3>Following HIDs</h3> 
+ 
+<p>For many kinds of transformation and analysis, the fundamental operation on 
+hierarchical, scoped, or indexed expressions is to follow them to what they 
+refer to.  To do this correctly requires an detailed understanding of both the 
+concepts above and also <a href="VL2014____SCOPESTACK.html">scopestack</a>s for looking up identifiers.</p> 
+ 
+<p>Due to this complexity, most code throughout VL should never try to follow 
+hierarchical identifiers on its own.  Instead, most code should be make use of 
+the high-level functions described in <a href="VL2014____FOLLOWING-HIDS.html">following-hids</a>.</p>
+</body>
+</html>

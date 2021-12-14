@@ -1,0 +1,156 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Syscalls</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=X86ISA____SYSCALLS">Click for Syscalls in the Full Manual</a></h3>
+
+<p>Extending the x86 ISA with the system call model in the 
+  application-level view</p><p>System calls are non-deterministic --- different runs of a 
+program with syscalls can yield different results on the same machine. 
+Since our ACL2-based x86 specification serves both as an executable 
+simulator and a formal model to do x86 code proofs, we need to be able 
+to do the following:</p> 
+ 
+<ol> 
+<li>  Simulate a run of a program with syscalls on concrete data </li> 
+<li>  Reason about such a program </li> 
+</ol> 
+ 
+<p>Ideally, to serve both these tasks, we would model enough features 
+of the x86 to simulate an operating system running on it; the syscall 
+service can then be provided by this simulated OS.  However, since 
+loading a serious OS on our formal model is more than non-trivial, we 
+chose to do this task differently.</p> 
+ 
+<p>For simulations, we set up our x86 model to use the results 
+returned by some raw Lisp functions that invoke the syscalls by 
+interacting directly with the underlying operating system.  More 
+precisely, we install alternate raw Lisp definitions for some 
+functions, using trust tags.  Thus, simulation of all instructions 
+except syscalls happens within ACL2 but for syscalls, we escape out of 
+Lisp (and hence, ACL2) to get the "real" results.  However, these 
+raw Lisp functions are not really functions in the logical sense since 
+they can return different values for the same input arguments.  So we 
+need a logical story that justifies this setup for simulations.  To 
+this end, we define an oracle field in the x86 state that holds all 
+the results of syscalls starting with that state.  Whenever we want to 
+see the effects of a syscall in logic, we simply consult this 
+oracle.</p> 
+ 
+<p>It is important that our setup prohibits proofs of theorems that 
+say that some syscall returns a specific value.  If that were the 
+case, then due to the non-determinism inherent in syscalls, we might 
+be able to prove that the same syscall returns some other value in 
+some other ACL2 session.  That could allow us to certify books with 
+contradictory theorems, and then include them both to prove nil.  Or 
+perhaps worse yet, we could prove an instance of <span class="tt">(not (equal x 
+x))</span> by instantiating x with a term that invokes syscall!  The 
+only reasoning about syscall that our setup should allow must be based 
+on results that are specified by the oracle field.  As discussed 
+below, we make this happen by arranging for the oracle field to be 
+completely hidden during evaluation in the top-level loop, where raw 
+Lisp functions are applied to implement syscall; but during reasoning, 
+the raw Lisp functions are "taken out" of the model.</p> 
+ 
+<p>At a high level, the following three properties hold for our 
+setup:</p> 
+ 
+<ul> 
+ 
+<li> <b>(L)</b> Our official x86 model consists of ordinary logic 
+definitions, without the use of a trust tag.</li> 
+ 
+<li> <b>(E)</b> An execution environment, which requires a trust tag, 
+    can allow us to run the model using raw Lisp functions that 
+    directly interact with the underlying OS to provide the syscall 
+    service.</li> 
+ 
+<li> <b>(C)</b> The following connection exists between the logical 
+    model and the execution environment.  Let <span class="v">x0</span> be an x86 
+    state. Suppose in our execution environment, the evaluation of 
+    <span class="tt">(x86-run x0)</span> returns <span class="v">x1</span> and generates a syscall 
+    trace <span class="v">TR</span>. Then, the following is true for our logical model: 
+    if the oracle of x86 extends <span class="v">TR</span> and the other fields of x86 
+    are those of <span class="v">x0</span>, then <span class="tt">(x86-run x0) = x1</span>.  Note 
+    that all bets are off if the oracle does not extend <span class="v">TR</span> 
+    appropriately.</li> 
+ 
+</ul> 
+ 
+<p>Note that because of (C), we know that evaluation results 
+produced with raw Lisp functions installed will not be contradicted by 
+theorems proved later; in fact, each evaluation produces a theorem 
+under a suitable extra hypothesis about the oracle.</p> 
+ 
+<p>Here are some details about our implementation, where "top-level 
+  evaluation" and "during reasoning", also known as "impure" and 
+  "pure" evaluation (respectively), partition evaluation into that 
+  done outside or inside the prover (or proof-builder), 
+  respectively.  Below, we use "attach" in quotes to refer to 
+  changing a definition.  In our case we probably will avoid 
+  defattach, in part at least to avoid complicating the defattach 
+  story, but also to give us the freedom to "attach" to a function 
+  introduced by defun as opposed to encapsulate.</p> 
+ 
+<ol> 
+ 
+<li>
+<p>During top-level evaluation, calling of oracle accessor and 
+   updater functions will generate an error.</p> 
+ 
+   <p>We ensure this by construction.  We "attach" the raw Lisp 
+   syscall functions (which do not access/update the oracle field but 
+   interact with the underlying OS directly to get the results of 
+   executing a syscall) to the logic definitions of the syscall 
+   functions, thereby bypassing the oracle during execution. 
+   Moreover, all the oracle accessor and updater functions and macros 
+   are either untouchable (the primitive macros that come with the 
+   stobj definition --- env and !env) or cause an error upon 
+   execution ("safe" functions --- env-read and 
+   pop-x86-oracle).</p> 
+ 
+   <p>Note that functions to be smashed should be declared notinline. 
+   That way we can be confident that the compiler will not inline the 
+   function definitions for efficiency (and "smashing" inlined 
+   functions is not possible).</p>
+</li> 
+ 
+<li> <p>During proofs, raw Lisp functions cannot be called.</p> 
+ 
+   <p>We smash with definitions that avoid calling raw Lisp code when 
+   state globals <span class="v">in-prove-flg</span> or <span class="v">in-verify-flg</span> are set.</p> 
+ 
+   <p>If, in the future, we wind up using <span class="v">:program</span> mode functions 
+   for any of this work that need not to become <span class="v">:logic</span> mode 
+   functions, especially without guards verified (hence executing in 
+   the logic), we can further disallow the user from bringing these 
+   raw Lisp functions into the ACL2 logic by using 
+   <span class="v">program-fns-with-raw-code</span> to declare these functions as 
+   "special".</p>
+</li> 
+ 
+</ol> 
+ 
+<p> For more details, please refer to the following paper: </p> 
+ 
+<p>Shilpi Goel, Warren A. Hunt, Jr., Matt Kaufmann, and Soumava 
+Ghosh. Simulation and Formal Verification of x86 Machine-Code 
+Programs that make System Calls. In Formal Methods in 
+Computer-Aided Design (FMCAD), 2014.</p> 
+ 
+<p>The logic definitions of syscalls might be incomplete.  For 
+example, we don't model all the errors yet; we don't have a global 
+error variable that's updated when an error occurs; we don't keep 
+track of the maximum allowed object offset, etc.  We plan to make this 
+specification more and more complete as time goes on.  Of course, 
+anything we don't want to implement can always be thought of or 
+implemented as something obtained from the oracle, which might be a 
+really good thing to do to keep the model simple.</p> 
+ 
+
+</body>
+</html>

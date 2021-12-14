@@ -1,0 +1,89 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Vl-commentmap-falp</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL____VL-COMMENTMAP-FALP">Click for Vl-commentmap-falp in the Full Manual</a></h3>
+
+<p>Data structure that supports efficient comment gathering.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(vl-commentmap-falp x) → *</pre></dt> 
+</dl></div> 
+<p>Our initial approach to pretty-printing with comments was to store 
+all comments in a single comment map, then extract the relevant part of the 
+comment map when we wanted to print each module.  But profiling indicated that 
+we were spending 90% of the (considerable) pretty-printing time just gathering 
+the appropriate comments.</p> 
+ 
+<p>We then decided to attach the comments to each module, once and for all, so 
+that we never need to look them up during pretty printing.  An advantage of 
+this is that we can carry out the comment injection before unparameterization, 
+so that there are fewer lookups to begin with.  Another advantage is that we 
+can do the comment injection after loading each file, so that we never need to 
+build a massive comment map spanning all files, but only smaller ones on a 
+per-file basis.</p> 
+ 
+<p>Even so, individual files can be large.  For a half-million line file, we 
+obtained a big comment map, and our simple-minded comment gathering scheme was 
+taking around 20 seconds.  We developed a faster version that threw away 
+comments after assigning them to a module, but even this was taking 10 seconds 
+and allocating 1 GB of memory.</p> 
+ 
+<p>To correct for this, we developed a much faster comment gathering mechanism. 
+The basic idea is to partition the big comment map into an alist that maps each 
+line number to the subset of the comment map which is about that line.</p> 
+ 
+<p>That is, each entry in our commentmap-fal has the form:</p> 
+ 
+<pre class="code">line --&gt; comment-map</pre> 
+ 
+<p>where the <span class="v">comment-map</span> has only the comments for this line and, in 
+practice, is typically a singleton.</p> 
+ 
+<p>To extract all of the comments, we simply walk over the lines between min 
+and max, gathering their comments.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>vl-commentmap-falp</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> vl-commentmap-falp (x)
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t))
+       (<a href="COMMON-LISP____LET.html">let</a> ((__function__ 'vl-commentmap-falp))
+            (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+            (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ATOM.html">atom</a> x)
+                (<a href="COMMON-LISP____NOT.html">not</a> x)
+                (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____CONSP.html">consp</a> (<a href="COMMON-LISP____CAR.html">car</a> x))
+                     (<a href="ACL2____POSP.html">posp</a> (<a href="COMMON-LISP____CAAR.html">caar</a> x))
+                     (<a href="VL____VL-COMMENTMAP-P.html">vl-commentmap-p</a> (<a href="COMMON-LISP____CDAR.html">cdar</a> x))
+                     (<a href="VL____VL-COMMENTMAP-LINES-AGREEP.html">vl-commentmap-lines-agreep</a> (<a href="COMMON-LISP____CAAR.html">caar</a> x)
+                                                 (<a href="COMMON-LISP____CDAR.html">cdar</a> x))
+                     (<a href="VL____VL-COMMENTMAP-FALP.html">vl-commentmap-falp</a> (<a href="COMMON-LISP____CDR.html">cdr</a> x))))))</pre> 
+<p><b>Theorem: </b>vl-commentmap-falp-of-extension</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-commentmap-falp-of-extension
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____FORCE.html">force</a> (<a href="ACL2____POSP.html">posp</a> line))
+                      (<a href="ACL2____FORCE.html">force</a> (<a href="VL____VL-COMMENTMAP-P.html">vl-commentmap-p</a> map))
+                      (<a href="ACL2____FORCE.html">force</a> (<a href="VL____VL-COMMENTMAP-LINES-AGREEP.html">vl-commentmap-lines-agreep</a> line map))
+                      (<a href="ACL2____FORCE.html">force</a> (<a href="VL____VL-COMMENTMAP-FALP.html">vl-commentmap-falp</a> alist)))
+                 (<a href="VL____VL-COMMENTMAP-FALP.html">vl-commentmap-falp</a> (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> line map) alist))))</pre> 
+<p><b>Theorem: </b>vl-commentmap-falp-of-hons-shrink-alist</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-commentmap-falp-of-hons-shrink-alist
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____FORCE.html">force</a> (<a href="VL____VL-COMMENTMAP-FALP.html">vl-commentmap-falp</a> x))
+                      (<a href="ACL2____FORCE.html">force</a> (<a href="VL____VL-COMMENTMAP-FALP.html">vl-commentmap-falp</a> y)))
+                 (<a href="VL____VL-COMMENTMAP-FALP.html">vl-commentmap-falp</a> (<a href="ACL2____HONS-SHRINK-ALIST.html">hons-shrink-alist</a> x y))))</pre> 
+<p><b>Theorem: </b>vl-commentmap-falp-of-append</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-commentmap-falp-of-append
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____FORCE.html">force</a> (<a href="VL____VL-COMMENTMAP-FALP.html">vl-commentmap-falp</a> x))
+                      (<a href="ACL2____FORCE.html">force</a> (<a href="VL____VL-COMMENTMAP-FALP.html">vl-commentmap-falp</a> y)))
+                 (<a href="VL____VL-COMMENTMAP-FALP.html">vl-commentmap-falp</a> (<a href="COMMON-LISP____APPEND.html">append</a> x y))))</pre> 
+<p><b>Theorem: </b>vl-commentmap-p-of-hons-assoc-equal</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+   vl-commentmap-p-of-hons-assoc-equal
+   (<a href="ACL2____IMPLIES.html">implies</a> (<a href="VL____VL-COMMENTMAP-FALP.html">vl-commentmap-falp</a> x)
+            (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL____VL-COMMENTMAP-P.html">vl-commentmap-p</a> (<a href="COMMON-LISP____CDR.html">cdr</a> (<a href="ACL2____HONS-ASSOC-EQUAL.html">hons-assoc-equal</a> line x)))
+                   t)))</pre> 
+<p><b>Theorem: </b>vl-commentmap-lines-agreep-of-hons-assoc-equal</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-commentmap-lines-agreep-of-hons-assoc-equal
+ (<a href="ACL2____IMPLIES.html">implies</a>
+  (<a href="ACL2____FORCE.html">force</a> (<a href="VL____VL-COMMENTMAP-FALP.html">vl-commentmap-falp</a> x))
+  (<a href="COMMON-LISP____EQUAL.html">equal</a>
+   (<a href="VL____VL-COMMENTMAP-LINES-AGREEP.html">vl-commentmap-lines-agreep</a> line (<a href="COMMON-LISP____CDR.html">cdr</a> (<a href="ACL2____HONS-ASSOC-EQUAL.html">hons-assoc-equal</a> line x)))
+   t)))</pre> 
+
+</body>
+</html>

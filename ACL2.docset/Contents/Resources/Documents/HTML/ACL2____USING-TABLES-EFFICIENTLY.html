@@ -1,0 +1,82 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Using-tables-efficiently</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____USING-TABLES-EFFICIENTLY">Click for Using-tables-efficiently in the Full Manual</a></h3>
+
+<p>Notes on how to use tables efficiently</p><p> 
+ (Thanks to Jared Davis for contributing this <a href="COMMON-LISP____DOCUMENTATION.html">documentation</a> topic, to 
+ which we have made only minor modifications.)</p> 
+ 
+ <p>Suppose your book contains <span class="tt"><a href="ACL2____TABLE.html">table</a></span> <a href="ACL2____EVENTS.html">events</a>, or macros that 
+ expand into <span class="v">table</span> events, of the following form:</p> 
+ 
+ <pre class="code">(<a href="ACL2____TABLE.html">table</a> my-table 'my-field &lt;computation&gt;)</pre> 
+ 
+ <p>Then <span class="v">&lt;computation&gt;</span> will be evaluated <i>twice</i> during <span class="tt"><a href="ACL2____CERTIFY-BOOK.html">certify-book</a></span> and <i>again</i> every time you include the book with <span class="tt"><a href="ACL2____INCLUDE-BOOK.html">include-book</a></span>.  In some cases this overhead can be avoided using <span class="tt"><a href="ACL2____MAKE-EVENT.html">make-event</a></span>.</p> 
+ 
+ <p>See also <a href="ACL2____DEFCONSTS.html">defconsts</a> for an analogous trick involving <span class="tt"><a href="ACL2____DEFCONST.html">defconst</a></span>.</p> 
+ 
+ <p>As an example, suppose we want to store numbers in a table only if they 
+ satisfy some computationally expensive predicate.  We'll introduce a new book, 
+ <span class="v">number-table.lisp</span>, and create a table to store these numbers:</p> 
+ 
+ <pre class="code">(<a href="ACL2____TABLE.html">table</a> number-table 'data nil)</pre> 
+ 
+ <p>Instead of implementing a ``computationally expensive predicate,'' we'll 
+ write a function that just prints a message when it is called and accepts even 
+ numbers:</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> expensive-computation (n)
+  (<a href="ACL2____PROG2_42.html">prog2$</a> (<a href="ACL2____CW.html">cw</a> "Expensive computation on ~x0.~%" n)
+          (<a href="COMMON-LISP____EVENP.html">evenp</a> n)))</pre> 
+ 
+ <p>Now we'll implement a macro, <span class="v">add-number</span>, which will add its argument 
+ to the table only if it satisfies the expensive predicate:</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> add-number (n)
+  `(<a href="ACL2____TABLE.html">table</a> number-table 'data
+          (<a href="COMMON-LISP____LET.html">let</a> ((current-data
+                 (<a href="COMMON-LISP____CDR.html">cdr</a> (<a href="ACL2____ASSOC-EQ.html">assoc-eq</a> 'data (<a href="ACL2____TABLE-ALIST.html">table-alist</a> 'number-table world)))))
+            (<a href="COMMON-LISP____IF.html">if</a> (expensive-computation ,n)
+                (<a href="COMMON-LISP____CONS.html">cons</a> ,n current-data)
+              current-data))))</pre> 
+ 
+ <p>Finally, we'll call <span class="v">add-number</span> a few times to finish the book.</p> 
+ 
+ <pre class="code">(add-number 1)
+(add-number 2)
+(add-number 3)</pre> 
+ 
+ <p>When we now invoke <span class="v">(<a href="ACL2____CERTIFY-BOOK.html">certify-book</a> "number-table")</span>, we see the 
+ expensive predicate being called twice for each number: once in Step 2, the 
+ main pass, then again in Step 3, the admissibility check.  Worse, the 
+ computation is performed again for each number when we use <span class="tt"><a href="ACL2____INCLUDE-BOOK.html">include-book</a></span> to load <span class="v">number-table</span>, e.g.,</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "number-table")
+Expensive computation on 1.
+Expensive computation on 2.
+Expensive computation on 3.</pre> 
+ 
+ <p>To avoid these repeated executions, we can pull the test out of the 
+ <span class="v">table</span> event using <span class="tt"><a href="ACL2____MAKE-EVENT.html">make-event</a></span>.  Here's an alternate implementation 
+ of <span class="v">add-number</span> that won't repeat the computation:</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> add-number (n)
+  `(<a href="ACL2____MAKE-EVENT.html">make-event</a>
+    (<a href="COMMON-LISP____IF.html">if</a> (expensive-computation ,n)
+        '(<a href="ACL2____TABLE.html">table</a> number-table 'data
+                (<a href="COMMON-LISP____CONS.html">cons</a> ,n (<a href="COMMON-LISP____CDR.html">cdr</a> (<a href="COMMON-LISP____ASSOC.html">assoc</a> 'data
+                                     (<a href="ACL2____TABLE-ALIST.html">table-alist</a> 'number-table world)))))
+      '(<a href="ACL2____VALUE-TRIPLE.html">value-triple</a> :expensive-computation-failed))))</pre> 
+ 
+ <p>When we recertify <span class="v">number-table.lisp</span>, we'll see the expensive 
+ computation is still called once for each number in Step 2, but is no longer 
+ called during Step 3.  Similarly, the <span class="tt"><a href="ACL2____INCLUDE-BOOK.html">include-book</a></span> no longer shows any 
+ calls of the expensive computation.</p>
+</body>
+</html>

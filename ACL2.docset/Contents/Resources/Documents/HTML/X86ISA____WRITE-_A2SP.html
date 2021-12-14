@@ -1,0 +1,110 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Write-*sp</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=X86ISA____WRITE-_A2SP">Click for Write-*sp in the Full Manual</a></h3>
+
+<p>Write a stack pointer into the register RSP, ESP, or SP.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(write-*sp proc-mode *sp x86) → x86-new</pre></dt>
+<dt>Returns</dt>
+<dd>
+<span class="tt">x86-new</span> — <font color="#606060">Type <span class="v">(x86p x86-new)</span>, given <span class="v">(x86p x86)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p> 
+     In 64-bit mode, a 64-bit stack pointer is written into the full RSP. 
+     Since, in the model, this is a 64-bit signed integer, 
+     this function consumes a 64-bit signed integer. 
+     </p> 
+     <p> 
+     In 32-bit mode, the stack pointer is 32 or 16 bits based on the SS.B bit, 
+     i.e. the B bit of the current stack segment descriptor. 
+     In these cases, the argument to this function should be 
+     a 32-bit or 16-bit unsigned integer, which is also a 64-bit signed integer. 
+     </p> 
+     <p> 
+     See Intel manual, Mar'17, Vol. 1, Sec. 6.2.3 and Sec. 6.2.5, 
+     and AMD manual, Apr'16, Vol. 2, Sec 2.4.5 and Sec. 4.7.3. 
+     The actual size of the value consumed by this function 
+     should be <span class="v">StackAddrSize</span>, 
+     introduced in Intel manual, Mar'17, Vol. 2, Sec. 3.1.1.9. 
+     </p> 
+     <p> 
+     The pseudocode of stack instructions like PUSH 
+     in Intel manual, Mar'17, Vol. 2 
+     show assignments of the form 
+     <span class="v">RSP &lt;- ...</span>, <span class="v">ESP &lt;- ...</span>, and <span class="v">SP &lt;- ...</span> 
+     based on the stack address size. 
+     This may suggests that 
+     when the stack address size is 32 
+     the assignment to ESP leaves the high 32 bits of RSP unchanged, 
+     and when the stack address size is 16 
+     the assignment to SP leaves the high 48 bits of RSP unchanged. 
+     However, 
+     as explained in the documentation of <span class="tt"><a href="X86ISA____WR32.html">wr32</a></span> and <span class="tt"><a href="X86ISA____WR16.html">wr16</a></span>, 
+     normally writing to the low 32 bits of a general-purpose register 
+     (which RSP/ESP/SP is) zeros the high 32 bits, 
+     while writing the low 16 bits leaves the high 48 bits unchanged. 
+     Thus, we follow this requirement also when writing RSP/ESP/SP implicitly, 
+     via stack manipulation instructions like PUSH that use 
+     this <span class="tt"><a href="X86ISA____WRITE-_A2SP.html">write-*sp</a></span> function to update the stack pointer register. 
+     </p> 
+     <p> 
+     This function should be always called 
+     with a stack pointer of the right type 
+     (64-bit signed, 32-bit unsigned, or 16-bit unsigned) 
+     based on the stack address size. 
+     We may add a guard to ensure that in the future, 
+     but for now in the code below 
+     we coerce the stack pointer to 32 and 16 bits as appropriate, 
+     to verify guards; 
+     these coercions are expected not to change the argument stack pointer. 
+     </p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>write-*sp$inline</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ write-*sp$inline (proc-mode *sp x86)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (x86)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____TYPE.html">type</a> (integer 0 4) proc-mode)
+          (<a href="COMMON-LISP____TYPE.html">type</a> (signed-byte 64) *sp))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> proc-mode 0)
+                            t (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 32 *sp))))
+ (<a href="COMMON-LISP____CASE.html">case</a>
+  proc-mode (0 (!rgfi 4 *sp x86))
+  (1
+   (<a href="ACL2____B_A2.html">b*</a>
+      (((<a href="COMMON-LISP____THE.html">the</a> (unsigned-byte 16) ss-attr)
+        (seg-hidden-attri 2 x86))
+       (ss.b (<a href="X86ISA____DATA-SEGMENT-DESCRIPTOR-ATTRIBUTESBITS-_E3D_F2B.html">data-segment-descriptor-attributesbits-&gt;d/b</a> ss-attr)))
+      (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP_____D3.html">=</a> ss.b 1)
+          (<a href="ACL2____MBE.html">mbe</a> :logic (!rgfi 4 (<a href="X86ISA____N32.html">n32</a> *sp) x86)
+               :exec (!rgfi 4 (<a href="COMMON-LISP____THE.html">the</a> (unsigned-byte 32) *sp)
+                            x86))
+          (<a href="ACL2____B_A2.html">b*</a> (((<a href="COMMON-LISP____THE.html">the</a> (signed-byte 64) rsp)
+                (rgfi 4 x86))
+               ((<a href="COMMON-LISP____THE.html">the</a> (signed-byte 64) rsp-new)
+                (<a href="ACL2____MBE.html">mbe</a> :logic (<a href="ACL2____PART-INSTALL.html">part-install</a> (<a href="X86ISA____N16.html">n16</a> *sp)
+                                          rsp
+                                          :low 0
+                                          :width 16)
+                     :exec (<a href="COMMON-LISP____LOGIOR.html">logior</a> (<a href="COMMON-LISP____LOGAND.html">logand</a> -65536 rsp)
+                                   (<a href="COMMON-LISP____LOGAND.html">logand</a> 65535 *sp)))))
+              (!rgfi 4 rsp-new x86)))))
+  (otherwise x86)))</pre> 
+<p><b>Theorem: </b>x86p-of-write-*sp</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     x86p-of-write-*sp
+     (<a href="ACL2____IMPLIES.html">implies</a> (x86p x86)
+              (<a href="ACL2____B_A2.html">b*</a> ((x86-new (write-*sp$inline proc-mode *sp x86)))
+                  (x86p x86-new)))
+     :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>write-*sp-when-64-bit-modep</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> write-*sp-when-64-bit-modep
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="X86ISA____WRITE-_A2SP.html">write-*sp</a> 0 *sp x86)
+               (!rgfi 4 *sp x86)))</pre> 
+
+</body>
+</html>

@@ -1,0 +1,170 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Vl-hidexpr-traverse-datatype</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL2014____VL-HIDEXPR-TRAVERSE-DATATYPE">Click for Vl-hidexpr-traverse-datatype in the Full Manual</a></h3>
+
+<p>Given a dotted expression that indexes into a datatype, find the type of the expression.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(vl-hidexpr-traverse-datatype x type) → (mv warning restype)</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">x</span> — <font color="#606060">Guard <span class="v">(<a href="VL2014____VL-EXPR-P.html">vl-expr-p</a> x)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">type</span> — <font color="#606060">Guard <span class="v">(<a href="VL2014____VL-DATATYPE-P.html">vl-datatype-p</a> type)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">warning</span> — <font color="#606060">Type <span class="v">(<a href="ACL2____IFF.html">iff</a> (<a href="VL2014____VL-WARNING-P.html">vl-warning-p</a> warning) warning)</span>.</font>
+</dd> 
+<dd>
+<span class="tt">restype</span> — <font color="#606060">Type <span class="v">(<a href="ACL2____IFF.html">iff</a> (<a href="VL2014____VL-DATATYPE-P.html">vl-datatype-p</a> restype) (<a href="COMMON-LISP____NOT.html">not</a> warning))</span>.</font>
+</dd> 
+ 
+</dl></div> 
+ <p>A helpful invariant to remember when thinking about this function: 
+The type and unpacked dimensions of a given call of this function belong to the 
+base (leftmost) variable in the HID.</p> 
+ 
+<p>Also note: the datatype should be fully usertype-resolved, as by 
+vl-datatype-usertype-elim.</p> 
+ 
+<p>BOZO Rewrite this documentation under the new assumption that the datatypes 
+are pre-resolved.</p> 
+ 
+<p>Example: Suppose we have the following type declarations</p> 
+<pre class="code">typedef struct packed { logic [3:0] foo; } [4:0] foostruct;
+typedef union { foostruct [5:0] bar; logic [2:0] baz; } bunion [0:6];
+typedef struct { bunion fa [0:8], logic [1:0] ba; } bstruct;
+bstruct myvar [8:0];</pre> 
+ 
+<p>For this example, we'll write a type with both packed an unpacked dimensions 
+with an underscore between the packed and unpacked dims.</p> 
+ 
+<p>A bunion is a type consisting of an unpacked array of 7 elements 
+each of which may either be a packed array of 6 foostructs (a packed structure 
+containing one 4-bit logic field) or a 3-bit logic; a bstruct is a struct 
+containing an unpacked array of 9 bunions and an additional 2-bit logic field; 
+and myvar is an unpacked array of 9 bstructs.</p> 
+ 
+<p>Suppose our expression is <span class="v">myvar[1].fa[8][4].bar[3][4].foo</span>.</p> 
+ 
+<ul> 
+ 
+<li>First, before calling this function we look up the type of myvar.  We get a 
+vardecl, which has a type <span class="v">bstruct _ [8:0]</span>. Then we're ready to run.</li> 
+ 
+<li>Outermost call: We resolve the type bstruct to its struct definition.  We 
+cancel our index with the single array dimension, leaving just the struct.  We 
+find the element fa inside the struct, and 
+recur on the remainder of our expression, <span class="v">fa[8][4].bar[3][4].foo</span>, with the 
+structmember's type, <span class="v">bunion _ [0:8]</span>.</li> 
+ 
+<li> We resolve the bunion type to the union, and append the unpacked 
+dimensions of the type and the element to get <span class="v">[0:8][0:6]</span>.  We then check 
+the indices from the expression against this type and unpacked dimensions, 
+which results in just the bare union type (the definition of bunion, but 
+without its unpacked dimension <span class="v">[0:6]</span>).  We find the element bar inside the 
+union and recur: <span class="v">bar[3][4].foo</span>, type <span class="v">foostruct[5:0]</span>.</li> 
+ 
+<li> We resolve the type foostruct to its struct type, and append the packed 
+dimensions to get <span class="v">[5:0][4:0]</span>.  We then check the indices from the 
+expression, which results in cancelling out the dimension to obtain just the 
+bare struct.  We find the element foo of the struct and recur on that.</li> 
+ 
+<li>Finally, we have just the atom <span class="v">foo</span> as our expression, so we return the 
+type <span class="v">logic[3:0]</span>.</li> </ul> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>vl-hidexpr-traverse-datatype</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ vl-hidexpr-traverse-datatype (x type)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="VL2014____VL-EXPR-P.html">vl-expr-p</a> x)
+                             (<a href="VL2014____VL-DATATYPE-P.html">vl-datatype-p</a> type))))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-HIDEXPR-P.html">vl-hidexpr-p</a> x)))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'vl-hidexpr-traverse-datatype))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+   ((<a href="COMMON-LISP____TYPE.html">type</a> (<a href="VL2014____VL-DATATYPE-FIX.html">vl-datatype-fix</a> type))
+    ((when (<a href="VL2014____VL-HIDEXPR-_E3ENDP.html">vl-hidexpr-&gt;endp</a> x))
+     (<a href="ACL2____MV.html">mv</a> nil type))
+    (idx1 (<a href="VL2014____VL-HIDEXPR-_E3FIRST.html">vl-hidexpr-&gt;first</a> x))
+    ((<a href="ACL2____MV.html">mv</a> warning baretype)
+     (<a href="VL2014____VL-HIDINDEX-DATATYPE-RESOLVE-DIMS.html">vl-hidindex-datatype-resolve-dims</a> idx1 type))
+    ((when warning) (<a href="ACL2____MV.html">mv</a> warning nil))
+    ((when (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____CONSP.html">consp</a> (<a href="VL2014____VL-DATATYPE-_E3UDIMS.html">vl-datatype-&gt;udims</a> baretype))
+               (<a href="COMMON-LISP____CONSP.html">consp</a> (<a href="VL2014____VL-DATATYPE-_E3PDIMS.html">vl-datatype-&gt;pdims</a> baretype))))
+     (<a href="ACL2____MV.html">mv</a>
+      (<a href="VL2014____MAKE-VL-WARNING.html">make-vl-warning</a>
+       :type :vl-hid-datatype-fail
+       :msg
+       "Not enough indices in dotted selector ~a0: ~
+                                   extra ~s1 dimensions."
+       :args (<a href="COMMON-LISP____LIST.html">list</a> (<a href="VL2014____VL-EXPR-FIX.html">vl-expr-fix</a> x)
+                   (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____CONSP.html">consp</a> (<a href="VL2014____VL-DATATYPE-_E3UDIMS.html">vl-datatype-&gt;udims</a> baretype))
+                       "unpacked" "packed"))
+       :fn __function__)
+      nil))
+    ((<a href="ACL2____MV.html">mv</a> ok members)
+     (<a href="VL2014____VL-DATATYPE-_E3STRUCTMEMBERS.html">vl-datatype-&gt;structmembers</a> baretype))
+    ((unless ok)
+     (<a href="ACL2____MV.html">mv</a>
+      (<a href="VL2014____MAKE-VL-WARNING.html">make-vl-warning</a>
+       :type :vl-hid-datatype-fail
+       :msg
+       "Dot-indexing into a datatype that isn't a ~
+                                   struct or union: ~a0"
+       :args (<a href="COMMON-LISP____LIST.html">list</a> (<a href="VL2014____VL-DATATYPE-FIX.html">vl-datatype-fix</a> baretype))
+       :fn __function__)
+      nil))
+    (next-hid (<a href="VL2014____VL-HIDEXPR-_E3REST.html">vl-hidexpr-&gt;rest</a> x))
+    (nextname (<a href="VL2014____VL-HIDINDEX-_E3NAME.html">vl-hidindex-&gt;name</a> (<a href="VL2014____VL-HIDEXPR-_E3FIRST.html">vl-hidexpr-&gt;first</a> next-hid)))
+    (<a href="COMMON-LISP____MEMBER.html">member</a> (<a href="VL2014____VL-FIND-STRUCTMEMBER.html">vl-find-structmember</a> nextname members))
+    ((unless member)
+     (<a href="ACL2____MV.html">mv</a>
+      (<a href="VL2014____MAKE-VL-WARNING.html">make-vl-warning</a>
+       :type :vl-structindex-fail
+       :msg
+       "Dot-indexing failed: struct/union member ~
+                                   ~s0 not found in type ~a1"
+       :args (<a href="COMMON-LISP____LIST.html">list</a> nextname (<a href="VL2014____VL-DATATYPE-FIX.html">vl-datatype-fix</a> baretype))
+       :fn __function__)
+      nil))
+    (membtype (<a href="VL2014____VL-STRUCTMEMBER-_E3TYPE.html">vl-structmember-&gt;type</a> member)))
+   (<a href="VL2014____VL-HIDEXPR-TRAVERSE-DATATYPE.html">vl-hidexpr-traverse-datatype</a> next-hid membtype))))</pre> 
+<p><b>Theorem: </b>return-type-of-vl-hidexpr-traverse-datatype.warning</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> return-type-of-vl-hidexpr-traverse-datatype.warning
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> common-lisp::?warning ?restype)
+              (<a href="VL2014____VL-HIDEXPR-TRAVERSE-DATATYPE.html">vl-hidexpr-traverse-datatype</a> x type)))
+            (<a href="ACL2____IFF.html">iff</a> (<a href="VL2014____VL-WARNING-P.html">vl-warning-p</a> warning) warning))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>return-type-of-vl-hidexpr-traverse-datatype.restype</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> return-type-of-vl-hidexpr-traverse-datatype.restype
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> common-lisp::?warning ?restype)
+              (<a href="VL2014____VL-HIDEXPR-TRAVERSE-DATATYPE.html">vl-hidexpr-traverse-datatype</a> x type)))
+            (<a href="ACL2____IFF.html">iff</a> (<a href="VL2014____VL-DATATYPE-P.html">vl-datatype-p</a> restype)
+                 (<a href="COMMON-LISP____NOT.html">not</a> warning)))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>vl-hidexpr-traverse-datatype-of-vl-expr-fix-x</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-hidexpr-traverse-datatype-of-vl-expr-fix-x
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL2014____VL-HIDEXPR-TRAVERSE-DATATYPE.html">vl-hidexpr-traverse-datatype</a> (<a href="VL2014____VL-EXPR-FIX.html">vl-expr-fix</a> x)
+                                             type)
+               (<a href="VL2014____VL-HIDEXPR-TRAVERSE-DATATYPE.html">vl-hidexpr-traverse-datatype</a> x type)))</pre> 
+<p><b>Theorem: </b>vl-hidexpr-traverse-datatype-vl-expr-equiv-congruence-on-x</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     vl-hidexpr-traverse-datatype-vl-expr-equiv-congruence-on-x
+     (<a href="ACL2____IMPLIES.html">implies</a> (<a href="VL2014____VL-EXPR-EQUIV.html">vl-expr-equiv</a> x x-equiv)
+              (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL2014____VL-HIDEXPR-TRAVERSE-DATATYPE.html">vl-hidexpr-traverse-datatype</a> x type)
+                     (<a href="VL2014____VL-HIDEXPR-TRAVERSE-DATATYPE.html">vl-hidexpr-traverse-datatype</a> x-equiv type)))
+     :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>vl-hidexpr-traverse-datatype-of-vl-datatype-fix-type</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     vl-hidexpr-traverse-datatype-of-vl-datatype-fix-type
+     (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL2014____VL-HIDEXPR-TRAVERSE-DATATYPE.html">vl-hidexpr-traverse-datatype</a> x (<a href="VL2014____VL-DATATYPE-FIX.html">vl-datatype-fix</a> type))
+            (<a href="VL2014____VL-HIDEXPR-TRAVERSE-DATATYPE.html">vl-hidexpr-traverse-datatype</a> x type)))</pre> 
+<p><b>Theorem: </b>vl-hidexpr-traverse-datatype-vl-datatype-equiv-congruence-on-type</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+   vl-hidexpr-traverse-datatype-vl-datatype-equiv-congruence-on-type
+   (<a href="ACL2____IMPLIES.html">implies</a> (<a href="VL2014____VL-DATATYPE-EQUIV.html">vl-datatype-equiv</a> type type-equiv)
+            (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL2014____VL-HIDEXPR-TRAVERSE-DATATYPE.html">vl-hidexpr-traverse-datatype</a> x type)
+                   (<a href="VL2014____VL-HIDEXPR-TRAVERSE-DATATYPE.html">vl-hidexpr-traverse-datatype</a> x type-equiv)))
+   :rule-classes :congruence)</pre> 
+
+</body>
+</html>

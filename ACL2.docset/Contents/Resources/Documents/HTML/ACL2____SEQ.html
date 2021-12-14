@@ -1,0 +1,153 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Seq</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____SEQ">Click for Seq in the Full Manual</a></h3>
+
+<p><i>Seq</i> is a macro language for applying actions to a stream.</p><p>In this context, a <i>stream</i> is any data structure that we want 
+to update in an essentially sequential/single-threaded way.  It might be a 
+stobj, but it could also be a regular ACL2 list or some other kind of 
+structure.  For example, in the <a href="ACL2____VL.html">vl</a> Verilog parser, we typically use seq 
+to traverse a list of tokens, which are regular ACL2 objects.</p> 
+ 
+<p>Meanwhile, an <i>action</i> is some operation which typically inspects the 
+stream, and then returns a triple of the form <span class="v">(<a href="ACL2____MV.html">mv</a> error val stream)</span>.  When 
+the action is successful, <span class="v">error</span> is <span class="v">nil</span>, <span class="v">stream</span> is the updated 
+stream, and <span class="v">val</span> is perhaps some piece of information that was gleaned from 
+running this action.  For instance, in the Verilog parser we may take a token 
+out of the stream and put it into val.</p> 
+ 
+<p>But an action may also fail, in which case it should set <span class="v">error</span> to some 
+non-nil value, typically an error message produced by <a href="ACL2____MSG.html">msg</a>.</p> 
+ 
+<p>A Seq program is introduced by writing:</p> 
+ 
+<pre class="code">(<a href="ACL2____SEQ.html">seq</a> &lt;stream&gt; ... statements ...)</pre> 
+ 
+<p>Where <span class="v">stream</span> is the name of the stream to operate on and update, and 
+the valid statements are described below.  Every Seq program evaluates to an 
+<span class="v">(<a href="ACL2____MV.html">mv</a> error val stream)</span> triple.</p> 
+ 
+<p>Some examples of using Seq can be found in <span class="v">misc/seq-examples.lsp</span>.</p> 
+ 
+ 
+<h3>The Basic Assignment Statement</h3> 
+ 
+<p>In many ways, Seq resembles a loop-free, imperative programming language 
+with a mechanism to throw exceptions.  Seq programs are written as blocks of 
+statements, and the fundamental statement is assignment:</p> 
+ 
+<pre class="code">(var := (action ... &lt;stream&gt;))</pre> 
+ 
+<p>Such an assignment statement has two effects when action is successful:</p> 
+ 
+<ol> 
+<li>It binds var to the val produced by the action, and</li> 
+<li>It rebinds stream to the updated stream produced by the action</li> 
+</ol> 
+ 
+<p>But action may also fail, in which case the failure stops execution of the 
+current block and we propagate the error upwards throughout the entire Seq 
+program.</p> 
+ 
+ 
+<h3>Alternative Forms of Assignment</h3> 
+ 
+<p>We have a couple of additional assignment statements.  The first variant 
+simply allows you to ignore the val produced by an action, and is written:</p> 
+ 
+<pre class="code">(:= (action ... &lt;stream&gt;))</pre> 
+ 
+<p>The second variant allows you to destructure the val produced by the action, 
+and is written:</p> 
+ 
+<pre class="code">((foo . bar) := (action ... &lt;stream&gt;))</pre> 
+ 
+<p><span class="v">NIL</span> has a special meaning in this second form, and can be used to 
+"drop" parts of val which are not interesting.  For example, if action 
+produces the value (1 . 2), and you write:</p> 
+ 
+<pre class="code">((foo . nil) := action)</pre> 
+ 
+<p>Then <span class="v">foo</span> will be bound to 1 and the "2" part of val will be 
+inaccessible.</p> 
+ 
+<p>(Usually unnecessary): In place of <span class="v">:=</span> in any of the above, one can also 
+write:</p> 
+ 
+<ul> 
+<li>
+<span class="v">:w=</span> — weak count decrease</li> 
+<li>
+<span class="v">:s=</span> — strong count decrease</li> 
+</ul> 
+ 
+<p>These act the same as <span class="v">:=</span>, except that they add some <span class="v">(<a href="ACL2____MBE.html">mbe</a> :logic
+...)</span>-only checks that ensure that the returned stream has a weakly lower or 
+strongly lower <a href="ACL2____ACL2-COUNT.html">ACL2-count</a> than the stream going into the action.  This 
+is sometimes needed when using Seq in mutually-recursive functions.</p> 
+ 
+ 
+<h3>Conditional Execution</h3> 
+ 
+<p>A block can be only conditionally executed by wrapping it in a <b>when</b> 
+or <b>unless</b> clause.  For example:</p> 
+ 
+<pre class="code">(when (<a href="COMMON-LISP____INTEGERP.html">integerp</a> x)
+  (foo := (action1 ...)
+  (bar := (action2 ...)))
+
+(unless (<a href="COMMON-LISP____CONSP.html">consp</a> x)
+  (foo := (action ...)))</pre> 
+ 
+<p>This causes the bindings for <span class="v">foo</span> and <span class="v">bar</span> only to be executed when 
+the condition evaluates to non-<span class="v">nil</span>.</p> 
+ 
+ 
+<h3>Return Statements</h3> 
+ 
+<p>The final statement of a Seq program must be a return statement, and "early" 
+return statements can also occur as the last statement of a when or unless 
+block.  There are two versions of the return statement.</p> 
+ 
+<pre class="code">(return expr)
+(return-raw action)</pre> 
+ 
+<p>Either one of these causes the entire Seq program to exit.  In the first 
+form, <span class="v">expr</span> is expected to evaluate to a regular ACL2 object, and the result 
+of the Seq program will be <span class="v">(<a href="ACL2____MV.html">mv</a> nil expr stream)</span>.</p> 
+ 
+<p>In the second form, <span class="v">action</span> is expected to itself evaluate to an <span class="v">(<a href="ACL2____MV.html">mv</a>
+error val stream)</span> tuple, and the Seq program returns this value verbatim.</p> 
+ 
+ 
+<h3>Backtracking</h3> 
+ 
+<p>We also provide another macro, <b>seq-backtrack</b>, which cannot be used on 
+STOBJs, but can be used with regular, applicative structures.  The general form 
+is:</p> 
+ 
+<pre class="code">(seq-backtrack stream block1 block2 ...)</pre> 
+ 
+<p>This macro has the following effect.  First, we try to run <span class="v">block1</span>.  If 
+it succeeds, we return the <span class="v">(<a href="ACL2____MV.html">mv</a> error val new-stream)</span> that it returns. 
+Otherwise, we start again with the initial <span class="v">stream</span> and try to run the 
+remaining blocks, in order.  If none of the blocks succeed, we return the 
+<span class="v">(<a href="ACL2____MV.html">mv</a> error val new-stream)</span> encountered by the final block.</p> 
+ 
+ 
+<h3>Other Resources</h3> 
+ 
+<p>While Seq is convenient in certain cases, the <a href="ACL2____B_A2.html">b*</a> macro is generally 
+more flexible.</p> 
+ 
+<p>See also <a href="ACL2____SEQW.html">seqw</a>, an expanded version of <a href="ACL2____SEQ.html">seq</a> that supports the 
+creation of warnings while processing the stream.</p> 
+ 
+
+</body>
+</html>

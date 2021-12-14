@@ -1,0 +1,117 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Vl-parse-sequence-match-item</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL____VL-PARSE-SEQUENCE-MATCH-ITEM">Click for Vl-parse-sequence-match-item in the Full Manual</a></h3>
+
+<p>Matches <span class="v">sequence_match_item</span>.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(vl-parse-sequence-match-item &amp;key (tokstream 'tokstream) 
+                              (config 'config)) 
+ 
+  → 
+(mv errmsg? value new-tokstream)</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">config</span> — <font color="#606060">Guard <span class="v">(<a href="VL____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>After reviewing the grammar, I think sequence_match_items are 
+essentially just a subset of expressions and can probably be best represented 
+just as expressions.  The main grammar rule is:</p> 
+ 
+<pre class="code">sequence_match_item ::= operator_assignment
+                      | inc_or_dec_expression
+                      | subroutine_call</pre> 
+ 
+<p>If you dive down into this, the complexity really explodes.  The details of 
+<span class="v">inc_or_dec_expression</span> and <span class="v">operator_assignment</span> involve 
+<span class="v">variable_lvalue</span> terms which are really complex and which we haven't tried 
+to entirely support yet in our expressions.  Meanwhile <span class="v">subroutine_call</span> can 
+include <span class="v">randomize_call</span> which leads to a huge bunch of 
+<span class="v">constraint_block</span> stuff and there are also other parts of 
+<span class="v">subroutine_call</span> like <span class="v">array_manipulation_call</span> that we haven't tried to 
+implement at all.</p> 
+ 
+<p>But all of this stuff is also a problem in our ordinary expressions; we 
+have</p> 
+ 
+<pre class="code">expression ::= primary
+             | '(' operator_assignment ')'
+             | inc_or_dec_expression
+             | ...
+
+primary ::= function_subroutine_call
+          | ...
+
+function_subroutine_call ::= subroutine_call</pre> 
+ 
+<p>So all of these kinds of things can directly be expressions.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>vl-parse-sequence-match-item-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ vl-parse-sequence-match-item-fn
+ (tokstream config)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'vl-parse-sequence-match-item))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="VL____SEQ.html">seq</a>
+   tokstream
+   (expr := (<a href="VL____VL-PARSE-MINTYPMAX-EXPRESSION.html">vl-parse-mintypmax-expression</a>))
+   (when
+    (<a href="COMMON-LISP____AND.html">and</a>
+     expr
+     (<a href="VL____VL-EXPR-CASE.html">vl-expr-case</a>
+      expr (:vl-call t)
+      (:vl-unary
+       (<a href="COMMON-LISP____MEMBER.html">member</a>
+           expr.op
+           '(:vl-unary-preinc :vl-unary-predec
+                              :vl-unary-postinc :vl-unary-postdec)))
+      (:vl-binary
+        (<a href="COMMON-LISP____MEMBER.html">member</a> expr.op
+                '(:vl-binary-assign
+                      :vl-binary-plusassign :vl-binary-minusassign
+                      :vl-binary-timesassign :vl-binary-divassign
+                      :vl-binary-remassign :vl-binary-andassign
+                      :vl-binary-orassign :vl-binary-xorassign
+                      :vl-binary-shlassign :vl-binary-shrassign
+                      :vl-binary-ashlassign :vl-binary-ashrassign)))
+      (&amp; nil)))
+    (return expr))
+   (return-raw
+        (<a href="VL____VL-PARSE-ERROR.html">vl-parse-error</a>
+             "Illegal expression for sequence_match_item.")))))</pre> 
+<p><b>Theorem: </b>vl-parse-sequence-match-item-fails-gracefully</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-parse-sequence-match-item-fails-gracefully
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 0 (<a href="VL____VL-PARSE-SEQUENCE-MATCH-ITEM.html">vl-parse-sequence-match-item</a>))
+                 (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 1 (<a href="VL____VL-PARSE-SEQUENCE-MATCH-ITEM.html">vl-parse-sequence-match-item</a>)))))</pre> 
+<p><b>Theorem: </b>vl-warning-p-of-vl-parse-sequence-match-item</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     vl-warning-p-of-vl-parse-sequence-match-item
+     (<a href="ACL2____IFF.html">iff</a> (<a href="VL____VL-WARNING-P.html">vl-warning-p</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 0 (<a href="VL____VL-PARSE-SEQUENCE-MATCH-ITEM.html">vl-parse-sequence-match-item</a>)))
+          (<a href="ACL2____MV-NTH.html">mv-nth</a> 0 (<a href="VL____VL-PARSE-SEQUENCE-MATCH-ITEM.html">vl-parse-sequence-match-item</a>))))</pre> 
+<p><b>Theorem: </b>vl-parse-sequence-match-item-result</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+   vl-parse-sequence-match-item-result
+   (<a href="ACL2____IMPLIES.html">implies</a>
+        (<a href="COMMON-LISP____AND.html">and</a> t)
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL____VL-EXPR-P.html">vl-expr-p</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 1 (<a href="VL____VL-PARSE-SEQUENCE-MATCH-ITEM.html">vl-parse-sequence-match-item</a>)))
+               (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 0 (<a href="VL____VL-PARSE-SEQUENCE-MATCH-ITEM.html">vl-parse-sequence-match-item</a>))))))</pre> 
+<p><b>Theorem: </b>vl-parse-sequence-match-item-count-strong</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-parse-sequence-match-item-count-strong
+ (<a href="COMMON-LISP____AND.html">and</a>
+  (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> (vl-tokstream-measure
+           :tokstream (<a href="ACL2____MV-NTH.html">mv-nth</a> 2 (<a href="VL____VL-PARSE-SEQUENCE-MATCH-ITEM.html">vl-parse-sequence-match-item</a>)))
+      (vl-tokstream-measure))
+  (<a href="ACL2____IMPLIES.html">implies</a>
+       (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 0 (<a href="VL____VL-PARSE-SEQUENCE-MATCH-ITEM.html">vl-parse-sequence-match-item</a>)))
+       (<a href="COMMON-LISP_____C3.html">&lt;</a> (vl-tokstream-measure
+               :tokstream (<a href="ACL2____MV-NTH.html">mv-nth</a> 2 (<a href="VL____VL-PARSE-SEQUENCE-MATCH-ITEM.html">vl-parse-sequence-match-item</a>)))
+          (vl-tokstream-measure))))
+ :rule-classes ((:rewrite) (:linear)))</pre> 
+
+</body>
+</html>

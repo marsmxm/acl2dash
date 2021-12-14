@@ -1,0 +1,119 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Vl-repeatstmt-rewrite</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL2014____VL-REPEATSTMT-REWRITE">Click for Vl-repeatstmt-rewrite in the Full Manual</a></h3>
+
+<p>Unroll deterministic repeat statements.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(vl-repeatstmt-rewrite condition body atts warnings unroll-limit) 
+  → 
+(mv warnings stmt)</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">condition</span> — <font color="#606060">Guard <span class="v">(<a href="VL2014____VL-EXPR-P.html">vl-expr-p</a> condition)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">body</span> — <font color="#606060">Guard <span class="v">(<a href="VL2014____VL-STMT-P.html">vl-stmt-p</a> body)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">atts</span> — <font color="#606060">Guard <span class="v">(<a href="VL2014____VL-ATTS-P.html">vl-atts-p</a> atts)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">warnings</span> — <font color="#606060">Guard <span class="v">(<a href="VL2014____VL-WARNINGLIST-P.html">vl-warninglist-p</a> warnings)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">unroll-limit</span> — <font color="#606060">Guard <span class="v">(<a href="ACL2____NATP.html">natp</a> unroll-limit)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">warnings</span> — <font color="#606060">Type <span class="v">(<a href="VL2014____VL-WARNINGLIST-P.html">vl-warninglist-p</a> warnings)</span>, given the <a href="ACL2____GUARD.html">guard</a>.</font>
+</dd> 
+<dd>
+<span class="tt">stmt</span> — <font color="#606060">Type <span class="v">(<a href="VL2014____VL-STMT-P.html">vl-stmt-p</a> stmt)</span>, given the <a href="ACL2____GUARD.html">guard</a>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>The basic rewrite this performs is:</p> 
+ 
+<pre class="code">repeat(n) body;   // with 0 &lt;= n &lt;= unroll-limit
+  --&gt;
+begin
+  body   }
+  body   }  n times
+  ...    }
+  body   }
+end</pre> 
+ 
+<p>We only try to unroll when <span class="v">n</span> is easily resolved to a constant that is 
+less than the <span class="v">unroll-limit</span>.  In particular, we use <a href="VL2014____VL-CONSTEVAL.html">vl-consteval</a> to 
+try to evaluate the condition.  This lets us handle things like 
+<span class="v">repeat(width-1) body</span> after <a href="VL2014____UNPARAMETERIZATION.html">unparameterization</a> has occurred.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>vl-repeatstmt-rewrite</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ vl-repeatstmt-rewrite
+ (condition body atts warnings unroll-limit)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="VL2014____VL-EXPR-P.html">vl-expr-p</a> condition)
+                             (<a href="VL2014____VL-STMT-P.html">vl-stmt-p</a> body)
+                             (<a href="VL2014____VL-ATTS-P.html">vl-atts-p</a> atts)
+                             (<a href="VL2014____VL-WARNINGLIST-P.html">vl-warninglist-p</a> warnings)
+                             (<a href="ACL2____NATP.html">natp</a> unroll-limit))))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'vl-repeatstmt-rewrite))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+   (((<a href="ACL2____MV.html">mv</a> ok count-expr)
+     (<a href="VL2014____VL-CONSTEVAL.html">vl-consteval</a> condition nil))
+    (<a href="COMMON-LISP____COUNT.html">count</a> (<a href="COMMON-LISP____AND.html">and</a> ok (<a href="VL2014____VL-RESOLVED-_E3VAL.html">vl-resolved-&gt;val</a> count-expr)))
+    ((when (<a href="COMMON-LISP____AND.html">and</a> count (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> count unroll-limit)))
+     (<a href="ACL2____MV.html">mv</a> warnings
+         (<a href="VL2014____MAKE-VL-BLOCKSTMT.html">make-vl-blockstmt</a>
+              :sequentialp t
+              :stmts (<a href="ACL2____REPLICATE.html">replicate</a> count body)
+              :atts (<a href="COMMON-LISP____ACONS.html">acons</a> "VL_UNROLL_REPEAT" nil atts)))))
+   (<a href="ACL2____MV.html">mv</a>
+    (<a href="VL2014____WARN.html">warn</a>
+     :type :vl-unroll-fail
+     :msg
+     (<a href="COMMON-LISP____IF.html">if</a>
+      count
+      "Cannot unroll repeat statement because the count, ~
+                         ~a0, did not resolve to a constant."
+      "Cannot unroll repeat statement because the count, ~a0, ~
+                       resolevd to ~x1, which exceeds the unroll limit of ~x2.")
+     :args (<a href="COMMON-LISP____LIST.html">list</a> condition count unroll-limit))
+    (<a href="VL2014____MAKE-VL-REPEATSTMT.html">make-vl-repeatstmt</a>
+         :condition condition
+         :body body
+         :atts (<a href="COMMON-LISP____ACONS.html">acons</a> "VL_UNROLL_REPEAT_FAIL" nil atts))))))</pre> 
+<p><b>Theorem: </b>vl-warninglist-p-of-vl-repeatstmt-rewrite.warnings</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-warninglist-p-of-vl-repeatstmt-rewrite.warnings
+ (<a href="ACL2____IMPLIES.html">implies</a>
+     (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____FORCE.html">force</a> (<a href="VL2014____VL-EXPR-P.html">vl-expr-p</a> condition))
+          (<a href="ACL2____FORCE.html">force</a> (<a href="VL2014____VL-STMT-P.html">vl-stmt-p</a> body))
+          (<a href="ACL2____FORCE.html">force</a> (<a href="VL2014____VL-ATTS-P.html">vl-atts-p</a> atts))
+          (<a href="ACL2____FORCE.html">force</a> (<a href="VL2014____VL-WARNINGLIST-P.html">vl-warninglist-p</a> warnings))
+          (<a href="ACL2____FORCE.html">force</a> (<a href="ACL2____NATP.html">natp</a> unroll-limit)))
+     (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?warnings ?stmt)
+           (<a href="VL2014____VL-REPEATSTMT-REWRITE.html">vl-repeatstmt-rewrite</a> condition
+                                  body atts warnings unroll-limit)))
+         (<a href="VL2014____VL-WARNINGLIST-P.html">vl-warninglist-p</a> warnings)))
+ :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>vl-stmt-p-of-vl-repeatstmt-rewrite.stmt</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ vl-stmt-p-of-vl-repeatstmt-rewrite.stmt
+ (<a href="ACL2____IMPLIES.html">implies</a>
+     (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____FORCE.html">force</a> (<a href="VL2014____VL-EXPR-P.html">vl-expr-p</a> condition))
+          (<a href="ACL2____FORCE.html">force</a> (<a href="VL2014____VL-STMT-P.html">vl-stmt-p</a> body))
+          (<a href="ACL2____FORCE.html">force</a> (<a href="VL2014____VL-ATTS-P.html">vl-atts-p</a> atts))
+          (<a href="ACL2____FORCE.html">force</a> (<a href="VL2014____VL-WARNINGLIST-P.html">vl-warninglist-p</a> warnings))
+          (<a href="ACL2____FORCE.html">force</a> (<a href="ACL2____NATP.html">natp</a> unroll-limit)))
+     (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?warnings ?stmt)
+           (<a href="VL2014____VL-REPEATSTMT-REWRITE.html">vl-repeatstmt-rewrite</a> condition
+                                  body atts warnings unroll-limit)))
+         (<a href="VL2014____VL-STMT-P.html">vl-stmt-p</a> stmt)))
+ :rule-classes :rewrite)</pre> 
+
+</body>
+</html>

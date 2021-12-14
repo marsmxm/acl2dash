@@ -1,0 +1,95 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>4. Proving Theorems by Symbolic Execution</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=GL____4._02Proving_02Theorems_02by_02Symbolic_02Execution">Click for 4. Proving Theorems by Symbolic Execution in the Full Manual</a></h3>
+
+<p></p> 
+ 
+<p>To see how symbolic execution can be used to prove theorems, let's return to 
+the bit-counting example, where our goal was to prove</p> 
+ 
+<pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 32 x)
+         (<a href="COMMON-LISP____EQUAL.html">equal</a> (fast-logcount-32 x)
+                (<a href="COMMON-LISP____LOGCOUNT.html">logcount</a> x)))</pre> 
+ 
+<p>The basic idea is to first symbolically execute the above formula, and then 
+check whether it can ever evaluate to <span class="v">nil</span>.  But to do this symbolic 
+execution, we need some symbolic object to represent <span class="v">x</span>.</p> 
+ 
+<p>We want our symbolic execution to cover all the cases necessary for proving 
+the theorem, namely all <span class="v">x</span> for which the hypothesis <span class="v">(<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 32
+x)</span> holds.  In other words, the symbolic object we choose needs to be able to 
+represent any integer from 0 to <span class="v">2^32 - 1</span>.</p> 
+ 
+<p>Many symbolic objects cover this range.  As notation, let <span class="v">b0, b1, ...</span> 
+represent independent Boolean variables in our Boolean expression 
+representation.  Then, one suitable object is:</p> 
+ 
+<pre class="code">Xinit = (:g-integer b0 b1 ... b31 b32).</pre> 
+ 
+<p>Why does this have 33 variables?  The final bit, <span class="v">b32</span>, represents the 
+sign, so this object covers the integers from <span class="v">-2^32</span> to <span class="v">2^32 - 1</span>.  We 
+could instead use a 34-bit integer, or a 35-bit integer, or some esoteric 
+creation involving <span class="v">:g-ite</span> forms.  But perhaps the best object to use would 
+be:</p> 
+ 
+<pre class="code">Xbest = (:g-integer b0 b1 ... b31 false).</pre> 
+ 
+<p>since it covers exactly the desired range using the simplest possible 
+Boolean expressions.</p> 
+ 
+<p>Suppose we choose <span class="v">Xbest</span> to stand for <span class="v">x</span>. We can now symbolically 
+execute the goal formula on that object.</p> 
+ 
+<p>What does this involve?  First, <span class="v">(<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 32 x)</span> produces the 
+symbolic result <span class="v">t</span>, since it is always true of the possible values of 
+<span class="v">Xbest</span>.  It would have been equally valid for this to produce 
+<span class="v">(:g-boolean . true)</span>, but GL prefers to produce constants when 
+possible.</p> 
+ 
+<p>Next, the <span class="v">(fast-logcount-32 x)</span> and <span class="v">(<a href="COMMON-LISP____LOGCOUNT.html">logcount</a> x)</span> forms each yield 
+<span class="v">:g-integer</span> objects whose bits are Boolean expressions in the variables 
+<span class="v">b0, ..., b31</span>.  For example, the least significant bit will be an 
+expression representing the XOR of all these variables.</p> 
+ 
+<p>Finally, we symbolically execute <a href="COMMON-LISP____EQUAL.html">equal</a> on these two results.  This 
+compares the Boolean expressions for their bits to determine if they are 
+equivalent, and produces a symbolic object representing the answer.</p> 
+ 
+<p>So far we have basically ignored the differences between using <a href="ACL2____UBDDS.html">ubdds</a> 
+or <a href="ACL2____AIG.html">aig</a>s as our Boolean expression representation.  But here, the two 
+approaches produce very different answers:</p> 
+ 
+<ul> 
+<li>Since UBDDs are canonical, the expressions for the bits of the two numbers 
+  are syntactically equal, and the result from <a href="COMMON-LISP____EQUAL.html">equal</a> is simply <span class="v">t</span>.</li> 
+ 
+<li>With AIGs, the expressions for the bits are semantically equivalent but not 
+  syntactically equal.  The result is therefore <span class="v">(:g-boolean . phi)</span>, where 
+  <span class="v">phi</span> is a large Boolean expression in the variables <span class="v">b0, ..., b31</span>. 
+  The fact that <span class="v">phi</span> always evaluates to <span class="v">t</span> is not obvious just from 
+  its syntax.</li> 
+</ul> 
+ 
+<p>At this point we have completed the symbolic execution of our goal formula, 
+obtaining either <span class="v">t</span> in BDD mode, or this <span class="v">:g-boolean</span> object in AIG 
+mode.  Recall that to prove theorems using symbolic execution, the idea is to 
+symbolically execute the goal formula and then check whether its symbolic 
+result can represent <span class="v">nil</span>.  If we are using BDDs, it is obvious that <span class="v">t</span> 
+cannot represent <span class="v">nil</span>.  With AIGs, we simply ask a SAT solver whether 
+<span class="v">phi</span> can evaluate to <span class="v">false</span>, and find that it cannot.  This completes 
+the proof.</p> 
+ 
+<p>GL automates this proof strategy, taking care of many of the details 
+relating to creating symbolic objects, ensuring that they cover all the 
+possible cases, and ensuring that <span class="v">nil</span> cannot be represented by the 
+symbolic result.  When GL is asked to prove a non-theorem, it can generate 
+counterexamples by finding assignments to the Boolean variables that cause the 
+result to become <span class="v">nil</span>.</p>
+</body>
+</html>

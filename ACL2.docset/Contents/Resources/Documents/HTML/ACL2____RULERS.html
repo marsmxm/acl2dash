@@ -1,0 +1,472 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Rulers</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____RULERS">Click for Rulers in the Full Manual</a></h3>
+
+<p>Control for ACL2's termination and induction analyses</p><p><b>Introduction</b></p> 
+ 
+ <p>Consider the following recursive definition, which returns a list of threes 
+ of length one more than the length of <span class="v">x</span>.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> f (x)
+  (<a href="COMMON-LISP____CONS.html">cons</a> 3
+        (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x)
+            (f (<a href="COMMON-LISP____CDR.html">cdr</a> x))
+          nil)))</pre> 
+ 
+ <p>One might expect ACL2's termination analysis to admit this function, since 
+ we know that <span class="v">(<a href="COMMON-LISP____CDR.html">cdr</a> x)</span> is ``smaller'' than <span class="v">x</span> if <span class="v">(<a href="COMMON-LISP____CONSP.html">consp</a> x)</span> is 
+ true.  (ACL2's notion of ``smaller'' here is essentially ordinary 
+ natural-number <span class="v">&lt;</span>, and the argument <span class="v">x</span> is measured by applying 
+ function <span class="tt"><a href="ACL2____ACL2-COUNT.html">ACL2-count</a></span> to <span class="v">x</span>; see <a href="COMMON-LISP____DEFUN.html">defun</a>.)  However, by default 
+ that termination analysis does not consider <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span> tests, like <span class="v">(<a href="COMMON-LISP____CONSP.html">consp</a>
+ x)</span> above, when they occur under calls of functions other than <span class="v">IF</span>, such 
+ as <span class="v">CONS</span> in the case above; it considers only rulers, as we now 
+ discuss.</p> 
+ 
+ <p>In the example above, we say that the term <span class="v">(<a href="COMMON-LISP____CONSP.html">consp</a> x)</span> <i>governs</i> 
+ the recursive call <span class="v">(f (<a href="COMMON-LISP____CDR.html">cdr</a> x))</span> shown above, but does not <i>rule</i> that 
+ call.  Roughly speaking, the set of <i>governors</i> of a subterm occurrence 
+ in a given term consists of all superior <span class="v">IF</span> tests and their negations 
+ that must be true in order for evaluation to reach that subterm; however, the 
+ set of <i>rulers</i> of the occurrence only includes, at least by default, 
+ those tests and their negations from the top-level <span class="v">IF</span> structure of the 
+ term — that is, tests and their negations that are collected by walking 
+ through the true and false branches of <span class="v">IF</span> calls, starting at the top. 
+ Consider for example the following term, where <span class="v">foo</span> is assumed to be a 
+ function symbol.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____IF.html">if</a> a
+    (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____IF.html">if</a> b c d) e f)
+  (<a href="COMMON-LISP____IF.html">if</a> g
+      (foo (<a href="COMMON-LISP____IF.html">if</a> h i j))
+    k))</pre> 
+ 
+ <p>For the occurrence of <span class="v">c</span> in that term, the only ruler is <span class="v">a</span>; but 
+ both <span class="v">a</span> and <span class="v">b</span> are governors.  For the occurrence of <span class="v">i</span>, <span class="v">(<a href="COMMON-LISP____NOT.html">not</a>
+ a)</span> and <span class="v">g</span> are the only rulers; but its governors are <span class="v">(<a href="COMMON-LISP____NOT.html">not</a> a)</span>, 
+ <span class="v">g</span>, and <span class="v">h</span>.</p> 
+ 
+ <p>We have seen that for a subterm occurrence in a term, every ruler is a 
+ governor but not necessarily vice-versa.  It is the rulers of a recursive call 
+ that affect its role in the termination and induction analysis for a 
+ function.</p> 
+ 
+ <p>One way to overcome the discrepancy between rulers and governors is to 
+ ``lift'' the <span class="v">IF</span> test to the top level.  We can apply that technique to 
+ the <span class="v">defun</span> of <span class="v">f</span> above, so that now <span class="v">(<a href="COMMON-LISP____CONSP.html">consp</a> x)</span> is a ruler of the 
+ recursive call, and not merely a governor (though it remains a governor as 
+ well, of course).</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> f (x)
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x)
+      (<a href="COMMON-LISP____CONS.html">cons</a> 3 (f (<a href="COMMON-LISP____CDR.html">cdr</a> x)))
+    (<a href="COMMON-LISP____CONS.html">cons</a> 3 nil)))</pre> 
+ 
+ <p>But another way to overcome the problem is to tell ACL2 to extend its 
+ termination (and induction) analysis through calls of <span class="v">cons</span>, as 
+ follows, by designating that calls of <span class="v">cons</span> should not block the 
+ accumulation of rulers.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> f (x)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :ruler-extenders (<a href="COMMON-LISP____CONS.html">cons</a>)))
+  (<a href="COMMON-LISP____CONS.html">cons</a> 3
+        (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x)
+            (f (<a href="COMMON-LISP____CDR.html">cdr</a> x))
+          nil)))</pre> 
+ 
+ <p>Let's look at one more (contrived) example:</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> g (x)
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ATOM.html">atom</a> x)
+      x
+    (<a href="ACL2____LEN.html">len</a> (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> (<a href="COMMON-LISP____CAR.html">car</a> x))
+             (<a href="ACL2____G.html">g</a> (<a href="COMMON-LISP____CDDR.html">cddr</a> x))
+           (<a href="ACL2____G.html">g</a> (<a href="COMMON-LISP____CDR.html">cdr</a> x))))))</pre> 
+ 
+ <p>There are two recursive calls, and the set of rulers is <span class="v">{(<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____ATOM.html">atom</a>
+ x))}</span> for each of those.  The set of governors for the first recursive call 
+ is <span class="v">{(<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____ATOM.html">atom</a> x)), (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> (<a href="COMMON-LISP____CAR.html">car</a> x))}</span>, and for the second, 
+ <span class="v">{(<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____ATOM.html">atom</a> x)), (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> (<a href="COMMON-LISP____CAR.html">car</a> x)))}</span>.  The rulers is extended to be 
+ the governors in each case if we specify: 
+ <span class="v">(<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :ruler-extenders (<a href="ACL2____LEN.html">len</a>)))</span>.</p> 
+ 
+ <p>You may even wish to provide value <span class="v">:all</span> instead of an explicit list of 
+ ruler-extenders, so that no function call blocks the termination analysis:</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> f (x)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :ruler-extenders :all))
+  (<a href="COMMON-LISP____CONS.html">cons</a> 3
+        (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x)
+            (f (<a href="COMMON-LISP____CDR.html">cdr</a> x))
+          nil)))</pre> 
+ 
+ <p>Alternatively, you can omit the <span class="v">XARGS</span> <span class="v">:RULER-EXTENDERS</span> form, 
+ instead modifying the global default set of ruler-extenders:</p> 
+ 
+ <pre class="code">(<a href="ACL2____SET-RULER-EXTENDERS.html">set-ruler-extenders</a> :all)
+
+; or, for example:
+(<a href="ACL2____SET-RULER-EXTENDERS.html">set-ruler-extenders</a> '(<a href="COMMON-LISP____CONS.html">cons</a> return-last))</pre> 
+ 
+ <p>You can call the function <span class="tt"><a href="ACL2____DEFAULT-RULER-EXTENDERS.html">default-ruler-extenders</a></span> as follows to see 
+ the current global default set of ruler-extenders:</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFAULT-RULER-EXTENDERS.html">default-ruler-extenders</a> (<a href="ACL2____W.html">w</a> state))</pre> 
+ 
+ <p>We conclude this introduction by considering the handling of <span class="v">LET</span> 
+ expressions by termination analysis.  Consider the following example.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> fact (n)
+  (<a href="COMMON-LISP____THE.html">the</a> (integer 1 *)
+       (<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2____POSP.html">posp</a> n)
+           (<a href="COMMON-LISP_____A2.html">*</a> n (fact (<a href="COMMON-LISP____1-.html">1-</a> n)))
+         1)))</pre> 
+ 
+ <p>ACL2 treats the call of <span class="tt"><a href="COMMON-LISP____THE.html">the</a></span> in the body of this definition as 
+ follows.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____LET.html">let</a> ((var (<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2____POSP.html">posp</a> n)
+               (<a href="COMMON-LISP_____A2.html">*</a> n (fact (<a href="COMMON-LISP____1-.html">1-</a> n)))
+             1)))
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> var) (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> 1 var))
+      var
+    &lt;some_error&gt;))</pre> 
+ 
+ <p>A <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span> expression, in turn, is treated as a <span class="tt"><a href="COMMON-LISP____LAMBDA.html">lambda</a></span> 
+ application:</p> 
+ 
+ <pre class="code">((<a href="COMMON-LISP____LAMBDA.html">lambda</a> (var)
+   (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> var)
+           (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP_____C3.html">&lt;</a> var 1))
+         nil)
+       var
+     &lt;some_error&gt;))
+ (<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2____POSP.html">posp</a> n)
+     (<a href="COMMON-LISP_____A2.html">*</a> n (fact (<a href="COMMON-LISP____1-.html">1-</a> n)))
+   1))</pre> 
+ 
+ <p>Notice that the <span class="tt"><a href="ACL2____POSP.html">posp</a></span> test, which governs the recursive call of 
+ <span class="v">fact</span>, is inside an argument of a function application, namely the 
+ application of the <span class="v">LAMBDA</span> expression.  So by default, ACL2 will not 
+ consider this <span class="tt"><a href="ACL2____POSP.html">posp</a></span> test in its termination analysis.  The keyword 
+ <span class="v">:LAMBDAS</span> in the list of ruler-extenders denotes all calls of lambda 
+ expressions, much as the inclusion of <span class="v">CONS</span> in the ruler-extenders denotes 
+ all calls of <span class="v">CONS</span>.  The following definition is thus accepted by 
+ ACL2.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> fact (n)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :ruler-extenders (:lambdas)))
+  (<a href="COMMON-LISP____THE.html">the</a> (integer 1 *)
+       (<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2____POSP.html">posp</a> n)
+           (<a href="COMMON-LISP_____A2.html">*</a> n (fact (<a href="COMMON-LISP____1-.html">1-</a> n)))
+         1)))</pre> 
+ 
+ <p>As a convenience, ACL2 allows the symbol <span class="v">:lambdas</span> in place of 
+ <span class="v">(:lambdas)</span>, and in fact the former will also include the three basic 
+ ruler-extenders: <span class="tt"><a href="ACL2____RETURN-LAST.html">return-last</a></span>, which comes from macroexpansion of calls 
+ of <span class="tt"><a href="ACL2____PROG2_42.html">prog2$</a></span>, <span class="tt"><a href="ACL2____EC-CALL.html">ec-call</a></span>, and others; <span class="tt"><a href="ACL2____MV-LIST.html">mv-list</a></span>; and <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span>, which affects termination analysis through the first argument of calls of 
+ <span class="v">IF</span> (it continues through the true and false branches of these calls even 
+ without <span class="v">IF</span> being among the ruler-extenders).</p> 
+ 
+ <p>IMPORTANT REMARKS.  (1) Notice that the argument to 
+ <span class="v">set-ruler-extenders</span> is evaluated, but the argument to 
+ <span class="v">:RULER-EXTENDERS</span> in <span class="v">XARGS</span> is not evaluated.  (2) Do not put macro 
+ names in your list of ruler-extenders.  For example, if you intend that <span class="v">+</span> 
+ should not block the termination analysis, in analogy to <span class="v">cons</span> in the 
+ example above, then the list of ruler-extenders should include <span class="v">binary-+</span>, 
+ not <span class="v">+</span>.  Of course, if you use <span class="v">:all</span> then this is not an issue, but 
+ see the next remark.  (3) Also please note that by taking advantage of the 
+ ruler-extenders, you may be complicating the induction scheme stored for the 
+ function, whose computation takes similar advantage of the additional <span class="v">IF</span> 
+ structure that you are specifying.</p> 
+ 
+ <p>To see the ruler-extenders of an existing function symbol, <span class="v">fn</span>, in a 
+ logical <a href="ACL2____WORLD.html">world</a>, <span class="v">wrld</span>, evaluate <span class="v">(<a href="ACL2____RULER-EXTENDERS.html">ruler-extenders</a> 'fn wrld)</span> 
+ after <span class="v">(<a href="ACL2____INCLUDE-BOOK.html">include-book</a>
+ "kestrel/utilities/system/world-queries" :dir :system)</span>.  For example, 
+ evaluation of <span class="v">(<a href="ACL2____RULER-EXTENDERS.html">ruler-extenders</a> 'fn (<a href="ACL2____W.html">w</a> state))</span> provides the 
+ ruler-extenders of <span class="v">fn</span> in the current logical world.</p> 
+ 
+ <p>Below we describe the notion of ruler-extenders in detail, as well as how 
+ to set its default using <span class="v">set-ruler-extenders</span>.</p> 
+ 
+ <p><b>Details</b></p> 
+ 
+ <p>We begin by discussing how to set the ruler-extenders by using the macro 
+ <span class="v">set-ruler-extenders</span>; below we will discuss the use of keyword 
+ <span class="v">:ruler-extenders</span> in <span class="tt"><a href="ACL2____XARGS.html">xargs</a></span> <span class="tt"><a href="COMMON-LISP____DECLARE.html">declare</a></span> forms.  NOTE: The legal 
+ values discussed below for <span class="v">set-ruler-extenders</span> are the same as the legal 
+ values for the <span class="v">:ruler-extenders</span> <span class="tt"><a href="ACL2____XARGS.html">xargs</a></span> keyword.</p> 
+ 
+ <pre class="code">Examples:
+(<a href="ACL2____SET-RULER-EXTENDERS.html">set-ruler-extenders</a> :basic) ; return to default
+(<a href="ACL2____SET-RULER-EXTENDERS.html">set-ruler-extenders</a> *basic-ruler-extenders*) ; same as immediately above
+(<a href="ACL2____SET-RULER-EXTENDERS.html">set-ruler-extenders</a> :all) ; every governing IF test rules a recursive call
+(<a href="ACL2____SET-RULER-EXTENDERS.html">set-ruler-extenders</a> :lambdas) ; LET does not block termination analysis
+(<a href="ACL2____SET-RULER-EXTENDERS.html">set-ruler-extenders</a> (<a href="COMMON-LISP____CONS.html">cons</a> :lambdas *basic-ruler-extenders*))
+                               ; same as immediately above
+(<a href="ACL2____SET-RULER-EXTENDERS.html">set-ruler-extenders</a> '(f g)) ; termination analysis goes past calls of f, g
+
+General Form:
+(<a href="ACL2____SET-RULER-EXTENDERS.html">set-ruler-extenders</a> val)</pre> 
+ 
+ <p>where <span class="v">val</span> evaluates to one of <span class="v">:basic</span>, <span class="v">:all</span>, <span class="v">:lambdas</span>, 
+ or a true list of symbols containing no keyword other than, optionally, 
+ <span class="v">:lambdas</span>.</p> 
+ 
+ <p>When a recursive definition is submitted to ACL2 (in <span class="v">:</span><span class="tt"><a href="ACL2____LOGIC.html">logic</a></span> 
+ mode), the recursion must be proved to terminate; see <a href="COMMON-LISP____DEFUN.html">defun</a>.  More 
+ precisely, ACL2 explores the <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span> structure of the body of the 
+ definition to accumulate the tests that ``rule'' any given recursive call. 
+ The following example reviews how this works.  Suppose that <span class="v">f</span> has already 
+ been defined.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> g (x y)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :measure (<a href="COMMON-LISP_____B2.html">+</a> (<a href="ACL2____ACL2-COUNT.html">acl2-count</a> x) (<a href="ACL2____ACL2-COUNT.html">acl2-count</a> y))))
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x)
+      (<a href="ACL2____G.html">g</a> (<a href="COMMON-LISP____CDR.html">cdr</a> x) y)
+    (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____CONSP.html">consp</a> y)
+        (f (<a href="ACL2____G.html">g</a> x (<a href="COMMON-LISP____CDR.html">cdr</a> y)))
+      (f (<a href="COMMON-LISP____LIST.html">list</a> x y)))))</pre> 
+ 
+ <p>ACL2 makes the following response to this proposed definition.  Notice that 
+ the <span class="v">:measure</span> proposed above must be proved to be an ACL2 ordinal — 
+ that is, to satisfy <span class="v">O-P</span> — and that the arguments to each recursive 
+ call must be smaller (in the sense of that measure and <span class="v">O&lt;</span>, which here 
+ reduces to the ordinary <span class="v">&lt;</span> relation) than the formals under the assumption 
+ of the ruling <span class="v">IF</span> tests.  The first <span class="v">IMPLIES</span> term below thus 
+ corresponds to the recursive call <span class="v">(<a href="ACL2____G.html">g</a> (<a href="COMMON-LISP____CDR.html">cdr</a> x) y)</span>, while the second 
+ corresponds to the recursive call <span class="v">(<a href="ACL2____G.html">g</a> x (<a href="COMMON-LISP____CDR.html">cdr</a> y))</span>.</p> 
+ 
+ <pre class="code">For the admission of G we will use the relation O&lt; (which is known
+to be well-founded on the domain recognized by O-P) and the measure
+(<a href="COMMON-LISP_____B2.html">+</a> (<a href="ACL2____ACL2-COUNT.html">ACL2-COUNT</a> X) (<a href="ACL2____ACL2-COUNT.html">ACL2-COUNT</a> Y)).  The non-trivial part of the measure
+conjecture is
+
+Goal
+(<a href="COMMON-LISP____AND.html">AND</a> (<a href="ACL2____O-P.html">O-P</a> (<a href="COMMON-LISP_____B2.html">+</a> (<a href="ACL2____ACL2-COUNT.html">ACL2-COUNT</a> X) (<a href="ACL2____ACL2-COUNT.html">ACL2-COUNT</a> Y)))
+     (<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____CONSP.html">CONSP</a> X)
+              (<a href="ACL2____O_C3.html">O&lt;</a> (<a href="COMMON-LISP_____B2.html">+</a> (<a href="ACL2____ACL2-COUNT.html">ACL2-COUNT</a> (<a href="COMMON-LISP____CDR.html">CDR</a> X)) (<a href="ACL2____ACL2-COUNT.html">ACL2-COUNT</a> Y))
+                  (<a href="COMMON-LISP_____B2.html">+</a> (<a href="ACL2____ACL2-COUNT.html">ACL2-COUNT</a> X) (<a href="ACL2____ACL2-COUNT.html">ACL2-COUNT</a> Y))))
+     (<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____AND.html">AND</a> (<a href="COMMON-LISP____NOT.html">NOT</a> (<a href="COMMON-LISP____CONSP.html">CONSP</a> X)) (<a href="COMMON-LISP____CONSP.html">CONSP</a> Y))
+              (<a href="ACL2____O_C3.html">O&lt;</a> (<a href="COMMON-LISP_____B2.html">+</a> (<a href="ACL2____ACL2-COUNT.html">ACL2-COUNT</a> X) (<a href="ACL2____ACL2-COUNT.html">ACL2-COUNT</a> (<a href="COMMON-LISP____CDR.html">CDR</a> Y)))
+                  (<a href="COMMON-LISP_____B2.html">+</a> (<a href="ACL2____ACL2-COUNT.html">ACL2-COUNT</a> X) (<a href="ACL2____ACL2-COUNT.html">ACL2-COUNT</a> Y))))).</pre> 
+ 
+ <p>Now consider the following alternate version of the above definition.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> g (x y)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :measure (<a href="COMMON-LISP_____B2.html">+</a> (<a href="ACL2____ACL2-COUNT.html">acl2-count</a> x) (<a href="ACL2____ACL2-COUNT.html">acl2-count</a> y))))
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x)
+      (<a href="ACL2____G.html">g</a> (<a href="COMMON-LISP____CDR.html">cdr</a> x) y)
+    (f (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____CONSP.html">consp</a> y)
+           (<a href="ACL2____G.html">g</a> x (<a href="COMMON-LISP____CDR.html">cdr</a> y))
+         (<a href="COMMON-LISP____LIST.html">list</a> x y)))))</pre> 
+ 
+ <p>The first test, <span class="v">(<a href="COMMON-LISP____CONSP.html">consp</a> x)</span>, still rules the first recursive call, <span class="v">(<a href="ACL2____G.html">g</a>
+ (<a href="COMMON-LISP____CDR.html">cdr</a> x) y)</span>.  And the negation of that test, namely <span class="v">(<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x))</span>, 
+ still rules the second recursive call <span class="v">(<a href="ACL2____G.html">g</a> x (<a href="COMMON-LISP____CDR.html">cdr</a> y))</span>.  But the call of 
+ <span class="v">f</span> blocks the top-down exploration of the <span class="v">IF</span> structure of the body of 
+ <span class="v">g</span>, so <span class="v">(<a href="COMMON-LISP____CONSP.html">consp</a> y)</span> does not rule that second recursive call, which 
+ (again) is <span class="v">(<a href="ACL2____G.html">g</a> x (<a href="COMMON-LISP____CDR.html">cdr</a> y))</span>.  As a result, ACL2 fails to admit the above 
+ definition.</p> 
+ 
+ <p><span class="v">Set-ruler-extenders</span> is provided to overcome the sort of blocking 
+ described above.  Suppose for example that the following event is 
+ submitted:</p> 
+ 
+ <pre class="code">(<a href="ACL2____SET-RULER-EXTENDERS.html">set-ruler-extenders</a> '(f))</pre> 
+ 
+ <p>Then the alternate definition of <span class="v">g</span> above is admissible, because the 
+ call of <span class="v">f</span> no longer blocks the top-down exploration of the <span class="v">IF</span> 
+ structure of the body of <span class="v">g</span>: that is, <span class="v">(<a href="COMMON-LISP____CONSP.html">consp</a> y)</span> becomes a ruler of 
+ the recursive call <span class="v">(<a href="ACL2____G.html">g</a> x (<a href="COMMON-LISP____CDR.html">cdr</a> y))</span>.  In this case, we say that <span class="v">f</span> is a 
+ ``ruler-extender''.  The same result obtains if we first submit</p> 
+ 
+ <pre class="code">(<a href="ACL2____SET-RULER-EXTENDERS.html">set-ruler-extenders</a> :all)</pre> 
+ 
+ <p>as this removes all function calls as blockers of the top-down analysis. 
+ In other words, with <span class="v">:all</span> it is the case that for every recursive call, 
+ every test argument of a superior call of <span class="v">IF</span> contributes a ruler of that 
+ recursive call.</p> 
+ 
+ <p>ACL2 handles <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span> (and <span class="tt"><a href="COMMON-LISP____LET_A2.html">let*</a></span>) expressions by translating them 
+ to <span class="v">LAMBDA</span> expressions (see <a href="ACL2____TERM.html">term</a>).  The next examples illustrates 
+ termination analysis involving such expressions.  First consider the following 
+ (admittedly inefficient) definition.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> fact (n)
+  (<a href="COMMON-LISP____LET.html">let</a> ((k (<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2____NATP.html">natp</a> n) n 0)))
+    (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> k 0)
+        1
+      (<a href="COMMON-LISP_____A2.html">*</a> k (fact (<a href="COMMON-LISP_____B2.html">+</a> -1 k))))))</pre> 
+ 
+ <p>ACL2 translates the body of this definition to a <span class="v">LAMBDA</span> application, 
+ essentially:</p> 
+ 
+ <pre class="code">((<a href="COMMON-LISP____LAMBDA.html">lambda</a> (k)
+   (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> k 0)
+       1
+     (<a href="COMMON-LISP_____A2.html">*</a> k (fact (<a href="COMMON-LISP_____B2.html">+</a> -1 k)))))
+ (<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2____NATP.html">natp</a> n) n 0))</pre> 
+ 
+ <p>As with the application of any function other than <span class="v">IF</span>, the top-down 
+ termination analysis does not dive into arguments: the <span class="v">LAMBDA</span> blocks the 
+ continuation of the analysis into its argument.  But here, the argument of the 
+ <span class="v">LAMBDA</span> is <span class="v">(<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2____NATP.html">natp</a> n) n 0)</span>, which has no recursive calls to 
+ consider anyhow.  What is more interesting: ACL2 does continue its termination 
+ analysis into the body of the <span class="v">LAMBDA</span>, in an environment binding the 
+ <span class="v">LAMBDA</span> formals to its actuals.  In this case, the termination analysis 
+ thus continues into the term</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> k 0)
+    1
+  (<a href="COMMON-LISP_____A2.html">*</a> k (fact (<a href="COMMON-LISP_____B2.html">+</a> -1 k))))</pre> 
+ 
+ <p>in the environment that binds <span class="v">k</span> to the term <span class="v">(<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2____NATP.html">natp</a> n) n 0)</span>. 
+ Thus, the proof obligation is successfully discharged, as reported by 
+ ACL2:</p> 
+ 
+ <pre class="code">For the admission of FACT we will use the relation O&lt; (which is known
+to be well-founded on the domain recognized by O-P) and the measure
+(<a href="ACL2____ACL2-COUNT.html">ACL2-COUNT</a> N).  The non-trivial part of the measure conjecture is
+
+Goal
+(<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____NOT.html">NOT</a> (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (<a href="COMMON-LISP____IF.html">IF</a> (<a href="ACL2____NATP.html">NATP</a> N) N 0) 0))
+         (<a href="ACL2____O_C3.html">O&lt;</a> (<a href="ACL2____ACL2-COUNT.html">ACL2-COUNT</a> (<a href="COMMON-LISP_____B2.html">+</a> -1 (<a href="COMMON-LISP____IF.html">IF</a> (<a href="ACL2____NATP.html">NATP</a> N) N 0)))
+             (<a href="ACL2____ACL2-COUNT.html">ACL2-COUNT</a> N))).
+.....
+Q.E.D.
+
+That completes the proof of the measure theorem for FACT.</pre> 
+ 
+ <p>But now consider the following definition, in which the recursion takes 
+ place inside the argument of the <span class="v">LAMBDA</span> rather than inside the 
+ <span class="v">LAMBDA</span> body.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> app (x y)
+  (<a href="COMMON-LISP____LET.html">let</a> ((result (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ENDP.html">endp</a> x)
+                    y
+                  (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CAR.html">car</a> x)
+                        (app (<a href="COMMON-LISP____CDR.html">cdr</a> x) y)))))
+    (<a href="COMMON-LISP____IF.html">if</a> (our-test result)
+        result
+      0)))</pre> 
+ 
+ <p>Writing the body in <span class="v">LAMBDA</span> notation:</p> 
+ 
+ <pre class="code">((<a href="COMMON-LISP____LAMBDA.html">lambda</a> (result)
+   (<a href="COMMON-LISP____IF.html">if</a> (our-test result)
+       result
+     0))
+ (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ENDP.html">endp</a> x)
+     y
+   (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CAR.html">car</a> x)
+         (app (<a href="COMMON-LISP____CDR.html">cdr</a> x) y))))</pre> 
+ 
+ <p>By default, the <span class="v">LAMBDA</span> call blocks the top-down termination analysis 
+ from proceeding into the term <span class="v">(<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ENDP.html">endp</a> x) ...)</span>.  To solve this, one can 
+ submit the event:</p> 
+ 
+ <pre class="code">(<a href="ACL2____SET-RULER-EXTENDERS.html">set-ruler-extenders</a> :lambdas)</pre> 
+ 
+ <p>The above definition of <span class="v">app</span> is then admitted by ACL2, because the 
+ termination analysis is no longer blocked by the <span class="v">LAMBDA</span> call.</p> 
+ 
+ <p>The example just above illustrates that the heuristically-chosen measure is 
+ suitably sensitive to the ruler-extenders.  Specifically: that measure is the 
+ application of <span class="v">acl2-count</span> to the first formal parameter of the function 
+ that is tested along every branch of the relevant <span class="v">IF</span> structure (as 
+ determined by the rulers) and occurs as a proper subterm at the same argument 
+ position in every recursive call.  The heuristics for choosing the 
+ controller-alist for a <span class="tt"><a href="ACL2____DEFINITION.html">definition</a></span> rule are similarly sensitive to the 
+ ruler-extenders (see <a href="ACL2____DEFINITION.html">definition</a>).</p> 
+ 
+ <p>The remarks above for <span class="tt"><a href="COMMON-LISP____DEFUN.html">defun</a></span> <a href="ACL2____EVENTS.html">events</a> are equally applicable 
+ when a definition sits inside a <span class="tt"><a href="ACL2____MUTUAL-RECURSION.html">mutual-recursion</a></span> event, except of 
+ course that in this case, a ``recursive call'' is a call of any function being 
+ defined by that <span class="tt"><a href="ACL2____MUTUAL-RECURSION.html">mutual-recursion</a></span> event.</p> 
+ 
+ <p>Rules of class <span class="v">:</span><span class="tt"><a href="ACL2____DEFINITION.html">definition</a></span> are sensitive to 
+ <span class="v">set-ruler-extenders</span> in analogy to the case of <span class="v">defun</span> <a href="ACL2____EVENTS.html">events</a>.</p> 
+ 
+ <p>This macro generates a call <span class="v">(<a href="ACL2____TABLE.html">table</a> acl2-defaults-table :ruler-extenders
+ val)</span> and hence is <span class="tt"><a href="ACL2____LOCAL.html">local</a></span> to any <a href="ACL2____BOOKS.html">books</a> and <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span> 
+ <a href="ACL2____EVENTS.html">events</a> in which it occurs. See <a href="ACL2____ACL2-DEFAULTS-TABLE.html">ACL2-defaults-table</a>.  The current 
+ list of ruler-extenders may be obtained as</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____CDR.html">cdr</a> (<a href="ACL2____ASSOC-EQ.html">assoc-eq</a> :ruler-extenders
+     (<a href="ACL2____TABLE-ALIST.html">table-alist</a> 'acl2-defaults-table (<a href="ACL2____W.html">w</a> state))))</pre> 
+ 
+ <p>or more conveniently, as:</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFAULT-RULER-EXTENDERS.html">default-ruler-extenders</a> (<a href="ACL2____W.html">w</a> state))</pre> 
+ 
+ <p>Note that evaluation of <span class="v">(<a href="ACL2____SET-RULER-EXTENDERS.html">set-ruler-extenders</a> lst)</span>, where <span class="v">lst</span> 
+ evaluates to a list, does not necessarily include the default ruler-extenders 
+ — i.e., those included for the argument, <span class="v">:basic</span> — which are 
+ the elements of the list constant <span class="v">*basic-ruler-extenders*</span>, namely <span class="tt"><a href="ACL2____RETURN-LAST.html">return-last</a></span> <span class="tt"><a href="ACL2____MV-LIST.html">mv-list</a></span>, and <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span>.  You may, of course, include 
+ these explicitly in your list argument.</p> 
+ 
+ <p>We conclude our discussion by noting that the set of ruler-extenders can 
+ affect the induction scheme that is stored with a recursive definition.  The 
+ community book <span class="v">books/misc/misc2/ruler-extenders-tests.lisp</span> explains how 
+ induction schemes are derived in this case.  Consider the following 
+ example.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> tree-of-nils-p (x)
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x)
+      (<a href="COMMON-LISP____AND.html">and</a> (tree-of-nils-p (<a href="COMMON-LISP____CAR.html">car</a> x))
+           (tree-of-nils-p (<a href="COMMON-LISP____CDR.html">cdr</a> x)))
+    (<a href="COMMON-LISP____NULL.html">null</a> x)))</pre> 
+ 
+ <p>The above definition generates the following induction scheme.  Note that 
+ <span class="v">(<a href="COMMON-LISP____AND.html">and</a> u v)</span> expands to <span class="v">(<a href="COMMON-LISP____IF.html">if</a> u v nil)</span>, which explains why the term 
+ <span class="v">(tree-of-nils-p (<a href="COMMON-LISP____CAR.html">car</a> x))</span> rules the recursive call <span class="v">(tree-of-nils-p (<a href="COMMON-LISP____CDR.html">cdr</a>
+ x))</span>, resulting in the hypothesis <span class="v">(tree-of-nils-p (<a href="COMMON-LISP____CAR.html">car</a> x))</span> in the final 
+ conjunct below.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____AND.html">AND</a> (<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____NOT.html">NOT</a> (<a href="COMMON-LISP____CONSP.html">CONSP</a> X)) (:P X))
+     (<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____AND.html">AND</a> (<a href="COMMON-LISP____CONSP.html">CONSP</a> X)
+                   (<a href="COMMON-LISP____NOT.html">NOT</a> (TREE-OF-NILS-P (<a href="COMMON-LISP____CAR.html">CAR</a> X)))
+                   (:P (<a href="COMMON-LISP____CAR.html">CAR</a> X)))
+              (:P X))
+     (<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____AND.html">AND</a> (<a href="COMMON-LISP____CONSP.html">CONSP</a> X)
+                   (TREE-OF-NILS-P (<a href="COMMON-LISP____CAR.html">CAR</a> X))
+                   (:P (<a href="COMMON-LISP____CAR.html">CAR</a> X))
+                   (:P (<a href="COMMON-LISP____CDR.html">CDR</a> X)))
+              (:P X)))</pre> 
+ 
+ <p>Now consider the following variant of the above definition, in which a call 
+ of the function <span class="v">identity</span> blocks the termination analysis.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> tree-of-nils-p (x)
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x)
+      (<a href="COMMON-LISP____IDENTITY.html">identity</a> (<a href="COMMON-LISP____AND.html">and</a> (tree-of-nils-p (<a href="COMMON-LISP____CAR.html">car</a> x))
+                     (tree-of-nils-p (<a href="COMMON-LISP____CDR.html">cdr</a> x))))
+    (<a href="COMMON-LISP____NULL.html">null</a> x)))</pre> 
+ 
+ <p>This time the induction scheme is as follows, since only the top-level 
+ <span class="v">IF</span> test contributes rulers to the termination analysis.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____AND.html">AND</a> (<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____NOT.html">NOT</a> (<a href="COMMON-LISP____CONSP.html">CONSP</a> X)) (:P X))
+     (<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____AND.html">AND</a> (<a href="COMMON-LISP____CONSP.html">CONSP</a> X)
+                   (:P (<a href="COMMON-LISP____CAR.html">CAR</a> X))
+                   (:P (<a href="COMMON-LISP____CDR.html">CDR</a> X)))
+              (:P X)))</pre> 
+ 
+ <p>But now suppose we first designate <span class="v">identity</span> as a ruler-extender.</p> 
+ 
+ <pre class="code">(<a href="ACL2____SET-RULER-EXTENDERS.html">set-ruler-extenders</a> '(<a href="COMMON-LISP____IDENTITY.html">identity</a>))</pre> 
+ 
+ <p>Then the induction scheme generated for the both of the above variants of 
+ <span class="v">tree-of-nils-p</span> is the one shown for the first variant, which is 
+ reasonable because both definitions now produce essentially the same 
+ termination analysis.</p>
+</body>
+</html>

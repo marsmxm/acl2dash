@@ -1,0 +1,235 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Make-event-example-2</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____MAKE-EVENT-EXAMPLE-2">Click for Make-event-example-2 in the Full Manual</a></h3>
+
+<p>An example use of <span class="tt"><a href="ACL2____MAKE-EVENT.html">make-event</a></span></p><p>Here, we develop a reasonably self-contained example that 
+ illustrates how to use <span class="v">make-event</span> to develop tools.  For another such 
+ example, see <a href="ACL2____MAKE-EVENT-EXAMPLE-1.html">make-event-example-1</a>.  We thank Yan Peng for putting 
+ forward this problem.</p> 
+ 
+ <p>We begin by discussing prerequisites for this presentation.  Next, we 
+ present the challenge problem, followed by code that solves the problem 
+ together with an example that illustrates its use.  Finally, we start from the 
+ beginning and show how to develop the solution step-by-step.</p> 
+ 
+ <h3>Prerequisites</h3> 
+ 
+ <p>We assume some general ACL2 and Common Lisp background, including 
+ familiarity with <a href="ACL2____MACROS.html">macros</a> and backquote.  But we do some programming 
+ below that goes beyond that general background in our use of the ACL2 <a href="ACL2____STATE.html">state</a>.  See <a href="ACL2____PROGRAMMING-WITH-STATE.html">programming-with-state</a> for relevant discussion, including 
+ state global variables, <span class="tt"><a href="ACL2____F-GET-GLOBAL.html">f-get-global</a></span>, <span class="tt"><a href="ACL2____F-PUT-GLOBAL.html">f-put-global</a></span>, <a href="ACL2____ERROR-TRIPLE.html">error-triple</a>s and their construction using <span class="v">value</span>, <span class="tt"><a href="ACL2____VALUE-TRIPLE.html">value-triple</a></span>, 
+ and <span class="tt"><a href="ACL2____PPROGN.html">pprogn</a></span>.  We also assume familiarity with both <span class="tt"><a href="COMMON-LISP____PROGN.html">progn</a></span> and 
+ the notion of legal event form; see <a href="ACL2____EMBEDDED-EVENT-FORM.html">embedded-event-form</a>.  If you are 
+ not familiar with these notions, then the discussion below might still make 
+ some sense, but you might need to read about these notions in order to 
+ complete your understanding.</p> 
+ 
+ <p>Next, we present the challenge problem that we will solve below.</p> 
+ 
+ <h3>Challenge problem</h3> 
+ 
+ <blockquote><p>Define a utility that evaluates a given sequence of 
+ <a href="ACL2____EVENTS.html">events</a>, even continuing past errors, which stores the list of event 
+ forms that caused errors.</p></blockquote> 
+ 
+ <p>Let us call this utility <span class="v">progn+</span>, since it can be viewed as an 
+ enhancement of <span class="tt"><a href="COMMON-LISP____PROGN.html">progn</a></span>.  So a successful solution should allow us to 
+ evaluate the following form to define function symbols <span class="v">f1</span>, <span class="v">f2</span>, and 
+ <span class="v">f3</span>, as well as the event <span class="v">good-thm</span>, and also store the events for 
+ <span class="v">bad-thm</span> and <span class="v">bad-fn</span>.</p> 
+ 
+ <pre class="code">(progn+ (<a href="COMMON-LISP____DEFUN.html">defun</a> f1 (x) x)
+        (<a href="ACL2____DEFTHM.html">defthm</a> good-thm (<a href="COMMON-LISP____EQUAL.html">equal</a> 1 1) :rule-classes nil)
+        (<a href="ACL2____VALUE-TRIPLE.html">value-triple</a> (<a href="ACL2____CW.html">cw</a> "@@HI~%"))
+        (<a href="ACL2____DEFTHM.html">defthm</a> bad-thm (<a href="COMMON-LISP____EQUAL.html">equal</a> x y) :rule-classes nil) ; error!
+        (<a href="COMMON-LISP____DEFUN.html">defun</a> f2 (x) x)
+        (<a href="COMMON-LISP____DEFUN.html">defun</a> bad-fn (x) y) ; error!
+        (<a href="COMMON-LISP____DEFUN.html">defun</a> f3 (x) x)
+        )</pre> 
+ 
+ <p>We next present a definition of <span class="v">progn+</span>, together with output from the 
+ example displayed above.  After that we will start from the beginning and 
+ describe how one might develop <span class="v">progn+</span> from scratch.</p> 
+ 
+ <h3>The completed code and a test</h3> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> save-progn+-error (x)
+  `(<a href="ACL2____MAKE-EVENT.html">make-event</a>
+    (<a href="ACL2____PPROGN.html">pprogn</a> (<a href="ACL2____F-PUT-GLOBAL.html">f-put-global</a> 'progn+-errors
+                          (<a href="COMMON-LISP____CONS.html">cons</a> ,x
+                                (<a href="ACL2____F-GET-GLOBAL.html">f-get-global</a> 'progn+-errors state))
+                          state)
+            (<a href="ACL2____VALUE.html">value</a> '(<a href="ACL2____VALUE-TRIPLE.html">value-triple</a> nil)))))
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> progn+-fn (lst)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____TRUE-LISTP.html">true-listp</a> lst) :mode :program))
+  (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____ENDP.html">endp</a> lst) nil)
+        (t (<a href="COMMON-LISP____CONS.html">cons</a> `(<a href="ACL2____MAKE-EVENT.html">make-event</a> '(:or ,(<a href="COMMON-LISP____CAR.html">car</a> lst) (save-progn+-error ',(<a href="COMMON-LISP____CAR.html">car</a> lst))))
+                 (progn+-fn (<a href="COMMON-LISP____CDR.html">cdr</a> lst))))))
+
+(<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> progn+ (<a href="COMMON-LISP_____62REST.html">&amp;rest</a> lst)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____TRUE-LISTP.html">true-listp</a> lst)
+                              lst)))
+  `(<a href="COMMON-LISP____PROGN.html">progn</a> (<a href="ACL2____MAKE-EVENT.html">make-event</a> (<a href="ACL2____PPROGN.html">pprogn</a> (<a href="ACL2____F-PUT-GLOBAL.html">f-put-global</a> 'progn+-errors nil state)
+                              (<a href="ACL2____VALUE.html">value</a> '(<a href="ACL2____VALUE-TRIPLE.html">value-triple</a> nil))))
+           ,@(progn+-fn lst)))
+
+; Example:
+(progn+ (<a href="COMMON-LISP____DEFUN.html">defun</a> f1 (x) x)
+        (<a href="ACL2____DEFTHM.html">defthm</a> good-thm (<a href="COMMON-LISP____EQUAL.html">equal</a> 1 1) :rule-classes nil)
+        (<a href="ACL2____VALUE-TRIPLE.html">value-triple</a> (<a href="ACL2____CW.html">cw</a> "@@HI~%"))
+        (<a href="ACL2____DEFTHM.html">defthm</a> bad-thm (<a href="COMMON-LISP____EQUAL.html">equal</a> x y) :rule-classes nil)
+        (<a href="COMMON-LISP____DEFUN.html">defun</a> f2 (x) x)
+        (<a href="COMMON-LISP____DEFUN.html">defun</a> bad-fn (x) y)
+        (<a href="COMMON-LISP____DEFUN.html">defun</a> f3 (x) x)
+        )</pre> 
+ 
+ <p>After running the example (which is the final form above), we expect the 
+ resulting logical <a href="ACL2____WORLD.html">world</a> to contain definitions of function symbols 
+ <span class="v">f1</span>, <span class="v">f2</span>, and <span class="v">f3</span>, as well as the event <span class="v">good-thm</span>, but that no 
+ events would be stored for <span class="v">bad-thm</span> or <span class="v">bad-fn</span>.  Moreover, we expect 
+ that a state global variable holds the event forms for <span class="v">bad-thm</span> and 
+ <span class="v">bad-fn</span>.  Let us check that all of these expectations are met.</p> 
+ 
+ <pre class="code">ACL2 !&gt;:pe f1
+           4:x(PROGN+ (<a href="COMMON-LISP____DEFUN.html">DEFUN</a> F1 # ...)
+                      (<a href="ACL2____DEFTHM.html">DEFTHM</a> GOOD-THM # ...)
+                      ...)
+              
+&gt;L             (<a href="COMMON-LISP____DEFUN.html">DEFUN</a> F1 (X) X)
+ACL2 !&gt;:pe f2
+           4:x(PROGN+ (<a href="COMMON-LISP____DEFUN.html">DEFUN</a> F1 # ...)
+                      (<a href="ACL2____DEFTHM.html">DEFTHM</a> GOOD-THM # ...)
+                      ...)
+              
+&gt;L             (<a href="COMMON-LISP____DEFUN.html">DEFUN</a> F2 (X) X)
+ACL2 !&gt;:pe f3
+           4:x(PROGN+ (<a href="COMMON-LISP____DEFUN.html">DEFUN</a> F1 # ...)
+                      (<a href="ACL2____DEFTHM.html">DEFTHM</a> GOOD-THM # ...)
+                      ...)
+              
+&gt;L             (<a href="COMMON-LISP____DEFUN.html">DEFUN</a> F3 (X) X)
+ACL2 !&gt;(<a href="ACL2_____04.html">@</a> progn+-errors) ; same as (<a href="ACL2____F-GET-GLOBAL.html">f-get-global</a> 'progn+-errors state)
+((<a href="COMMON-LISP____DEFUN.html">DEFUN</a> BAD-FN (X) Y)
+ (<a href="ACL2____DEFTHM.html">DEFTHM</a> BAD-THM (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> X Y)
+         :RULE-CLASSES NIL))
+ACL2 !&gt;</pre> 
+ 
+ <h3>Development of the solution</h3> 
+ 
+ <p>We now start from the beginning.  Recall that <span class="tt"><a href="COMMON-LISP____PROGN.html">progn</a></span> does almost 
+ what we ask <span class="v">progn+</span> to do, except that <span class="tt"><a href="COMMON-LISP____PROGN.html">progn</a></span> stops at the first 
+ error.  So our approach will be to define a macro that is much like 
+ <span class="v">progn</span>, except that each event is modified as follows: if evaluation fails 
+ for an event, then that event is pushed onto the value of a specific state 
+ global (see <a href="ACL2____PROGRAMMING-WITH-STATE.html">programming-with-state</a>), <span class="v">progn+-errors</span>.  Moreover, 
+ since <span class="tt"><a href="COMMON-LISP____PROGN.html">progn</a></span> is applied only to legal event forms (see <a href="ACL2____EMBEDDED-EVENT-FORM.html">embedded-event-form</a>), we need this modification to be a legal event form, 
+ too.  Fortunately, a call of <span class="tt"><a href="ACL2____MAKE-EVENT.html">make-event</a></span> is a legal event form.  So our 
+ plan is for <span class="v">(progn+ ... &lt;event&gt; ...)</span> to expand to a call <span class="v">(<a href="COMMON-LISP____PROGN.html">progn</a>
+ ... (<a href="ACL2____MAKE-EVENT.html">make-event</a> ...) ...)</span> so that the indicated <span class="v">make-event</span> call 
+ attempts to evaluate <span class="v">&lt;event&gt;</span>, and if that attempt fails, then 
+ <span class="v">&lt;event&gt;</span> it is pushed onto <span class="v">progn+-errors</span>.</p> 
+ 
+ <p>Thus, we begin with a simple piece of the task, by showing how to create an 
+ event that will push a specific form, <span class="v">(<a href="ACL2____DEFTHM.html">defthm</a> bad-thm (<a href="COMMON-LISP____EQUAL.html">equal</a> x
+ y) :rule-classes nil)</span>, onto <span class="v">progn+-errors</span>.</p> 
+ 
+ <pre class="code">(<a href="ACL2____MAKE-EVENT.html">make-event</a>
+ (<a href="ACL2____PPROGN.html">pprogn</a> (<a href="ACL2____F-PUT-GLOBAL.html">f-put-global</a> 'progn+-errors
+                       (<a href="COMMON-LISP____CONS.html">cons</a> '(<a href="ACL2____DEFTHM.html">defthm</a> bad-thm (<a href="COMMON-LISP____EQUAL.html">equal</a> x y) :rule-classes nil)
+                             (<a href="ACL2____F-GET-GLOBAL.html">f-get-global</a> 'progn+-errors state))
+                       state)
+         (<a href="ACL2____VALUE.html">value</a> '(<a href="ACL2____VALUE-TRIPLE.html">value-triple</a> nil))))</pre> 
+ 
+ <p>It might seem more natural to write <span class="v">(<a href="ACL2____F-PUT-GLOBAL.html">f-put-global</a> ...)</span>, instead of the 
+ more complex <span class="v">(<a href="ACL2____PPROGN.html">pprogn</a> (<a href="ACL2____F-PUT-GLOBAL.html">f-put-global</a> ...) (<a href="ACL2____VALUE.html">value</a> '(<a href="ACL2____VALUE-TRIPLE.html">value-triple</a> nil)))</span>. 
+ However, the argument to <span class="v">make-event</span> must evaluate to either: (1) a legal 
+ event form; or (2) an <a href="ACL2____ERROR-TRIPLE.html">error-triple</a>, <span class="v">(<a href="ACL2____MV.html">mv</a> nil x state)</span>, where <span class="v">x</span> 
+ is a legal event form.  Since the <span class="v">f-put-global</span> call modifies state, (1) 
+ is not an option; so we choose (2).  Since the role of <span class="v">x</span> is only to 
+ provide an event form, we choose <span class="v">x</span> to be the trivial event form 
+ <span class="v">(<a href="ACL2____VALUE-TRIPLE.html">value-triple</a> nil)</span>.</p> 
+ 
+ <p>We follow good programming practice by wrapping the functionality displayed 
+ above into a concise utility, as follows.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> save-progn+-error (x)
+; Push x (which is evaluated) onto the value of state global 'progn+-errors.
+  `(<a href="ACL2____MAKE-EVENT.html">make-event</a>
+    (<a href="ACL2____PPROGN.html">pprogn</a> (<a href="ACL2____F-PUT-GLOBAL.html">f-put-global</a> 'progn+-errors
+                          (<a href="COMMON-LISP____CONS.html">cons</a> ,x
+                                (<a href="ACL2____F-GET-GLOBAL.html">f-get-global</a> 'progn+-errors state))
+                          state)
+            (<a href="ACL2____VALUE.html">value</a> '(<a href="ACL2____VALUE-TRIPLE.html">value-triple</a> nil)))))</pre> 
+ 
+ <p>Before we write <span class="v">progn+</span>, it helps to approximate its expansion in the 
+ specific ``Example'' displayed above.  We know in advance which two forms will 
+ fail, so we `cheat' by using <span class="v">progn</span> but with those two forms replaced by 
+ calls to <span class="v">save-progn+-error</span>.</p> 
+ 
+ <pre class="code">(<a href="ACL2____F-PUT-GLOBAL.html">f-put-global</a> 'progn+-errors nil state)
+(<a href="COMMON-LISP____PROGN.html">progn</a>  (<a href="COMMON-LISP____DEFUN.html">defun</a> f1 (x) x)
+        (<a href="ACL2____DEFTHM.html">defthm</a> good-thm (<a href="COMMON-LISP____EQUAL.html">equal</a> 1 1) :rule-classes nil)
+        (<a href="ACL2____VALUE-TRIPLE.html">value-triple</a> (<a href="ACL2____CW.html">cw</a> "@@HI~%"))
+        (save-progn+-error
+         '(<a href="ACL2____DEFTHM.html">defthm</a> bad-thm (<a href="COMMON-LISP____EQUAL.html">equal</a> x y) :rule-classes nil))
+        (<a href="COMMON-LISP____DEFUN.html">defun</a> f2 (x) x)
+        (save-progn+-error
+         '(<a href="COMMON-LISP____DEFUN.html">defun</a> bad-fn (x) y))
+        (<a href="COMMON-LISP____DEFUN.html">defun</a> f3 (x) x)
+        )</pre> 
+ 
+ <p>Our next task is to find a way to tell ACL2 that it should run a given 
+ event, and if that event fails it should save it using <span class="v">save-progn+-error</span>. 
+ Fortunately, the <span class="v">:OR</span> keyword of <span class="tt"><a href="ACL2____MAKE-EVENT.html">make-event</a></span> is perfect for this 
+ task.  Consider the following two examples.</p> 
+ 
+ <pre class="code">(<a href="ACL2____MAKE-EVENT.html">make-event</a> '(:or (<a href="COMMON-LISP____DEFUN.html">defun</a> f2 (x) x)
+                  (save-progn+-error '(<a href="COMMON-LISP____DEFUN.html">defun</a> f2 (x) x))))
+
+(<a href="ACL2____MAKE-EVENT.html">make-event</a> '(:or (<a href="COMMON-LISP____DEFUN.html">defun</a> bad-fn (x) y)
+                  (save-progn+-error '(<a href="COMMON-LISP____DEFUN.html">defun</a> bad-fn (x) y))))</pre> 
+ 
+ <p>In the first example, <span class="v">make-event</span> invokes the given call of <span class="tt"><a href="COMMON-LISP____DEFUN.html">defun</a></span>, which runs without error; and <span class="v">make-event</span> then exits without 
+ error.  In the second example, <span class="v">make-event</span> invokes the given call of 
+ <span class="v">defun</span>, which causes an error; so then <span class="v">make-event</span> evaluates the 
+ second argument of the <span class="v">:OR</span>, to invoke <span class="v">save-progn+-error</span> on that same 
+ <span class="v">defun</span> call.  Since that call of <span class="v">save-progn+-error</span> evaluates without 
+ error (because it expands to <span class="v">(<a href="ACL2____VALUE-TRIPLE.html">value-triple</a> nil)</span>), the <span class="v">make-event</span> 
+ call exits without error.  See <a href="ACL2____MAKE-EVENT.html">make-event</a> for more information about 
+ the <span class="v">:OR</span> keyword.</p> 
+ 
+ <p>We can now define <span class="v">progn+</span> to be the result of modifying each of its 
+ forms as in the two examples displayed just above.  First we write a function 
+ that transforms a list by applying that modification to each of its 
+ members.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> progn+-fn (lst)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____TRUE-LISTP.html">true-listp</a> lst) :mode :program))
+  (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____ENDP.html">endp</a> lst) nil)
+        (t (<a href="COMMON-LISP____CONS.html">cons</a> `(<a href="ACL2____MAKE-EVENT.html">make-event</a> '(:or ,(<a href="COMMON-LISP____CAR.html">car</a> lst) (save-progn+-error ',(<a href="COMMON-LISP____CAR.html">car</a> lst))))
+                 (progn+-fn (<a href="COMMON-LISP____CDR.html">cdr</a> lst))))))</pre> 
+ 
+ <p>We complete our definition of <span class="v">progn+</span>, by generating a <span class="v">progn</span> call 
+ with the desired modification of each form in the list, using <span class="v">progn+-fn</span> 
+ — but preceded by yet another <span class="v">make-event</span> call, this one for 
+ initializing our state global to <span class="v">nil</span>.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> progn+ (<a href="COMMON-LISP_____62REST.html">&amp;rest</a> lst)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____TRUE-LISTP.html">true-listp</a> lst)
+                              lst)))
+  `(<a href="COMMON-LISP____PROGN.html">progn</a> (<a href="ACL2____MAKE-EVENT.html">make-event</a> (<a href="ACL2____PPROGN.html">pprogn</a> (<a href="ACL2____F-PUT-GLOBAL.html">f-put-global</a> 'progn+-errors nil state)
+                              (<a href="ACL2____VALUE.html">value</a> '(<a href="ACL2____VALUE-TRIPLE.html">value-triple</a> nil))))
+           ,@(progn+-fn lst)))</pre> 
+ 
+ <p><b>Exercise</b>: Modify this tool so that instead of merely updating a 
+ state global, it prints the failed events at the end of execution; and 
+ moreover, it prints them in their original order.  See <a href="ACL2____MAKE-EVENT-EXAMPLE-2-EXERCISE.html">make-event-example-2-exercise</a> for a solution.</p>
+</body>
+</html>

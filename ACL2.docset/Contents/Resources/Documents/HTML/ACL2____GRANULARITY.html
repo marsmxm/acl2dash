@@ -1,0 +1,113 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Granularity</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____GRANULARITY">Click for Granularity in the Full Manual</a></h3>
+
+<p>Limit the amount of parallelism</p><p>This <a href="COMMON-LISP____DOCUMENTATION.html">documentation</a> topic relates to the experimental 
+ extension of ACL2 supporting parallel execution and proof; see <a href="ACL2____PARALLELISM.html">parallelism</a>.</p> 
+ 
+ <p>Some function calls are on arguments whose evaluation time is long enough 
+ to warrant parallel execution, while others are not.  A granularity form can 
+ be used to make appropriate restrictions on the use of parallelism.</p> 
+ 
+ <p>For example, consider the Fibonacci function.  Experiments have suggested 
+ that execution time can be reduced if whenever the argument is less than 27, a 
+ serial version of the Fibonacci function is called.  One way to utilize this 
+ information is to write two definitions of the Fibonacci function, one serial 
+ and one parallel.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> fib (x)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____NATP.html">natp</a> x)))
+  (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____OR.html">or</a> (<a href="ACL2____ZP.html">zp</a> x) (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> x 0)) 0)
+        ((<a href="COMMON-LISP_____D3.html">=</a> x 1) 1)
+        (t (<a href="ACL2____BINARY-_B2.html">binary-+</a> (fib (<a href="COMMON-LISP____-.html">-</a> x 1))
+                     (fib (<a href="COMMON-LISP____-.html">-</a> x 2))))))
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> pfib (x)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____NATP.html">natp</a> x)))
+  (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____OR.html">or</a> (<a href="ACL2____ZP.html">zp</a> x) (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> x 0)) 0)
+        ((<a href="COMMON-LISP_____D3.html">=</a> x 1) 1)
+        ((<a href="COMMON-LISP_____C3.html">&lt;</a> x 27) (<a href="ACL2____BINARY-_B2.html">binary-+</a> (fib (<a href="COMMON-LISP____-.html">-</a> x 1))
+                            (fib (<a href="COMMON-LISP____-.html">-</a> x 2))))
+        (t (<a href="ACL2____PARGS.html">pargs</a> (<a href="ACL2____BINARY-_B2.html">binary-+</a> (pfib (<a href="COMMON-LISP____-.html">-</a> x 1))
+                            (pfib (<a href="COMMON-LISP____-.html">-</a> x 2)))))))</pre> 
+ 
+ <p>We realize quickly that writing both of these function definitions is 
+ cumbersome and redundant.  This problem can be avoided by using a 
+ <span class="v">granularity</span> declaration with a parallelism primitive.  This form ensures 
+ that a call is parallelized only if resources are available and the 
+ granularity form evaluates to a non-<span class="v">nil</span> value at the time of the call. 
+ Below is a definition of the Fibonacci function using a granularity form.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> pfib (x)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____NATP.html">natp</a> x)))
+  (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____OR.html">or</a> (<a href="ACL2____ZP.html">zp</a> x) (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> x 0)) 0)
+        ((<a href="COMMON-LISP_____D3.html">=</a> x 1) 1)
+        (t (<a href="ACL2____PARGS.html">pargs</a> (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____GRANULARITY.html">granularity</a> (<a href="COMMON-LISP_____E3_D3.html">&gt;=</a> x 27)))
+                  (<a href="ACL2____BINARY-_B2.html">binary-+</a> (pfib (<a href="COMMON-LISP____-.html">-</a> x 1))
+                            (pfib (<a href="COMMON-LISP____-.html">-</a> x 2)))))))</pre> 
+ 
+ <p>A granularity form can reference an extra formal parameter that describes 
+ the call depth of the function the user is parallelizing.  Consider for 
+ example the following parallel <span class="v">mergesort</span> function, based on Davis's 
+ Ordered Sets library.  It splits the data into symmetric chunks for 
+ computation, so we increment the <span class="v">depth</span> argument during the recursive call 
+ on both the <span class="v">car</span> and <span class="v">cdr</span>.</p> 
+ 
+ <pre class="code">(<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "finite-set-theory/osets/sets" :dir :system)
+(<a href="COMMON-LISP____DEFUN.html">defun</a> set::pmergesort-exec (x depth)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :mode :program))
+  (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____ENDP.html">endp</a> x) nil)
+        ((<a href="COMMON-LISP____ENDP.html">endp</a> (<a href="COMMON-LISP____CDR.html">cdr</a> x)) (<a href="SET____INSERT.html">set::insert</a> (<a href="COMMON-LISP____CAR.html">car</a> x) nil))
+        (t (<a href="ACL2____MV-LET.html">mv-let</a> (part1 part2)
+                   (set::split-list x nil nil)
+                   (<a href="ACL2____PARGS.html">pargs</a>
+                    (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____GRANULARITY.html">granularity</a> (<a href="COMMON-LISP_____C3.html">&lt;</a> depth 2)))
+                    (<a href="SET____UNION.html">set::union</a> (set::pmergesort-exec part1
+                                                        (<a href="COMMON-LISP____1_B2.html">1+</a> depth))
+                                 (set::pmergesort-exec part2
+                                                        (<a href="COMMON-LISP____1_B2.html">1+</a> depth))))))))</pre> 
+ 
+ <p>A less intrusive method (i.e., not requiring an extra formal parameter like 
+ the <span class="v">depth</span> argument just above), which however can be less efficient, 
+ involves analyzing the data itself for structural properties.  For 
+ example:</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> some-depth-exceeds (x n)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____NATP.html">natp</a> n)))
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ATOM.html">atom</a> x)
+      nil
+    (<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2____ZP.html">zp</a> n)
+        t
+      (<a href="COMMON-LISP____OR.html">or</a> (some-depth-exceeds (<a href="COMMON-LISP____CAR.html">car</a> x) (<a href="COMMON-LISP____1-.html">1-</a> n))
+          (some-depth-exceeds (<a href="COMMON-LISP____CDR.html">cdr</a> x) (<a href="COMMON-LISP____1-.html">1-</a> n))))))
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> valid-tip (x)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t))
+  (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____EQ.html">eq</a> x 'A)
+      (<a href="COMMON-LISP____EQ.html">eq</a> x 'T)
+      (<a href="COMMON-LISP____EQ.html">eq</a> x 'C)
+      (<a href="COMMON-LISP____EQ.html">eq</a> x 'G)))
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> pvalid-tree (x)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t))
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ATOM.html">atom</a> x)
+      (valid-tip x)
+    (<a href="ACL2____PAND.html">pand</a> (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____GRANULARITY.html">granularity</a> (some-depth-exceeds x 3)))
+          (pvalid-tree (<a href="COMMON-LISP____CAR.html">car</a> x))
+          (pvalid-tree (<a href="COMMON-LISP____CDR.html">cdr</a> x)))))</pre> 
+ 
+ <p>If you experiment with calls of <span class="v">pvalid-tree</span>, you are likely to find 
+ that the ``speedup'' it provides over a corresponding serial version is, in 
+ fact, a slowdown!  The problem is likely that <span class="v">some-depth-exceeds</span> is an 
+ expensive function to run repeatedly.  Instead of the approach above, it is 
+ often handy to add an extra formal parameter in order to allow for more 
+ efficient granularity forms, as we have done above in the definition of 
+ <span class="v">SET::pmergesort-exec</span>.</p>
+</body>
+</html>

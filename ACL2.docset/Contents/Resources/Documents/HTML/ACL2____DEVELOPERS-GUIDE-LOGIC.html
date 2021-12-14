@@ -1,0 +1,374 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Developers-guide-logic</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____DEVELOPERS-GUIDE-LOGIC">Click for Developers-guide-logic in the Full Manual</a></h3>
+
+<p>Logical Considerations</p><p>This Developer's Guide may give the impression that ACL2 
+ maintenance is primarily a programming exercise, and that is probably true. 
+ However, <font color="#c00000">there are some subtle logical 
+ considerations</font> that need to be considered when working with some parts 
+ of the implementation.  This topic addresses an assortment of such 
+ considerations, often by pointing to source code comments.  Additional reading 
+ for those intrigued by logic is the paper: ``Structured Theory Development for 
+ a Mechanized Logic,'' Matt Kaufmann and J Strother Moore, Journal of Automated 
+ Reasoning 26, no. 2 (2001), pp. 161--203.</p> 
+ 
+ <p><b>Note:</b> <font color="#c00000">The examples below are by no means 
+ comprehensive!</font> You are encouraged to extend this documentation topic 
+ with additional logical considerations as they arise.  Also see the Essay on 
+ Soundness Threats.</p> 
+ 
+ <h3>Histories, chronologies, and theories</h3> 
+ 
+ <p>An ACL2 session has at least three logical interpretations, as follows.</p> 
+ 
+ <ul> 
+ 
+ <li>The corresponding <font color="#c00000"><i>history</i></font>, which is 
+ the sequence of all <i>axiomatic <a href="ACL2____EVENTS.html">events</a></i> from the session: this 
+ includes <span class="tt"><a href="COMMON-LISP____DEFUN.html">defun</a></span>, <span class="tt"><a href="ACL2____DEFCHOOSE.html">defchoose</a></span>, and <span class="tt"><a href="ACL2____DEFAXIOM.html">defaxiom</a></span> events, as 
+ well as <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span> events with non-empty <a href="ACL2____SIGNATURE.html">signature</a>s.  It does 
+ not include <span class="tt"><a href="ACL2____DEFTHM.html">defthm</a></span> events.</li> 
+ 
+ <li>The corresponding <font color="#c00000"><i>chronology</i></font>, which is 
+ the sequence of all events from the session with logical content.  Thus the 
+ history is a subsequence of the chronology, but the chronology also includes 
+ <span class="v">defthm</span> events.</li> 
+ 
+ <li>The corresponding <font color="#c00000"><i>theory</i></font> of the 
+ session, which is the first-order theory of its history, that is, axiomatized 
+ by the formulas in its history.  (Careful: This theory is not sensitive to 
+ which runes are enabled, unlike the macro, <span class="tt"><a href="ACL2____CURRENT-THEORY.html">current-theory</a></span>.)  A basic 
+ property of ACL2 is that all formulas in the session's chronology are provable 
+ in the session's theory.  In particular, by restricting to the chronology of 
+ events up to and including a given <span class="v">defthm</span> event, we see that the formula 
+ of that event is provable from the axiomatic events that precede it.</li> 
+ 
+ </ul> 
+ 
+ <font color="#c00000"> 
+ 
+ <p>When a session <span class="v">S1</span> is extended to a session <span class="v">S2</span> without using 
+ <span class="v">defaxiom</span> events, then the theory <span class="v">T2</span> for <span class="v">S2</span> is a <i>conservative 
+ extension</i> of the theory <span class="v">T1</span> for <span class="v">S1</span>: that is, every theorem of 
+ <span class="v">T2</span> whose function symbols all occur in <span class="v">T1</span> — that is, are all 
+ introduced in <span class="v">S1</span> — is a theorem of <span class="v">T1</span>.  An important corollary 
+ is that if a session has no <span class="v">defaxiom</span> events, then its theory is 
+ consistent.</p> 
+ 
+ </font> 
+ 
+ <p>Note that <span class="tt"><a href="ACL2____DEFATTACH.html">defattach</a></span> events are ignored for all three notions listed 
+ above.  There is also a notion of <i>evaluation theory</i>, which is the 
+ extension of the session's theory by the equations that equate each function 
+ with its attachment.  A basic property is that every evaluation theory built 
+ from a session free of <span class="v">defaxiom</span> events is the theory of some history that 
+ is free of <span class="v">defaxiom</span> events, and thus (by the corollary stated in the 
+ preceding paragraph) is consistent.  For a detailed development of theory 
+ supporting the use of <span class="v">defattach</span> (though this can probably ignored unless 
+ you are doing deep work with <span class="v">defattach</span>), see the source code comment, 
+ ``Essay on Defattach.''</p> 
+ 
+ <p>There is also a logical explanation for <span class="tt"><a href="ACL2____APPLY_42.html">apply$</a></span>, which is based on 
+ the notion of evaluation theory mentioned above for <span class="v">defattach</span>.  The 
+ upshot is that a certain construction, the ``doppelganger construction'', 
+ produces an evaluation theory in which every <a href="ACL2____WARRANT.html">warrant</a> is valid.  For 
+ detailed theoretical justification (probably not necessary for most 
+ developers, unless perhaps they are doing deep modifications pertaining to 
+ <span class="v">defattach</span> or <span class="v">apply$</span>), see the source code comment, ``Essay on 
+ Admitting a Model for Apply$ and the Functions that Use It.''</p> 
+ 
+ <h3><span class="tt"><a href="ACL2____LOCAL.html">Local</a></span></h3> 
+ 
+ <font color="#800080"> 
+ <p>IN THIS SECTION WE CAN FOCUS MAINLY ON THE DISPLAYS.</p> 
+ </font> 
+ 
+ <font color="#c00000"> 
+ 
+ <p>Many soundness bugs in past versions of ACL2 — indeed, perhaps the 
+ majority of them — can be attributed to a subtle mishandling of <span class="tt"><a href="ACL2____LOCAL.html">local</a></span> <a href="ACL2____EVENTS.html">events</a>.  Perhaps the only advice possible in this regard is the 
+ following: Think carefully about the effects of <span class="v">local</span> when making 
+ event-level changes to ACL2!</p> 
+ 
+ </font> 
+ 
+ <p>Consider for example the following, seemingly innocuous ``enhancement'': 
+ allow <span class="tt"><a href="ACL2____VERIFY-GUARDS.html">verify-guards</a></span> to comprehend macro-aliases (see <a href="ACL2____MACRO-ALIASES-TABLE.html">macro-aliases-table</a>).  Such an ``enhancement'' would be unsound!  Instead, a 
+ similar but sound enhancement, <span class="v">verify-guards+</span>, was introduced (into 
+ Version 6.3).  <font color="#c00000">See <a href="ACL2____VERIFY-GUARDS_B2.html">verify-guards+</a> for an example, 
+ using <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span> and <span class="tt"><a href="ACL2____LOCAL.html">local</a></span>, for why such an enhancement to 
+ <span class="v">verify-guards</span> would be unsound.</font></p> 
+ 
+ <p>We turn now to discuss a key mechanism for avoiding potential soundness 
+ issues caused by <span class="v">local</span>: the <span class="tt"><a href="ACL2____ACL2-DEFAULTS-TABLE.html">ACL2-defaults-table</a></span>.  Because of the 
+ logical information stored in this <a href="ACL2____TABLE.html">table</a>, it is prohibited to modify 
+ this table locally, as we illustrate with a couple of examples.  First 
+ consider the following introduction of a <a href="ACL2____PROGRAM.html">program</a>-mode function, <span class="v">f</span>, 
+ that clearly is inadmissible in <a href="ACL2____LOGIC.html">logic</a>-mode.</p> 
+ 
+ <pre class="code">(<a href="ACL2____ENCAPSULATE.html">encapsulate</a>
+  ()
+  (<a href="ACL2____PROGRAM.html">program</a>)
+  (<a href="COMMON-LISP____DEFUN.html">defun</a> f () (<a href="COMMON-LISP____NOT.html">not</a> (f))))</pre> 
+ 
+ <p>If the <span class="v">(<a href="ACL2____PROGRAM.html">program</a>)</span> event were allowed to be local, then the second pass 
+ of the <span class="v">encapsulate</span> event would introduce <span class="v">f</span> in logic-mode, creating 
+ an inconsistent theory!</p> 
+ 
+ <p>A slightly more subtle example is the following.</p> 
+ 
+ <pre class="code">(<a href="ACL2____ENCAPSULATE.html">encapsulate</a>
+  ()
+  (<a href="ACL2____SET-RULER-EXTENDERS.html">set-ruler-extenders</a> :all)
+  (<a href="COMMON-LISP____DEFUN.html">defun</a> foo (x)
+    (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x) (foo (<a href="COMMON-LISP____CDR.html">cdr</a> x)) x)
+          3)))</pre> 
+ 
+ <p>The induction scheme stored for <span class="v">foo</span> is as follows, which is the same 
+ as would be stored for the simpler definition, <span class="v">(<a href="COMMON-LISP____DEFUN.html">defun</a> foo (x) (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____CONSP.html">consp</a>
+ x) (foo (<a href="COMMON-LISP____CDR.html">cdr</a> x)) x))</span>.  (Don't worry about the form of the structure below. 
+ Further relevant discussion may be found below in the section, ``Induction, 
+ recursion, and termination.'')</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____GETPROPC.html">getpropc</a> 'foo 'induction-machine)
+((TESTS-AND-CALLS ((<a href="COMMON-LISP____CONSP.html">CONSP</a> X))
+                  (FOO (<a href="COMMON-LISP____CDR.html">CDR</a> X)))
+ (TESTS-AND-CALLS ((<a href="COMMON-LISP____NOT.html">NOT</a> (<a href="COMMON-LISP____CONSP.html">CONSP</a> X)))))
+ACL2 !&gt;</pre> 
+ 
+ <p>The <span class="v">'induction-machine</span> property is computed based on the 
+ ruler-extenders.  So if the event <span class="v">(<a href="ACL2____SET-RULER-EXTENDERS.html">set-ruler-extenders</a> :all)</span> above could 
+ be made local, we would be storing the same induction machine as for the 
+ following definition.</p> 
+ 
+ <pre class="code">(<a href="ACL2____SKIP-PROOFS.html">skip-proofs</a>
+ (<a href="COMMON-LISP____DEFUN.html">defun</a> foo (x)
+   (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :measure (<a href="ACL2____ACL2-COUNT.html">acl2-count</a> x)))
+   (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x) (foo (<a href="COMMON-LISP____CDR.html">cdr</a> x)) x)
+         3)))</pre> 
+ 
+ <p>But that induction-machine is unsound!</p> 
+ 
+ <pre class="code">(<a href="ACL2____THM.html">thm</a> nil :hints (("Goal" :induct (foo x))))</pre> 
+ 
+ <p>The two examples above illustrate the importance of thinking about whether 
+ an event can soundly be local.  If not, then it may be best for that event to 
+ be one that sets the <span class="tt"><a href="ACL2____ACL2-DEFAULTS-TABLE.html">ACL2-defaults-table</a></span>, like <span class="tt"><a href="ACL2____PROGRAM.html">program</a></span> and 
+ <span class="tt"><a href="ACL2____SET-RULER-EXTENDERS.html">set-ruler-extenders</a></span>, since <span class="tt"><a href="ACL2____TABLE.html">table</a></span> events that set the 
+ <span class="v">acl2-defaults-table</span> are not permitted to be local.</p> 
+ 
+ <h3>
+<span class="tt"><a href="ACL2____SKIP-PROOFS.html">Skip-proofs</a></span> vs. <span class="tt"><a href="ACL2____DEFAXIOM.html">defaxiom</a></span>
+</h3> 
+ 
+ <font color="#800080"> 
+ <p>IN THE WORKSHOP THE FOCUS WILL BE ONLY ON THE LOGICAL DIFFERENCE.</p> 
+ </font> 
+ 
+ <p>There is a fundamental logical difference between wrapping <span class="tt"><a href="ACL2____SKIP-PROOFS.html">skip-proofs</a></span> around a <span class="tt"><a href="ACL2____DEFTHM.html">defthm</a></span> event and using <span class="tt"><a href="ACL2____DEFAXIOM.html">defaxiom</a></span>.  When 
+ using <span class="v">skip-proofs</span>, the user is promising that the ensuing proof 
+ obligations are indeed theorems of the theory of the current ACL2 session. 
+ However, the meaning of <span class="v">defaxiom</span> is to extend that theory with a new 
+ axiom, one which is generally not provable from the session's theory.  See 
+ <a href="ACL2____SKIP-PROOFS.html">skip-proofs</a> and see <a href="ACL2____DEFAXIOM.html">defaxiom</a>.  This logical distinction has 
+ ramifications for the implementation, as we now describe.</p> 
+ 
+ <p>Since the use of <span class="tt"><a href="ACL2____SKIP-PROOFS.html">skip-proofs</a></span> carries an implicit promise of 
+ provability, the implementation can largely ignore the question of whether an 
+ event was, or was not, introduced using <span class="v">skip-proofs</span>.  The key reason to 
+ do any such tracking is to inform <span class="tt"><a href="ACL2____CERTIFY-BOOK.html">certify-book</a></span> when the use of keyword 
+ argument <span class="v">:skip-proofs-okp t</span> is required.</p> 
+ 
+ <p>On the other hand, it is critical for soundness to track the use of <span class="tt"><a href="ACL2____DEFAXIOM.html">defaxiom</a></span>.  In particular, it is unsound to allow <a href="ACL2____LOCAL.html">local</a> <span class="v">defaxiom</span> 
+ events.  That is obvious from the following example, which would leave us in 
+ an ACL2 world in which <span class="v">nil</span> is provable even though there is no 
+ <span class="v">defaxiom</span> event in that world.</p> 
+ 
+ <pre class="code">(<a href="ACL2____ENCAPSULATE.html">encapsulate</a>
+  ()
+  (<a href="ACL2____LOCAL.html">local</a> (<a href="ACL2____DEFAXIOM.html">defaxiom</a> bad-axiom nil :rule-classes nil))
+  (<a href="ACL2____DEFTHM.html">defthm</a> bad-theorem nil
+    :hints (("Goal" :use bad-axiom))
+    :rule-classes nil))</pre> 
+ 
+ <p>That event is, of course, rejected by ACL2.  The following, on the other 
+ hand, is accepted; but this does not demonstrate unsoundness of ACL2, because 
+ the user violated the implied promise that, quoting from above, ``the ensuing 
+ proof obligations are indeed theorems of the theory of the current ACL2 
+ session.''</p> 
+ 
+ <pre class="code">(<a href="ACL2____ENCAPSULATE.html">encapsulate</a>
+  ()
+  (<a href="ACL2____LOCAL.html">local</a> (<a href="ACL2____SKIP-PROOFS.html">skip-proofs</a> (<a href="ACL2____DEFTHM.html">defthm</a> bad-axiom nil :rule-classes nil)))
+  (<a href="ACL2____DEFTHM.html">defthm</a> bad-theorem nil
+    :hints (("Goal" :use bad-axiom))
+    :rule-classes nil))</pre> 
+ 
+ <p>We conclude this section by noting that there are different ``levels'' of 
+ <span class="v">skip-proofs</span> used by the implementation that are not directly visible to 
+ the user.  The basic <span class="v">skip-proofs</span> you see around an event generates a 
+ binding of state global <span class="v">'ld-skip-proofsp</span> to <span class="v">t</span>.  However, when you 
+ include a book, state global <span class="v">'ld-skip-proofsp</span> is bound to 
+ <span class="v">'include-book</span>, which has two major effects: <span class="v">local</span> events are 
+ skipped, and some checks are omitted.  For example, the redundancy checks 
+ normally performed after <span class="v">(<a href="ACL2____SET-ENFORCE-REDUNDANCY.html">set-enforce-redundancy</a> t)</span> are, as one would 
+ hope, omitted when including a book.  If you tags-search the sources for 
+ ``<span class="v">(enforce-redundancy</span>'', you'll see that it is used to implement 
+ events (see for example the definition of <span class="v">defconst-fn</span>); then if you look 
+ at the definition of <span class="v">enforce-redundancy</span>, you'll see that its check is 
+ skipped when state global <span class="v">'ld-skip-proofsp</span> is bound to 
+ <span class="v">'include-book</span>, hence when a book is being included.  Also see <a href="ACL2____LD-SKIP-PROOFSP.html">ld-skip-proofsp</a>.</p> 
+ 
+ <h3>Induction, recursion, and termination</h3> 
+ 
+ <p>Every proposed definition with recursion generates two related artifacts: a 
+ proof obligation that is generally described as the termination proof 
+ obligation, and an induction scheme to be stored if the definition is 
+ admitted.  <font color="#c00000">A key soundness requirement is that the 
+ termination proof obligation justifies use of the induction scheme.</font> 
+ This produces a tension, as can be seen by the analysis below of the following 
+ example.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> f (x)
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x)
+      (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____CONSP.html">consp</a> (<a href="COMMON-LISP____CAR.html">car</a> x)) (f (<a href="COMMON-LISP____CAR.html">car</a> x)) x)
+            x)
+    x))</pre> 
+ 
+ <p>The generated induction is displayed symbolically just below: when proving 
+ a proposition <span class="v">(P x)</span>, the induction step is to assume <span class="v">(<a href="COMMON-LISP____CONSP.html">consp</a> x)</span> and 
+ <span class="v">(P (<a href="COMMON-LISP____CAR.html">car</a> x))</span> when proving <span class="v">(P x)</span>, and the base case is to assume 
+ <span class="v">(<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x))</span> when proving <span class="v">(P x)</span>.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____GETPROPC.html">getpropc</a> 'f 'induction-machine)
+((TESTS-AND-CALLS ((<a href="COMMON-LISP____CONSP.html">CONSP</a> X))
+                  (F (<a href="COMMON-LISP____CAR.html">CAR</a> X)))
+ (TESTS-AND-CALLS ((<a href="COMMON-LISP____NOT.html">NOT</a> (<a href="COMMON-LISP____CONSP.html">CONSP</a> X)))))
+ACL2 !&gt;</pre> 
+ 
+ <p>There is a comment just above the <span class="v">defrec</span> for <span class="v">tests-and-calls</span> that 
+ explains that record structure.  The corresponding termination 
+ scheme may be seen by evaluating <span class="v">(<a href="ACL2____TRACE_42.html">trace$</a> termination-machine)</span> before 
+ submitting the <span class="v">defun</span> form above.  Here is the result.</p> 
+ 
+ <pre class="code">&lt;1 (TERMINATION-MACHINE ((TESTS-AND-CALL ((<a href="COMMON-LISP____CONSP.html">CONSP</a> X))
+                                         (F (<a href="COMMON-LISP____CAR.html">CAR</a> X)))))</pre> 
+ 
+ <p>What this means is that ACL2 must prove that under the hypothesis <span class="v">(<a href="COMMON-LISP____CONSP.html">consp</a>
+ x)</span>, then <span class="v">(<a href="ACL2____ACL2-COUNT.html">acl2-count</a> (<a href="COMMON-LISP____CAR.html">car</a> x))</span> is smaller than <span class="v">(<a href="ACL2____ACL2-COUNT.html">acl2-count</a> x)</span>. 
+ That proof obligation clearly justifies the induction scheme described 
+ above.</p> 
+ 
+ <p>But let us try an experiment in which ACL2 is instructed to consider, for 
+ termination and induction, any <span class="v">IF</span>-tests that are not at the top level 
+ — in this case, within the call of <span class="v">cons</span>.  In a fresh session, we 
+ try this instead.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> f (x)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :ruler-extenders (<a href="COMMON-LISP____CONS.html">cons</a>)))
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x)
+      (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____CONSP.html">consp</a> (<a href="COMMON-LISP____CAR.html">car</a> x)) (f (<a href="COMMON-LISP____CAR.html">car</a> x)) x)
+            x)
+    x))</pre> 
+ 
+ <p>The induction machine produced this time includes the extra <span class="v">if</span> test or 
+ its negation.  It says that when proving a proposition <span class="v">(P x)</span>, the 
+ induction step is to assume <span class="v">(<a href="COMMON-LISP____CONSP.html">consp</a> x)</span>, <span class="v">(<a href="COMMON-LISP____CONSP.html">consp</a> (<a href="COMMON-LISP____CAR.html">car</a> x))</span>, and 
+ <span class="v">(P (<a href="COMMON-LISP____CAR.html">car</a> x))</span> when proving <span class="v">(P x)</span>; one base case is to assume <span class="v">(<a href="COMMON-LISP____CONSP.html">consp</a>
+ x)</span> and <span class="v">(<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____CONSP.html">consp</a> (<a href="COMMON-LISP____CAR.html">car</a> x)))</span> when proving <span class="v">(P x)</span>; and the other 
+ base case is to assume <span class="v">(<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x))</span> when proving <span class="v">(P x)</span>.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____GETPROPC.html">getpropc</a> 'f 'induction-machine)
+((TESTS-AND-CALLS ((<a href="COMMON-LISP____CONSP.html">CONSP</a> X) (<a href="COMMON-LISP____CONSP.html">CONSP</a> (<a href="COMMON-LISP____CAR.html">CAR</a> X)))
+                  (F (<a href="COMMON-LISP____CAR.html">CAR</a> X)))
+ (TESTS-AND-CALLS ((<a href="COMMON-LISP____CONSP.html">CONSP</a> X) (<a href="COMMON-LISP____NOT.html">NOT</a> (<a href="COMMON-LISP____CONSP.html">CONSP</a> (<a href="COMMON-LISP____CAR.html">CAR</a> X)))))
+ (TESTS-AND-CALLS ((<a href="COMMON-LISP____NOT.html">NOT</a> (<a href="COMMON-LISP____CONSP.html">CONSP</a> X)))))
+ACL2 !&gt;</pre> 
+ 
+ <p>This time there is a different termination proof obligation as well, 
+ stating that <span class="v">(<a href="COMMON-LISP____CAR.html">car</a> x)</span> has a smaller <span class="v">acl2-count</span> than that of <span class="v">x</span> 
+ under the conjunction of the pair of assumptions <span class="v">(<a href="COMMON-LISP____CONSP.html">consp</a> x)</span> and 
+ <span class="v">(<a href="COMMON-LISP____CONSP.html">consp</a> (<a href="COMMON-LISP____CAR.html">car</a> x))</span>.  As before, it justifies the induction scheme just 
+ above.</p> 
+ 
+ <pre class="code">&lt;1 (TERMINATION-MACHINE ((TESTS-AND-CALL ((<a href="COMMON-LISP____CONSP.html">CONSP</a> X) (<a href="COMMON-LISP____CONSP.html">CONSP</a> (<a href="COMMON-LISP____CAR.html">CAR</a> X)))
+                                         (F (<a href="COMMON-LISP____CAR.html">CAR</a> X)))))</pre> 
+ 
+ <p>Now suppose that the implementation is careless, by making the <a href="ACL2____RULER-EXTENDERS.html">ruler-extenders</a> affect the termination proof obligations but not the 
+ induction scheme.  Consider the following example.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> g (x)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :ruler-extenders (<a href="COMMON-LISP____CONS.html">cons</a>)))
+  (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x) (<a href="ACL2____G.html">g</a> (<a href="COMMON-LISP____CAR.html">car</a> x)) x)
+        x))</pre> 
+ 
+ <p>This produces the termination proof obligation represented as follows 
+ (again from a trace), which says that assuming <span class="v">(<a href="COMMON-LISP____CONSP.html">consp</a> x)</span>, <span class="v">(<a href="ACL2____ACL2-COUNT.html">acl2-count</a>
+ (<a href="COMMON-LISP____CAR.html">car</a> x))</span> is less than <span class="v">(<a href="ACL2____ACL2-COUNT.html">acl2-count</a> x)</span>.  Note that this is indeed a 
+ theorem.</p> 
+ 
+ <pre class="code">&lt;1 (TERMINATION-MACHINE ((TESTS-AND-CALL ((<a href="COMMON-LISP____CONSP.html">CONSP</a> X))
+                                         (<a href="ACL2____G.html">G</a> (<a href="COMMON-LISP____CAR.html">CAR</a> X)))))</pre> 
+ 
+ <p>To see what the induction scheme would be if we ignored the 
+ ruler-extenders, we submit the following.</p> 
+ 
+ <pre class="code">(<a href="ACL2____SKIP-PROOFS.html">skip-proofs</a>
+ (<a href="COMMON-LISP____DEFUN.html">defun</a> g (x)
+   (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :measure (<a href="ACL2____ACL2-COUNT.html">acl2-count</a> x)))
+   (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____CONSP.html">consp</a> (<a href="COMMON-LISP____CAR.html">car</a> x)) (<a href="ACL2____G.html">g</a> (<a href="COMMON-LISP____CAR.html">car</a> x)) x)
+         x)))</pre> 
+ 
+ <p>The corresponding induction machine states that to prove <span class="v">(P x)</span>, we may 
+ assume <span class="v">(P (<a href="COMMON-LISP____CAR.html">car</a> x))</span>.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____GETPROPC.html">getpropc</a> 'g 'induction-machine)
+((TESTS-AND-CALLS NIL (<a href="ACL2____G.html">G</a> (<a href="COMMON-LISP____CAR.html">CAR</a> X))))
+ACL2 !&gt;</pre> 
+ 
+ <p>If we let <span class="v">(P x)</span> be <span class="v">(<a href="COMMON-LISP____CONSP.html">consp</a> x)</span>, then clearly this induction scheme 
+ allows us to prove <span class="v">(<a href="COMMON-LISP____CONSP.html">consp</a> x)</span> for all <span class="v">x</span>!</p> 
+ 
+ <pre class="code">(<a href="ACL2____THM.html">thm</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x)
+     :hints (("Goal" :induct (<a href="ACL2____G.html">g</a> x))))</pre> 
+ 
+ <p>This induction scheme is thus clearly unsound.</p> 
+ 
+ <p>The moral of the story is this: As the termination machine is modified to 
+ accommodate the ruler-extenders, the induction machine must be modified 
+ accordingly.  More generally, and as already noted: The termination machine 
+ must justify the induction machine.</p> 
+ 
+ <h3>Other tricky stuff</h3> 
+ 
+ <p>The logical underpinnings of ACL2 can be a bit overwhelming when considered 
+ together, so the following paragraphs should be taken as a suggestion for what 
+ to explore only when you're in the mood for some logic, and also as an 
+ acknowledgment that many subtle logical issues exist.  It is <i>NOT</i> meant 
+ as a prescription for what you need to explore!  Moreover, it is far from 
+ complete.</p> 
+ 
+ <p>The foundations of metatheoretic reasoning can be challenging.  If you 
+ tags-search for ``; Essay on Metafunction Support'', you'll see two relevant 
+ essays.  But a much longer essay is the ``Essay on Correctness of Meta 
+ Reasoning''.  That essay even ties into the ``Essay on Defattach'', at the 
+ mention of the Attachment Restriction Lemma.  If you decide to change the 
+ handling of metafunctions or clause-processors or their corresponding <a href="ACL2____RULE-CLASSES.html">rule-classes</a>, <span class="v">:meta</span> and <span class="v">:clause-processor</span>, other than fixing coding 
+ bugs or making extra-logical changes such as output, you probably should read 
+ these Essays.  Of course, before reading these or any essays, it is generally 
+ a good idea to read relevant user-level documentation, such as the 
+ documentation for <a href="ACL2____META.html">meta</a> or <a href="ACL2____CLAUSE-PROCESSOR.html">clause-processor</a>.</p> 
+ 
+ <p>A few other features of ACL2 with interesting logical foundations are 
+ <span class="tt"><a href="ACL2____DEFCHOOSE.html">defchoose</a></span>, <span class="tt"><a href="ACL2____DEFABSSTOBJ.html">defabsstobj</a></span>, and the interaction of packages with 
+ <span class="tt"><a href="ACL2____LOCAL.html">local</a></span> (see the ``Essay on Hidden Packages'').</p> 
+ 
+ <p>NEXT SECTION: <a href="ACL2____DEVELOPERS-GUIDE-PROGRAMMING.html">developers-guide-programming</a></p>
+</body>
+</html>

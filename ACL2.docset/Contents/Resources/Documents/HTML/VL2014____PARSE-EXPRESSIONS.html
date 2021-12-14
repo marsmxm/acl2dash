@@ -1,0 +1,1330 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Parse-expressions</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL2014____PARSE-EXPRESSIONS">Click for Parse-expressions in the Full Manual</a></h3>
+
+<p>Parser for Verilog and SystemVerilog expressions.</p><p>This is very complicated because everything about expressions is 
+mutually recursive.  Most of the functions here correspond to particular 
+productions in the grammars of the Verilog-2005 or SystemVerilog-2012.  A 
+few high-level notes:</p> 
+ 
+<ul> 
+ 
+<li>The documentation for each function generally describes the grammar 
+productions that are being implemented.</li> 
+ 
+<li>We generally simplify the grammar rules by removing any bare "aliases" 
+such as <span class="v">base_expression ::= expression</span> and <span class="v">attr_name ::=
+identifier</span>.</li> 
+ 
+<li>We do not try to implement any separation between "ordinary" expressions 
+and "constant" expressions.  I think the whole treatment of constant 
+expressions as a syntactic construct is somewhat misguided.  It is difficult to 
+imagine truly handling constant expressions at parse time.  For instance, in a 
+parameterized module with, say, a <span class="v">width</span> parameter, you really want to 
+resolve expressions like <span class="v">width-1</span> into constants and treat them as constant 
+indexes.  But you can't do this until you know the values for these parameters, 
+which you don't know until you've read all the instances of the module, 
+etc.</li> 
+ 
+</ul> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>vl-parse-attr-spec-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ vl-parse-attr-spec-fn (tokstream config)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'vl-parse-attr-spec))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="VL2014____SEQ.html">seq</a>
+   tokstream
+   (id := (<a href="VL2014____VL-MATCH-TOKEN.html">vl-match-token</a> :vl-idtoken))
+   (when (<a href="VL2014____VL-IS-TOKEN_F3.html">vl-is-token?</a> :vl-equalsign)
+         (:= (<a href="VL2014____VL-MATCH.html">vl-match</a>))
+         (expr := (<a href="VL2014____VL-PARSE-EXPRESSION.html">vl-parse-expression</a>)))
+   (when
+     (<a href="COMMON-LISP____AND.html">and</a> expr (<a href="VL2014____VL-EXPR-HAS-ANY-ATTS-P.html">vl-expr-has-any-atts-p</a> expr))
+     (return-raw (<a href="VL2014____VL-PARSE-ERROR.html">vl-parse-error</a> "Nested attributes are illegal.")))
+   (return (<a href="COMMON-LISP____LIST.html">list</a> (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="VL2014____VL-IDTOKEN-_E3NAME.html">vl-idtoken-&gt;name</a> id) expr))))))</pre> 
+<p><b>Function: </b>vl-parse-attribute-instance-aux-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> vl-parse-attribute-instance-aux-fn
+       (tokstream config)
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+       (<a href="COMMON-LISP____LET.html">let</a> ((__function__ 'vl-parse-attribute-instance-aux))
+            (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+            (<a href="VL2014____SEQ.html">seq</a> tokstream
+                 (<a href="COMMON-LISP____FIRST.html">first</a> :s= (<a href="VL2014____VL-PARSE-ATTR-SPEC.html">vl-parse-attr-spec</a>))
+                 (when (<a href="VL2014____VL-IS-TOKEN_F3.html">vl-is-token?</a> :vl-comma)
+                       (:= (<a href="VL2014____VL-MATCH.html">vl-match</a>))
+                       (<a href="COMMON-LISP____REST.html">rest</a> := (<a href="VL2014____VL-PARSE-ATTRIBUTE-INSTANCE-AUX.html">vl-parse-attribute-instance-aux</a>)))
+                 (return (<a href="COMMON-LISP____APPEND.html">append</a> first rest)))))</pre> 
+<p><b>Function: </b>vl-parse-attribute-instance-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> vl-parse-attribute-instance-fn
+       (tokstream config)
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+       (<a href="COMMON-LISP____LET.html">let</a> ((__function__ 'vl-parse-attribute-instance))
+            (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+            (<a href="VL2014____SEQ.html">seq</a> tokstream
+                 (:= (<a href="VL2014____VL-MATCH-TOKEN.html">vl-match-token</a> :vl-beginattr))
+                 (data := (<a href="VL2014____VL-PARSE-ATTRIBUTE-INSTANCE-AUX.html">vl-parse-attribute-instance-aux</a>))
+                 (:= (<a href="VL2014____VL-MATCH-TOKEN.html">vl-match-token</a> :vl-endattr))
+                 (return data))))</pre> 
+<p><b>Function: </b>vl-parse-0+-attribute-instances-aux-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> vl-parse-0+-attribute-instances-aux-fn
+       (tokstream config)
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+       (<a href="COMMON-LISP____LET.html">let</a> ((__function__ 'vl-parse-0+-attribute-instances-aux))
+            (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+            (<a href="VL2014____SEQ.html">seq</a> tokstream
+                 (when (<a href="COMMON-LISP____NOT.html">not</a> (<a href="VL2014____VL-IS-TOKEN_F3.html">vl-is-token?</a> :vl-beginattr))
+                       (return nil))
+                 (<a href="COMMON-LISP____FIRST.html">first</a> :s= (<a href="VL2014____VL-PARSE-ATTRIBUTE-INSTANCE.html">vl-parse-attribute-instance</a>))
+                 (<a href="COMMON-LISP____REST.html">rest</a> := (<a href="VL2014____VL-PARSE-0_B2-ATTRIBUTE-INSTANCES-AUX.html">vl-parse-0+-attribute-instances-aux</a>))
+                 (return (<a href="COMMON-LISP____APPEND.html">append</a> first rest)))))</pre> 
+<p><b>Function: </b>vl-parse-0+-attribute-instances-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ vl-parse-0+-attribute-instances-fn
+ (tokstream config)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'vl-parse-0+-attribute-instances))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="VL2014____SEQ.html">seq</a>
+   tokstream
+   (when (<a href="COMMON-LISP____NOT.html">not</a> (<a href="VL2014____VL-IS-TOKEN_F3.html">vl-is-token?</a> :vl-beginattr))
+         (return nil))
+   (loc := (<a href="VL2014____VL-CURRENT-LOC.html">vl-current-loc</a>))
+   (original-atts := (<a href="VL2014____VL-PARSE-0_B2-ATTRIBUTE-INSTANCES-AUX.html">vl-parse-0+-attribute-instances-aux</a>))
+   (return-raw
+    (<a href="ACL2____B_A2.html">b*</a>
+     ((atts (<a href="ACL2____FAST-ALIST-FREE.html">fast-alist-free</a> (<a href="ACL2____HONS-SHRINK-ALIST.html">hons-shrink-alist</a> (<a href="ACL2____REV.html">rev</a> original-atts)
+                                                nil)))
+      ((when (same-lengthp atts original-atts))
+       (<a href="ACL2____MV.html">mv</a> nil atts tokstream))
+      (<a href="ACL2____W.html">w</a>
+       (<a href="VL2014____MAKE-VL-WARNING.html">make-vl-warning</a>
+        :type :vl-warn-shadowed-atts
+        :msg
+        "~l0: Found multiple occurrences of ~&amp;1 in ~
+                          attributes.  Later occurrences take precedence."
+        :args (<a href="COMMON-LISP____LIST.html">list</a> loc
+                    (duplicated-members (<a href="ACL2____ALIST-KEYS.html">alist-keys</a> original-atts)))
+        :fatalp nil
+        :fn __function__))
+      (tokstream (<a href="VL2014____VL-TOKSTREAM-ADD-WARNING.html">vl-tokstream-add-warning</a> w)))
+     (<a href="ACL2____MV.html">mv</a> nil atts tokstream))))))</pre> 
+<p><b>Function: </b>vl-parse-1+-expressions-separated-by-commas-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ vl-parse-1+-expressions-separated-by-commas-fn
+ (tokstream config)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'vl-parse-1+-expressions-separated-by-commas))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="VL2014____SEQ.html">seq</a>
+      tokstream
+      (<a href="COMMON-LISP____FIRST.html">first</a> :s= (<a href="VL2014____VL-PARSE-EXPRESSION.html">vl-parse-expression</a>))
+      (when (<a href="VL2014____VL-IS-TOKEN_F3.html">vl-is-token?</a> :vl-comma)
+            (:= (<a href="VL2014____VL-MATCH.html">vl-match</a>))
+            (<a href="COMMON-LISP____REST.html">rest</a> := (<a href="VL2014____VL-PARSE-1_B2-EXPRESSIONS-SEPARATED-BY-COMMAS.html">vl-parse-1+-expressions-separated-by-commas</a>)))
+      (return (<a href="COMMON-LISP____CONS.html">cons</a> first rest)))))</pre> 
+<p><b>Function: </b>vl-parse-1+-keyval-expression-pairs-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ vl-parse-1+-keyval-expression-pairs-fn
+ (tokstream config)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+ (<a href="COMMON-LISP____LET.html">let</a> ((__function__ 'vl-parse-1+-keyval-expression-pairs))
+      (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+      (<a href="VL2014____SEQ.html">seq</a> tokstream
+           (<a href="COMMON-LISP____FIRST.html">first</a> :s= (<a href="VL2014____VL-PARSE-EXPRESSION.html">vl-parse-expression</a>))
+           (:= (<a href="VL2014____VL-MATCH-TOKEN.html">vl-match-token</a> :vl-colon))
+           (<a href="COMMON-LISP____SECOND.html">second</a> :s= (<a href="VL2014____VL-PARSE-EXPRESSION.html">vl-parse-expression</a>))
+           (when (<a href="VL2014____VL-IS-TOKEN_F3.html">vl-is-token?</a> :vl-comma)
+                 (:= (<a href="VL2014____VL-MATCH.html">vl-match</a>))
+                 (<a href="COMMON-LISP____REST.html">rest</a> := (<a href="VL2014____VL-PARSE-1_B2-KEYVAL-EXPRESSION-PAIRS.html">vl-parse-1+-keyval-expression-pairs</a>)))
+           (return (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="VL2014____MAKE-VL-NONATOM.html">make-vl-nonatom</a> :op :vl-keyvalue
+                                          :args (<a href="COMMON-LISP____LIST.html">list</a> first second))
+                         rest)))))</pre> 
+<p><b>Function: </b>vl-parse-system-function-call-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ vl-parse-system-function-call-fn
+ (tokstream config)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'vl-parse-system-function-call))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="VL2014____SEQ.html">seq</a>
+   tokstream
+   (fn := (<a href="VL2014____VL-MATCH-TOKEN.html">vl-match-token</a> :vl-sysidtoken))
+   (when (<a href="VL2014____VL-IS-TOKEN_F3.html">vl-is-token?</a> :vl-lparen)
+         (:= (<a href="VL2014____VL-MATCH.html">vl-match</a>))
+         (<a href="ACL2____ARGS.html">args</a> := (<a href="VL2014____VL-PARSE-1_B2-EXPRESSIONS-SEPARATED-BY-COMMAS.html">vl-parse-1+-expressions-separated-by-commas</a>))
+         (:= (<a href="VL2014____VL-MATCH-TOKEN.html">vl-match-token</a> :vl-rparen)))
+   (return
+    (<a href="COMMON-LISP____LET.html">let</a>
+       ((fname (<a href="VL2014____MAKE-VL-SYSFUNNAME.html">make-vl-sysfunname</a> :name (<a href="VL2014____VL-SYSIDTOKEN-_E3NAME.html">vl-sysidtoken-&gt;name</a> fn))))
+       (<a href="VL2014____MAKE-VL-NONATOM.html">make-vl-nonatom</a> :op :vl-syscall
+                        :args (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="VL2014____MAKE-VL-ATOM.html">make-vl-atom</a> :guts fname)
+                                    args)))))))</pre> 
+<p><b>Function: </b>vl-parse-mintypmax-expression-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ vl-parse-mintypmax-expression-fn
+ (tokstream config)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'vl-parse-mintypmax-expression))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="VL2014____SEQ.html">seq</a> tokstream
+       (<a href="COMMON-LISP____MIN.html">min</a> :s= (<a href="VL2014____VL-PARSE-EXPRESSION.html">vl-parse-expression</a>))
+       (when (<a href="VL2014____VL-IS-TOKEN_F3.html">vl-is-token?</a> :vl-colon)
+             (:= (<a href="VL2014____VL-MATCH.html">vl-match</a>))
+             (typ :s= (<a href="VL2014____VL-PARSE-EXPRESSION.html">vl-parse-expression</a>))
+             (:= (<a href="VL2014____VL-MATCH-TOKEN.html">vl-match-token</a> :vl-colon))
+             (<a href="COMMON-LISP____MAX.html">max</a> := (<a href="VL2014____VL-PARSE-EXPRESSION.html">vl-parse-expression</a>))
+             (return (<a href="VL2014____MAKE-VL-NONATOM.html">make-vl-nonatom</a> :op :vl-mintypmax
+                                      :args (<a href="COMMON-LISP____LIST.html">list</a> min typ max))))
+       (when (<a href="COMMON-LISP____EQ.html">eq</a> (<a href="VL2014____VL-LOADCONFIG-_E3EDITION.html">vl-loadconfig-&gt;edition</a> config)
+                 :verilog-2005)
+             (return min))
+       (op := (<a href="VL2014____VL-PARSE-OP.html">vl-parse-op</a> 2
+                           '((:vl-equalsign . :vl-binary-assign)
+                             (:vl-pluseq . :vl-binary-plusassign)
+                             (:vl-minuseq . :vl-binary-minusassign)
+                             (:vl-timeseq . :vl-binary-timesassign)
+                             (:vl-diveq . :vl-binary-divassign)
+                             (:vl-remeq . :vl-binary-remassign)
+                             (:vl-andeq . :vl-binary-andassign)
+                             (:vl-oreq . :vl-binary-orassign)
+                             (:vl-xoreq . :vl-binary-xorassign)
+                             (:vl-shleq . :vl-binary-shlassign)
+                             (:vl-shreq . :vl-binary-shrassign)
+                             (:vl-ashleq . :vl-binary-ashlassign)
+                             (:vl-ashreq . :vl-binary-ashrassign))))
+       (unless op (return min))
+       (rhs := (<a href="VL2014____VL-PARSE-EXPRESSION.html">vl-parse-expression</a>))
+       (return (<a href="VL2014____MAKE-VL-NONATOM.html">make-vl-nonatom</a> :op op
+                                :args (<a href="COMMON-LISP____LIST.html">list</a> min rhs))))))</pre> 
+<p><b>Function: </b>vl-parse-range-expression-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ vl-parse-range-expression-fn
+ (tokstream config)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'vl-parse-range-expression))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="VL2014____SEQ.html">seq</a>
+   tokstream (e1 :s= (<a href="VL2014____VL-PARSE-EXPRESSION.html">vl-parse-expression</a>))
+   (unless
+       (<a href="VL2014____VL-IS-SOME-TOKEN_F3.html">vl-is-some-token?</a> '(:vl-colon :vl-pluscolon :vl-minuscolon))
+       (return (<a href="VL2014____VL-ERANGE.html">vl-erange</a> :vl-index e1 e1)))
+   (sep := (<a href="VL2014____VL-MATCH.html">vl-match</a>))
+   (e2 := (<a href="VL2014____VL-PARSE-EXPRESSION.html">vl-parse-expression</a>))
+   (return (<a href="VL2014____VL-ERANGE.html">vl-erange</a> (<a href="VL2014____VL-TOKEN-_E3TYPE.html">vl-token-&gt;type</a> sep)
+                      e1 e2)))))</pre> 
+<p><b>Function: </b>vl-parse-concatenation-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+   vl-parse-concatenation-fn
+   (tokstream config)
+   (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+   (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+   (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+   (<a href="COMMON-LISP____LET.html">let</a> ((__function__ 'vl-parse-concatenation))
+        (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+        (<a href="VL2014____SEQ.html">seq</a> tokstream
+             (:= (<a href="VL2014____VL-MATCH-TOKEN.html">vl-match-token</a> :vl-lcurly))
+             (<a href="ACL2____ARGS.html">args</a> := (<a href="VL2014____VL-PARSE-1_B2-EXPRESSIONS-SEPARATED-BY-COMMAS.html">vl-parse-1+-expressions-separated-by-commas</a>))
+             (:= (<a href="VL2014____VL-MATCH-TOKEN.html">vl-match-token</a> :vl-rcurly))
+             (return (<a href="VL2014____MAKE-VL-NONATOM.html">make-vl-nonatom</a> :op :vl-concat
+                                      :args args)))))</pre> 
+<p><b>Function: </b>vl-parse-stream-expression-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> vl-parse-stream-expression-fn
+       (tokstream config)
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+       (<a href="COMMON-LISP____LET.html">let</a> ((__function__ 'vl-parse-stream-expression))
+            (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+            (<a href="VL2014____SEQ.html">seq</a> tokstream
+                 (expr :s= (<a href="VL2014____VL-PARSE-EXPRESSION.html">vl-parse-expression</a>))
+                 (unless (<a href="VL2014____VL-IS-TOKEN_F3.html">vl-is-token?</a> :vl-kwd-with)
+                         (return expr))
+                 (:= (<a href="VL2014____VL-MATCH.html">vl-match</a>))
+                 (:= (<a href="VL2014____VL-MATCH-TOKEN.html">vl-match-token</a> :vl-lbrack))
+                 (range := (<a href="VL2014____VL-PARSE-RANGE-EXPRESSION.html">vl-parse-range-expression</a>))
+                 (:= (<a href="VL2014____VL-MATCH-TOKEN.html">vl-match-token</a> :vl-rbrack))
+                 (return (<a href="VL2014____VL-BUILD-RANGE-SELECT-WITH.html">vl-build-range-select-with</a> expr range)))))</pre> 
+<p><b>Function: </b>vl-parse-1+-stream-expressions-separated-by-commas-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ vl-parse-1+-stream-expressions-separated-by-commas-fn
+ (tokstream config)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__
+        'vl-parse-1+-stream-expressions-separated-by-commas))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="VL2014____SEQ.html">seq</a>
+   tokstream
+   (<a href="COMMON-LISP____FIRST.html">first</a> :s= (<a href="VL2014____VL-PARSE-STREAM-EXPRESSION.html">vl-parse-stream-expression</a>))
+   (when
+     (<a href="VL2014____VL-IS-TOKEN_F3.html">vl-is-token?</a> :vl-comma)
+     (:= (<a href="VL2014____VL-MATCH.html">vl-match</a>))
+     (<a href="COMMON-LISP____REST.html">rest</a> := (<a href="VL2014____VL-PARSE-1_B2-STREAM-EXPRESSIONS-SEPARATED-BY-COMMAS.html">vl-parse-1+-stream-expressions-separated-by-commas</a>)))
+   (return (<a href="COMMON-LISP____CONS.html">cons</a> first rest)))))</pre> 
+<p><b>Function: </b>vl-parse-stream-concatenation-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ vl-parse-stream-concatenation-fn
+ (tokstream config)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'vl-parse-stream-concatenation))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="VL2014____SEQ.html">seq</a>
+      tokstream
+      (:= (<a href="VL2014____VL-MATCH-TOKEN.html">vl-match-token</a> :vl-lcurly))
+      (<a href="ACL2____ARGS.html">args</a> := (<a href="VL2014____VL-PARSE-1_B2-STREAM-EXPRESSIONS-SEPARATED-BY-COMMAS.html">vl-parse-1+-stream-expressions-separated-by-commas</a>))
+      (:= (<a href="VL2014____VL-MATCH-TOKEN.html">vl-match-token</a> :vl-rcurly))
+      (return args))))</pre> 
+<p><b>Function: </b>vl-parse-simple-type-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ vl-parse-simple-type-fn
+ (tokstream config)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'vl-parse-simple-type))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="VL2014____SEQ.html">seq</a>
+   tokstream
+   (when
+    (<a href="VL2014____VL-IS-TOKEN_F3.html">vl-is-token?</a> :vl-kwd-local)
+    (:= (<a href="VL2014____VL-MATCH.html">vl-match</a>))
+    (:= (<a href="VL2014____VL-MATCH-TOKEN.html">vl-match-token</a> :vl-scope))
+    (<a href="SET____TAIL.html">tail</a> := (<a href="VL2014____VL-MATCH-TOKEN.html">vl-match-token</a> :vl-idtoken))
+    (return
+     (<a href="VL2014____MAKE-VL-NONATOM.html">make-vl-nonatom</a>
+      :op :vl-scope
+      :args
+      (<a href="COMMON-LISP____LIST.html">list</a>
+       (<a href="VL2014____MAKE-VL-ATOM.html">make-vl-atom</a> :guts (<a href="VL2014____MAKE-VL-KEYGUTS.html">make-vl-keyguts</a> :type :vl-local))
+       (<a href="VL2014____MAKE-VL-ATOM.html">make-vl-atom</a>
+         :guts (<a href="VL2014____MAKE-VL-HIDPIECE.html">make-vl-hidpiece</a> :name (<a href="VL2014____VL-IDTOKEN-_E3NAME.html">vl-idtoken-&gt;name</a> tail)))))))
+   (when
+    (<a href="VL2014____VL-IS-TOKEN_F3.html">vl-is-token?</a> :vl-$unit)
+    (:= (<a href="VL2014____VL-MATCH.html">vl-match</a>))
+    (<a href="SET____TAIL.html">tail</a> := (<a href="VL2014____VL-PARSE-PVA-TAIL.html">vl-parse-pva-tail</a>))
+    (return
+     (<a href="VL2014____MAKE-VL-NONATOM.html">make-vl-nonatom</a>
+        :op :vl-scope
+        :args
+        (<a href="COMMON-LISP____LIST.html">list</a> (<a href="VL2014____MAKE-VL-ATOM.html">make-vl-atom</a> :guts (<a href="VL2014____MAKE-VL-KEYGUTS.html">make-vl-keyguts</a> :type :vl-$unit))
+              tail))))
+   (unless (<a href="VL2014____VL-IS-TOKEN_F3.html">vl-is-token?</a> :vl-idtoken)
+           (return-raw (<a href="VL2014____VL-PARSE-VERY-SIMPLE-TYPE.html">vl-parse-very-simple-type</a>)))
+   (when
+     (<a href="VL2014____VL-LOOKAHEAD-IS-TOKEN_F3.html">vl-lookahead-is-token?</a> :vl-pound (<a href="COMMON-LISP____CDR.html">cdr</a> (<a href="VL2014____VL-TOKSTREAM-_E3TOKENS.html">vl-tokstream-&gt;tokens</a>)))
+     (:= (<a href="VL2014____VL-MATCH.html">vl-match</a>))
+     (:= (<a href="VL2014____VL-PARSE-PARAMETER-VALUE-ASSIGNMENT-HACK.html">vl-parse-parameter-value-assignment-hack</a>))
+     (return-raw (<a href="VL2014____VL-PARSE-ERROR.html">vl-parse-error</a> "Implement PVAs.")))
+   (when
+    (<a href="VL2014____VL-LOOKAHEAD-IS-TOKEN_F3.html">vl-lookahead-is-token?</a> :vl-scope (<a href="COMMON-LISP____CDR.html">cdr</a> (<a href="VL2014____VL-TOKSTREAM-_E3TOKENS.html">vl-tokstream-&gt;tokens</a>)))
+    (<a href="SET____HEAD.html">head</a> := (<a href="VL2014____VL-MATCH.html">vl-match</a>))
+    (<a href="SET____TAIL.html">tail</a> := (<a href="VL2014____VL-PARSE-PVA-TAIL.html">vl-parse-pva-tail</a>))
+    (return
+     (<a href="VL2014____MAKE-VL-NONATOM.html">make-vl-nonatom</a>
+      :op :vl-scope
+      :args
+      (<a href="COMMON-LISP____LIST.html">list</a>
+        (<a href="VL2014____MAKE-VL-ATOM.html">make-vl-atom</a>
+             :guts (<a href="VL2014____MAKE-VL-HIDPIECE.html">make-vl-hidpiece</a> :name (<a href="VL2014____VL-IDTOKEN-_E3NAME.html">vl-idtoken-&gt;name</a> head)))
+        tail))))
+   (id := (<a href="VL2014____VL-PARSE-HIERARCHICAL-IDENTIFIER.html">vl-parse-hierarchical-identifier</a> nil))
+   (when (<a href="COMMON-LISP____AND.html">and</a> (<a href="VL2014____VL-IDEXPR-P.html">vl-idexpr-p</a> id)
+              (<a href="COMMON-LISP____NOT.html">not</a> (<a href="VL2014____VL-PARSESTATE-IS-USER-DEFINED-TYPE-P.html">vl-parsestate-is-user-defined-type-p</a>
+                        (<a href="VL2014____VL-IDEXPR-_E3NAME.html">vl-idexpr-&gt;name</a> id)
+                        (<a href="VL2014____VL-TOKSTREAM-_E3PSTATE.html">vl-tokstream-&gt;pstate</a>))))
+         (return-raw (<a href="VL2014____VL-PARSE-ERROR.html">vl-parse-error</a> (<a href="STR____CAT.html">cat</a> "Not a known type: "
+                                          (<a href="VL2014____VL-IDEXPR-_E3NAME.html">vl-idexpr-&gt;name</a> id)))))
+   (return id))))</pre> 
+<p><b>Function: </b>vl-parse-slice-size-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> vl-parse-slice-size-fn
+       (tokstream config)
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+       (<a href="COMMON-LISP____LET.html">let</a> ((__function__ 'vl-parse-slice-size))
+            (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+            (<a href="ACL2____B_A2.html">b*</a> ((backup (<a href="VL2014____VL-TOKSTREAM-SAVE.html">vl-tokstream-save</a>))
+                 ((<a href="ACL2____MV.html">mv</a> err expr tokstream)
+                  (<a href="VL2014____VL-PARSE-SIMPLE-TYPE.html">vl-parse-simple-type</a>))
+                 ((unless err) (<a href="ACL2____MV.html">mv</a> err expr tokstream))
+                 (tokstream (<a href="VL2014____VL-TOKSTREAM-RESTORE.html">vl-tokstream-restore</a> backup)))
+                (<a href="VL2014____VL-PARSE-EXPRESSION.html">vl-parse-expression</a>))))</pre> 
+<p><b>Function: </b>vl-parse-any-sort-of-concatenation-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ vl-parse-any-sort-of-concatenation-fn
+ (tokstream config)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'vl-parse-any-sort-of-concatenation))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="VL2014____SEQ.html">seq</a>
+   tokstream
+   (:= (<a href="VL2014____VL-MATCH-TOKEN.html">vl-match-token</a> :vl-lcurly))
+   (when
+    (<a href="COMMON-LISP____AND.html">and</a> (<a href="VL2014____VL-IS-TOKEN_F3.html">vl-is-token?</a> :vl-rcurly)
+         (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQ.html">eq</a> (<a href="VL2014____VL-LOADCONFIG-_E3EDITION.html">vl-loadconfig-&gt;edition</a> config)
+                  :verilog-2005)))
+    (:= (<a href="VL2014____VL-MATCH.html">vl-match</a>))
+    (return
+       (<a href="VL2014____MAKE-VL-ATOM.html">make-vl-atom</a> :guts (<a href="VL2014____MAKE-VL-KEYGUTS.html">make-vl-keyguts</a> :type :vl-emptyqueue))))
+   (when
+    (<a href="COMMON-LISP____AND.html">and</a> (<a href="VL2014____VL-IS-SOME-TOKEN_F3.html">vl-is-some-token?</a> '(:vl-shl :vl-shr))
+         (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQ.html">eq</a> (<a href="VL2014____VL-LOADCONFIG-_E3EDITION.html">vl-loadconfig-&gt;edition</a> config)
+                  :verilog-2005)))
+    (op := (<a href="VL2014____VL-MATCH.html">vl-match</a>))
+    (unless (<a href="VL2014____VL-IS-TOKEN_F3.html">vl-is-token?</a> :vl-lcurly)
+            (slicesize :s= (<a href="VL2014____VL-PARSE-SLICE-SIZE.html">vl-parse-slice-size</a>)))
+    (<a href="ACL2____ARGS.html">args</a> := (<a href="VL2014____VL-PARSE-STREAM-CONCATENATION.html">vl-parse-stream-concatenation</a>))
+    (:= (<a href="VL2014____VL-MATCH-TOKEN.html">vl-match-token</a> :vl-rcurly))
+    (return
+     (<a href="ACL2____B_A2.html">b*</a>
+        ((dir (<a href="VL2014____VL-TOKEN-_E3TYPE.html">vl-token-&gt;type</a> op))
+         ((unless slicesize)
+          (<a href="VL2014____MAKE-VL-NONATOM.html">make-vl-nonatom</a> :op (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQ.html">eq</a> dir :vl-shl)
+                                   :vl-stream-left :vl-stream-right)
+                           :args args)))
+        (<a href="VL2014____MAKE-VL-NONATOM.html">make-vl-nonatom</a>
+             :op (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQ.html">eq</a> dir :vl-shl)
+                     :vl-stream-left-sized :vl-stream-right-sized)
+             :args (<a href="COMMON-LISP____CONS.html">cons</a> slicesize args)))))
+   (e1 :s= (<a href="VL2014____VL-PARSE-EXPRESSION.html">vl-parse-expression</a>))
+   (when (<a href="VL2014____VL-IS-TOKEN_F3.html">vl-is-token?</a> :vl-lcurly)
+         (concat := (<a href="VL2014____VL-PARSE-CONCATENATION.html">vl-parse-concatenation</a>))
+         (:= (<a href="VL2014____VL-MATCH-TOKEN.html">vl-match-token</a> :vl-rcurly))
+         (return (<a href="VL2014____MAKE-VL-NONATOM.html">make-vl-nonatom</a> :op :vl-multiconcat
+                                  :args (<a href="COMMON-LISP____LIST.html">list</a> e1 concat))))
+   (when (<a href="VL2014____VL-IS-TOKEN_F3.html">vl-is-token?</a> :vl-comma)
+         (:= (<a href="VL2014____VL-MATCH.html">vl-match</a>))
+         (<a href="COMMON-LISP____REST.html">rest</a> := (<a href="VL2014____VL-PARSE-1_B2-EXPRESSIONS-SEPARATED-BY-COMMAS.html">vl-parse-1+-expressions-separated-by-commas</a>))
+         (:= (<a href="VL2014____VL-MATCH-TOKEN.html">vl-match-token</a> :vl-rcurly))
+         (return (<a href="VL2014____MAKE-VL-NONATOM.html">make-vl-nonatom</a> :op :vl-concat
+                                  :args (<a href="COMMON-LISP____CONS.html">cons</a> e1 rest))))
+   (:= (<a href="VL2014____VL-MATCH-TOKEN.html">vl-match-token</a> :vl-rcurly))
+   (return (<a href="VL2014____MAKE-VL-NONATOM.html">make-vl-nonatom</a> :op :vl-concat
+                            :args (<a href="COMMON-LISP____LIST.html">list</a> e1))))))</pre> 
+<p><b>Function: </b>vl-parse-hierarchical-identifier-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ vl-parse-hierarchical-identifier-fn
+ (recursivep tokstream config)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'vl-parse-hierarchical-identifier))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+   ((sys-p (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQ.html">eq</a> (<a href="VL2014____VL-LOADCONFIG-_E3EDITION.html">vl-loadconfig-&gt;edition</a> config)
+                    :verilog-2005))))
+   (<a href="VL2014____SEQ.html">seq</a>
+    tokstream
+    (when (<a href="COMMON-LISP____AND.html">and</a> sys-p (<a href="COMMON-LISP____NOT.html">not</a> recursivep)
+               (<a href="VL2014____VL-IS-TOKEN_F3.html">vl-is-token?</a> :vl-$root))
+          (:= (<a href="VL2014____VL-MATCH.html">vl-match</a>))
+          (:= (<a href="VL2014____VL-MATCH-TOKEN.html">vl-match-token</a> :vl-dot))
+          (<a href="SET____TAIL.html">tail</a> := (<a href="VL2014____VL-PARSE-HIERARCHICAL-IDENTIFIER.html">vl-parse-hierarchical-identifier</a> t))
+          (return (<a href="ACL2____B_A2.html">b*</a> ((guts (<a href="VL2014____MAKE-VL-KEYGUTS.html">make-vl-keyguts</a> :type :vl-$root))
+                       (<a href="SET____HEAD.html">head</a> (<a href="VL2014____MAKE-VL-ATOM.html">make-vl-atom</a> :guts guts)))
+                      (<a href="VL2014____MAKE-VL-NONATOM.html">make-vl-nonatom</a> :op :vl-hid-dot
+                                       :args (<a href="COMMON-LISP____LIST.html">list</a> head tail)))))
+    (id := (<a href="VL2014____VL-MATCH-TOKEN.html">vl-match-token</a> :vl-idtoken))
+    (when
+     (<a href="VL2014____VL-PARSESTATE-IS-USER-DEFINED-TYPE-P.html">vl-parsestate-is-user-defined-type-p</a> (<a href="VL2014____VL-IDTOKEN-_E3NAME.html">vl-idtoken-&gt;name</a> id)
+                                           (<a href="VL2014____VL-TOKSTREAM-_E3PSTATE.html">vl-tokstream-&gt;pstate</a>))
+     (return
+        (<a href="VL2014____MAKE-VL-ATOM.html">make-vl-atom</a>
+             :guts (<a href="VL2014____MAKE-VL-TYPENAME.html">make-vl-typename</a> :name (<a href="VL2014____VL-IDTOKEN-_E3NAME.html">vl-idtoken-&gt;name</a> id)))))
+    (when
+     (<a href="VL2014____VL-IS-TOKEN_F3.html">vl-is-token?</a> :vl-dot)
+     (:= (<a href="VL2014____VL-MATCH.html">vl-match</a>))
+     (<a href="SET____TAIL.html">tail</a> :s= (<a href="VL2014____VL-PARSE-HIERARCHICAL-IDENTIFIER.html">vl-parse-hierarchical-identifier</a> t))
+     (return
+          (<a href="ACL2____B_A2.html">b*</a> ((guts (<a href="VL2014____MAKE-VL-HIDPIECE.html">make-vl-hidpiece</a> :name (<a href="VL2014____VL-IDTOKEN-_E3NAME.html">vl-idtoken-&gt;name</a> id)))
+               (<a href="SET____HEAD.html">head</a> (<a href="VL2014____MAKE-VL-ATOM.html">make-vl-atom</a> :guts guts)))
+              (<a href="VL2014____MAKE-VL-NONATOM.html">make-vl-nonatom</a> :op :vl-hid-dot
+                               :args (<a href="COMMON-LISP____LIST.html">list</a> head tail)))))
+    (unless
+     sys-p
+     (when (<a href="VL2014____VL-IS-TOKEN_F3.html">vl-is-token?</a> :vl-lbrack)
+           (expr := (<a href="ACL2____B_A2.html">b*</a> ((backup (<a href="VL2014____VL-TOKSTREAM-SAVE.html">vl-tokstream-save</a>))
+                         ((<a href="ACL2____MV.html">mv</a> err expr tokstream)
+                          (<a href="VL2014____SEQ.html">seq</a> tokstream (:= (<a href="VL2014____VL-MATCH.html">vl-match</a>))
+                               (expr :s= (<a href="VL2014____VL-PARSE-EXPRESSION.html">vl-parse-expression</a>))
+                               (:= (<a href="VL2014____VL-MATCH-TOKEN.html">vl-match-token</a> :vl-rbrack))
+                               (:= (<a href="VL2014____VL-MATCH-TOKEN.html">vl-match-token</a> :vl-dot))
+                               (return expr)))
+                         ((unless err) (<a href="ACL2____MV.html">mv</a> nil expr tokstream))
+                         (tokstream (<a href="VL2014____VL-TOKSTREAM-RESTORE.html">vl-tokstream-restore</a> backup)))
+                        (<a href="ACL2____MV.html">mv</a> nil nil tokstream))))
+     (when
+      expr
+      (<a href="SET____TAIL.html">tail</a> := (<a href="VL2014____VL-PARSE-HIERARCHICAL-IDENTIFIER.html">vl-parse-hierarchical-identifier</a> t))
+      (return
+       (<a href="ACL2____B_A2.html">b*</a>
+         ((from-guts (<a href="VL2014____MAKE-VL-HIDPIECE.html">make-vl-hidpiece</a> :name (<a href="VL2014____VL-IDTOKEN-_E3NAME.html">vl-idtoken-&gt;name</a> id)))
+          (from-expr (<a href="VL2014____MAKE-VL-ATOM.html">make-vl-atom</a> :guts from-guts))
+          (sel-expr (<a href="VL2014____MAKE-VL-NONATOM.html">make-vl-nonatom</a> :op :vl-index
+                                     :args (<a href="COMMON-LISP____LIST.html">list</a> from-expr expr))))
+         (<a href="VL2014____MAKE-VL-NONATOM.html">make-vl-nonatom</a> :op :vl-hid-dot
+                          :args (<a href="COMMON-LISP____LIST.html">list</a> sel-expr tail)))))
+     (return
+       (<a href="VL2014____MAKE-VL-ATOM.html">make-vl-atom</a>
+            :guts (<a href="COMMON-LISP____IF.html">if</a> recursivep
+                      (<a href="VL2014____MAKE-VL-HIDPIECE.html">make-vl-hidpiece</a> :name (<a href="VL2014____VL-IDTOKEN-_E3NAME.html">vl-idtoken-&gt;name</a> id))
+                      (<a href="VL2014____MAKE-VL-ID.html">make-vl-id</a> :name (<a href="VL2014____VL-IDTOKEN-_E3NAME.html">vl-idtoken-&gt;name</a> id))))))
+    (when
+     (<a href="VL2014____VL-IS-TOKEN_F3.html">vl-is-token?</a> :vl-lbrack)
+     (exprs
+       :w= (<a href="ACL2____B_A2.html">b*</a> ((backup (<a href="VL2014____VL-TOKSTREAM-SAVE.html">vl-tokstream-save</a>))
+                ((<a href="ACL2____MV.html">mv</a> err exprs tokstream)
+                 (<a href="VL2014____SEQ.html">seq</a> tokstream
+                      (exprs := (<a href="VL2014____VL-PARSE-0_B2-BRACKETED-EXPRESSIONS.html">vl-parse-0+-bracketed-expressions</a>))
+                      (:= (<a href="VL2014____VL-MATCH-TOKEN.html">vl-match-token</a> :vl-dot))
+                      (return exprs)))
+                ((unless err) (<a href="ACL2____MV.html">mv</a> nil exprs tokstream))
+                (tokstream (<a href="VL2014____VL-TOKSTREAM-RESTORE.html">vl-tokstream-restore</a> backup)))
+               (<a href="ACL2____MV.html">mv</a> nil nil tokstream))))
+    (when
+     exprs
+     (<a href="SET____TAIL.html">tail</a> := (<a href="VL2014____VL-PARSE-HIERARCHICAL-IDENTIFIER.html">vl-parse-hierarchical-identifier</a> t))
+     (return
+      (<a href="ACL2____B_A2.html">b*</a>
+         ((from-guts (<a href="VL2014____MAKE-VL-HIDPIECE.html">make-vl-hidpiece</a> :name (<a href="VL2014____VL-IDTOKEN-_E3NAME.html">vl-idtoken-&gt;name</a> id)))
+          (from-expr (<a href="VL2014____MAKE-VL-ATOM.html">make-vl-atom</a> :guts from-guts))
+          (sel-expr (<a href="VL2014____VL-BUILD-INDEXING-NEST.html">vl-build-indexing-nest</a> from-expr exprs)))
+         (<a href="VL2014____MAKE-VL-NONATOM.html">make-vl-nonatom</a> :op :vl-hid-dot
+                          :args (<a href="COMMON-LISP____LIST.html">list</a> sel-expr tail)))))
+    (return
+      (<a href="VL2014____MAKE-VL-ATOM.html">make-vl-atom</a>
+           :guts (<a href="COMMON-LISP____IF.html">if</a> recursivep
+                     (<a href="VL2014____MAKE-VL-HIDPIECE.html">make-vl-hidpiece</a> :name (<a href="VL2014____VL-IDTOKEN-_E3NAME.html">vl-idtoken-&gt;name</a> id))
+                     (<a href="VL2014____MAKE-VL-ID.html">make-vl-id</a> :name (<a href="VL2014____VL-IDTOKEN-_E3NAME.html">vl-idtoken-&gt;name</a> id)))))))))</pre> 
+<p><b>Function: </b>vl-parse-function-call-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ vl-parse-function-call-fn
+ (tokstream config)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'vl-parse-function-call))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="VL2014____SEQ.html">seq</a>
+   tokstream
+   (id :s= (<a href="VL2014____VL-PARSE-HIERARCHICAL-IDENTIFIER.html">vl-parse-hierarchical-identifier</a> nil))
+   (atts :w= (<a href="VL2014____VL-PARSE-0_B2-ATTRIBUTE-INSTANCES.html">vl-parse-0+-attribute-instances</a>))
+   (:= (<a href="VL2014____VL-MATCH-TOKEN.html">vl-match-token</a> :vl-lparen))
+   (<a href="ACL2____ARGS.html">args</a> := (<a href="VL2014____VL-PARSE-1_B2-EXPRESSIONS-SEPARATED-BY-COMMAS.html">vl-parse-1+-expressions-separated-by-commas</a>))
+   (:= (<a href="VL2014____VL-MATCH-TOKEN.html">vl-match-token</a> :vl-rparen))
+   (return
+    (<a href="COMMON-LISP____COND.html">cond</a>
+     ((<a href="COMMON-LISP____AND.html">and</a> (vl-fast-atom-p id)
+           (<a href="VL2014____VL-FAST-ID-P.html">vl-fast-id-p</a> (<a href="VL2014____VL-ATOM-_E3GUTS.html">vl-atom-&gt;guts</a> id)))
+      (<a href="COMMON-LISP____LET.html">let</a>
+       ((fname
+          (<a href="VL2014____MAKE-VL-FUNNAME.html">make-vl-funname</a> :name (<a href="VL2014____VL-ID-_E3NAME.html">vl-id-&gt;name</a> (<a href="VL2014____VL-ATOM-_E3GUTS.html">vl-atom-&gt;guts</a> id)))))
+       (<a href="VL2014____MAKE-VL-NONATOM.html">make-vl-nonatom</a> :op :vl-funcall
+                        :atts atts
+                        :args (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="VL2014____MAKE-VL-ATOM.html">make-vl-atom</a> :guts fname)
+                                    args))))
+     (t (<a href="VL2014____MAKE-VL-NONATOM.html">make-vl-nonatom</a> :op :vl-funcall
+                         :atts atts
+                         :args (<a href="COMMON-LISP____CONS.html">cons</a> id args))))))))</pre> 
+<p><b>Function: </b>vl-parse-0+-bracketed-expressions-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ vl-parse-0+-bracketed-expressions-fn
+ (tokstream config)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'vl-parse-0+-bracketed-expressions))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+     (((unless (<a href="VL2014____VL-IS-TOKEN_F3.html">vl-is-token?</a> :vl-lbrack))
+       (<a href="ACL2____MV.html">mv</a> nil nil tokstream))
+      (backup (<a href="VL2014____VL-TOKSTREAM-SAVE.html">vl-tokstream-save</a>))
+      ((<a href="ACL2____MV.html">mv</a> err first tokstream)
+       (<a href="VL2014____SEQ.html">seq</a> tokstream (:= (<a href="VL2014____VL-MATCH.html">vl-match</a>))
+            (expr := (<a href="VL2014____VL-PARSE-EXPRESSION.html">vl-parse-expression</a>))
+            (:= (<a href="VL2014____VL-MATCH-TOKEN.html">vl-match-token</a> :vl-rbrack))
+            (return expr)))
+      ((when (<a href="COMMON-LISP____OR.html">or</a> err (<a href="COMMON-LISP____NOT.html">not</a> first)))
+       (<a href="ACL2____B_A2.html">b*</a> ((tokstream (<a href="VL2014____VL-TOKSTREAM-RESTORE.html">vl-tokstream-restore</a> backup)))
+           (<a href="ACL2____MV.html">mv</a> nil nil tokstream)))
+      ((unless (<a href="ACL2____MBT.html">mbt</a> (<a href="COMMON-LISP_____C3.html">&lt;</a> (vl-tokstream-measure)
+                       (<a href="ACL2____LEN.html">len</a> (<a href="VL2014____VL-TOKSTREAM-BACKUP-_E3TOKENS.html">vl-tokstream-backup-&gt;tokens</a> backup)))))
+       (<a href="ACL2____RAISE.html">raise</a> "termination failure")
+       (<a href="VL2014____VL-PARSE-ERROR.html">vl-parse-error</a> "termination failure"))
+      ((<a href="ACL2____MV.html">mv</a> erp rest tokstream)
+       (<a href="VL2014____VL-PARSE-0_B2-BRACKETED-EXPRESSIONS.html">vl-parse-0+-bracketed-expressions</a>))
+      ((when erp) (<a href="ACL2____MV.html">mv</a> erp rest tokstream)))
+     (<a href="ACL2____MV.html">mv</a> nil (<a href="COMMON-LISP____CONS.html">cons</a> first rest) tokstream))))</pre> 
+<p><b>Function: </b>vl-parse-indexed-id-2005-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ vl-parse-indexed-id-2005-fn
+ (scopes recursivep tokstream config)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-EXPRLIST-P.html">vl-exprlist-p</a> scopes)))
+ (<a href="COMMON-LISP____LET.html">let</a> ((__function__ 'vl-parse-indexed-id-2005))
+      (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+      (<a href="VL2014____SEQ.html">seq</a> tokstream
+           (hid :s= (<a href="VL2014____VL-PARSE-HIERARCHICAL-IDENTIFIER.html">vl-parse-hierarchical-identifier</a> recursivep))
+           (bexprs :w= (<a href="VL2014____VL-PARSE-0_B2-BRACKETED-EXPRESSIONS.html">vl-parse-0+-bracketed-expressions</a>))
+           (when (<a href="VL2014____VL-IS-TOKEN_F3.html">vl-is-token?</a> :vl-lbrack)
+                 (:= (<a href="VL2014____VL-MATCH.html">vl-match</a>))
+                 (range := (<a href="VL2014____VL-PARSE-RANGE-EXPRESSION.html">vl-parse-range-expression</a>))
+                 (:= (<a href="VL2014____VL-MATCH-TOKEN.html">vl-match-token</a> :vl-rbrack)))
+           (return (<a href="COMMON-LISP____LET_A2.html">let*</a> ((ans (<a href="VL2014____VL-TACK-SCOPES-ONTO-HID.html">vl-tack-scopes-onto-hid</a> scopes hid))
+                          (ans (<a href="VL2014____VL-BUILD-INDEXING-NEST.html">vl-build-indexing-nest</a> ans bexprs)))
+                         (<a href="COMMON-LISP____IF.html">if</a> range (<a href="VL2014____VL-BUILD-RANGE-SELECT.html">vl-build-range-select</a> ans range)
+                             ans))))))</pre> 
+<p><b>Function: </b>vl-parse-indexed-id-2012-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ vl-parse-indexed-id-2012-fn
+ (tokstream config)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'vl-parse-indexed-id-2012))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="VL2014____SEQ.html">seq</a>
+   tokstream
+   (when
+    (<a href="VL2014____VL-IS-SOME-TOKEN_F3.html">vl-is-some-token?</a> '(:vl-kwd-local :vl-$unit))
+    (<a href="COMMON-LISP____FIRST.html">first</a> := (<a href="VL2014____VL-MATCH.html">vl-match</a>))
+    (:= (<a href="VL2014____VL-MATCH-TOKEN.html">vl-match-token</a> :vl-scope))
+    (morescopes := (<a href="VL2014____VL-PARSE-0_B2-SCOPE-PREFIXES.html">vl-parse-0+-scope-prefixes</a>))
+    (return-raw
+     (<a href="VL2014____VL-PARSE-INDEXED-ID-2005.html">vl-parse-indexed-id-2005</a>
+      (<a href="COMMON-LISP____CONS.html">cons</a>
+       (case
+        (<a href="VL2014____VL-TOKEN-_E3TYPE.html">vl-token-&gt;type</a> first)
+        (:vl-kwd-local
+             (<a href="VL2014____MAKE-VL-ATOM.html">make-vl-atom</a> :guts (<a href="VL2014____MAKE-VL-KEYGUTS.html">make-vl-keyguts</a> :type :vl-local)))
+        (:vl-$unit
+            (<a href="VL2014____MAKE-VL-ATOM.html">make-vl-atom</a> :guts (<a href="VL2014____MAKE-VL-KEYGUTS.html">make-vl-keyguts</a> :type :vl-$unit))))
+       morescopes)
+      t)))
+   (scopes := (<a href="VL2014____VL-PARSE-0_B2-SCOPE-PREFIXES.html">vl-parse-0+-scope-prefixes</a>))
+   (return-raw (<a href="VL2014____VL-PARSE-INDEXED-ID-2005.html">vl-parse-indexed-id-2005</a> scopes (<a href="COMMON-LISP____CONSP.html">consp</a> scopes))))))</pre> 
+<p><b>Function: </b>vl-parse-indexed-id-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> vl-parse-indexed-id-fn
+       (tokstream config)
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+       (<a href="COMMON-LISP____LET.html">let</a> ((__function__ 'vl-parse-indexed-id))
+            (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+            (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQ.html">eq</a> (<a href="VL2014____VL-LOADCONFIG-_E3EDITION.html">vl-loadconfig-&gt;edition</a> config)
+                    :verilog-2005)
+                (<a href="VL2014____VL-PARSE-INDEXED-ID-2005.html">vl-parse-indexed-id-2005</a> nil nil)
+                (<a href="VL2014____VL-PARSE-INDEXED-ID-2012.html">vl-parse-indexed-id-2012</a>))))</pre> 
+<p><b>Function: </b>vl-parse-assignment-pattern-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ vl-parse-assignment-pattern-fn
+ (tokstream config)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :measure-debug t))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'vl-parse-assignment-pattern))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="VL2014____SEQ.html">seq</a>
+   tokstream
+   (<a href="COMMON-LISP____FIRST.html">first</a> :s= (<a href="VL2014____VL-PARSE-EXPRESSION.html">vl-parse-expression</a>))
+   (when (<a href="VL2014____VL-IS-TOKEN_F3.html">vl-is-token?</a> :vl-rcurly)
+         (:= (<a href="VL2014____VL-MATCH.html">vl-match</a>))
+         (return (<a href="VL2014____MAKE-VL-NONATOM.html">make-vl-nonatom</a> :op :vl-pattern-positional
+                                  :args (<a href="COMMON-LISP____LIST.html">list</a> first))))
+   (when (<a href="VL2014____VL-IS-TOKEN_F3.html">vl-is-token?</a> :vl-comma)
+         (:= (<a href="VL2014____VL-MATCH.html">vl-match</a>))
+         (<a href="COMMON-LISP____REST.html">rest</a> := (<a href="VL2014____VL-PARSE-1_B2-EXPRESSIONS-SEPARATED-BY-COMMAS.html">vl-parse-1+-expressions-separated-by-commas</a>))
+         (:= (<a href="VL2014____VL-MATCH-TOKEN.html">vl-match-token</a> :vl-rcurly))
+         (return (<a href="VL2014____MAKE-VL-NONATOM.html">make-vl-nonatom</a> :op :vl-pattern-positional
+                                  :args (<a href="COMMON-LISP____CONS.html">cons</a> first rest))))
+   (when
+    (<a href="VL2014____VL-IS-TOKEN_F3.html">vl-is-token?</a> :vl-colon)
+    (:= (<a href="VL2014____VL-MATCH.html">vl-match</a>))
+    (firstval :s= (<a href="VL2014____VL-PARSE-EXPRESSION.html">vl-parse-expression</a>))
+    (when
+     (<a href="VL2014____VL-IS-TOKEN_F3.html">vl-is-token?</a> :vl-rcurly)
+     (:= (<a href="VL2014____VL-MATCH.html">vl-match</a>))
+     (return
+      (<a href="VL2014____MAKE-VL-NONATOM.html">make-vl-nonatom</a>
+       :op :vl-pattern-keyvalue
+       :args (<a href="COMMON-LISP____LIST.html">list</a> (<a href="VL2014____MAKE-VL-NONATOM.html">make-vl-nonatom</a> :op :vl-keyvalue
+                                    :args (<a href="COMMON-LISP____LIST.html">list</a> first firstval))))))
+    (:= (<a href="VL2014____VL-MATCH-TOKEN.html">vl-match-token</a> :vl-comma))
+    (<a href="COMMON-LISP____REST.html">rest</a> := (<a href="VL2014____VL-PARSE-1_B2-KEYVAL-EXPRESSION-PAIRS.html">vl-parse-1+-keyval-expression-pairs</a>))
+    (:= (<a href="VL2014____VL-MATCH-TOKEN.html">vl-match-token</a> :vl-rcurly))
+    (return
+      (<a href="VL2014____MAKE-VL-NONATOM.html">make-vl-nonatom</a>
+           :op :vl-pattern-keyvalue
+           :args (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="VL2014____MAKE-VL-NONATOM.html">make-vl-nonatom</a> :op :vl-keyvalue
+                                        :args (<a href="COMMON-LISP____LIST.html">list</a> first firstval))
+                       rest))))
+   (concat := (<a href="VL2014____VL-PARSE-CONCATENATION.html">vl-parse-concatenation</a>))
+   (:= (<a href="VL2014____VL-MATCH-TOKEN.html">vl-match-token</a> :vl-rcurly))
+   (return (<a href="VL2014____MAKE-VL-NONATOM.html">make-vl-nonatom</a> :op :vl-pattern-multi
+                            :args (<a href="COMMON-LISP____LIST.html">list</a> first concat))))))</pre> 
+<p><b>Function: </b>vl-parse-primary-main-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ vl-parse-primary-main-fn
+ (tokstream config)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+ (<a href="COMMON-LISP____LET.html">let</a>
+     ((__function__ 'vl-parse-primary-main))
+     (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+     (<a href="ACL2____B_A2.html">b*</a> ((backup (<a href="VL2014____VL-TOKSTREAM-SAVE.html">vl-tokstream-save</a>))
+          ((<a href="ACL2____MV.html">mv</a> errmsg? expr tokstream)
+           (<a href="VL2014____VL-MAYBE-PARSE-BASE-PRIMARY.html">vl-maybe-parse-base-primary</a>))
+          ((when (<a href="COMMON-LISP____OR.html">or</a> errmsg? expr))
+           (<a href="ACL2____MV.html">mv</a> errmsg? expr tokstream))
+          (tokstream (<a href="VL2014____VL-TOKSTREAM-RESTORE.html">vl-tokstream-restore</a> backup))
+          (<a href="VL2014____TOKENS.html">tokens</a> (<a href="VL2014____VL-TOKSTREAM-_E3TOKENS.html">vl-tokstream-&gt;tokens</a>))
+          ((when (<a href="COMMON-LISP____ATOM.html">atom</a> tokens))
+           (<a href="VL2014____VL-PARSE-ERROR.html">vl-parse-error</a> "Unexpected EOF."))
+          (<a href="COMMON-LISP____TYPE.html">type</a> (<a href="VL2014____VL-TOKEN-_E3TYPE.html">vl-token-&gt;type</a> (<a href="COMMON-LISP____CAR.html">car</a> tokens)))
+          ((when (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____EQ.html">eq</a> type :vl-idtoken)
+                     (<a href="COMMON-LISP____EQ.html">eq</a> type :vl-$root)
+                     (<a href="COMMON-LISP____EQ.html">eq</a> type :vl-$unit)
+                     (<a href="COMMON-LISP____EQ.html">eq</a> type :vl-kwd-local)))
+           (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> err funcall tokstream)
+                 (<a href="VL2014____VL-PARSE-FUNCTION-CALL.html">vl-parse-function-call</a>))
+                ((unless err)
+                 (<a href="ACL2____MV.html">mv</a> err funcall tokstream))
+                (tokstream (<a href="VL2014____VL-TOKSTREAM-RESTORE.html">vl-tokstream-restore</a> backup)))
+               (<a href="VL2014____VL-PARSE-INDEXED-ID.html">vl-parse-indexed-id</a>)))
+          ((when (<a href="COMMON-LISP____EQ.html">eq</a> type :vl-lcurly))
+           (<a href="VL2014____VL-PARSE-ANY-SORT-OF-CONCATENATION.html">vl-parse-any-sort-of-concatenation</a>))
+          ((when (<a href="COMMON-LISP____EQ.html">eq</a> type :vl-sysidtoken))
+           (<a href="VL2014____VL-PARSE-SYSTEM-FUNCTION-CALL.html">vl-parse-system-function-call</a>))
+          ((when (<a href="COMMON-LISP____EQ.html">eq</a> type :vl-lparen))
+           (<a href="VL2014____SEQ.html">seq</a> tokstream (:= (<a href="VL2014____VL-MATCH.html">vl-match</a>))
+                (expr := (<a href="VL2014____VL-PARSE-MINTYPMAX-EXPRESSION.html">vl-parse-mintypmax-expression</a>))
+                (:= (<a href="VL2014____VL-MATCH-TOKEN.html">vl-match-token</a> :vl-rparen))
+                (return (<a href="VL2014____VL-MARK-AS-EXPLICIT-PARENS.html">vl-mark-as-explicit-parens</a> expr))))
+          ((when (<a href="COMMON-LISP____EQ.html">eq</a> type :vl-quote))
+           (<a href="VL2014____SEQ.html">seq</a> tokstream (:= (<a href="VL2014____VL-MATCH.html">vl-match</a>))
+                (:= (<a href="VL2014____VL-MATCH-TOKEN.html">vl-match-token</a> :vl-lcurly))
+                (return-raw (<a href="VL2014____VL-PARSE-ASSIGNMENT-PATTERN.html">vl-parse-assignment-pattern</a>)))))
+         (<a href="VL2014____VL-PARSE-ERROR.html">vl-parse-error</a> "Failed to match a primary expression."))))</pre> 
+<p><b>Function: </b>vl-parse-primary-cast-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ vl-parse-primary-cast-fn
+ (tokstream config)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'vl-parse-primary-cast))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="VL2014____SEQ.html">seq</a>
+    tokstream
+    (primary :s= (<a href="VL2014____VL-PARSE-PRIMARY-MAIN.html">vl-parse-primary-main</a>))
+    (when (<a href="VL2014____VL-IS-TOKEN_F3.html">vl-is-token?</a> :vl-quote)
+          (:= (<a href="VL2014____VL-MATCH.html">vl-match</a>))
+          (when (<a href="VL2014____VL-IS-TOKEN_F3.html">vl-is-token?</a> :vl-lparen)
+                (:= (<a href="VL2014____VL-MATCH.html">vl-match</a>))
+                (arg := (<a href="VL2014____VL-PARSE-EXPRESSION.html">vl-parse-expression</a>))
+                (:= (<a href="VL2014____VL-MATCH-TOKEN.html">vl-match-token</a> :vl-rparen))
+                (return (<a href="VL2014____MAKE-VL-NONATOM.html">make-vl-nonatom</a> :op :vl-binary-cast
+                                         :args (<a href="COMMON-LISP____LIST.html">list</a> primary arg))))
+          (:= (<a href="VL2014____VL-MATCH-TOKEN.html">vl-match-token</a> :vl-lcurly))
+          (pattern := (<a href="VL2014____VL-PARSE-ASSIGNMENT-PATTERN.html">vl-parse-assignment-pattern</a>))
+          (return (<a href="VL2014____MAKE-VL-NONATOM.html">make-vl-nonatom</a> :op :vl-pattern-type
+                                   :args (<a href="COMMON-LISP____LIST.html">list</a> primary pattern))))
+    (return primary))))</pre> 
+<p><b>Function: </b>vl-parse-nonprimary-cast-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ vl-parse-nonprimary-cast-fn
+ (tokstream config)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'vl-parse-nonprimary-cast))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="VL2014____SEQ.html">seq</a>
+   tokstream
+   (when
+    (<a href="VL2014____VL-IS-SOME-TOKEN_F3.html">vl-is-some-token?</a>
+         '(:vl-kwd-signed :vl-kwd-unsigned
+                          :vl-kwd-string :vl-kwd-const))
+    (<a href="COMMON-LISP____TYPE.html">type</a> := (<a href="VL2014____VL-MATCH.html">vl-match</a>))
+    (:= (<a href="VL2014____VL-MATCH-TOKEN.html">vl-match-token</a> :vl-quote))
+    (:= (<a href="VL2014____VL-MATCH-TOKEN.html">vl-match-token</a> :vl-lparen))
+    (arg := (<a href="VL2014____VL-PARSE-EXPRESSION.html">vl-parse-expression</a>))
+    (:= (<a href="VL2014____VL-MATCH-TOKEN.html">vl-match-token</a> :vl-rparen))
+    (return
+      (<a href="ACL2____B_A2.html">b*</a> ((casting-type (case (<a href="VL2014____VL-TOKEN-_E3TYPE.html">vl-token-&gt;type</a> type)
+                               (:vl-kwd-signed :vl-signed)
+                               (:vl-kwd-unsigned :vl-unsigned)
+                               (:vl-kwd-string :vl-string)
+                               (:vl-kwd-const :vl-const)))
+           (type-atom
+                (<a href="VL2014____MAKE-VL-ATOM.html">make-vl-atom</a>
+                     :guts (<a href="VL2014____MAKE-VL-BASICTYPE.html">make-vl-basictype</a> :kind casting-type))))
+          (<a href="VL2014____MAKE-VL-NONATOM.html">make-vl-nonatom</a> :op :vl-binary-cast
+                           :args (<a href="COMMON-LISP____LIST.html">list</a> type-atom arg)))))
+   (<a href="COMMON-LISP____TYPE.html">type</a> :s= (<a href="VL2014____VL-PARSE-SIMPLE-TYPE.html">vl-parse-simple-type</a>))
+   (:= (<a href="VL2014____VL-MATCH-TOKEN.html">vl-match-token</a> :vl-quote))
+   (:= (<a href="VL2014____VL-MATCH-TOKEN.html">vl-match-token</a> :vl-lparen))
+   (arg := (<a href="VL2014____VL-PARSE-EXPRESSION.html">vl-parse-expression</a>))
+   (:= (<a href="VL2014____VL-MATCH-TOKEN.html">vl-match-token</a> :vl-rparen))
+   (return (<a href="VL2014____MAKE-VL-NONATOM.html">make-vl-nonatom</a> :op :vl-binary-cast
+                            :args (<a href="COMMON-LISP____LIST.html">list</a> type arg))))))</pre> 
+<p><b>Function: </b>vl-parse-primary-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ vl-parse-primary-fn (tokstream config)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+ (<a href="COMMON-LISP____LET.html">let</a>
+     ((__function__ 'vl-parse-primary))
+     (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+     (<a href="ACL2____B_A2.html">b*</a> (((when (<a href="COMMON-LISP____EQ.html">eq</a> (<a href="VL2014____VL-LOADCONFIG-_E3EDITION.html">vl-loadconfig-&gt;edition</a> config)
+                     :verilog-2005))
+           (<a href="VL2014____VL-PARSE-PRIMARY-MAIN.html">vl-parse-primary-main</a>))
+          (backup (<a href="VL2014____VL-TOKSTREAM-SAVE.html">vl-tokstream-save</a>))
+          ((<a href="ACL2____MV.html">mv</a> errmsg expr tokstream)
+           (<a href="VL2014____VL-PARSE-PRIMARY-CAST.html">vl-parse-primary-cast</a>))
+          ((unless errmsg)
+           (<a href="ACL2____MV.html">mv</a> errmsg expr tokstream))
+          (tokstream (<a href="VL2014____VL-TOKSTREAM-RESTORE.html">vl-tokstream-restore</a> backup))
+          ((<a href="ACL2____MV.html">mv</a> errmsg expr tokstream)
+           (<a href="VL2014____VL-PARSE-NONPRIMARY-CAST.html">vl-parse-nonprimary-cast</a>))
+          ((unless errmsg)
+           (<a href="ACL2____MV.html">mv</a> errmsg expr tokstream))
+          (tokstream (<a href="VL2014____VL-TOKSTREAM-RESTORE.html">vl-tokstream-restore</a> backup)))
+         (<a href="VL2014____VL-PARSE-ERROR.html">vl-parse-error</a> "Failed to match a primary expression."))))</pre> 
+<p><b>Function: </b>vl-parse-unary-expression-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ vl-parse-unary-expression-fn
+ (tokstream config)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'vl-parse-unary-expression))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="VL2014____SEQ.html">seq</a>
+   tokstream
+   (op := (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQ.html">eq</a> (<a href="VL2014____VL-LOADCONFIG-_E3EDITION.html">vl-loadconfig-&gt;edition</a> config)
+                  :verilog-2005)
+              (<a href="VL2014____VL-PARSE-OP.html">vl-parse-op</a> 1
+                           '((:vl-plus . :vl-unary-plus)
+                             (:vl-minus . :vl-unary-minus)
+                             (:vl-lognot . :vl-unary-lognot)
+                             (:vl-bitnot . :vl-unary-bitnot)
+                             (:vl-bitand . :vl-unary-bitand)
+                             (:vl-nand . :vl-unary-nand)
+                             (:vl-bitor . :vl-unary-bitor)
+                             (:vl-nor . :vl-unary-nor)
+                             (:vl-xor . :vl-unary-xor)
+                             (:vl-xnor . :vl-unary-xnor)))
+              (<a href="VL2014____VL-PARSE-OP.html">vl-parse-op</a> 1
+                           '((:vl-plus . :vl-unary-plus)
+                             (:vl-minus . :vl-unary-minus)
+                             (:vl-lognot . :vl-unary-lognot)
+                             (:vl-bitnot . :vl-unary-bitnot)
+                             (:vl-bitand . :vl-unary-bitand)
+                             (:vl-nand . :vl-unary-nand)
+                             (:vl-bitor . :vl-unary-bitor)
+                             (:vl-nor . :vl-unary-nor)
+                             (:vl-xor . :vl-unary-xor)
+                             (:vl-xnor . :vl-unary-xnor)
+                             (:vl-plusplus . :vl-unary-preinc)
+                             (:vl-minusminus . :vl-unary-predec)))))
+   (unless
+    op (primary :s= (<a href="VL2014____VL-PARSE-PRIMARY.html">vl-parse-primary</a>))
+    (when (<a href="COMMON-LISP____EQ.html">eq</a> (<a href="VL2014____VL-LOADCONFIG-_E3EDITION.html">vl-loadconfig-&gt;edition</a> config)
+              :verilog-2005)
+          (return primary))
+    (return-raw
+     (<a href="ACL2____B_A2.html">b*</a>
+      ((backup (<a href="VL2014____VL-TOKSTREAM-SAVE.html">vl-tokstream-save</a>))
+       ((<a href="ACL2____MV.html">mv</a> err val tokstream)
+        (<a href="VL2014____SEQ.html">seq</a>
+         tokstream
+         (atts := (<a href="VL2014____VL-PARSE-0_B2-ATTRIBUTE-INSTANCES.html">vl-parse-0+-attribute-instances</a>))
+         (post
+           := (<a href="VL2014____VL-PARSE-OP.html">vl-parse-op</a> 1
+                           '((:vl-plusplus . :vl-unary-postinc)
+                             (:vl-minusminus . :vl-unary-postdec))))
+         (unless post (return nil))
+         (return (<a href="VL2014____MAKE-VL-NONATOM.html">make-vl-nonatom</a> :op post
+                                  :atts atts
+                                  :args (<a href="COMMON-LISP____LIST.html">list</a> primary)))))
+       ((when (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____NOT.html">not</a> err) val))
+        (<a href="ACL2____MV.html">mv</a> nil val tokstream))
+       (tokstream (<a href="VL2014____VL-TOKSTREAM-RESTORE.html">vl-tokstream-restore</a> backup)))
+      (<a href="ACL2____MV.html">mv</a> nil primary tokstream))))
+   (atts :w= (<a href="VL2014____VL-PARSE-0_B2-ATTRIBUTE-INSTANCES.html">vl-parse-0+-attribute-instances</a>))
+   (primary := (<a href="VL2014____VL-PARSE-PRIMARY.html">vl-parse-primary</a>))
+   (return (<a href="VL2014____MAKE-VL-NONATOM.html">make-vl-nonatom</a> :op op
+                            :atts atts
+                            :args (<a href="COMMON-LISP____LIST.html">list</a> primary))))))</pre> 
+<p><b>Function: </b>vl-parse-power-expression-aux-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+     vl-parse-power-expression-aux-fn
+     (tokstream config)
+     (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+     (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+     (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+     (<a href="COMMON-LISP____LET.html">let</a> ((__function__ 'vl-parse-power-expression-aux))
+          (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+          (<a href="VL2014____SEQ.html">seq</a> tokstream
+               (<a href="COMMON-LISP____FIRST.html">first</a> :s= (<a href="VL2014____VL-PARSE-UNARY-EXPRESSION.html">vl-parse-unary-expression</a>))
+               (unless (<a href="VL2014____VL-IS-TOKEN_F3.html">vl-is-token?</a> :vl-power)
+                       (return (<a href="COMMON-LISP____LIST.html">list</a> first)))
+               (:= (<a href="VL2014____VL-MATCH.html">vl-match</a>))
+               (atts :w= (<a href="VL2014____VL-PARSE-0_B2-ATTRIBUTE-INSTANCES.html">vl-parse-0+-attribute-instances</a>))
+               (<a href="SET____TAIL.html">tail</a> := (<a href="VL2014____VL-PARSE-POWER-EXPRESSION-AUX.html">vl-parse-power-expression-aux</a>))
+               (return (<a href="COMMON-LISP____LIST_A2.html">list*</a> first :vl-binary-power atts tail)))))</pre> 
+<p><b>Function: </b>vl-parse-power-expression-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+    vl-parse-power-expression-fn
+    (tokstream config)
+    (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+    (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+    (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+    (<a href="COMMON-LISP____LET.html">let</a> ((__function__ 'vl-parse-power-expression))
+         (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+         (<a href="VL2014____SEQ.html">seq</a> tokstream
+              (mixed := (<a href="VL2014____VL-PARSE-POWER-EXPRESSION-AUX.html">vl-parse-power-expression-aux</a>))
+              (return (<a href="VL2014____VL-LEFT-ASSOCIATE-MIXED-BINOP-LIST.html">vl-left-associate-mixed-binop-list</a> mixed)))))</pre> 
+<p><b>Function: </b>vl-parse-mult-expression-aux-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+     vl-parse-mult-expression-aux-fn
+     (tokstream config)
+     (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+     (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+     (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+     (<a href="COMMON-LISP____LET.html">let</a> ((__function__ 'vl-parse-mult-expression-aux))
+          (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+          (<a href="VL2014____SEQ.html">seq</a> tokstream
+               (<a href="COMMON-LISP____FIRST.html">first</a> :s= (<a href="VL2014____VL-PARSE-POWER-EXPRESSION.html">vl-parse-power-expression</a>))
+               (op := (<a href="VL2014____VL-PARSE-OP.html">vl-parse-op</a> 2
+                                   '((:vl-times . :vl-binary-times)
+                                     (:vl-div . :vl-binary-div)
+                                     (:vl-rem . :vl-binary-rem))))
+               (unless op (return (<a href="COMMON-LISP____LIST.html">list</a> first)))
+               (atts :w= (<a href="VL2014____VL-PARSE-0_B2-ATTRIBUTE-INSTANCES.html">vl-parse-0+-attribute-instances</a>))
+               (<a href="SET____TAIL.html">tail</a> := (<a href="VL2014____VL-PARSE-MULT-EXPRESSION-AUX.html">vl-parse-mult-expression-aux</a>))
+               (return (<a href="COMMON-LISP____LIST_A2.html">list*</a> first op atts tail)))))</pre> 
+<p><b>Function: </b>vl-parse-mult-expression-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+    vl-parse-mult-expression-fn
+    (tokstream config)
+    (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+    (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+    (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+    (<a href="COMMON-LISP____LET.html">let</a> ((__function__ 'vl-parse-mult-expression))
+         (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+         (<a href="VL2014____SEQ.html">seq</a> tokstream
+              (mixed := (<a href="VL2014____VL-PARSE-MULT-EXPRESSION-AUX.html">vl-parse-mult-expression-aux</a>))
+              (return (<a href="VL2014____VL-LEFT-ASSOCIATE-MIXED-BINOP-LIST.html">vl-left-associate-mixed-binop-list</a> mixed)))))</pre> 
+<p><b>Function: </b>vl-parse-add-expression-aux-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+   vl-parse-add-expression-aux-fn
+   (tokstream config)
+   (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+   (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+   (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+   (<a href="COMMON-LISP____LET.html">let</a> ((__function__ 'vl-parse-add-expression-aux))
+        (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+        (<a href="VL2014____SEQ.html">seq</a> tokstream
+             (<a href="COMMON-LISP____FIRST.html">first</a> :s= (<a href="VL2014____VL-PARSE-MULT-EXPRESSION.html">vl-parse-mult-expression</a>))
+             (op := (<a href="VL2014____VL-PARSE-OP.html">vl-parse-op</a> 2
+                                 '((:vl-plus . :vl-binary-plus)
+                                   (:vl-minus . :vl-binary-minus))))
+             (unless op (return (<a href="COMMON-LISP____LIST.html">list</a> first)))
+             (atts :w= (<a href="VL2014____VL-PARSE-0_B2-ATTRIBUTE-INSTANCES.html">vl-parse-0+-attribute-instances</a>))
+             (<a href="SET____TAIL.html">tail</a> := (<a href="VL2014____VL-PARSE-ADD-EXPRESSION-AUX.html">vl-parse-add-expression-aux</a>))
+             (return (<a href="COMMON-LISP____LIST_A2.html">list*</a> first op atts tail)))))</pre> 
+<p><b>Function: </b>vl-parse-add-expression-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+    vl-parse-add-expression-fn
+    (tokstream config)
+    (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+    (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+    (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+    (<a href="COMMON-LISP____LET.html">let</a> ((__function__ 'vl-parse-add-expression))
+         (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+         (<a href="VL2014____SEQ.html">seq</a> tokstream
+              (mixed := (<a href="VL2014____VL-PARSE-ADD-EXPRESSION-AUX.html">vl-parse-add-expression-aux</a>))
+              (return (<a href="VL2014____VL-LEFT-ASSOCIATE-MIXED-BINOP-LIST.html">vl-left-associate-mixed-binop-list</a> mixed)))))</pre> 
+<p><b>Function: </b>vl-parse-shift-expression-aux-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+     vl-parse-shift-expression-aux-fn
+     (tokstream config)
+     (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+     (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+     (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+     (<a href="COMMON-LISP____LET.html">let</a> ((__function__ 'vl-parse-shift-expression-aux))
+          (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+          (<a href="VL2014____SEQ.html">seq</a> tokstream
+               (<a href="COMMON-LISP____FIRST.html">first</a> :s= (<a href="VL2014____VL-PARSE-ADD-EXPRESSION.html">vl-parse-add-expression</a>))
+               (op := (<a href="VL2014____VL-PARSE-OP.html">vl-parse-op</a> 2
+                                   '((:vl-shl . :vl-binary-shl)
+                                     (:vl-shr . :vl-binary-shr)
+                                     (:vl-ashl . :vl-binary-ashl)
+                                     (:vl-ashr . :vl-binary-ashr))))
+               (unless op (return (<a href="COMMON-LISP____LIST.html">list</a> first)))
+               (atts :w= (<a href="VL2014____VL-PARSE-0_B2-ATTRIBUTE-INSTANCES.html">vl-parse-0+-attribute-instances</a>))
+               (<a href="SET____TAIL.html">tail</a> := (<a href="VL2014____VL-PARSE-SHIFT-EXPRESSION-AUX.html">vl-parse-shift-expression-aux</a>))
+               (return (<a href="COMMON-LISP____LIST_A2.html">list*</a> first op atts tail)))))</pre> 
+<p><b>Function: </b>vl-parse-shift-expression-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+    vl-parse-shift-expression-fn
+    (tokstream config)
+    (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+    (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+    (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+    (<a href="COMMON-LISP____LET.html">let</a> ((__function__ 'vl-parse-shift-expression))
+         (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+         (<a href="VL2014____SEQ.html">seq</a> tokstream
+              (mixed := (<a href="VL2014____VL-PARSE-SHIFT-EXPRESSION-AUX.html">vl-parse-shift-expression-aux</a>))
+              (return (<a href="VL2014____VL-LEFT-ASSOCIATE-MIXED-BINOP-LIST.html">vl-left-associate-mixed-binop-list</a> mixed)))))</pre> 
+<p><b>Function: </b>vl-parse-compare-expression-aux-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ vl-parse-compare-expression-aux-fn
+ (tokstream config)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+ (<a href="COMMON-LISP____LET.html">let</a>
+     ((__function__ 'vl-parse-compare-expression-aux))
+     (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+     (<a href="VL2014____SEQ.html">seq</a> tokstream
+          (<a href="COMMON-LISP____FIRST.html">first</a> :s= (<a href="VL2014____VL-PARSE-SHIFT-EXPRESSION.html">vl-parse-shift-expression</a>))
+          (op := (<a href="VL2014____VL-PARSE-OP.html">vl-parse-op</a> 2
+                              '((:vl-lt . :vl-binary-lt)
+                                (:vl-lte . :vl-binary-lte)
+                                (:vl-gt . :vl-binary-gt)
+                                (:vl-gte . :vl-binary-gte)
+                                (:vl-kwd-inside . :vl-inside))))
+          (unless op (return (<a href="COMMON-LISP____LIST.html">list</a> first)))
+          (unless (<a href="COMMON-LISP____EQ.html">eq</a> op :vl-inside)
+                  (atts :w= (<a href="VL2014____VL-PARSE-0_B2-ATTRIBUTE-INSTANCES.html">vl-parse-0+-attribute-instances</a>))
+                  (<a href="SET____TAIL.html">tail</a> := (<a href="VL2014____VL-PARSE-COMPARE-EXPRESSION-AUX.html">vl-parse-compare-expression-aux</a>))
+                  (return (<a href="COMMON-LISP____LIST_A2.html">list*</a> first op atts tail)))
+          (:= (<a href="VL2014____VL-MATCH-TOKEN.html">vl-match-token</a> :vl-lcurly))
+          (<a href="ACL2____ARGS.html">args</a> := (<a href="VL2014____VL-PARSE-1_B2-OPEN-VALUE-RANGES.html">vl-parse-1+-open-value-ranges</a>))
+          (:= (<a href="VL2014____VL-MATCH-TOKEN.html">vl-match-token</a> :vl-rcurly))
+          (return (<a href="ACL2____B_A2.html">b*</a> ((<a href="SET____TAIL.html">tail</a> (<a href="VL2014____MAKE-VL-NONATOM.html">make-vl-nonatom</a> :op :vl-valuerangelist
+                                              :args args)))
+                      (<a href="COMMON-LISP____LIST_A2.html">list*</a> first op atts (<a href="COMMON-LISP____LIST.html">list</a> tail)))))))</pre> 
+<p><b>Function: </b>vl-parse-compare-expression-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+    vl-parse-compare-expression-fn
+    (tokstream config)
+    (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+    (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+    (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+    (<a href="COMMON-LISP____LET.html">let</a> ((__function__ 'vl-parse-compare-expression))
+         (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+         (<a href="VL2014____SEQ.html">seq</a> tokstream
+              (mixed := (<a href="VL2014____VL-PARSE-COMPARE-EXPRESSION-AUX.html">vl-parse-compare-expression-aux</a>))
+              (return (<a href="VL2014____VL-LEFT-ASSOCIATE-MIXED-BINOP-LIST.html">vl-left-associate-mixed-binop-list</a> mixed)))))</pre> 
+<p><b>Function: </b>vl-parse-open-value-range-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> vl-parse-open-value-range-fn
+       (tokstream config)
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+       (<a href="COMMON-LISP____LET.html">let</a> ((__function__ 'vl-parse-open-value-range))
+            (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+            (<a href="VL2014____SEQ.html">seq</a> tokstream
+                 (when (<a href="VL2014____VL-IS-TOKEN_F3.html">vl-is-token?</a> :vl-lbrack)
+                       (:= (<a href="VL2014____VL-MATCH.html">vl-match</a>))
+                       (a :w= (<a href="VL2014____VL-PARSE-EXPRESSION.html">vl-parse-expression</a>))
+                       (:= (<a href="VL2014____VL-MATCH-TOKEN.html">vl-match-token</a> :vl-colon))
+                       (b := (<a href="VL2014____VL-PARSE-EXPRESSION.html">vl-parse-expression</a>))
+                       (:= (<a href="VL2014____VL-MATCH-TOKEN.html">vl-match-token</a> :vl-rbrack))
+                       (return (<a href="VL2014____MAKE-VL-NONATOM.html">make-vl-nonatom</a> :op :vl-valuerange
+                                                :args (<a href="COMMON-LISP____LIST.html">list</a> a b))))
+                 (return-raw (<a href="VL2014____VL-PARSE-EXPRESSION.html">vl-parse-expression</a>)))))</pre> 
+<p><b>Function: </b>vl-parse-1+-open-value-ranges-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> vl-parse-1+-open-value-ranges-fn
+       (tokstream config)
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+       (<a href="COMMON-LISP____LET.html">let</a> ((__function__ 'vl-parse-1+-open-value-ranges))
+            (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+            (<a href="VL2014____SEQ.html">seq</a> tokstream
+                 (range1 :s= (<a href="VL2014____VL-PARSE-OPEN-VALUE-RANGE.html">vl-parse-open-value-range</a>))
+                 (when (<a href="VL2014____VL-IS-TOKEN_F3.html">vl-is-token?</a> :vl-comma)
+                       (:= (<a href="VL2014____VL-MATCH.html">vl-match</a>))
+                       (<a href="COMMON-LISP____REST.html">rest</a> := (<a href="VL2014____VL-PARSE-1_B2-OPEN-VALUE-RANGES.html">vl-parse-1+-open-value-ranges</a>)))
+                 (return (<a href="COMMON-LISP____CONS.html">cons</a> range1 rest)))))</pre> 
+<p><b>Function: </b>vl-parse-equality-expression-aux-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ vl-parse-equality-expression-aux-fn
+ (tokstream config)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+ (<a href="COMMON-LISP____LET.html">let</a>
+    ((__function__ 'vl-parse-equality-expression-aux))
+    (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+    (<a href="VL2014____SEQ.html">seq</a> tokstream
+         (<a href="COMMON-LISP____FIRST.html">first</a> :s= (<a href="VL2014____VL-PARSE-COMPARE-EXPRESSION.html">vl-parse-compare-expression</a>))
+         (op := (<a href="VL2014____VL-PARSE-OP.html">vl-parse-op</a> 2
+                             '((:vl-eq . :vl-binary-eq)
+                               (:vl-neq . :vl-binary-neq)
+                               (:vl-ceq . :vl-binary-ceq)
+                               (:vl-cne . :vl-binary-cne)
+                               (:vl-wildeq . :vl-binary-wildeq)
+                               (:vl-wildneq . :vl-binary-wildneq))))
+         (unless op (return (<a href="COMMON-LISP____LIST.html">list</a> first)))
+         (atts :w= (<a href="VL2014____VL-PARSE-0_B2-ATTRIBUTE-INSTANCES.html">vl-parse-0+-attribute-instances</a>))
+         (<a href="SET____TAIL.html">tail</a> := (<a href="VL2014____VL-PARSE-EQUALITY-EXPRESSION-AUX.html">vl-parse-equality-expression-aux</a>))
+         (return (<a href="COMMON-LISP____LIST_A2.html">list*</a> first op atts tail)))))</pre> 
+<p><b>Function: </b>vl-parse-equality-expression-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+    vl-parse-equality-expression-fn
+    (tokstream config)
+    (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+    (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+    (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+    (<a href="COMMON-LISP____LET.html">let</a> ((__function__ 'vl-parse-equality-expression))
+         (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+         (<a href="VL2014____SEQ.html">seq</a> tokstream
+              (mixed := (<a href="VL2014____VL-PARSE-EQUALITY-EXPRESSION-AUX.html">vl-parse-equality-expression-aux</a>))
+              (return (<a href="VL2014____VL-LEFT-ASSOCIATE-MIXED-BINOP-LIST.html">vl-left-associate-mixed-binop-list</a> mixed)))))</pre> 
+<p><b>Function: </b>vl-parse-bitand-expression-aux-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+     vl-parse-bitand-expression-aux-fn
+     (tokstream config)
+     (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+     (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+     (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+     (<a href="COMMON-LISP____LET.html">let</a> ((__function__ 'vl-parse-bitand-expression-aux))
+          (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+          (<a href="VL2014____SEQ.html">seq</a> tokstream
+               (<a href="COMMON-LISP____FIRST.html">first</a> :s= (<a href="VL2014____VL-PARSE-EQUALITY-EXPRESSION.html">vl-parse-equality-expression</a>))
+               (unless (<a href="VL2014____VL-IS-TOKEN_F3.html">vl-is-token?</a> :vl-bitand)
+                       (return (<a href="COMMON-LISP____LIST.html">list</a> first)))
+               (:= (<a href="VL2014____VL-MATCH.html">vl-match</a>))
+               (atts :w= (<a href="VL2014____VL-PARSE-0_B2-ATTRIBUTE-INSTANCES.html">vl-parse-0+-attribute-instances</a>))
+               (<a href="SET____TAIL.html">tail</a> := (<a href="VL2014____VL-PARSE-BITAND-EXPRESSION-AUX.html">vl-parse-bitand-expression-aux</a>))
+               (return (<a href="COMMON-LISP____LIST_A2.html">list*</a> first :vl-binary-bitand atts tail)))))</pre> 
+<p><b>Function: </b>vl-parse-bitand-expression-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+    vl-parse-bitand-expression-fn
+    (tokstream config)
+    (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+    (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+    (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+    (<a href="COMMON-LISP____LET.html">let</a> ((__function__ 'vl-parse-bitand-expression))
+         (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+         (<a href="VL2014____SEQ.html">seq</a> tokstream
+              (mixed := (<a href="VL2014____VL-PARSE-BITAND-EXPRESSION-AUX.html">vl-parse-bitand-expression-aux</a>))
+              (return (<a href="VL2014____VL-LEFT-ASSOCIATE-MIXED-BINOP-LIST.html">vl-left-associate-mixed-binop-list</a> mixed)))))</pre> 
+<p><b>Function: </b>vl-parse-bitxor-expression-aux-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+     vl-parse-bitxor-expression-aux-fn
+     (tokstream config)
+     (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+     (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+     (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+     (<a href="COMMON-LISP____LET.html">let</a> ((__function__ 'vl-parse-bitxor-expression-aux))
+          (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+          (<a href="VL2014____SEQ.html">seq</a> tokstream
+               (<a href="COMMON-LISP____FIRST.html">first</a> :s= (<a href="VL2014____VL-PARSE-BITAND-EXPRESSION.html">vl-parse-bitand-expression</a>))
+               (op := (<a href="VL2014____VL-PARSE-OP.html">vl-parse-op</a> 2
+                                   '((:vl-xor . :vl-binary-xor)
+                                     (:vl-xnor . :vl-binary-xnor))))
+               (unless op (return (<a href="COMMON-LISP____LIST.html">list</a> first)))
+               (atts :w= (<a href="VL2014____VL-PARSE-0_B2-ATTRIBUTE-INSTANCES.html">vl-parse-0+-attribute-instances</a>))
+               (<a href="SET____TAIL.html">tail</a> := (<a href="VL2014____VL-PARSE-BITXOR-EXPRESSION-AUX.html">vl-parse-bitxor-expression-aux</a>))
+               (return (<a href="COMMON-LISP____LIST_A2.html">list*</a> first op atts tail)))))</pre> 
+<p><b>Function: </b>vl-parse-bitxor-expression-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+    vl-parse-bitxor-expression-fn
+    (tokstream config)
+    (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+    (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+    (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+    (<a href="COMMON-LISP____LET.html">let</a> ((__function__ 'vl-parse-bitxor-expression))
+         (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+         (<a href="VL2014____SEQ.html">seq</a> tokstream
+              (mixed := (<a href="VL2014____VL-PARSE-BITXOR-EXPRESSION-AUX.html">vl-parse-bitxor-expression-aux</a>))
+              (return (<a href="VL2014____VL-LEFT-ASSOCIATE-MIXED-BINOP-LIST.html">vl-left-associate-mixed-binop-list</a> mixed)))))</pre> 
+<p><b>Function: </b>vl-parse-bitor-expression-aux-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+     vl-parse-bitor-expression-aux-fn
+     (tokstream config)
+     (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+     (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+     (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+     (<a href="COMMON-LISP____LET.html">let</a> ((__function__ 'vl-parse-bitor-expression-aux))
+          (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+          (<a href="VL2014____SEQ.html">seq</a> tokstream
+               (<a href="COMMON-LISP____FIRST.html">first</a> :s= (<a href="VL2014____VL-PARSE-BITXOR-EXPRESSION.html">vl-parse-bitxor-expression</a>))
+               (unless (<a href="VL2014____VL-IS-TOKEN_F3.html">vl-is-token?</a> :vl-bitor)
+                       (return (<a href="COMMON-LISP____LIST.html">list</a> first)))
+               (:= (<a href="VL2014____VL-MATCH.html">vl-match</a>))
+               (atts :w= (<a href="VL2014____VL-PARSE-0_B2-ATTRIBUTE-INSTANCES.html">vl-parse-0+-attribute-instances</a>))
+               (<a href="SET____TAIL.html">tail</a> := (<a href="VL2014____VL-PARSE-BITOR-EXPRESSION-AUX.html">vl-parse-bitor-expression-aux</a>))
+               (return (<a href="COMMON-LISP____LIST_A2.html">list*</a> first :vl-binary-bitor atts tail)))))</pre> 
+<p><b>Function: </b>vl-parse-bitor-expression-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+    vl-parse-bitor-expression-fn
+    (tokstream config)
+    (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+    (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+    (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+    (<a href="COMMON-LISP____LET.html">let</a> ((__function__ 'vl-parse-bitor-expression))
+         (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+         (<a href="VL2014____SEQ.html">seq</a> tokstream
+              (mixed := (<a href="VL2014____VL-PARSE-BITOR-EXPRESSION-AUX.html">vl-parse-bitor-expression-aux</a>))
+              (return (<a href="VL2014____VL-LEFT-ASSOCIATE-MIXED-BINOP-LIST.html">vl-left-associate-mixed-binop-list</a> mixed)))))</pre> 
+<p><b>Function: </b>vl-parse-logand-expression-aux-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+     vl-parse-logand-expression-aux-fn
+     (tokstream config)
+     (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+     (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+     (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+     (<a href="COMMON-LISP____LET.html">let</a> ((__function__ 'vl-parse-logand-expression-aux))
+          (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+          (<a href="VL2014____SEQ.html">seq</a> tokstream
+               (<a href="COMMON-LISP____FIRST.html">first</a> :s= (<a href="VL2014____VL-PARSE-BITOR-EXPRESSION.html">vl-parse-bitor-expression</a>))
+               (unless (<a href="VL2014____VL-IS-TOKEN_F3.html">vl-is-token?</a> :vl-logand)
+                       (return (<a href="COMMON-LISP____LIST.html">list</a> first)))
+               (:= (<a href="VL2014____VL-MATCH.html">vl-match</a>))
+               (atts :w= (<a href="VL2014____VL-PARSE-0_B2-ATTRIBUTE-INSTANCES.html">vl-parse-0+-attribute-instances</a>))
+               (<a href="SET____TAIL.html">tail</a> := (<a href="VL2014____VL-PARSE-LOGAND-EXPRESSION-AUX.html">vl-parse-logand-expression-aux</a>))
+               (return (<a href="COMMON-LISP____LIST_A2.html">list*</a> first :vl-binary-logand atts tail)))))</pre> 
+<p><b>Function: </b>vl-parse-logand-expression-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+    vl-parse-logand-expression-fn
+    (tokstream config)
+    (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+    (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+    (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+    (<a href="COMMON-LISP____LET.html">let</a> ((__function__ 'vl-parse-logand-expression))
+         (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+         (<a href="VL2014____SEQ.html">seq</a> tokstream
+              (mixed := (<a href="VL2014____VL-PARSE-LOGAND-EXPRESSION-AUX.html">vl-parse-logand-expression-aux</a>))
+              (return (<a href="VL2014____VL-LEFT-ASSOCIATE-MIXED-BINOP-LIST.html">vl-left-associate-mixed-binop-list</a> mixed)))))</pre> 
+<p><b>Function: </b>vl-parse-logor-expression-aux-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+     vl-parse-logor-expression-aux-fn
+     (tokstream config)
+     (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+     (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+     (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+     (<a href="COMMON-LISP____LET.html">let</a> ((__function__ 'vl-parse-logor-expression-aux))
+          (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+          (<a href="VL2014____SEQ.html">seq</a> tokstream
+               (<a href="COMMON-LISP____FIRST.html">first</a> :s= (<a href="VL2014____VL-PARSE-LOGAND-EXPRESSION.html">vl-parse-logand-expression</a>))
+               (unless (<a href="VL2014____VL-IS-TOKEN_F3.html">vl-is-token?</a> :vl-logor)
+                       (return (<a href="COMMON-LISP____LIST.html">list</a> first)))
+               (:= (<a href="VL2014____VL-MATCH.html">vl-match</a>))
+               (atts :w= (<a href="VL2014____VL-PARSE-0_B2-ATTRIBUTE-INSTANCES.html">vl-parse-0+-attribute-instances</a>))
+               (<a href="SET____TAIL.html">tail</a> := (<a href="VL2014____VL-PARSE-LOGOR-EXPRESSION-AUX.html">vl-parse-logor-expression-aux</a>))
+               (return (<a href="COMMON-LISP____LIST_A2.html">list*</a> first :vl-binary-logor atts tail)))))</pre> 
+<p><b>Function: </b>vl-parse-logor-expression-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+    vl-parse-logor-expression-fn
+    (tokstream config)
+    (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+    (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+    (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+    (<a href="COMMON-LISP____LET.html">let</a> ((__function__ 'vl-parse-logor-expression))
+         (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+         (<a href="VL2014____SEQ.html">seq</a> tokstream
+              (mixed := (<a href="VL2014____VL-PARSE-LOGOR-EXPRESSION-AUX.html">vl-parse-logor-expression-aux</a>))
+              (return (<a href="VL2014____VL-LEFT-ASSOCIATE-MIXED-BINOP-LIST.html">vl-left-associate-mixed-binop-list</a> mixed)))))</pre> 
+<p><b>Function: </b>vl-parse-qmark-expression-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ vl-parse-qmark-expression-fn
+ (tokstream config)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'vl-parse-qmark-expression))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="VL2014____SEQ.html">seq</a> tokstream
+       (<a href="COMMON-LISP____FIRST.html">first</a> :s= (<a href="VL2014____VL-PARSE-LOGOR-EXPRESSION.html">vl-parse-logor-expression</a>))
+       (unless (<a href="VL2014____VL-IS-TOKEN_F3.html">vl-is-token?</a> :vl-qmark)
+               (return first))
+       (:= (<a href="VL2014____VL-MATCH.html">vl-match</a>))
+       (atts :w= (<a href="VL2014____VL-PARSE-0_B2-ATTRIBUTE-INSTANCES.html">vl-parse-0+-attribute-instances</a>))
+       (<a href="COMMON-LISP____SECOND.html">second</a> :s= (<a href="VL2014____VL-PARSE-EXPRESSION.html">vl-parse-expression</a>))
+       (:= (<a href="VL2014____VL-MATCH-TOKEN.html">vl-match-token</a> :vl-colon))
+       (<a href="COMMON-LISP____THIRD.html">third</a> := (<a href="VL2014____VL-PARSE-QMARK-EXPRESSION.html">vl-parse-qmark-expression</a>))
+       (return (<a href="VL2014____MAKE-VL-NONATOM.html">make-vl-nonatom</a> :op :vl-qmark
+                                :atts atts
+                                :args (<a href="COMMON-LISP____LIST.html">list</a> first second third))))))</pre> 
+<p><b>Function: </b>vl-parse-impl-expression-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> vl-parse-impl-expression-fn
+       (tokstream config)
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+       (<a href="COMMON-LISP____LET.html">let</a> ((__function__ 'vl-parse-impl-expression))
+            (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+            (<a href="VL2014____SEQ.html">seq</a> tokstream
+                 (<a href="COMMON-LISP____FIRST.html">first</a> :s= (<a href="VL2014____VL-PARSE-QMARK-EXPRESSION.html">vl-parse-qmark-expression</a>))
+                 (when (<a href="COMMON-LISP____EQ.html">eq</a> (<a href="VL2014____VL-LOADCONFIG-_E3EDITION.html">vl-loadconfig-&gt;edition</a> config)
+                           :verilog-2005)
+                       (return first))
+                 (op := (<a href="VL2014____VL-PARSE-OP.html">vl-parse-op</a> 2
+                                     '((:vl-arrow . :vl-implies)
+                                       (:vl-equiv . :vl-equiv))))
+                 (unless op (return first))
+                 (atts :w= (<a href="VL2014____VL-PARSE-0_B2-ATTRIBUTE-INSTANCES.html">vl-parse-0+-attribute-instances</a>))
+                 (<a href="COMMON-LISP____SECOND.html">second</a> :s= (<a href="VL2014____VL-PARSE-IMPL-EXPRESSION.html">vl-parse-impl-expression</a>))
+                 (return (<a href="VL2014____MAKE-VL-NONATOM.html">make-vl-nonatom</a> :op op
+                                          :args (<a href="COMMON-LISP____LIST.html">list</a> first second)
+                                          :atts atts)))))</pre> 
+<p><b>Function: </b>vl-parse-expression-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ vl-parse-expression-fn
+ (tokstream config)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (tokstream)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="VL2014____VL-LOADCONFIG-P.html">vl-loadconfig-p</a> config)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> config))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'vl-parse-expression))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="VL2014____SEQ.html">seq</a>
+   tokstream
+   (unless (<a href="COMMON-LISP____AND.html">and</a> (<a href="VL2014____VL-IS-TOKEN_F3.html">vl-is-token?</a> :vl-kwd-tagged)
+                (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQ.html">eq</a> (<a href="VL2014____VL-LOADCONFIG-_E3EDITION.html">vl-loadconfig-&gt;edition</a> config)
+                         :verilog-2005)))
+           (expr :s= (<a href="VL2014____VL-PARSE-IMPL-EXPRESSION.html">vl-parse-impl-expression</a>))
+           (return expr))
+   (:= (<a href="VL2014____VL-MATCH.html">vl-match</a>))
+   (id := (<a href="VL2014____VL-MATCH-TOKEN.html">vl-match-token</a> :vl-idtoken))
+   (return-raw
+    (<a href="ACL2____B_A2.html">b*</a>
+     ((tagexpr
+          (<a href="VL2014____MAKE-VL-ATOM.html">make-vl-atom</a>
+               :guts (<a href="VL2014____MAKE-VL-TAGNAME.html">make-vl-tagname</a> :name (<a href="VL2014____VL-IDTOKEN-_E3NAME.html">vl-idtoken-&gt;name</a> id))))
+      (backup (<a href="VL2014____VL-TOKSTREAM-SAVE.html">vl-tokstream-save</a>))
+      ((<a href="ACL2____MV.html">mv</a> err expr tokstream)
+       (<a href="VL2014____SEQ.html">seq</a> tokstream
+            (expr :s= (<a href="VL2014____VL-PARSE-EXPRESSION.html">vl-parse-expression</a>))
+            (return expr)))
+      ((when err)
+       (<a href="ACL2____B_A2.html">b*</a> ((tokstream (<a href="VL2014____VL-TOKSTREAM-RESTORE.html">vl-tokstream-restore</a> backup)))
+           (<a href="ACL2____MV.html">mv</a> nil
+               (<a href="VL2014____MAKE-VL-NONATOM.html">make-vl-nonatom</a> :op :vl-tagged
+                                :args (<a href="COMMON-LISP____LIST.html">list</a> tagexpr))
+               tokstream)))
+      ((unless (<a href="COMMON-LISP____OR.html">or</a> (vl-fast-atom-p expr)
+                   (<a href="ACL2____HONS-ASSOC-EQUAL.html">hons-assoc-equal</a> "VL_EXPLICIT_PARENS"
+                                     (<a href="VL2014____VL-NONATOM-_E3ATTS.html">vl-nonatom-&gt;atts</a> expr))))
+       (<a href="VL2014____VL-PARSE-ERROR.html">vl-parse-error</a>
+        "Cowardly refusing to support tagged union expression such as
+                   'tagged foo 1 + 2' due to unclear precedence.  Workaround:
+                   add explicit parens, e.g., write 'tagged foo (1 + 2)'
+                   instead."))
+      (ans (<a href="VL2014____MAKE-VL-NONATOM.html">make-vl-nonatom</a> :op :vl-tagged
+                            :args (<a href="COMMON-LISP____LIST.html">list</a> tagexpr expr))))
+     (<a href="ACL2____MV.html">mv</a> nil ans tokstream))))))</pre> 
+ 
+ 
+
+</body>
+</html>

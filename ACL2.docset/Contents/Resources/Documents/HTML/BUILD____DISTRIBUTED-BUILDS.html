@@ -1,0 +1,100 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Distributed-builds</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=BUILD____DISTRIBUTED-BUILDS">Click for Distributed-builds in the Full Manual</a></h3>
+
+<p>(Advanced) how to distribute ACL2 book building over a cluster 
+of machines.</p><p>Warning: getting a cluster set up and running smoothly is a 
+significant undertaking.  Aside from hardware costs, it may take significant 
+energy to install and administer the system, and you will need to learn how to 
+effectively use the queuing system.  You'll probably also need to be ready to 
+do some scripting to work around dumb problems.  Think of this topic as: 
+<i>some hints that may help you</i>, not <i>a usable guide to setting up a 
+cluster.</i></p> 
+ 
+<p>At Centaur, <span class="v">cert.pl</span> is successfully used within a <a href="http://www.rocksclusters.org/" target="_blank"><nobr>rocks<img src="../Icon_External_Link.png" title="External link to http://www.rocksclusters.org/"></nobr></a> cluster environment, 
+using the open-source queuing system <a href="http://www.adaptivecomputing.com/support/download-center/torque-download/" target="_blank"><nobr>torque<img src="../Icon_External_Link.png" title="External link to http://www.adaptivecomputing.com/support/download-center/torque-download/"></nobr></a> 
+and the <a href="http://www.adaptivecomputing.com/products/open-source/maui/" target="_blank"><nobr>maui<img src="../Icon_External_Link.png" title="External link to http://www.adaptivecomputing.com/products/open-source/maui/"></nobr></a> 
+scheduler.  This clustering software allows for the submission of <a href="http://en.wikipedia.org/wiki/Portable_Batch_System" target="_blank"><nobr>PBS<img src="../Icon_External_Link.png" title="External link to http://en.wikipedia.org/wiki/Portable_Batch_System"></nobr></a> scripts as 
+jobs.  To support this cluster, <span class="v">cert.pl</span> has certain features.</p> 
+ 
+ 
+<h3>Support for PBS directives</h3> 
+ 
+<p>For one, <span class="v">cert.pl</span> writes out a PBS script for each book it is going to 
+certify.  These scripts look like ordinary shell scripts (so they work fine for 
+use in non-cluster environments), but they contain special comments that the 
+clustering software understands.</p> 
+ 
+<p>These comments allow you to say, e.g., how much memory a job is going to 
+take, so that if a job takes more than its allotted memory, the clustering 
+software may choose to kill it.  The clustering software also uses this memory 
+limit to ensure that when it allocates a job to a machine, the machine will 
+have enough physical machine to run the job.</p> 
+ 
+<p>This is really very useful.  If you let a machine start swapping into the 
+gigabytes, at worst you will need to physically reset it, because it dies a 
+special kind of horrible death where its load average is 50 and you can't even 
+"kill" anything.  In a slightly better case, you may run into the Linux 
+overcommit and OOM killer features, which are also really awful.  My favorite 
+article on the topic, from back before we had the cluster and were running into 
+this frequently, is <a href="http://thoughts.davisjeff.com/2009/11/29/linux-oom-killer/" target="_blank"><nobr>here<img src="../Icon_External_Link.png" title="External link to http://thoughts.davisjeff.com/2009/11/29/linux-oom-killer/"></nobr></a>.</p> 
+ 
+<p>At any rate, when cert.pl writes out the scripts to certify books, it 
+includes some PBS commands that say how much memory the book is expected to 
+take. This is done by a stupid heuristic: we search for <span class="v">set-max-mem</span> lines; 
+if no such line is found we say the book will take 4 GB, and otherwise we 
+reserve I think 2-3 GB more than the set-max-mem line calls for. This extra 
+padding is because set-max-mem only affects the heap, and doesn't account for 
+the stacks, and we typically build a CCL image with large stacks, as explained 
+in centaur/ccl-config.lsp, and also because set-max-mem is sort of best thought 
+of as a soft cap, anyway.</p> 
+ 
+ 
+<h3>Support for a Queuing System</h3> 
+ 
+<p>Besides this support for PBS directives, <span class="v">cert.pl</span> also consults an 
+environment variable <span class="v">$STARTJOB</span>.  If this variable isn't set, we default it 
+to your current <span class="v">$SHELL</span>.  When we run ACL2 jobs, we basically use:</p> 
+ 
+<pre class="code">$STARTJOB -c "acl2 &lt; certify-commands &amp;&gt; foo.cert.out"</pre> 
+ 
+<p>So, given a suitable <span class="v">startjob</span> command, <span class="v">cert.pl</span> can automatically 
+distribute the jobs to your cluster.  A suitable command is one that:</p> 
+ 
+<ul> 
+<li>Accepts the <span class="v">-c</span> syntax or (without <span class="v">-c</span>) accepts a script.</li> 
+<li>Waits for the job to finish.</li> 
+<li>Exits "transparently", i.e., with the exit code of the job.</li> 
+</ul> 
+ 
+<p>A suitable <span class="v">startjob</span> command does not need to support any input/output 
+redirection; we embed that into the command itself.</p> 
+ 
+ 
+<h3>Support for NFS Lag</h3> 
+ 
+<p>We originally found that our builds would often "fail" due to the 
+following scenario:</p> 
+ 
+<ul> 
+<li>Head node: Makefile submits book A to the queue.</li> 
+<li>Compute node: Certifies book A successfully.</li> 
+<li>Head node: startjob returns control to the Makefile.</li> 
+<li>Head node: Makefile runs <span class="v">ls A.cert</span> to check success.</li> 
+<li>Head node: <span class="v">ls</span> fails because NFS isn't up to date.</li> 
+<li>Make thinks there's been a problem and dies.</li> 
+<li>Moments later <span class="v">A.cert</span> shows up.</li> 
+</ul> 
+ 
+<p>To avoid this, <span class="v">cert.pl</span> now has special support for NFS lag.  We now use 
+exit codes instead of files to determine success.  In cases where the exit code 
+says the job completed successfully, we wait until <span class="v">A.cert</span> becomes visible 
+to the head node before returning control to the Makefile.</p>
+</body>
+</html>

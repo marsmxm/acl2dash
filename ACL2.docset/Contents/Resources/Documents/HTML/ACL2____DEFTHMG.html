@@ -1,0 +1,174 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Defthmg</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____DEFTHMG">Click for Defthmg in the Full Manual</a></h3>
+
+<p>Variant of <span class="tt"><a href="ACL2____DEFTHM.html">defthm</a></span> supporting <a href="ACL2____GUARD.html">guard</a> verification</p><p>After a <span class="tt"><a href="ACL2____DEFTHM.html">defthm</a></span> event introduces a name, <span class="tt"><a href="ACL2____VERIFY-GUARDS.html">verify-guards</a></span> can be called on that theorem name, just as it can be called on 
+ a function symbol.  However, the proof obligation for verifying <a href="ACL2____GUARD.html">guard</a>s 
+ is often not a theorem.  After presenting the general form for <span class="v">defthmg</span>, 
+ we give a running example, which illustrates a problem with <span class="v">implies</span> for 
+ guard verification and how <span class="v">defthmg</span> solves that problem.</p> 
+ 
+ <pre class="code">Example Form:
+(<a href="ACL2____DEFTHMG.html">defthmg</a> true-listp-member-equal
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____TRUE-LISTP.html">true-listp</a> x)
+           (<a href="ACL2____TRUE-LISTP.html">true-listp</a> (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> a x))))
+
+General Form:
+(<a href="ACL2____DEFTHMG.html">defthmg</a> name
+  body
+;;; defthm arguments:
+  :rule-classes  rule-classes
+  :instructions  instructions
+  :hints         hints
+  :otf-flg       otf-flg
+;;; new arguments:
+  :verify-guards verify-guards
+  :guard-hints   guard-hints)</pre> 
+ 
+ <p>where all but the last two keyword arguments are exactly as for <span class="tt"><a href="ACL2____DEFTHM.html">defthm</a></span>.  If <span class="v">:verify-guards</span> is supplied then it must be <span class="v">t</span> or 
+ <span class="v">nil</span>, indicating that a call of <span class="tt"><a href="ACL2____VERIFY-GUARDS.html">verify-guards</a></span> on <span class="v">name</span> will or 
+ won't be attempted, respectively.  If <span class="v">:verify-guards</span> is omitted, then its 
+ value is normally treated as <span class="v">t</span>; but it is treated as <span class="v">nil</span> if the 
+ <a href="ACL2____DEFAULT-VERIFY-GUARDS-EAGERNESS.html">default-verify-guards-eagerness</a> is 0 (rather than either 2 or its usual 
+ value of 1, as we will assume for the rest of this documentation topic). 
+ Finally, if <span class="v">:guard-hints</span> is supplied and <span class="v">verify-guards</span> is attempted 
+ on <span class="v">name</span>, then the specified <span class="v">guard-hints</span> will become the value of 
+ <span class="v">:hints</span> for that <span class="v">verify-guards</span> event.</p> 
+ 
+ <p>We now consider in some detail the example displayed above.  Consider it 
+ again, but this time with <span class="v">defthm</span> instead of <span class="v">defthmg</span>.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> true-listp-member-equal
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____TRUE-LISTP.html">true-listp</a> x)
+           (<a href="ACL2____TRUE-LISTP.html">true-listp</a> (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> a x))))</pre> 
+ 
+ <p>The proof succeeds, after which we might try to call <span class="tt"><a href="ACL2____VERIFY-GUARDS.html">verify-guards</a></span>. 
+ But <span class="v">verify-guards</span> would guarantee that the indicated form will evaluate 
+ without a Lisp guard violation for all values of <span class="v">a</span> and <span class="v">x</span>, and that's 
+ not always the case!  Suppose for example that <span class="v">x</span> is <span class="v">17</span>.  Since 
+ <span class="v">implies</span> is an ordinary function, evaluation will take place for both its 
+ arguments, even though <span class="v">(<a href="ACL2____TRUE-LISTP.html">true-listp</a> x)</span> is false.  The call 
+ <span class="v">(<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> a 17)</span> will cause a guard violation, regardless of the value 
+ of <span class="v">a</span>, since the guard for <span class="tt"><a href="ACL2____MEMBER-EQUAL.html">member-equal</a></span> requires that its second 
+ argument satisfy <span class="tt"><a href="ACL2____TRUE-LISTP.html">true-listp</a></span>.</p> 
+ 
+ <p>A way to allow guard verification for such a theorem is to replace 
+ <span class="v">implies</span> by the macro, <span class="tt"><a href="ACL2____IMPLIEZ.html">impliez</a></span>, whose calls expand to calls of 
+ <span class="v">IF</span>, for example as follows (see <span class="tt"><a href="ACL2____TRANS1.html">trans1</a></span>).</p> 
+ 
+ <pre class="code">ACL2 !&gt;:trans1 (<a href="ACL2____IMPLIEZ.html">impliez</a> (<a href="ACL2____TRUE-LISTP.html">true-listp</a> x)
+                        (<a href="ACL2____TRUE-LISTP.html">true-listp</a> (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> a x)))
+ (<a href="COMMON-LISP____IF.html">IF</a> (<a href="ACL2____TRUE-LISTP.html">TRUE-LISTP</a> X)
+     (<a href="ACL2____TRUE-LISTP.html">TRUE-LISTP</a> (<a href="ACL2____MEMBER-EQUAL.html">MEMBER-EQUAL</a> A X))
+     T)
+ACL2 !&gt;</pre> 
+ 
+ <p>When <span class="v">x</span> is 17, evaluation of the form above (either the <span class="v">impliez</span> 
+ version or its expansion to an <span class="v">IF</span> call) will <i>not</i> lead to 
+ evaluation of the <span class="v">member-equal</span> call.  Guard verification will then be 
+ possible.</p> 
+ 
+ <p>But simply changing <span class="v">implies</span> to <span class="v">impliez</span> doesn't work.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____DEFTHM.html">defthm</a> true-listp-member-equal
+         (<a href="ACL2____IMPLIEZ.html">impliez</a> (<a href="ACL2____TRUE-LISTP.html">true-listp</a> x)
+                  (<a href="ACL2____TRUE-LISTP.html">true-listp</a> (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> a x))))
+
+
+ACL2 Error in ( DEFTHM TRUE-LISTP-MEMBER-EQUAL ...):  A :REWRITE rule
+generated from TRUE-LISTP-MEMBER-EQUAL is illegal because it rewrites
+the IF-expression (<a href="COMMON-LISP____IF.html">IF</a> (<a href="ACL2____TRUE-LISTP.html">TRUE-LISTP</a> X) (<a href="ACL2____TRUE-LISTP.html">TRUE-LISTP</a> (<a href="ACL2____MEMBER-EQUAL.html">MEMBER-EQUAL</a> A X)) 'T).
+For general information about rewrite rules in ACL2, see :DOC rewrite.</pre> 
+ 
+ <p>The error message is basically telling us that we need <span class="v">implies</span>, not 
+ <span class="v">impliez</span> (or <span class="v">IF</span>), in order to store the indicated theorem as a <a href="ACL2____REWRITE.html">rewrite</a> rule, which is the default.  We can overcome this problem by 
+ supplying an explicit <span class="v">:</span><span class="tt"><a href="ACL2____COROLLARY.html">corollary</a></span> equal to the original theorem, 
+ as follows.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> true-listp-member-equal
+  (<a href="ACL2____IMPLIEZ.html">impliez</a> (<a href="ACL2____TRUE-LISTP.html">true-listp</a> x)
+           (<a href="ACL2____TRUE-LISTP.html">true-listp</a> (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> a x)))
+  :rule-classes
+  ((:rewrite :corollary
+             (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____TRUE-LISTP.html">true-listp</a> x)
+                      (<a href="ACL2____TRUE-LISTP.html">true-listp</a> (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> a x))))))</pre> 
+ 
+ <p>Now the intended rewrite rule is stored, and also we can verify guards, 
+ since the guard proof obligation is based on the body of the <span class="v">defthm</span> 
+ event (with <span class="v">impliez</span>), not the corollary.</p> 
+ 
+ <pre class="code">(<a href="ACL2____VERIFY-GUARDS.html">verify-guards</a> true-listp-member-equal)</pre> 
+ 
+ <p>The purpose of <span class="v">defthmg</span> is to automate the process described above. 
+ Our example <span class="v">defthmg</span> call generates a <span class="tt"><a href="COMMON-LISP____PROGN.html">progn</a></span> containing the 
+ <span class="v">defthm</span> and <span class="v">verify-guards</span> forms displayed just above (except for the 
+ addition of suitable <span class="v">:</span><span class="tt"><a href="ACL2____HINTS.html">hints</a></span> to streamline the process).</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">DEFTHM</a> TRUE-LISTP-MEMBER-EQUAL
+  (<a href="ACL2____IMPLIEZ.html">IMPLIEZ</a> (<a href="ACL2____TRUE-LISTP.html">TRUE-LISTP</a> X)
+           (<a href="ACL2____TRUE-LISTP.html">TRUE-LISTP</a> (<a href="ACL2____MEMBER-EQUAL.html">MEMBER-EQUAL</a> A X)))
+  :RULE-CLASSES
+  ((:REWRITE
+    :COROLLARY (<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="ACL2____TRUE-LISTP.html">TRUE-LISTP</a> X)
+                        (<a href="ACL2____TRUE-LISTP.html">TRUE-LISTP</a> (<a href="ACL2____MEMBER-EQUAL.html">MEMBER-EQUAL</a> A X)))
+    :HINTS (("Goal" :IN-THEORY (<a href="ACL2____THEORY.html">THEORY</a> 'MINIMAL-THEORY))))))
+
+(<a href="ACL2____VERIFY-GUARDS.html">VERIFY-GUARDS</a> TRUE-LISTP-MEMBER-EQUAL)</pre> 
+ 
+ <p>If <span class="v">:</span><span class="tt"><a href="ACL2____RULE-CLASSES.html">rule-classes</a></span> are supplied explicitly, these will be 
+ handled appropriately: for each rule class, if a <span class="v">:corollary</span> is supplied 
+ explicitly then that rule class is not changed, and otherwise a 
+ <span class="v">:corollary</span> is specified to be the original theorem (hence with 
+ <span class="v">implies</span>, not changed to <span class="v">impliez</span>), and the <span class="v">:in-theory</span> hint 
+ displayed just above will be generated in order to make the proof of the 
+ corollary very fast.</p> 
+ 
+ <p>The following more complex (but rather nonsensical) example illustrates the 
+ various arguments of <span class="v">defthmg</span>.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHMG.html">defthmg</a> true-listp-member-equal
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____TRUE-LISTP.html">true-listp</a> x)
+           (<a href="ACL2____TRUE-LISTP.html">true-listp</a> (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> a x)))
+  :verify-guards t
+  :guard-hints (("Goal" :use car-cons))
+  :hints (("Goal" :induct (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> a x)))
+  :rule-classes
+  (:rewrite
+   (:rewrite ; awful rule with free variable
+    :corollary (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____TRUE-LISTP.html">true-listp</a> (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> a x)))
+                        (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____TRUE-LISTP.html">true-listp</a> x))))
+   :type-prescription)
+  :otf-flg t)</pre> 
+ 
+ <p>Here are the two events generated after successfully evaluating the form 
+ above.  Notice that the rule class with an explicit <span class="v">:corollary</span> is not 
+ modified.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">DEFTHM</a> TRUE-LISTP-MEMBER-EQUAL
+  (<a href="ACL2____IMPLIEZ.html">IMPLIEZ</a> (<a href="ACL2____TRUE-LISTP.html">TRUE-LISTP</a> X)
+           (<a href="ACL2____TRUE-LISTP.html">TRUE-LISTP</a> (<a href="ACL2____MEMBER-EQUAL.html">MEMBER-EQUAL</a> A X)))
+  :RULE-CLASSES
+  ((:REWRITE
+    :COROLLARY (<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="ACL2____TRUE-LISTP.html">TRUE-LISTP</a> X)
+                        (<a href="ACL2____TRUE-LISTP.html">TRUE-LISTP</a> (<a href="ACL2____MEMBER-EQUAL.html">MEMBER-EQUAL</a> A X)))
+    :HINTS (("Goal" :IN-THEORY (<a href="ACL2____THEORY.html">THEORY</a> 'MINIMAL-THEORY))))
+   (:REWRITE
+    :COROLLARY (<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____NOT.html">NOT</a> (<a href="ACL2____TRUE-LISTP.html">TRUE-LISTP</a> (<a href="ACL2____MEMBER-EQUAL.html">MEMBER-EQUAL</a> A X)))
+                        (<a href="COMMON-LISP____NOT.html">NOT</a> (<a href="ACL2____TRUE-LISTP.html">TRUE-LISTP</a> X))))
+   (:TYPE-PRESCRIPTION
+    :COROLLARY (<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="ACL2____TRUE-LISTP.html">TRUE-LISTP</a> X)
+                        (<a href="ACL2____TRUE-LISTP.html">TRUE-LISTP</a> (<a href="ACL2____MEMBER-EQUAL.html">MEMBER-EQUAL</a> A X)))
+    :HINTS (("Goal" :IN-THEORY (<a href="ACL2____THEORY.html">THEORY</a> 'MINIMAL-THEORY)))))
+  :HINTS (("Goal" :INDUCT (<a href="ACL2____MEMBER-EQUAL.html">MEMBER-EQUAL</a> A X)))
+  :OTF-FLG T)
+
+(<a href="ACL2____VERIFY-GUARDS.html">VERIFY-GUARDS</a> TRUE-LISTP-MEMBER-EQUAL
+  :HINTS (("Goal" :USE CAR-CONS)))</pre>
+</body>
+</html>

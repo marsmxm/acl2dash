@@ -1,0 +1,193 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Atj-tutorial-translated</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=JAVA____ATJ-TUTORIAL-TRANSLATED">Click for Atj-tutorial-translated in the Full Manual</a></h3>
+
+<p>ATJ tutorial: ACL2 Functions Translated To Java.</p><p>This tutorial page describes 
+    which ACL2 functions are translated to Java when ATJ is called, 
+    and which requirements these functions must satisfy. 
+    This applies to both <a href="JAVA____ATJ-TUTORIAL-DEEP-SHALLOW.html">deep and shallow embedding approaches</a>.</p><h5>Target Functions</h5><p>In the factorial function example in <a href="JAVA____ATJ-TUTORIAL-DEEP.html">atj-tutorial-deep</a>, 
+    ATJ is called with a single target ACL2 function, <span class="v">fact</span>, as argument. 
+    As noted in that page, ATJ generates a Java representation 
+    not only of the <span class="v">fact</span> function, 
+    but also of the functions called by it directly or indirectly, 
+    except for the ACL2 primitive functions.</p><p>In general, ATJ may be called with more than one target ACL2 function 
+    (with at least one being required):</p><pre class="code">(<a href="JAVA____ATJ.html">java::atj</a> f1 f2 f3 ...)</pre><p>ATJ generates code not only for the functions explicitly given, 
+    but also for all the ones called by them directly or indirectly. 
+    Normally, ATJ should be called on the top-level function(s) 
+    for which Java code must be generated; 
+    it is harmless, but unnecessary, 
+    to explicitly include non-top-level functions in the ATJ call.</p><h5>Calling Relation</h5><p>We need to be more precise about what 
+    `called directly or indirectly' means in this context. 
+    ATJ looks at the unnormalized body of each function 
+    (i.e. the <span class="v">acl2::unnormalized-body</span> property of the function), 
+    which is the result of <a href="ACL2____TERM.html">translating</a> the body of the <span class="tt"><a href="COMMON-LISP____DEFUN.html">defun</a></span> that has introduced the function, 
+    without any <a href="ACL2____NORMALIZE.html">normalization</a>. As far as ATJ is concerned, 
+    a function <span class="v">f</span> directly calls a function <span class="v">g</span> 
+    if and only if <span class="v">g</span> occurs in the unnormalized body of <span class="v">f</span>. 
+    Then the `indirectly calling' relation is 
+    the transitive closure of the `directly calling' relation. 
+    (The unnormalized body of a function <span class="v">f</span> 
+    can be examined via <span class="v">:props f</span>, or via utilities like 
+    <span class="tt"><a href="ACL2____BODY.html">body</a></span>, <span class="tt"><a href="ACL2____UBODY.html">ubody</a></span>, and <span class="tt"><a href="ACL2____UBODY_B2.html">ubody+</a></span>.)</p><p>Note that the guard of <span class="v">f</span> is ignored for the `calling' relation; 
+    only the unnormalized body is considered. 
+    That is, if the guard of <span class="v">f</span> calls <span class="v">g</span> 
+    but the unnormalized body of <span class="v">f</span> does not, 
+    then <span class="v">f</span> is not considered to directly call <span class="v">g</span>. 
+    It might still call <span class="v">g</span> indirectly, 
+    if the unnormalized body of <span class="v">f</span> calls some other function 
+    that calls <span class="v">g</span> directly or indirectly, 
+    but that has nothing to do with the guard of <span class="v">f</span>. 
+    The reason is that currently ATJ does not generate Java code from guards; 
+    this may change in the future, and with that the notion of `calling'.</p><p>If <span class="v">f</span> is recursive, 
+    the measure of <span class="v">f</span> is also ignored for the `calling' relation. 
+    The reason is that measures have really no significance 
+    in ACL2's evaluation semantics, 
+    other than serving to show that the evaluation of a function terminates.</p><p>If <span class="v">f</span> is a <a href="ACL2____PRIMITIVE.html">primitive function</a>, it has no unnormalized (or normalized) body; 
+    it has no definition. 
+    Therefore, according to the definition above, 
+    <span class="v">f</span> does not call any other function directly, or indirectly.</p><p>If <span class="v">f</span> is a non-primitive function <a href="JAVA____ATJ-TUTORIAL-NATIVE-FUNCTIONS.html">natively implemented in Java</a>, ATJ does not look at its unnormalized body. 
+    The function is thus regarded, like primitive functions, 
+    as not calling any other function directly, or indirectly. 
+    (Recall that all primitive functions are natively implemented in Java, 
+    but some non-primitive functions are also natively implemented in Java.)</p><h5>Calling Closure</h5><p>At a first approximation, we can say that 
+    ATJ calculates the closure of 
+    the explicitly supplied target functions <span class="v">f1</span>, <span class="v">f2</span>, etc., 
+    with respect to the calling relation defined above. 
+    Starting from <span class="v">f1</span>, <span class="v">f2</span>, etc., 
+    ATJ finds all the functions called by these directly or indirectly, 
+    using a worklist algorithm. 
+    When a natively implemnented function is encountered, 
+    its called functions are not further explored. 
+    Recursive functions, also mutually recursive ones, 
+    are handled appropriately (i.e. they do not cause a circular search).</p><p>While calculating this closure, 
+    ATJ checks that all the functions in the closure 
+    satisfy certain conditions:</p><ul>
+<li>Each function must either be primitive or have an unnormalized body. 
+     The reason is that, unless the function has a definition 
+     or a known behavior (like the primitive functions do), 
+     ATJ would not know how to translate the function to Java. 
+     (There is actually an exception to this, explained later in this page.)</li>
+<li>Each function must have no input or output stobjs. 
+     The reason is that stobjs entail side effects, 
+     as explained in <a href="JAVA____ATJ-TUTORIAL-BACKGROUND.html">atj-tutorial-background</a>, 
+     and side effects are not yet supported by ATJ.</li>
+<li>Each function must not have raw Lisp code, 
+     unless it is in a whitelist of functions with raw Lisp code 
+     that are known not to have side effects 
+     and are known to behave consistently with their unnormalized body. 
+     This whitelist is in the constant <span class="v">*pure-raw-p-whitelist*</span>, 
+     used by the <span class="tt"><a href="ACL2____PURE-RAW-P.html">pure-raw-p</a></span> utility. 
+     The reason for this restriction is that 
+     ATJ does not look at the raw Lisp code of those functions, 
+     and therefore could not properly translate to Java 
+     the code responsible for any side effects.</li>
+</ul><p>If any of these conditions is violated, 
+    ATJ stops with an error without generating Java code.</p><p>It should be possible to extend the whitelist as needed, 
+    and eventually to extend ATJ to accept functions with known side effects, 
+    and to generate Java code that suitably replicates those side effects. 
+    This is future work.</p><h5>Constrained Functions</h5><p>Besides the primitive functions, 
+    the ACL2 constrained functions, 
+    introduced via <span class="tt"><a href="ACL2____DEFCHOOSE.html">defchoose</a></span> or <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span>, 
+    do not have an unnormalized body. 
+    As noted above, when ATJ encounters a constrained function, 
+    it normally stops with an error without generating any code.</p><p>But there is an exception to this. 
+    If a constrained function <span class="v">f</span> 
+    with formal parameters <span class="v">x1</span>, ..., <span class="v">xn</span> 
+    has an <a href="ACL2____DEFATTACH.html">attachment</a> <span class="v">g</span>, 
+    then <span class="v">f</span> is treated as if its unnormalized body were 
+    <span class="v">(g x1 ... xn)</span>. 
+    Thus, <span class="v">f</span> is treated as if it called (directly) <span class="v">g</span>.</p><p>The attachment <span class="v">g</span> of <span class="v">f</span> may be defined, primitive, or constrained. 
+    If constrained, ATJ stops without generating code, 
+    unless <span class="v">g</span> has an attachment <span class="v">h</span>, 
+    in which case <span class="v">g</span> is treated like <span class="v">f</span> above, 
+    and then ATJ recursively examines <span class="v">h</span>.</p><h5>Special Treatment of Return-Last</h5><p>The <span class="tt"><a href="ACL2____RETURN-LAST.html">return-last</a></span> function results from translating 
+    macros like <span class="tt"><a href="ACL2____MBE.html">mbe</a></span> and <span class="tt"><a href="ACL2____PROG2_42.html">prog2$</a></span>. 
+    In particular, <span class="v">(<a href="ACL2____MBE.html">mbe</a> :logic a :exec b)</span> is translated to 
+    <span class="v">(<a href="ACL2____RETURN-LAST.html">return-last</a> 'acl2::mbe1-raw b a)</span>, 
+    and <span class="v">(<a href="ACL2____PROG2_42.html">prog2$</a> a b)</span> is translated to 
+    <span class="v">(<a href="ACL2____RETURN-LAST.html">return-last</a> 'acl2::progn a b)</span>. 
+    The <span class="tt"><a href="ACL2____RETURN-LAST.html">return-last</a></span> function has raw Lisp code; 
+    its unnormalized body is just its last argument, 
+    which does not describe its evaluation semantics 
+    (just its logical semantics).</p><p>The <span class="tt"><a href="ACL2____RETURN-LAST.html">return-last</a></span> function 
+    is not in the whitelist mentioned earlier. 
+    However, ATJ accepts certain uses of <span class="tt"><a href="ACL2____RETURN-LAST.html">return-last</a></span>: 
+    these uses have a known behavior and therefore ATJ 
+    knows how to generate correct Java code. 
+    (This is not to say that other uses of <span class="tt"><a href="ACL2____RETURN-LAST.html">return-last</a></span> 
+    do not have a known behavior: 
+    all the uses of <span class="tt"><a href="ACL2____RETURN-LAST.html">return-last</a></span> have a known behavior, 
+    but only some of them are currently supported by ATJ.)</p><p>ATJ accepts calls of <span class="tt"><a href="ACL2____RETURN-LAST.html">return-last</a></span> of the following forms:</p><ul>
+<li>
+<span class="v">(<a href="ACL2____RETURN-LAST.html">return-last</a> 'acl2::mbe1-raw x y)</span>, 
+     i.e. calls whose first argument is the symbol <span class="v">acl2::mbe1-raw</span>. 
+     As noted above, these calls result from <span class="v">(<a href="ACL2____MBE.html">mbe</a> :logic y :exec x)</span>. 
+     If ATJ's <span class="v">:guards</span> input is <span class="v">nil</span>, 
+     ATJ treats the call as if it were just <span class="v">y</span>; 
+     if instead ATJ's <span class="v">:guards</span> input is <span class="v">t</span>, 
+     ATJ treats the call as if it were just <span class="v">x</span>. 
+     The reason for this is explained later in more detail 
+     in <a href="JAVA____ATJ-TUTORIAL-DEEP-GUARDS.html">atj-tutorial-deep-guards</a>. 
+     However, the other subterm 
+     (i.e. <span class="v">x</span> if <span class="v">:guards</span> is <span class="v">nil</span>, 
+     and <span class="v">y</span> if <span class="v">:guards</span> is <span class="v">t</span>) 
+     is not completely ignored: 
+     ATJ still checks, recursively, 
+     that the functions called directly or indirectly by that subterm 
+     are known to be free of side effects. 
+     No Java code is generated for these functions 
+     (unless they are called directly or indirectly 
+     by the subterm of <span class="tt"><a href="ACL2____RETURN-LAST.html">return-last</a></span> for which code is generated, 
+     or more in general by the target functions), 
+     but ATJ still checks that they have no side effects, 
+     to ensure that the generated Java code, which has no side effects, 
+     is consistent with the ACL2 evaluation semantics. 
+     Note that, even if guards are verified, 
+     it is only known that <span class="v">x</span> and <span class="v">y</span> are logically equal 
+     in the context where the <span class="tt"><a href="ACL2____RETURN-LAST.html">return-last</a></span> call appears, 
+     but that says nothing about side effects.</li>
+<li>
+<span class="v">(<a href="ACL2____RETURN-LAST.html">return-last</a> 'acl2::progn x y)</span>, 
+     i.e. calls whose first argument is the symbol <span class="v">acl2::progn</span>. 
+     As noted above, these calls result from <span class="v">(<a href="ACL2____PROG2_42.html">prog2$</a> x y)</span>, 
+     which in turn may result from <span class="tt"><a href="ACL2____PROGN_42.html">progn$</a></span> calls. 
+     ATJ treats the call as if it were just <span class="v">y</span>, 
+     but also checks that <span class="v">x</span> does not call, directly or indirectly, 
+     any function that is not known to be free of side effects. 
+     The process and the reason are the same 
+     as in the <span class="v">acl2::mbe1-raw</span> case. 
+     This is independent from the value of ATJ's <span class="v">:guards</span> input.</li>
+</ul><p>It should be possible to extend ATJ to accept 
+    more forms of <span class="tt"><a href="ACL2____RETURN-LAST.html">return-last</a></span> calls, 
+    and to relax the checks on possibly-side-effecting functions, 
+    as also mentioned earlier in this tutorial page. 
+    This is future work.</p><h5>Ignoring the Whitelist</h5><p>ATJ provides an optional input <span class="v">:ignore-whitelist</span>. 
+    When this input is <span class="v">nil</span> (which is the default), 
+    the whitelist mentioned above is not ignored. 
+    That is, a function with raw Lisp code must be in the whitelist 
+    in order for the ATJ call to succeed, as explained above.</p><p>When <span class="v">:ignore-whitelist</span> is <span class="v">t</span>, the whitelist is ignored instead. 
+    So long as a function with raw Lisp code has an unnormalized body, 
+    ATJ will translate that unnormalized body to Java code, 
+    regardless of whether it is functionally equivalent to the raw Lisp code. 
+    In particular, this means that 
+    any side effects carried out by the raw Lisp code 
+    will not be replicated by the generated Java code. 
+    For instance, <span class="tt"><a href="ACL2____HARD-ERROR.html">hard-error</a></span> has <span class="v">'nil</span> as unnormalized body, 
+    so the Java code generated for <span class="tt"><a href="ACL2____HARD-ERROR.html">hard-error</a></span> just returns <span class="v">nil</span>: 
+    it does not stop execution with an error, as in ACL2.</p><p>There is thus a potential danger of generating incorrect Java code 
+    (with respect to a reasonable or expected evaluation semantics of ACL2) 
+    when <span class="v">:ignore-whitelist</span> is <span class="v">t</span>. 
+    Nonetheless, this option may be useful if, for instance, 
+    the ACL2 code that calls the side-effecting functions 
+    is unreachable under the guards. 
+    In any case, once the user explicitly sets <span class="v">:ignore-whitelist</span> to <span class="v">t</span>, 
+    they assume the responsibility for the adequacy of 
+    translating side-effecting ACL2 code to non-side-effecting Java code.</p><div class="box"></div><p><b>Previous:</b> <a href="JAVA____ATJ-TUTORIAL-SCREEN-OUTPUT.html">Control of the Screen Output</a></p><p><b>Next:</b> <a href="JAVA____ATJ-TUTORIAL-DEEP-GUARDS.html">Guards in the Deep Embedding Approach</a></p>
+</body>
+</html>

@@ -1,0 +1,110 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Alias-normalization</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=SV____ALIAS-NORMALIZATION">Click for Alias-normalization in the Full Manual</a></h3>
+
+<p>The process of computing a canonical form for each wire in the module hierarchy.</p><p>Alias normalization takes as input a list of pairs of <a href="SV____LHS.html">lhs</a> 
+objects and computes a canonical form for each wire mentioned.  The inputs must 
+be in indexed-variable form; that is, each variable name must be a unique 
+natural number (this allows us to use arrays to look up variable 
+properties).</p> 
+ 
+<p>The normalization algorithm is similar to a disjoint sets union-find 
+algorithm.  Initially, every wire is mapped to itself.  For each alias pair, we 
+canonicalize the two LHS objects according to our current mapping.  That is, 
+for each wire range in the LHS, we look up the current mapping of the wire, 
+truncate it to the relevant range, and recursively canonicalize that, stopping 
+on ranges that are mapped to themselves.  (In order that this process 
+terminates, it is an invariant that every subrange of every wire is mapped to a 
+range of a wire whose index is less than or equal to the index of that wire; 
+and if mapped to itself, then to either a lower range of bits or just to 
+itself.)</p> 
+ 
+<p>Then, when we have normalized the two LHSes, we break this pairing down into 
+pairs of single wire ranges.  For example, if our two normalized LHSes are <span class="v">{
+a[5:4], b[7:3] }</span> and <span class="v">{ c[8:5], d[9:7] }</span>, these would be broken down into 
+the pairs:</p> 
+<pre class="code">(a[5:4], c[8:7]),
+   (b[7:6], c[6:5]),
+   (b[5:3], d[9:7]).</pre> 
+ 
+<p>For each of these range pairs, unless the two elements are the same, we set 
+the canonical version of one to the other, chosen so that the ordering 
+invariant is maintained.</p> 
+ 
+<p>To finish processing the current alias pair, we again recursively 
+canonicalize the original pair of LHS objects.  However, now, whenever we find 
+the canonical version of a wire range, we replace the mapping for that wire 
+range with the canonical version found.  As in the union-find algorithm, this 
+is a performance optimization to minimize the number of steps necessary in 
+future searches.</p> 
+ 
+<p>Once all alias pairs are processed like this, we finish by doing a linear 
+sweep over all entries in the table, replacing every wire range by its 
+canonical representation.</p> 
+ 
+<h5>Correctness of the algorithm</h5> 
+ 
+<p>We haven't proved the algorithm correct.  Here are some thoughts on the topic.</p> 
+ 
+<p>The correctness statement is something like the following.</p> 
+ 
+<p>If v and w are each a bit selected from some wire, then <span class="v">canon(v) =
+canon(<a href="ACL2____W.html">w</a>)</span> iff there exists a path <span class="v">v0, ..., vn</span> where:</p> 
+<ul> 
+<li>
+<span class="v">v0 = v</span> and <span class="v">vn = w</span>
+</li> 
+<li>for all <span class="v">i</span> from 0 to <span class="v">n-1</span>, there exists an alias pair such that 
+<span class="v">vi</span> and <span class="v">vi+1</span> are corresponding bits in the two LHS objects of the 
+pair.</li> 
+</ul> 
+ 
+<p>During the main loop of the algorithm (i.e. between processing alias pairs), 
+this property holds of the alias pairs processed so far, if we regard 
+<span class="v">canon(v)</span> as recursive canonicalization of <span class="v">v</span> as opposed to a single 
+lookup.  Inductive argument:</p> 
+ 
+<p>Base case: we haven't processed any alias pairs yet; by the initial setting 
+of the mapping, <span class="v">canon(v) = canon(<a href="ACL2____W.html">w</a>)</span> iff <span class="v">v == w</span>.</p> 
+ 
+<p>Inductive case: Suppose the property holds before adding an alias pair, and 
+show it holds after adding it.</p> 
+ 
+<p>Backward direction: Show that if a path exists from v to w, then the 
+canonical forms are equal.</p> 
+ 
+<p>Lemma: If <span class="v">canon(v) = canon(<a href="ACL2____W.html">w</a>)</span> before, then this is true after.  We only 
+change the mapping for values that are canonical, which only adds 
+equivalences (unions sets), or for non-canonical values by replacing their 
+mapping with their canonical values, which preserves equivalences.</p> 
+ 
+<p>So if the path exists without our new alias pair, then by I.H. the canonical 
+forms are equal before, so they are equal after as well.  So we only need to 
+consider the case where the path uses our new alias pair.  Basically, it 
+suffices to show that as we process the alias pair, we equalize the canonical 
+forms of corresponding bits.  So since each link in the path is corresponding 
+bits of a pair, they have equal canonical representations.</p> 
+ 
+<p>Forward direction: If there is no path, then the canonical forms differ.  To 
+prove this, we assume the canonical forms are the same and produce a path.  We 
+only need to consider v, w whose canonical forms are newly equal: if they were 
+equal before then there was a path before by IH, and that same path works now. 
+The only operation that equalizes new pairs is that we set a canonical range to 
+the corresponding canonical range of the other LHS.</p> 
+ 
+<p>Lemma: Setting a canonical range to another range only affects the canonical 
+form of bits whose canonical form was in that range.</p> 
+ 
+<p>Bits whose canonical form was in the changed range (by IH) have a path to 
+corresponding bits of that range.  The part of the original LHS that mapped to 
+that range also has such a path.  Concatenate these two, step over the current 
+alias to some bit whose canonical form already was the new canonical form in 
+question -- so then concatenate on that bit's path to w.  Got that?</p>
+</body>
+</html>

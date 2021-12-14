@@ -1,0 +1,395 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Developers-guide-maintenance</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____DEVELOPERS-GUIDE-MAINTENANCE">Click for Developers-guide-maintenance in the Full Manual</a></h3>
+
+<p>Modifying, Testing, and Debugging</p><font color="#c00000"><p>Before working on changes to ACL2, consider 
+ sending email to the acl2-devel list (<span class="v">acl2-devel@utlists.utexas.edu</span>), 
+ explaining what you have in mind.  This will avoid duplication and also 
+ provide an opportunity for feedback.  In particular, you may want to wait for 
+ confirmation from Kaufmann or Moore that at least one of them will be willing 
+ to review your patch; otherwise they make no commitment to do so, and your 
+ efforts might be wasted!</p></font> 
+ 
+ <p>Please try to limit your modifications to those that are directly related 
+ to what you intend to change.  For example, please don't delete comments in a 
+ source file or a book.  (If you feel moved to do so, at least first check with 
+ an author of the file you propose to change.)  That said, it's certainly it's 
+ fine to fix typos.</p> 
+ 
+ <p>Detailed steps for making a contribution are outlined in the topic, <a href="ACL2____DEVELOPERS-GUIDE-CONTRIBUTING.html">developers-guide-contributing</a>.</p> 
+ 
+ <h3>Development</h3> 
+ 
+ <font color="#c00000"> 
+ <p>The first step towards changing ACL2 is typically to create a patch file, 
+ which here we call <span class="v">patch.lisp</span>.  It will typically have the following 
+ shape.</p> 
+ </font> 
+ 
+ <pre class="code">;;; Github commit hash as of your starting ACL2 version (see below)
+
+;;; Comments at the top (perhaps an email thread with a request for the
+;;; change)
+
+(<a href="ACL2____REDEF_B2.html">redef+</a>)
+
+&lt;your code&gt;
+
+(<a href="ACL2____REDEF-.html">redef-</a>)
+(<a href="ACL2____RESET-PREHISTORY.html">reset-prehistory</a>) ; optional</pre> 
+ 
+ <p>The reason to record the github commit hash is so that Kaufmann and Moore 
+ can correctly merge in your changes even after there have been several ACL2 
+ commits.  You can get that hash by running the following command under the 
+ main ACL2 directory.</p> 
+ 
+ <pre class="code">git rev-parse HEAD</pre> 
+ 
+ <p>Next, start copying into <span class="v">patch.lisp</span> the source functions that you want 
+ to modify.  (As already noted, it is helpful for this process to use 
+ <span class="v">meta-.</span> in Emacs.)  It is often best to keep the functions in order: if 
+ <span class="v">f</span> calls <span class="v">g</span> and both are defined (or redefined) in <span class="v">patch.lisp</span>, 
+ then the definition of <span class="v">g</span> should precede the definition of <span class="v">f</span> in 
+ <span class="v">patch.lisp</span>.</p> 
+ 
+ <p>Now modify those source functions and write any additional supporting 
+ functions that you need.  Try to use existing source functions when possible. 
+ perhaps finding them by using the Emacs command, <span class="v">meta-x tags-apropos</span>. 
+ For example, to find a function that concatenates a list of strings, you could 
+ run <span class="v">meta-x tags-apropos append</span> and then search for <span class="v">string</span> in the 
+ resulting display; you would find <span class="v">string-append-lst</span>, and you could run 
+ the Emacs command <span class="v">meta-.</span> on that word in order to find its definition in 
+ the sources, to see if it has the desired functionality.  You may also find it 
+ useful to consult the documentation topic, <a href="ACL2____SYSTEM-UTILITIES.html">system-utilities</a>.</p> 
+ 
+ <p>If there are further changes that you wish to make to the ACL2 source code 
+ which are not of the form of function definitions or redefinitions — for 
+ example, if you want to add or modify a top-level comment, or put some of the 
+ new functions in a particular file or a newly created file, etc. — then 
+ feel free to add instructions that reflect your intent in comments in 
+ <span class="v">patch.lisp</span>, within reason.  We will be reading over <span class="v">patch.lisp</span> 
+ manually, so human-directed comments are welcome — the exact format of 
+ <span class="v">patch.lisp</span> is not rigid.</p> 
+ 
+ <h3>Initial testing</h3> 
+ 
+ <p>Test your patch by starting ACL2 and evaluating the following form in the 
+ loop (but see below for an exception).  The use of <span class="v">:ld-pre-eval-print</span> is 
+ optional, but can be helpful when debugging since it prints each form before 
+ evaluating it.</p> 
+ 
+ <pre class="code">(<a href="ACL2____LD.html">ld</a> "patch.lisp" :ld-pre-eval-print t)</pre> 
+ 
+ <font color="#c00000"> 
+ <p>EXCEPTION: the form above may not work if your patch file has any 
+ occurrences of the <span class="v">acl2-loop-only</span> readtime conditional (preceded either 
+ by <span class="v">#+</span> or by <span class="v">#-</span>).  In that case, run <span class="v">LP!</span> as follows.  NOTE: if 
+ you are making changes that affect definition processing, then you may need to 
+ switch the order: first <span class="v">load</span>, then after <span class="v">(LP!)</span>, run <span class="v">ld</span>.</p> 
+ </font> 
+ 
+ <pre class="code">:q
+(LP!)
+(<a href="ACL2____LD.html">ld</a> "patch.lisp" :ld-pre-eval-print t)
+:q
+(load "patch.lisp") ; only needed if #-acl2-loop-only occurs in patch.lisp
+(<a href="ACL2____LP.html">LP</a>)</pre> 
+ 
+ <p>Remark (only rarely to be considered).  If efficiency is a concern and you 
+ are using a Lisp implementation that does not compile on-the-fly (as of this 
+ writing, that includes Lisps other than CCL and SBCL), then put 
+ <span class="v">(<a href="ACL2____SET-COMPILE-FNS.html">set-compile-fns</a> t)</span> near the top of <span class="v">patch.lisp</span>, and replace <span class="v">(load
+ "patch.lisp")</span> just above by the following (perhaps first adding 
+ <span class="v">(<a href="COMMON-LISP____IN-PACKAGE.html">in-package</a> "ACL2")</span> at the top of <span class="v">patch.lisp</span>):</p> 
+ 
+ <pre class="code">(load "patch.lisp")
+(compile-file "patch.lisp")
+(load "patch")</pre> 
+ 
+ <p>Now test your patch.  A quick test could be the following.</p> 
+ 
+ <pre class="code">(mini-proveall) ; should complete normally
+(<a href="ACL2____UBT_12.html">ubt!</a> 1) ; back to just after reset-prehistory was evaluated</pre> 
+ 
+ <p>You might also want to do your own tests.  In some cases, you could even 
+ add a book of tests in directory <span class="v">books/system/tests/</span>.  If the change was 
+ inspired by problems with a specific event in an existing book, the following 
+ can be useful.</p> 
+ 
+ <pre class="code">(<a href="ACL2____LD.html">ld</a> "foo.port")
+(<a href="ACL2____REBUILD.html">rebuild</a> "foo.lisp" t)
+:ubt &lt;bad-event-name&gt;
+&lt;bad-event&gt;</pre> 
+ 
+ <h3>Installing and building</h3> 
+ 
+ <p>When you are satisfied that all is well, take your copy of ACL2 and install 
+ the patches: for each system function redefined in patch.lisp, replace the 
+ definition in your copy of the ACL2 sources with the redefinition, preceded by 
+ new supporting definitions as necessary.  Then in your acl2-sources directory, 
+ build the system; see <a href="ACL2____DEVELOPERS-GUIDE-BUILD.html">developers-guide-build</a>.</p> 
+ 
+ <font color="#c00000"> 
+ <p>Since ACL2 insists that functions, macros, and constants are introduced 
+ before they are referenced, you might need to move some definitions around. 
+ You might even need to move then to ``earlier'' files (see <a href="ACL2____DEVELOPERS-GUIDE-BACKGROUND.html">developers-guide-background</a>).  This is normal.  Although a file name like 
+ ``<span class="v">rewrite.lisp</span>'' is suggestive of its contents, and ideally the file 
+ contains code that reflects the intent of the filename, nevertheless this is 
+ not a rule; ACL2 implementors often need to move definitions forward in 
+ support of other functions.</p> 
+ </font> 
+ 
+ <p>The following two additional steps are occasionally advisable, especially 
+ for patches that change definitions that are in <span class="v">:</span><span class="tt"><a href="ACL2____LOGIC.html">logic</a></span> mode. 
+ Feel free to ask an ACL2 author if they are necessary; as of this writing, 
+ that would be Matt Kaufmann, at <span class="v">kaufmann@cs.utexas.edu</span>.</p> 
+ 
+ <ul> 
+ 
+ <li>Run ``<span class="v">make proofs</span>''.  That should conclude with the message, 
+ ``Initialization SUCCEEDED.''</li> 
+ 
+ <li>Do a ``devel'' build, regression, and check.  See <a href="ACL2____VERIFY-GUARDS-FOR-SYSTEM-FUNCTIONS.html">verify-guards-for-system-functions</a>, specifically the six steps at the end of 
+ the topic.</li> 
+ 
+ </ul> 
+ 
+ <h3>Regression testing</h3> 
+ 
+ <p>Now do a regression test.  The most complete regression is done using the 
+ <span class="v">regression-everything</span> target in the top-level ACL2 sources directory, or 
+ equivalently, the <span class="v">everything</span> target in the <span class="v">books/</span> directory.  Please 
+ install a SAT solver first; see <a href="SATLINK____SAT-SOLVER-OPTIONS.html">satlink::sat-solver-options</a>.</p> 
+ 
+ <p>Note that the ``<span class="v">everything</span>'' level of testing may only work for CCL 
+ and SBCL; for other Lisps, or for ACL2(p) or ACL2(r), just use the 
+ <span class="v">regression</span> target in the top-level ACL2 sources directory or, 
+ equivalently, the <span class="v">all</span> target in the <span class="v">books/</span> directory.  This could 
+ take a few hours — perhaps more than 5 hours or even more than 8 hours, 
+ depending on the Lisp and the machine.  But feel free to do only an 
+ <span class="v">everything</span> regression for ACL2 using CCL or SBCL, ignoring ACL2(p) and 
+ ACL2(r).</p> 
+ 
+ <pre class="code">make clean-books ; \
+(time nice make -j 8 regression-everything) &gt;&amp; make-regression-everything.log&amp;</pre> 
+ 
+ <p>A search for <span class="v">**</span> in the log will determine whether there have been any 
+ failures; equivalently, in most cases, a failure has occurred when there is a 
+ non-zero exit status.</p> 
+ 
+ <p><font color="#c00000">It is a good idea to keep a record of the time it 
+ takes to complete a regression</font> using a given host Lisp and a given 
+ value for the <span class="v">-j</span> argument of `<span class="v">make</span>'.  If there is a jump of more 
+ than a percent or two that is not attributable to book changes, then perhaps 
+ the change is degrading performance.  Of course, that time increase could be 
+ noise; we have observed significantly more reliable timings, for example, on 
+ Linux than on Mac.  There are wonderful tools <span class="v">books/build/critpath.pl</span> and 
+ <span class="v">books/build/compare.pl</span> for narrowing time increases to the level of 
+ individual books, which you can investigate interactively, for example using 
+ profiling; see <a href="ACL2____PROFILE-ACL2.html">profile-ACL2</a> and <a href="ACL2____PROFILE-ALL.html">profile-all</a>.  (Also, Allegro CL 
+ has a particularly nice statistical profiler.)  Here is the first step, to be 
+ run in two ACL2 directories, <span class="v">DIR1</span> and <span class="v">DIR2</span>, that you want to compare 
+ after having run a regression test in each.</p> 
+ 
+ <pre class="code">cd books
+find . -name '*.cert.time' -print | sed 's/[.]time$//' | sort &gt; certs.txt
+./build/critpath.pl -t certs.txt --write-costs timingfile &gt; timing.txt</pre> 
+ 
+ <p>Then run the following command anywhere, which produces a file 
+ <span class="v">compare.txt</span> showing results, sorted two different ways.</p> 
+ 
+ <pre class="code">&lt;path_to_acl2&gt;/books/build/compare.pl \
+  DIR1/books/timingfile \
+  DIR2/books/timingfile &gt; compare.txt</pre> 
+ 
+ <h3>Documentation</h3> 
+ 
+ <font color="#800080"><p>[JUST TOUCH ON THIS SECTION]</p></font> 
+ 
+ <p>Be sure to document your changes.  This will typically involve adding a 
+ release note to a topic like <a href="ACL2____NOTE-8-2.html">note-8-2</a>.  The XDOC source code 
+ documentation for ACL2 resides in the community book 
+ <span class="v">books/system/doc/acl2-doc.lisp</span>.  If the change is not user visible, then 
+ a Lisp comment in the corresponding <span class="v">defxdoc</span> form is probably best; the 
+ existing <span class="v">(<a href="ACL2____DEFXDOC.html">defxdoc</a> note-xxx ...)</span> forms can provide guidance on this. 
+ Minor output changes don't generally require any release note.  Be sure to 
+ keep the <a href="ACL2____XDOC.html">xdoc</a> documentation at a user level, not at the level of the 
+ implementation.  Note that it is good practice to explain your changes as 
+ noted above — that is, in the text or comments of a <span class="tt"><a href="ACL2____DEFXDOC.html">defxdoc</a></span> 
+ release note form — rather than merely in GitHub commit messages. 
+ Every user should be able to find changes documented in the release notes, and 
+ every developer should additionally be able to find pertinent Lisp comments; 
+ neither will necessarily look back in GitHub logs (some may, but some may 
+ not).</p> 
+ 
+ <p>Also be sure to comment your code well with Lisp comments, at an 
+ implementation level.  For example, don't say ``union is commutative'' without 
+ explaining that you mean this with respect to set equality, not 
+ ordinary (Lisp) equality.</p> 
+ 
+ <p>Whoever actually commits and pushes to github — just Kaufmann and 
+ Moore as of this writing, but ideally others in the future — should also 
+ synchronize generated ACL2 source file <span class="v">doc.lisp</span> (see <a href="ACL2____DEVELOPERS-GUIDE-BUILD.html">developers-guide-build</a>) with <span class="v">books/system/doc/acl2-doc.lisp</span>.</p> 
+ 
+ <p>When you add new documentation in community book 
+ <span class="v">books/system/doc/acl2-doc.lisp</span> for a symbol that is the name of a 
+ function, macro, or constant, there is a check in the community book 
+ <span class="v">books/misc/check-acl2-exports.lisp</span> that the symbol belongs to the list, 
+ <span class="v">*acl2-exports*</span>.  Rather than add the symbol immediately to that list, 
+ however, it may be best to override the check for that symbol, as indicated in 
+ the definition of the constant, <span class="v">*acl2-exports-exclusions*</span>, in 
+ <span class="v">books/misc/check-acl2-exports.lisp</span>.  The reason for this delay is that if 
+ you change <span class="v">*acl2-exports*</span>, many books may need to be recertified, which 
+ could be inconvenient for users.  This issue is documented in the definition 
+ of the constant <span class="tt"><a href="ACL2_____A2ACL2-EXPORTS_A2.html">*ACL2-exports*</a></span>; see the ``WARNING'' comment there.</p> 
+ 
+ <h3>Debugging</h3> 
+ 
+ <font color="#800080"><p>[JUST TOUCH ON THIS SECTION]</p></font> 
+ 
+ <p>The art of debugging is... an art.  Some tools that can help with debugging 
+ are <span class="tt"><a href="ACL2____TRACE_42.html">trace$</a></span>, <span class="tt"><a href="ACL2____TRACE_12.html">trace!</a></span>, <span class="tt"><a href="ACL2____BREAK-ON-ERROR.html">break-on-error</a></span>, <span class="tt"><a href="ACL2____SET-DEBUGGER-ENABLE.html">set-debugger-enable</a></span>, <span class="tt"><a href="ACL2____WALKABOUT.html">walkabout</a></span>, <a href="ACL2____IPRINTING.html">iprinting</a>, and (rarely) <span class="tt"><a href="ACL2____DISASSEMBLE_42.html">disassemble$</a></span>.  Also see <a href="ACL2____DEBUGGING.html">debugging</a>.</p> 
+ 
+ <p>A common way to debug an unexpected error is to invoke 
+ <span class="v">(<a href="ACL2____SET-DEBUGGER-ENABLE.html">set-debugger-enable</a> t)</span> and <span class="v">(<a href="ACL2____BREAK-ON-ERROR.html">break-on-error</a>)</span>.  This may put you in 
+ the debugger when there is an error.  Each host Lisp has its own debugger 
+ commands for looking at the backtrace; for example, in CCL the command is 
+ <span class="v">:b</span>, while in SBCL it is <span class="v">backtrace</span>.  CCL's debugger lets you easily 
+ explore individual forms in the backtrace.  <font color="#c00000">Here is an 
+ edited log showing how that works.</font></p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="COMMON-LISP____DEFUN.html">defun</a> f (x) (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :mode :program)) (<a href="COMMON-LISP____CAR.html">car</a> x))
+
+Summary
+Form:  ( DEFUN F ...)
+Rules: NIL
+Time:  0.00 seconds (prove: 0.00, print: 0.00, other: 0.00)
+ F
+ACL2 !&gt;(<a href="ACL2____SET-DEBUGGER-ENABLE.html">set-debugger-enable</a> t)
+&lt;state&gt;
+ACL2 !&gt;(f 3)
+
+&gt; Error: Fault during read of memory address #x1D
+&gt; While executing: F, in process listener(1).
+&gt; Type :GO to continue, :POP to abort, :R for a list of available restarts.
+&gt; If continued: Skip evaluation of (acl2::acl2-default-restart)
+&gt; Type :? for other options.
+1 &gt; :b
+*(25819710) : 0 (F 3) 16
+ (25819770) : 1 (RAW-EV-FNCALL F (3) ('3) ((<a href="ACL2____STATE.html">STATE</a> . ACL2_INVISIBLE::|The Live State Itself|)) ((COMMAND-LANDMARK GLOBAL-VALUE 7662 # "/Users/kaufmann/acl2/acl2-git-scratch/books/system/doc/") (EVENT-LANDMARK GLOBAL-VALUE 9539 DEFUN F ...) (F ABSOLUTE-EVENT-NUMBER . 9539) (CLTL-COMMAND GLOBAL-VALUE DEFUNS :PROGRAM NIL ...) (TOP-LEVEL-CLTL-COMMAND-STACK GLOBAL-VALUE #) ...) NIL NIL T) 1253
+ (25819840) : 2 (EV (F '3) ((<a href="ACL2____STATE.html">STATE</a> . ACL2_INVISIBLE::|The Live State Itself|)) ACL2_INVISIBLE::|The Live State Itself| ((<a href="ACL2____STATE.html">STATE</a> . ACL2_INVISIBLE::|The Live State Itself|)) NIL T) 357
+
+&lt;&lt;... etc. ...&gt;&gt;
+
+ (25819F98) : 21 (FUNCALL #'#&lt;(:INTERNAL CCL::THREAD-MAKE-STARTUP-FUNCTION)&gt;) 277
+1 &gt; (:form 1) ; show the form labeled with 1 in the backtrace
+(RAW-EV-FNCALL 'F '# '# '# ...)
+1 &gt; (<a href="ACL2____WALKABOUT.html">walkabout</a> (<a href="ACL2____UNQUOTE.html">unquote</a> (<a href="COMMON-LISP____NTH.html">nth</a> 5 *)) state) ; world
+
+Commands:
+0, 1, 2, ..., nx, bk, pp, (pp n), (pp lev len), =, (<a href="COMMON-LISP_____D3.html">=</a> symb), and q.
+
+((COMMAND-LANDMARK GLOBAL-VALUE 7662 ...)
+ (EVENT-LANDMARK GLOBAL-VALUE 9539 ...)
+ (F ABSOLUTE-EVENT-NUMBER . 9539)
+ ...)
+:</pre> 
+ 
+ <p>Some problems are, of course, more awkward to debug.  One that pops up from 
+ time to time is an error like this.</p> 
+ 
+ <pre class="code">&gt; Error: value NIL is not of the expected type NUMBER.
+&gt; While executing: CCL::+-2, in process listener(1).</pre> 
+ 
+ <p>That particular sort of error may indicate that the <span class="v">state</span> argument of 
+ some function was passed incorrectly, perhaps in the wrong argument 
+ position.</p> 
+ 
+ <p>In rare cases an error may occur for which the backtrace isn't helpful or 
+ even makes little sense.  Something to try is to build with safety 3, for 
+ example as follows.</p> 
+ 
+ <pre class="code">make ACL2_SAFETY=3 PREFIX=safety-3-</pre> 
+ 
+ <p>If your test case involves including books, then also clean the books or 
+ use <span class="tt"><a href="ACL2____SET-COMPILER-ENABLED.html">set-compiler-enabled</a></span> to avoid loading their compiled files.  Then 
+ try again with the new executable; of course, if you cleaned the books, then 
+ first recertify as appropriate using the new executable.  ACL2 will run more 
+ slowly, but in return it will do a lot more checking along the way and might 
+ well provide a much better backtrace than before.</p> 
+ 
+ <p>If you are reading this and have more debugging suggestions, by all means 
+ consider adding them here!</p> 
+ 
+ <h3>Finishing up</h3> 
+ 
+ <p>Now feel free to send all changed files and also the starting git commit 
+ hash (or even the entire patch file, too) for review, to whoever has offered 
+ to look at your patch!  Some day others besides Kaufmann and Moore may be 
+ authorized to commit and push source code changes directly to GitHub; but 
+ getting someone else to review the changes could still be a good thing to 
+ do.</p> 
+ 
+ <p>When you are ready to have your patch incorporated into ACL2, follow the 
+ detailed steps for making a contribution outlined in the topic, <a href="ACL2____DEVELOPERS-GUIDE-CONTRIBUTING.html">developers-guide-contributing</a>.</p> 
+ 
+ <h3>General guidance</h3> 
+ 
+ <p>We close this chapter with some relevant tips and observations, some of 
+ which may also be found elsewhere in this Guide.</p> 
+ 
+ <ul> 
+ 
+ <li>
+<font color="#c00000">Small examples help when testing new features or bug fixes.</font>  For a bug fix 
+ it is important to have an example that exhibits the bug, both to guarantee 
+ that there really is a problem and to use to test your patch.  Ideally the 
+ example will be small, as this is useful for reading the output from tracing 
+ functions or debugger backtraces, and small examples are often helpful for 
+ understanding the problem.  Consider adding one or more relevant tests to 
+ <span class="v">books/system/tests/</span> or perhaps, if appropriate, <span class="v">books/demos/</span>.</li> 
+ 
+ <li>
+<font color="#c00000">Often it is best to avoid making a more sweeping change than necessary, 
+ instead waiting for users to complain.</font>  This process has several advantages: 
+ it avoids needless code complications; the user's complaint may help to inform 
+ the nature of the additional changes; and it may take significantly less time 
+ to complete the implementation, especially if there is a simple fix that is 
+ clearly correct and solves the problem.</li> 
+ 
+ <li>
+<font color="#c00000">Look for precedents</font>, since new code is probably more likely to be correct 
+ to the extent it is analogous to existing code.  ACL2 is a complex system with 
+ invariants that are not always explicit, so to the extent that you can follow 
+ the existing implementation of some feature, you may avoid introducing bugs or 
+ undesirable behavior.  For example, if you want to add a new key to the <span class="tt"><a href="ACL2____ACL2-DEFAULTS-TABLE.html">ACL2-defaults-table</a></span>, find an existing such key and do a tags-search for it, 
+ and mimic the implementation of that existing key to the extent it makes 
+ sense.  Try to pick a key that is little-used, so that the tags-search mainly 
+ hits on the essential aspects of being a key in the <span class="v">acl2-defaults-table</span>. 
+ For another example: to arrange for adding <span class="tt"><a href="ACL2____SYSTEM-ATTACHMENTS.html">system-attachments</a></span> to the 
+ <a href="ACL2____SUMMARY.html">summary</a>, the process was to follow how <span class="v">hint-events</span> is put into the 
+ summary, so a first step was to do tags-search for ``<span class="v">hint-events</span>''.</li> 
+ 
+ <li>At what point during the development of a source code change is it best to 
+ write comments and user-level documentation?  It may be good to write an 
+ outline before coding, as a guide towards what you want.  But ACL2 
+ implementation work can be tricky, which may lead you to change the 
+ specification slightly; so it is probably best to leave detailed documentation 
+ until after the other work is done, including testing.</li> 
+ 
+ <li>
+<font color="#c00000">Expect to take considerable time writing comments, 
+ documentation, and output (e.g., for warnings and errors).</font> These are 
+ important and may take longer than the implementation work itself.</li> 
+ 
+ </ul> 
+ 
+ <p>NEXT SECTION: <a href="ACL2____DEVELOPERS-GUIDE-CONTRIBUTING.html">developers-guide-contributing</a></p>
+</body>
+</html>

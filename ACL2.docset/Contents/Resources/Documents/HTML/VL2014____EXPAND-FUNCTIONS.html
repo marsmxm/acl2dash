@@ -1,0 +1,181 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Expand-functions</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL2014____EXPAND-FUNCTIONS">Click for Expand-functions in the Full Manual</a></h3>
+
+<p>Expand away function declarations and calls.</p><p>This transform can eliminate a fairly reasonable subset of Verilog 
+functions by replacing their uses with ordinary assignments.</p> 
+ 
+<p>Note: that our way of handling functions does not really preserve 
+hierarchical identifiers that lead into functions.</p> 
+ 
+ 
+<h3>Supported Subset</h3> 
+ 
+<p>The automatic keyword may be provided or omitted, but the subset we support 
+makes its use fairly meaningless (essentially we only implement functions that 
+behave the same whether automatic or not.)</p> 
+ 
+<p>The return type can be <span class="v">:vl-signed</span> or <span class="v">:vl-unsigned</span> (which is our 
+representation of a "plain" return type) and a range is permitted.  But we do 
+not support functions whose return type is integer, real, realtime, or 
+time.</p> 
+ 
+<p>There may be any number of inputs of type <span class="v">:vl-signed</span> or 
+<span class="v">:vl-unsigned</span> (which is our representation for plain and <span class="v">reg</span> type 
+inputs).  Each input may optionally have a range.  But we do not support inputs 
+whose types are integer, real, realtime, or time.</p> 
+ 
+<p>There may be any number of reg declarations, each of which may be signed or 
+not and may have a range.  We do not permit regs with array dimensions.  We 
+also do not permit regs with initial values (per the Verilog grammar this 
+shouldn't be possible, but our <a href="VL2014____VL-VARDECL-P.html">vl-vardecl-p</a> representation does not 
+forbid it.)</p> 
+ 
+<p>There may be any number of plain parameter and localparam declarations.  By 
+plain, we mean that we do not allow ranges, the signed keyword, etc.  (There 
+doesn't seem to be any way to initialize parameters in a function, so this is 
+basically just a way to define function-local constants.)  We do not allow 
+parameters that have the same names as other parameters in the module, because 
+this can lead to subtle issues related to declaration order.</p> 
+ 
+<p>We do not permit variable declarations (e.g., integer variables, real 
+variables, etc.) or event declarations.</p> 
+ 
+<p>The body of the function must contain a <b>flat list of assignments</b>, 
+starting with assignments to variables that have been declared within the 
+function (if any), and ending with an assignment to the function's name (in all 
+cases).  We do not allow any branching, looping, timing, case statements, 
+etc.</p> 
+ 
+<p>This restriction is overly severe and parts of it may eventually be lifted. 
+At present we at least do some basic rewriting of the statement, which allows 
+us to flatten sub-blocks.  In the long run, we may eventually want to try to 
+support at least some if-then-else statements, case statements, etc.</p> 
+ 
+<p>Finally, we require that <b>every variable declared in the function is 
+completely written before it is read</b>.  This restriction is intended to 
+ensure that a function's result depends only upon its inputs and the other, 
+current state of the module that it is inspecting.  For instance, we allow you 
+to write functions such as:</p> 
+ 
+<pre class="code">function foo ;
+  input a;
+  input b;
+  reg r1;
+  reg r2;
+  begin
+   r1 = a &amp; b;
+   r2 = r1 &amp; c;  // c is presumably a wire in the module
+   foo = r1 ^ r2;
+  end
+endfunction</pre> 
+ 
+<p>But we do NOT allow you to switch the order of these statements, e.g.,</p> 
+ 
+<pre class="code">begin
+ r2 = r1 &amp; c;  // using the old value of r1
+ r1 = a &amp; b;
+ foo = r1 ^ r2;
+end</pre> 
+ 
+<p>Because this can lead to very strange, timing-sensitive interactions when 
+there are multiple calls of the function, and generally seems like an 
+unreasonable thing to do.</p> 
+ 
+<p>We do not support recursive functions.  I mean, come on.  Do you think we 
+are Lisp programmers or something?</p> 
+ 
+ 
+<h3>Transformation Approach</h3> 
+ 
+<p>Given the above restrictions, there are a couple of basic approaches that we 
+could take for eliminating functions and replacing them with ordinary 
+assignments.  Here is a sample module that we can consider.</p> 
+ 
+<pre class="code">module foo (...);
+  wire w = ...;
+
+  function f ;
+    input a;
+    input b;
+    f = (a ^ w) | tmp;
+  endfunction
+
+  wire r1 = f(v1, v2) &amp; f(v2, v3);
+  wire r2 = f(v3, v4);
+endmodule</pre> 
+ 
+<p>An <b>inlining approach</b> would be to mangle the names of the wires in the 
+function and lift its assignments up into the containing module, e.g.,</p> 
+ 
+<pre class="code">module foo (...);
+  wire w = ...;
+
+  wire _tmp_f1 = (v1 ^ w) | v2;
+  wire _tmp_f2 = (v2 ^ w) | v3;
+  wire r1 = _tmp_f1 &amp; _tmp_f2;
+
+  wire _tmp_f3 = (v3 ^ w) | v4;
+  wire r2 = _tmp_f2;
+endmodule</pre> 
+ 
+<p>Alternately a <b>submodule approach</b> would be to write a new module that 
+implements the function, and replace calls of the function with instances of 
+this submodule.  For instance:</p> 
+ 
+<pre class="code">module foo$f (o, a, b, w);
+  input a, b, w;
+  output o;
+  assign o = (a ^ w) | b;
+endmodule
+
+module foo (...);
+  wire w = ...;
+
+  wire _tmp_f1, _tmp_f2, _tmp_f3;
+
+  foo$f _finst_1 (_tmp_f1, v1, v2, w);
+  foo$f _finst_2 (_tmp_f2, v2, v3, w);
+  wire r1 = _tmp_f1 &amp; _tmp_f2;
+
+  foo$f _finst_3 (_tmp_f3, v3, v4, w);
+  wire r2 = _tmp_f3;
+endmodule</pre> 
+ 
+<p>Both approaches have some good and bad things about them.  Inlining is nice 
+because we don't have to think very hard about how the use of non-inputs works. 
+For instance, in the submodule approach we have to realize that <span class="v">f</span> reads 
+from <span class="v">w</span>, an ordinary wire in the module, and so <span class="v">foo$f</span> has to take this 
+extra input.  But with the inlining approach, using <span class="v">w</span> is no big deal and 
+we can probably avoid some of this complication.</p> 
+ 
+<p>Another nice thing about inlining is that most hierarchical references that 
+originate within the function will probably still be working correctly.  That 
+is, if we refer to <span class="v">submod.wire</span> from within the function, then this is 
+still a submodule that we can see from the expanded code.</p> 
+ 
+<p>The submodule approach is kind of nice in that it avoids introducing a pile 
+of additional wires and assignments into the main module, and probably helps to 
+keep the transformed output smaller when the functions involved are large.  It 
+would probably be possible to account for hierarchical identifiers that are 
+being used within the function through some kind of flattening, e.g., if 
+<span class="v">submod.wire</span> is used by the function's code, then the submodule we create 
+could have an extra input that receives it.</p> 
+ 
+<p>Either approach has problems with hierarchical identifiers that point into 
+the function itself.  I'm not sure how to resolve that, but it doesn't seem 
+particularly meaningful to write a HID that points at, say, <span class="v">foo.f.a</span>, since 
+there are multiple instances of <span class="v">f</span> and so which one is being referred 
+to?</p> 
+ 
+<p>For now, I use the inlining approach because it seems somewhat simpler.  But 
+it would probably not be too difficult to switch to the submodule 
+approach.</p>
+</body>
+</html>

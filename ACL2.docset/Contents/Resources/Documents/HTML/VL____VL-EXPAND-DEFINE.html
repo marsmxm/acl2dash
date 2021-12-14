@@ -1,0 +1,123 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Vl-expand-define</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL____VL-EXPAND-DEFINE">Click for Vl-expand-define in the Full Manual</a></h3>
+
+<p>Expand uses of defines like <span class="v">`foo</span> and <span class="v">`max(a,b)</span>.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(vl-expand-define name echars loc ppst) 
+  → 
+(mv successp new-echars ppst)</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">name</span> — Name of the directive we've just read, like <span class="v">"foo"</span> for <span class="v">`foo</span>.<br>    <font color="#606060">Guard <span class="v">(<a href="COMMON-LISP____STRINGP.html">stringp</a> name)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">echars</span> — Remaining text after the name.  For simple macros like <span class="v">`foo</span> we 
+                             will just need to append the definition's body onto these characters. 
+                             For macros with arguments we will need to extract the actuals from 
+                             these characters.<br>    <font color="#606060">Guard <span class="v">(<a href="VL____VL-ECHARLIST-P.html">vl-echarlist-p</a> echars)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">loc</span> — Location for error messages and for the resulting expansion text.<br>    <font color="#606060">Guard <span class="v">(<a href="VL____VL-LOCATION-P.html">vl-location-p</a> loc)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">successp</span> — <font color="#606060">Type <span class="v">(<a href="ACL2____BOOLEANP.html">booleanp</a> successp)</span>.</font>
+</dd> 
+<dd>
+<span class="tt">new-echars</span> — On success, the updated characters with the macro invocation replaced by 
+                   its expansion.<br>    <font color="#606060">Type <span class="v">(<a href="VL____VL-ECHARLIST-P.html">vl-echarlist-p</a> new-echars)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>Note that variables in `define are lazy, e.g., if you do:</p> 
+ 
+<pre class="code">`define foo 3
+`define bar `foo
+`define foo 4</pre> 
+ 
+<p>Then from here on <span class="v">`bar</span> should also expand to 4.  To accomplish this, 
+we're going to modify the <span class="v">echars</span> that are remaining in the input.  That 
+is, the <b>output</b> of <span class="v">vl-expand-define</span> is going to get preprocessed. 
+This does not always terminate! (Hence the termination counter on <a href="VL____VL-PREPROCESS-LOOP.html">vl-preprocess-loop</a>.</p> 
+ 
+<p><b>Subtle.</b> If we simply inserted the echars stored in the defines table, 
+then locations on these characters would refer to their original position in 
+the file.  This might lead to confusing error messages, telling you that 
+something is wrong and showing you line numbers for a <span class="v">`define</span> that looks 
+just fine.  So instead, we change all of the locations for the inserted text to 
+point at the grave character for the macro usage.  That is, if <span class="v">`foo</span> occurs 
+on line 37 from characters 5 through 8, then we'll make every character of 
+foo's expansion occur at 37:5.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>vl-expand-define</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ vl-expand-define (name echars loc ppst)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (<a href="VL____PPST.html">ppst</a>)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____STRINGP.html">stringp</a> name)
+                             (<a href="VL____VL-ECHARLIST-P.html">vl-echarlist-p</a> echars)
+                             (<a href="VL____VL-LOCATION-P.html">vl-location-p</a> loc))))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'vl-expand-define))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+   ((echars (<a href="VL____VL-ECHARLIST-FIX.html">vl-echarlist-fix</a> echars))
+    (lookup (<a href="VL____VL-FIND-DEFINE.html">vl-find-define</a> name (<a href="VL____VL-PPST-_E3DEFINES.html">vl-ppst-&gt;defines</a>)))
+    ((unless lookup)
+     (<a href="COMMON-LISP____LET.html">let</a> ((<a href="VL____PPST.html">ppst</a> (<a href="VL____VL-PPST-FATAL.html">vl-ppst-fatal</a> :msg "~a0: `~s1 is not defined."
+                                :args (<a href="COMMON-LISP____LIST.html">list</a> loc name))))
+          (<a href="ACL2____MV.html">mv</a> nil echars ppst)))
+    ((<a href="VL____VL-DEFINE.html">vl-define</a> lookup))
+    ((when (<a href="COMMON-LISP____ATOM.html">atom</a> lookup.formals))
+     (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> okp rev-replacement-body ppst)
+           (<a href="VL____VL-SUBSTITUTE-INTO-MACRO-TEXT.html">vl-substitute-into-macro-text</a>
+                (<a href="VL____VL-CHANGE-ECHARLIST-LOCATIONS.html">vl-change-echarlist-locations</a>
+                     (<a href="VL____VL-ECHARLIST-FROM-STR.html">vl-echarlist-from-str</a> lookup.body)
+                     loc)
+                nil name loc nil ppst))
+          ((unless okp) (<a href="ACL2____MV.html">mv</a> nil echars ppst))
+          (replacement-body (<a href="ACL2____REV.html">rev</a> rev-replacement-body))
+          (echars (<a href="COMMON-LISP____APPEND.html">append</a> replacement-body echars)))
+         (<a href="ACL2____MV.html">mv</a> t echars ppst)))
+    ((<a href="ACL2____MV.html">mv</a> ?ws echars)
+     (vl-read-while-whitespace echars))
+    ((unless (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____CONSP.html">consp</a> echars)
+                  (<a href="COMMON-LISP____EQL.html">eql</a> (<a href="VL____VL-ECHAR-_E3CHAR.html">vl-echar-&gt;char</a> (<a href="COMMON-LISP____CAR.html">car</a> echars))
+                       #\()))
+     (<a href="COMMON-LISP____LET.html">let</a> ((<a href="VL____PPST.html">ppst</a> (<a href="VL____VL-PPST-FATAL.html">vl-ppst-fatal</a> :msg "~a0: `~s1 requires arguments."
+                                :args (<a href="COMMON-LISP____LIST.html">list</a> loc name))))
+          (<a href="ACL2____MV.html">mv</a> nil echars ppst)))
+    (echars (<a href="COMMON-LISP____CDR.html">cdr</a> echars))
+    ((<a href="ACL2____MV.html">mv</a> successp actuals echars ppst)
+     (<a href="VL____VL-PARSE-DEFINE-ACTUALS.html">vl-parse-define-actuals</a> name echars loc ppst))
+    ((unless successp) (<a href="ACL2____MV.html">mv</a> nil echars ppst))
+    ((<a href="ACL2____MV.html">mv</a> successp subst ppst)
+     (<a href="VL____VL-LINE-UP-DEFINE-FORMALS-AND-ACTUALS.html">vl-line-up-define-formals-and-actuals</a>
+          lookup.formals actuals name loc ppst))
+    ((unless successp) (<a href="ACL2____MV.html">mv</a> nil echars ppst))
+    ((<a href="ACL2____MV.html">mv</a> okp rev-replacement-body ppst)
+     (<a href="VL____VL-SUBSTITUTE-INTO-MACRO-TEXT.html">vl-substitute-into-macro-text</a>
+          (<a href="VL____VL-CHANGE-ECHARLIST-LOCATIONS.html">vl-change-echarlist-locations</a>
+               (<a href="VL____VL-ECHARLIST-FROM-STR.html">vl-echarlist-from-str</a> lookup.body)
+               loc)
+          subst name loc nil ppst))
+    ((unless okp) (<a href="ACL2____MV.html">mv</a> nil echars ppst))
+    (replacement-body (<a href="ACL2____REV.html">rev</a> rev-replacement-body))
+    (echars (<a href="COMMON-LISP____APPEND.html">append</a> replacement-body echars)))
+   (<a href="ACL2____MV.html">mv</a> t echars ppst))))</pre> 
+<p><b>Theorem: </b>booleanp-of-vl-expand-define.successp</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> booleanp-of-vl-expand-define.successp
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?successp ?new-echars ?ppst)
+              (<a href="VL____VL-EXPAND-DEFINE.html">vl-expand-define</a> name echars loc ppst)))
+            (<a href="ACL2____BOOLEANP.html">booleanp</a> successp))
+        :rule-classes :type-prescription)</pre> 
+<p><b>Theorem: </b>vl-echarlist-p-of-vl-expand-define.new-echars</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-echarlist-p-of-vl-expand-define.new-echars
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?successp ?new-echars ?ppst)
+              (<a href="VL____VL-EXPAND-DEFINE.html">vl-expand-define</a> name echars loc ppst)))
+            (<a href="VL____VL-ECHARLIST-P.html">vl-echarlist-p</a> new-echars))
+        :rule-classes :rewrite)</pre> 
+
+</body>
+</html>

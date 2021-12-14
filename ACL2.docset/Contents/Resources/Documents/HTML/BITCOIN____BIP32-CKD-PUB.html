@@ -1,0 +1,95 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Bip32-ckd-pub</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=BITCOIN____BIP32-CKD-PUB">Click for Bip32-ckd-pub in the Full Manual</a></h3>
+
+<p>Public child key derivation from public parent key.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(bip32-ckd-pub parent i) → (mv error? child)</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">parent</span> — <font color="#606060">Guard <span class="v">(<a href="BITCOIN____BIP32-EXT-PUB-KEY-P.html">bip32-ext-pub-key-p</a> parent)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">i</span> — <font color="#606060">Guard <span class="v">(<a href="ACL2____UBYTE32P.html">ubyte32p</a> i)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">error?</span> — <font color="#606060">Type <span class="v">(<a href="ACL2____BOOLEANP.html">booleanp</a> error?)</span>.</font>
+</dd> 
+<dd>
+<span class="tt">child</span> — <font color="#606060">Type <span class="v">(<a href="BITCOIN____BIP32-EXT-PUB-KEY-P.html">bip32-ext-pub-key-p</a> child)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>This is the function \mathsf{CKDpub} in [BIP32].</p><p>The first result is <span class="v">t</span> 
+     if the index is 2^{31} or more 
+     or if the key cannot be computed, 
+     as specified in [BIP32]; 
+     in these cases, the second result is irrelevant 
+     (and we just return the parent key). 
+     Otherwise, the first result is <span class="v">nil</span>, meaning no error.</p><p>We could have restricted the argument <span class="v">i</span> to be below 2^{31}, 
+     but [BIP32] handles the error explicitly in the definition of the function, 
+     so we do the same here.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>bip32-ckd-pub</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ bip32-ckd-pub (parent i)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="BITCOIN____BIP32-EXT-PUB-KEY-P.html">bip32-ext-pub-key-p</a> parent)
+                             (<a href="ACL2____UBYTE32P.html">ubyte32p</a> i))))
+ (<a href="ACL2____B_A2.html">b*</a>
+    (((<a href="BITCOIN____BIP32-EXT-PUB-KEY.html">bip32-ext-pub-key</a> parent) parent)
+     (irrelevant-child (<a href="BITCOIN____BIP32-EXT-PUB-KEY-FIX.html">bip32-ext-pub-key-fix</a> parent))
+     (i (<a href="ACL2____MBE.html">mbe</a> :logic (<a href="ACL2____UBYTE32-FIX.html">ubyte32-fix</a> i) :exec i))
+     ((when (<a href="COMMON-LISP_____E3_D3.html">&gt;=</a> i (<a href="COMMON-LISP____EXPT.html">expt</a> 2 31)))
+      (<a href="ACL2____MV.html">mv</a> t irrelevant-child))
+     (data (<a href="COMMON-LISP____APPEND.html">append</a> (<a href="ECURVE____SECP256K1-POINT-TO-BYTES.html">secp256k1-point-to-bytes</a> parent.key t)
+                   (<a href="ACL2____NAT_D3_E3BEBYTES.html">nat=&gt;bebytes</a> 4 i)))
+     (big-i (hmac-sha-512 parent.chain-code data))
+     (big-i-l (<a href="ACL2____TAKE.html">take</a> 32 big-i))
+     (big-i-r (<a href="COMMON-LISP____NTHCDR.html">nthcdr</a> 32 big-i))
+     (parsed-big-i-l (<a href="ACL2____BEBYTES_D3_E3NAT.html">bebytes=&gt;nat</a> big-i-l))
+     (n (<a href="PRIMES____SECP256K1-GROUP-PRIME.html">secp256k1-group-prime</a>))
+     ((when (<a href="COMMON-LISP_____E3_D3.html">&gt;=</a> parsed-big-i-l n))
+      (<a href="ACL2____MV.html">mv</a> t irrelevant-child))
+     (child.key
+          (<a href="ECURVE____SECP256K1-ADD.html">secp256k1-add</a> (<a href="ECURVE____SECP256K1-MUL.html">secp256k1-mul</a> parsed-big-i-l
+                                        (<a href="ECURVE____SECP256K1-POINT-GENERATOR.html">secp256k1-point-generator</a>))
+                         parent.key))
+     ((when (<a href="ECURVE____SECP256K1-POINT-INFINITYP.html">secp256k1-point-infinityp</a> child.key))
+      (<a href="ACL2____MV.html">mv</a> t irrelevant-child))
+     (child.chain-code big-i-r))
+    (<a href="ACL2____MV.html">mv</a> nil
+        (<a href="BITCOIN____BIP32-EXT-PUB-KEY.html">bip32-ext-pub-key</a> child.key child.chain-code))))</pre> 
+<p><b>Theorem: </b>booleanp-of-bip32-ckd-pub.error?</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> booleanp-of-bip32-ckd-pub.error?
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?error? ?child)
+              (<a href="BITCOIN____BIP32-CKD-PUB.html">bip32-ckd-pub</a> parent i)))
+            (<a href="ACL2____BOOLEANP.html">booleanp</a> error?))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>bip32-ext-pub-key-p-of-bip32-ckd-pub.child</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> bip32-ext-pub-key-p-of-bip32-ckd-pub.child
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?error? ?child)
+              (<a href="BITCOIN____BIP32-CKD-PUB.html">bip32-ckd-pub</a> parent i)))
+            (<a href="BITCOIN____BIP32-EXT-PUB-KEY-P.html">bip32-ext-pub-key-p</a> child))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>bip32-ckd-pub-of-bip32-ext-pub-key-fix-parent</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> bip32-ckd-pub-of-bip32-ext-pub-key-fix-parent
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="BITCOIN____BIP32-CKD-PUB.html">bip32-ckd-pub</a> (<a href="BITCOIN____BIP32-EXT-PUB-KEY-FIX.html">bip32-ext-pub-key-fix</a> parent)
+                              i)
+               (<a href="BITCOIN____BIP32-CKD-PUB.html">bip32-ckd-pub</a> parent i)))</pre> 
+<p><b>Theorem: </b>bip32-ckd-pub-bip32-ext-pub-key-equiv-congruence-on-parent</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> bip32-ckd-pub-bip32-ext-pub-key-equiv-congruence-on-parent
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="BITCOIN____BIP32-EXT-PUB-KEY-EQUIV.html">bip32-ext-pub-key-equiv</a> parent parent-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="BITCOIN____BIP32-CKD-PUB.html">bip32-ckd-pub</a> parent i)
+                        (<a href="BITCOIN____BIP32-CKD-PUB.html">bip32-ckd-pub</a> parent-equiv i)))
+        :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>bip32-ckd-pub-of-ubyte32-fix-i</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> bip32-ckd-pub-of-ubyte32-fix-i
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="BITCOIN____BIP32-CKD-PUB.html">bip32-ckd-pub</a> parent (<a href="ACL2____UBYTE32-FIX.html">ubyte32-fix</a> i))
+               (<a href="BITCOIN____BIP32-CKD-PUB.html">bip32-ckd-pub</a> parent i)))</pre> 
+<p><b>Theorem: </b>bip32-ckd-pub-ubyte32-equiv-congruence-on-i</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> bip32-ckd-pub-ubyte32-equiv-congruence-on-i
+        (<a href="ACL2____IMPLIES.html">implies</a> (acl2::ubyte32-equiv i i-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="BITCOIN____BIP32-CKD-PUB.html">bip32-ckd-pub</a> parent i)
+                        (<a href="BITCOIN____BIP32-CKD-PUB.html">bip32-ckd-pub</a> parent i-equiv)))
+        :rule-classes :congruence)</pre> 
+
+</body>
+</html>

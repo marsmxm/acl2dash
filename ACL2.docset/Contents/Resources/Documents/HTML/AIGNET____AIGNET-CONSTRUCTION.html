@@ -1,0 +1,108 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Aignet-construction</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=AIGNET____AIGNET-CONSTRUCTION">Click for Aignet-construction in the Full Manual</a></h3>
+
+<p>How to construct an AIGNET network.</p> 
+<p>An AIGNET network is constructed by adding nodes in topological 
+order: that is, an AND gate cannot be added until its two fanins are created, 
+and a combinational output cannot be added until its fanin exists. 
+Additionally, a register input cannot be added until its corresponding register 
+output exists.</p> 
+ 
+<p>First, because an AIGNET network is represented in a stobj, you must either 
+work on the "live" <span class="v">AIGNET</span> stobj or else create a local one using 
+<a href="ACL2____WITH-LOCAL-STOBJ.html">with-local-stobj</a>.</p> 
+ 
+<p>Usually when constructing an AIG network one wants to structurally hash the 
+AND nodes, so as to avoid creating duplicate nodes with identical structure. 
+To do this, you additionally need a <span class="v">STRASH</span> stobj, which again may either 
+be the live one or one created locally.</p> 
+ 
+<h3>Basic Low-level Construction Functions</h3> 
+ 
+<p>To initialize a new network or clear an existing one, use: 
+<pre class="code">(<a href="ACL2____AIGNET-CLEAR.html">aignet-clear</a> aignet)</pre> 
+or, to allocate a certain amount of space in order to avoid resizing arrays, 
+<pre class="code">(<a href="ACL2____AIGNET-INIT.html">aignet-init</a> output-cap reg-cap input-cap node-cap aignet).</pre></p> 
+ 
+<p>To initialize a strash object or clear an existing one, use: 
+<pre class="code">(strashtab-clear strash)</pre> 
+or to allocate a certain amount of space to avoid resizing the hash table, 
+<pre class="code">(strashtab-init node-cap nil nil strash).</pre></p> 
+ 
+<h1>Aignet-construction functions</h1> 
+<p><span class="v">(<a href="ACL2____AIGNET-ADD-IN.html">aignet-add-in</a> aignet)</span> adds a new primary input node to the network and 
+returns <span class="tt">(mv lit aignet)</span>, where <span class="tt">lit</span> is the non-negated literal of 
+the new node.</p> 
+ 
+<p><span class="v">(<a href="ACL2____AIGNET-ADD-REG.html">aignet-add-reg</a> aignet)</span> adds a new register output node to the network and 
+returns <span class="tt">(mv lit aignet)</span>, where <span class="tt">lit</span> is the non-negated literal of 
+the new node.</p> 
+ 
+<p><span class="v">(<a href="AIGNET____AIGNET-ADD-AND.html">aignet-add-and</a> lit1 lit2 aignet)</span> adds to the network a new AND node 
+conjoining <span class="tt">lit1</span> and <span class="tt">lit2</span>, and returns <span class="tt">(mv lit aignet)</span>, 
+where <span class="tt">lit</span> is the non-negated literal of the new node.  <span class="tt">lit1</span> 
+and <span class="tt">lit2</span> must be literals of the network, satisfying 
+<span class="v">aignet-litp</span> (which is true of any literal returned by a node construction 
+function, or its negation).  Note: this function does not do structural 
+hashing -- for that, see below.</p> 
+ 
+<p><span class="v">(<a href="AIGNET____AIGNET-ADD-XOR.html">aignet-add-xor</a> lit1 lit2 aignet)</span> is similar to <span class="v">aignet-add-and</span>, 
+but makes an XOR node rather than an AND.  It also does not to structural 
+hashing.</p> 
+ 
+<p><span class="v">(<a href="ACL2____AIGNET-ADD-OUT.html">aignet-add-out</a> lit aignet)</span> adds to the network a new primary output with 
+fanin <span class="tt">lit</span>, and returns <span class="tt">aignet</span>.  (It does not return a literal 
+because a combinational output node is not allowed to be the fanin to another 
+node.)  <span class="tt">lit</span> must satisfy <span class="v">aignet-litp</span>.</p> 
+ 
+<p><span class="v">(<a href="AIGNET____AIGNET-SET-NXST.html">aignet-set-nxst</a> lit ro aignet)</span> adds to the network a new register input 
+with fanin <span class="tt">lit</span>, and connects it to a register output node whose ID is 
+<span class="tt">ro</span>.  It returns <span class="tt">aignet</span>.  <span class="tt">lit</span> must satisfy <span class="v">aignet-litp</span> 
+and <span class="tt">ro</span> must be the ID of a register output node that is not yet 
+connected to a register input.</p> 
+ 
+<h3>Hashing and Simplifying Constructor Functions</h3> 
+ 
+<p>The following functions: 
+<pre class="code">(<a href="ACL2____AIGNET-HASH-AND.html">aignet-hash-and</a> f1 f2 gatesimp strash aignet)
+(<a href="ACL2____AIGNET-HASH-OR.html">aignet-hash-or</a>  f1 f2 gatesimp strash aignet)
+(<a href="ACL2____AIGNET-HASH-XOR.html">aignet-hash-xor</a> f1 f2 gatesimp strash aignet)
+(<a href="AIGNET____AIGNET-HASH-IFF.html">aignet-hash-iff</a> f1 f2 gatesimp strash aignet)
+(<a href="ACL2____AIGNET-HASH-MUX.html">aignet-hash-mux</a> c tb fb gatesimp strash aignet)</pre> 
+ 
+add nodes implementing the respective functions of input literals <span class="tt">f1</span> 
+and <span class="tt">f2</span> (for and/or/xor) and <span class="tt">c</span>, <span class="tt">tb</span>, and <span class="tt">fb</span> 
+for mux (signifying condition, true-branch, and false-branch), possibly with 
+structural hashing and lightweight simplification.  All return <pre class="code">(mv lit 
+strash aignet).</pre> Gatesimp is a <a href="AIGNET____GATESIMP.html">gatesimp</a> object that specifies 
+whether to structurally hash the nodes, what level of effort to use in Boolean 
+simplification (between 0 and 4), and whether to use XOR nodes at all and if so 
+whether to derive them from AND nodes.  The levels of simplification correspond 
+to the paper: 
+ 
+<blockquote> 
+R. Brummayer and A. Biere.  Local two-level And-Inverter Graph minimization 
+without blowup.  Proc. MEMCIS 6 (2006): 32-38, 
+</blockquote> 
+ 
+available <a href="http://megaknowledge.info/cadathlon/2007/refs/p5-verification.pdf" target="_blank"><nobr>here<img src="../Icon_External_Link.png" title="External link to http://megaknowledge.info/cadathlon/2007/refs/p5-verification.pdf"></nobr></a>. 
+These simplifications look at most one level deep at the fanins of each AND, 
+that is, examining at most four fanin nodes.  Usually at least level 1 is 
+desirable; level 1 deals with ANDs of constants and identical and negated 
+nodes.  Practically, we think for most applications building the AIGs is not a 
+performance bottleneck and level 3 or 4 can be used with some potential benefit 
+and no noticeable slowdown.</p> 
+ 
+<h3>
+<span class="v">aignet-build</span> macro</h3> 
+ 
+<p>See also <a href="AIGNET____AIGNET-BUILD.html">aignet-build</a>, a macro that lays out the calls necessary to build a nest of logic.  This uses the structural hashing constructor functions.</p>
+</body>
+</html>

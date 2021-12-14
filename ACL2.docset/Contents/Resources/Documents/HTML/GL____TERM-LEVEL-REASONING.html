@@ -1,0 +1,296 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Term-level-reasoning</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=GL____TERM-LEVEL-REASONING">Click for Term-level-reasoning in the Full Manual</a></h3>
+
+<p>GL's term-level proof support</p><p>The traditional way of using GL to prove a theorem is to give a bit-level 
+description of each variable of the theorem as a shape spec in the :g-bindings 
+argument of def-gl-thm -- X is a 10-bit integer, Y is a three-entry Boolean 
+list, etc.  In this mode of operation, the goal is for every function to be 
+able to symbolically execute and produce a purely bit-level symbolic object as 
+its output.</p> 
+ 
+<p>This style of reasoning is somewhat restrictive.  ACL2 code is often 
+written in a way that makes this sort of symbolic execution expensive.  For 
+example, suppose we want a structure that maps integer keys to values.  For 
+best execution speed, we might represent this as a stobj array.  For best 
+ease of reasoning, we might represent it as a record (as in 
+books/misc/records.lisp), since these have nice, intuitive, hypothesis-free 
+rules about them.  For symbolic execution performance, on the other hand, 
+we might decide that a simple alist is the best representation.  But if we've 
+written the code in one of the other styles, then we'd like to be able to 
+escape the suboptimal symbolic execution this entails.</p> 
+ 
+<p>We have added features to GL which provide a way around these problems by 
+allowing for term-level reasoning as well as bit-level:</p> 
+ 
+ 
+<ul> 
+ 
+<li>rewrite rules, conditional/unconditional, supporting syntaxp hypotheses</li> 
+ 
+<li>uninterpreted functions</li> 
+ 
+<li>rules for merging IF branches that resolve to term- rather than bit-level 
+objects</li> 
+ 
+<li>automatic generation of new Boolean variables for IF tests that resolve to 
+terms rather than bits</li> 
+ 
+</ul> 
+ 
+<p>Warning: These features require careful setup of a rewriting theory with good 
+normal forms.  It's difficult to debug problems with them.  In many ways 
+they may not yet be ready for prime time.</p> 
+ 
+<h3>Rewriting</h3> 
+ 
+<p>Elaborating on our memory example, suppose we are trying to prove something 
+about a program that loads and stores from computed addresses in a 1024-entry 
+memory of 32-bit unsigned numbers.  For good execution speed when running 
+concrete simulations, we might represent this memory as a stobj containing a 
+1024-element array.  However, this doesn't perform well when proving theorems 
+about this representation using GL, because at each update to a symbolic 
+address we must modify several (perhaps all) entries in the array 
+representation: if our update is</p> 
+ 
+<pre class="code">(update-mem &lt;sym_address&gt; &lt;sym_value&gt; &lt;arr&gt;)</pre> 
+ 
+<p>then at each address i of the array we must store an object representing:</p> 
+ 
+<pre class="code">if (sym_address == i) then sym_value else arr[i].</pre> 
+ 
+<p>We might do better if we didn't try to compute an explicit interpretation of 
+the array after each update, but instead simply tracked the updates in 
+chronological order, as in an alist.  To illustrate how to do this, suppose 
+that our updater, accessor, and creator functions are, respectively,</p> 
+ 
+<ul> 
+<li><span class="v">(update-mem addr val mem)</span></li> 
+<li><span class="v">(access-mem addr mem)</span></li> 
+<li><span class="v">(create-mem)</span></li> 
+</ul> 
+ 
+<p>First, tell GL never to open the definitions of these functions:</p> 
+ 
+<pre class="code">(<a href="GL____GL-SET-UNINTERPRETED.html">gl::gl-set-uninterpreted</a> update-mem)
+(<a href="GL____GL-SET-UNINTERPRETED.html">gl::gl-set-uninterpreted</a> access-mem)
+(<a href="GL____GL-SET-UNINTERPRETED.html">gl::gl-set-uninterpreted</a> create-mem)</pre> 
+ 
+<p>Now, when GL encounters updates, rather than computing a new explicit 
+symbolic representation for the memory, it will return a term representation, 
+such as</p> 
+ 
+<pre class="code">(update-mem addr1 val1 (update-mem addr2 val2 (create-mem))).</pre> 
+ 
+<p>To make this work, we just need to provide rewrite rules so that GL can reason 
+about accesses:</p> 
+ 
+<pre class="code">(<a href="GL____DEF-GL-REWRITE.html">gl::def-gl-rewrite</a> access-of-create
+   (<a href="COMMON-LISP____EQUAL.html">equal</a> (access-mem addr (create-mem))
+          (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____NATP.html">natp</a> addr) (<a href="COMMON-LISP_____C3.html">&lt;</a> addr 1024) 0)))
+
+(<a href="GL____DEF-GL-REWRITE.html">gl::def-gl-rewrite</a> access-of-update
+   (<a href="COMMON-LISP____EQUAL.html">equal</a> (access-mem addr (update-mem waddr val mem))
+          (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____NFIX.html">nfix</a> addr) (<a href="ACL2____NFIX.html">nfix</a> waddr))
+              val
+            (access-mem addr mem))))</pre> 
+ 
+<h3>Branch Merging</h3> 
+ 
+<p>Suppose that somewhere in our program we have an update as follows:</p> 
+ 
+<pre class="code">(<a href="COMMON-LISP____LET.html">let</a> ((mem (<a href="COMMON-LISP____IF.html">if</a> special-condition
+               (update-mem addr val mem)
+             mem)))
+    ...)</pre> 
+ 
+<p>At this point, simulating with just the rules we have above, our proof will 
+probably fail because a subsequent access of the memory won't be resolved by 
+the access-of-update rule: we no longer have a term of the form</p> 
+ 
+<pre class="code">(access-mem addr (update-mem waddr val mem))</pre> 
+ 
+<p>but rather</p> 
+ 
+<pre class="code">(access-mem addr (<a href="COMMON-LISP____IF.html">if</a> cond (update-mem waddr val mem) mem)).</pre> 
+ 
+<p>We could fix this by introducing a new rule:</p> 
+ 
+<pre class="code">(<a href="GL____DEF-GL-REWRITE.html">gl::def-gl-rewrite</a> access-of-if
+    (<a href="COMMON-LISP____EQUAL.html">equal</a> (access-mem addr (<a href="COMMON-LISP____IF.html">if</a> c mem1 mem2))
+           (<a href="COMMON-LISP____IF.html">if</a> c (access-mem addr mem1) (access-mem addr mem2))))</pre> 
+ 
+<p>This is probably the easiest solution if ACCESS-MEM is the only important 
+function that must interact with UPDATE-MEM.  An alternative is to write a rule 
+that merges the two branches into a single term.  A branch merge rule can 
+accomplish this:</p> 
+ 
+<pre class="code">(<a href="GL____DEF-GL-BRANCH-MERGE.html">gl::def-gl-branch-merge</a> merge-conditional-update
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____IF.html">if</a> cond (update-mem addr val mem) mem)
+         (update-mem addr (<a href="COMMON-LISP____IF.html">if</a> cond val (access-mem addr mem)) mem)))</pre> 
+ 
+<p>This isn't necessarily cheap -- in order to apply this rule, we need to find 
+the previous value of addr in mem, and this symbolic lookup is relatively 
+expensive, since it may need to traverse all the updates in mem to construct 
+the symbolic value of the access.</p> 
+ 
+ 
+<h3>Term-level shape specifiers</h3> 
+ 
+<p>Traditionally, to do a proof in GL one must supply, for each free variable of 
+the theorem, a shape specifier, which tells GL how to create a symbolic object 
+to represent that variable.  After GL finishes the symbolic execution portion 
+of the proof, the shape specifiers must be shown to be appropriate given the 
+assumptions about each variable; it therefore generates proof obligations of 
+the form:</p> 
+ 
+<pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (&lt;hypotheses&gt; var)
+         (shape-spec-obj-in-range &lt;shape-spec&gt; var))</pre> 
+ 
+<p>These are called coverage obligations.  Shape-spec-obj-in-range says that the 
+value var is expressible by the given shape-spec; that is, the shape-spec 
+covers all possible values of var satisfying the hyps.  For example, if the 
+shape-spec is the :g-integer construct for a 10-bit integer, then the 
+shape-spec-obj-in-range term reduces to:</p> 
+ 
+<pre class="code">(<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> var)
+     (<a href="COMMON-LISP_____C3.html">&lt;</a> var (<a href="COMMON-LISP____EXPT.html">expt</a> 2 9))
+     (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> (<a href="COMMON-LISP____-.html">-</a> (<a href="COMMON-LISP____EXPT.html">expt</a> 2 9)) var)).</pre> 
+ 
+<p>Since the new GL capabilities described above allow manipulation of 
+term-level symbolic objects, it can be useful to supply term-level shape 
+specifiers.  This can be done using the G-CALL and G-VAR constructs.</p> 
+ 
+<p>A G-VAR construct is simply a free variable; it can represent any object 
+whatsoever, so its coverage obligations are trivial.</p> 
+ 
+<p>A G-CALL represents a function call.  It takes three arguments:</p> 
+ 
+<ul> 
+<li>FN, a function symbol</li> 
+<li>ARGS, a list of arguments, each (recursively) a shape spec</li> 
+<li>INV, a 1-argument function symbol or lambda, the inverse function.</li> 
+</ul> 
+ 
+<p>The symbolic term resulting from this shape spec is simply the 
+application (G-APPLY) of FN to the symbolic objects derived from ARGS.  INV is 
+an extra piece of information that tells us how to prove coverage.  Its usage 
+is discussed in <a href="GL____G-CALL.html">g-call</a>.</p> 
+ 
+<h3>Automatic Boolean Variable Generation</h3> 
+ 
+<p>GL now has the ability to generate fresh Boolean variables in addition to 
+the ones existing in the user-provided shape spec.  It does this anytime an IF 
+condition's value ends up as a term-level object, i.e. a G-APPLY (function 
+call) or G-VAR (free variable).  The mapping between these term-level objects 
+and the generated Boolean variables are stored as we symbolically execute and 
+can be reused if the same condition is encountered again.  Careful use of this 
+feature can allow GL to work without giving such detailed shape specifiers.</p> 
+ 
+<p>For example, suppose that we don't want to assume anything about our memory 
+variable, but we know that for any slot we access, we'll only use 5 bits of the 
+stored value: perhaps our accessors always take (LOGHEAD 5 x) of the slot.  We 
+can assign a G-VAR object to the memory; that way it can represent any object 
+at all.  We then want to arrange things so that at every access, we generate 5 
+new Boolean variables for the integer bits of that access (if we haven't 
+already done so).  Here is one rule that will accomplish that:</p> 
+ 
+<pre class="code">(<a href="GL____DEF-GL-REWRITE.html">gl::def-gl-rewrite</a> loghead-5-of-access-mem
+   ;; We don't want this rule to apply to an update-mem term, so this syntaxp
+   ;; hyp prevents that.  We also should only apply this if ADDR is a concrete
+   ;; object; we'd need a different strategy for symbolic addresses.
+   (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____SYNTAXP.html">syntaxp</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____CONSP.html">consp</a> mem)
+                                    (gl::g-apply-p mem)
+                                    (<a href="COMMON-LISP____EQ.html">eq</a> (gl::g-apply-&gt;fn mem) 'update-mem)))
+                          (gl::general-concrete-p addr)))
+             (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____LOGHEAD.html">loghead</a> 5 (access-mem addr mem))
+                    (<a href="ACL2____LOGCONS.html">logcons</a>
+                     (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____LOGBITP.html">logbitp</a> 0 (access-mem addr mem)) 1 0)
+                     (<a href="ACL2____LOGCONS.html">logcons</a>
+                      (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____LOGBITP.html">logbitp</a> 1 (access-mem addr mem)) 1 0)
+                      (<a href="ACL2____LOGCONS.html">logcons</a>
+                       (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____LOGBITP.html">logbitp</a> 2 (access-mem addr mem)) 1 0)
+                       (<a href="ACL2____LOGCONS.html">logcons</a>
+                        (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____LOGBITP.html">logbitp</a> 3 (access-mem addr mem)) 1 0)
+                        (<a href="ACL2____LOGCONS.html">logcons</a>
+                         (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____LOGBITP.html">logbitp</a> 4 (access-mem addr mem)) 1 0)
+                         0))))))))</pre> 
+ 
+<p>Performing this rewrite will cause GL to generate a Boolean variable for each 
+of these LOGBITP terms, because they produce term-level objects that are then 
+used in IF tests.</p> 
+ 
+<p>Using this strategy makes it harder to generate counterexamples.  In fact, it 
+is impossible to generally solve the problem of generating counterexamples when 
+using this strategy.  A satisfying assignment from a SAT solver gives us an 
+assignment of values to our Boolean variables.  But these Boolean variables 
+each just correspond to some term, which may be an arbitrary nesting of 
+functions.  To map this Boolean-level counterexample to an ACL2-level 
+counterexample, we are then left with finding an assignment for some variables 
+that makes a series of terms take certain truth values, which is undecidable. 
+In the next section, we describe a heuristic method for generating 
+counterexamples that works in practice when applied carefully.</p> 
+ 
+<p>Furthermore, unless this strategy is used with utmost care, it is likely 
+that proofs will fail due to detection of "counterexamples" that are actually 
+impossible.  For example, we might generate a Boolean variable for (integerp x) 
+and another one for (logbitp 0 x).  But these two terms are not independent; in 
+fact, (logbitp 0 x) implies (integerp x).  If we don't let the SAT solver know 
+about these constraints, it might find false counterexamples. This can't render 
+GL unsound, but may lead to failed proofs.  You may provide rules for 
+generating constraints among these Boolean variables to solve this kind of 
+problem: see <a href="GL____DEF-GL-BOOLEAN-CONSTRAINT.html">def-gl-boolean-constraint</a>.</p> 
+ 
+<p>The situation described above (where every field is accessed via LOGHEAD and 
+via concrete address) is a particularly good one for this strategy, since then 
+all we need to know about each field are its LOGBITPs, which are all 
+independent.</p> 
+ 
+<h3>Counterexamples with Automatic Boolean Variable Generation</h3> 
+ 
+<p>Our strategy for generating counterexamples when using automatic Boolean 
+variable generation is to provide rules for manipulating assignments.  For 
+example:</p> 
+ 
+<pre class="code">(<a href="GL____DEF-GLCP-CTREX-REWRITE.html">gl::def-glcp-ctrex-rewrite</a>
+  ((<a href="COMMON-LISP____LOGBITP.html">logbitp</a> n x) t)
+  (x (<a href="COMMON-LISP____LOGIOR.html">logior</a> (<a href="COMMON-LISP____ASH.html">ash</a> 1 n) x)))
+
+(<a href="GL____DEF-GLCP-CTREX-REWRITE.html">gl::def-glcp-ctrex-rewrite</a>
+  ((<a href="COMMON-LISP____LOGBITP.html">logbitp</a> n x) nil)
+  (x (<a href="COMMON-LISP____LOGAND.html">logand</a> (<a href="COMMON-LISP____LOGNOT.html">lognot</a> (<a href="COMMON-LISP____ASH.html">ash</a> 1 n)) x)))</pre> 
+ 
+<p>These two rules, respectively, say:</p> 
+ 
+<ul> 
+<li>"if (logbitp n x) should be T, then assign X = (logior (ash 1 n) x)"</li> 
+<li>"if (logbitp n x) should be NIL, then assign X = (logand (lognot (ash 1 n)) x)".</li> 
+</ul> 
+ 
+<p>DEF-GLCP-CTREX-REWRITE can also take a keyword argument :test, which can do 
+a syntactic check on the variables matched. E.g., we could ensure that N was a 
+constant in the rules above:</p> 
+ 
+<pre class="code">(<a href="GL____DEF-GLCP-CTREX-REWRITE.html">gl::def-glcp-ctrex-rewrite</a>
+  ((<a href="COMMON-LISP____LOGBITP.html">logbitp</a> n x) t)
+  (x (<a href="COMMON-LISP____LOGIOR.html">logior</a> (<a href="COMMON-LISP____ASH.html">ash</a> 1 n) x))
+  :test (<a href="ACL2____QUOTEP.html">quotep</a> n))</pre> 
+ 
+<p>Note that these rules are purely heuristic, have no bearing on the soundness of 
+GL, and do not require any proofs.  Getting them wrong may cause GL to generate 
+false counterexamples, however.</p> 
+ 
+<p>Another rule that would be useful in the memory example above:</p> 
+ 
+<pre class="code">(<a href="GL____DEF-GLCP-CTREX-REWRITE.html">gl::def-glcp-ctrex-rewrite</a>
+  ((access-mem addr mem) val)
+  (mem (update-mem addr val mem))
+  :test (<a href="ACL2____QUOTEP.html">quotep</a> addr))</pre>
+</body>
+</html>

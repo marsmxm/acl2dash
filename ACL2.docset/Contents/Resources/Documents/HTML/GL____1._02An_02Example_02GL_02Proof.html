@@ -1,0 +1,72 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>1. An Example GL Proof</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=GL____1._02An_02Example_02GL_02Proof">Click for 1. An Example GL Proof in the Full Manual</a></h3>
+
+<p></p> 
+ 
+<p>The usual way to load GL is to start with</p> 
+<pre class="code">(<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "centaur/gl/gl" :dir :system)</pre> 
+ 
+<p>Let's use GL to prove a theorem.  The following C code, from Sean 
+Anderson <a href="http://graphics.stanford.edu/~seander/bithacks.html" target="_blank"><nobr>Bit 
+Twiddling Hacks<img src="../Icon_External_Link.png" title="External link to http://graphics.stanford.edu/~seander/bithacks.html"></nobr></a> page, is a fast way to count how many bits are set in a 
+32-bit integer.</p> 
+ 
+<pre class="code">v = v - ((v &gt;&gt; 1) &amp; 0x55555555);
+v = (v &amp; 0x33333333) + ((v &gt;&gt; 2) &amp; 0x33333333);
+c = ((v + (v &gt;&gt; 4) &amp; 0xF0F0F0F) * 0x1010101) &gt;&gt; 24;</pre> 
+ 
+<p>We can model this in ACL2 as follows.  It turns out that using 
+arbitrary-precision addition and subtraction does not affect the result, but we 
+must take care to use a 32-bit multiply to match the C code.</p> 
+ 
+<pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> 32* (x y)
+  (<a href="COMMON-LISP____LOGAND.html">logand</a> (<a href="COMMON-LISP_____A2.html">*</a> x y) (<a href="COMMON-LISP____1-.html">1-</a> (<a href="COMMON-LISP____EXPT.html">expt</a> 2 32))))
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> fast-logcount-32 (v)
+  (<a href="COMMON-LISP____LET_A2.html">let*</a> ((v (<a href="COMMON-LISP____-.html">-</a> v (<a href="COMMON-LISP____LOGAND.html">logand</a> (<a href="COMMON-LISP____ASH.html">ash</a> v -1) #x55555555)))
+         (v (<a href="COMMON-LISP_____B2.html">+</a> (<a href="COMMON-LISP____LOGAND.html">logand</a> v #x33333333)
+               (<a href="COMMON-LISP____LOGAND.html">logand</a> (<a href="COMMON-LISP____ASH.html">ash</a> v -2) #x33333333))))
+    (<a href="COMMON-LISP____ASH.html">ash</a> (32* (<a href="COMMON-LISP____LOGAND.html">logand</a> (<a href="COMMON-LISP_____B2.html">+</a> v (<a href="COMMON-LISP____ASH.html">ash</a> v -4)) #xF0F0F0F)
+              #x1010101)
+         -24)))</pre> 
+ 
+<p>We can then use GL to prove <span class="v">fast-logcount-32</span> computes the same 
+result as ACL2's built-in <span class="v">logcount</span> function for all unsigned 32-bit 
+inputs.</p> 
+ 
+<pre class="code">(<a href="ACL2____DEF-GL-THM.html">def-gl-thm</a> fast-logcount-32-correct
+  :hyp   (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 32 x)
+  :concl (<a href="COMMON-LISP____EQUAL.html">equal</a> (fast-logcount-32 x)
+                (<a href="COMMON-LISP____LOGCOUNT.html">logcount</a> x))
+  :g-bindings `((x ,(<a href="GL____G-INT.html">g-int</a> 0 1 33))))</pre> 
+ 
+<p>The <span class="v">:g-bindings</span> form is the only help GL needs from the user.  It tells 
+GL how to construct a symbolic object that can represent every value for <span class="v">x</span> 
+that satisfies the hypothesis (we'll cover this shortly).  No arithmetic books 
+or lemmas are required—we actually don't even know why this algorithm 
+works.  The proof completes in 0.09 seconds and results in the following ACL2 
+theorem.</p> 
+ 
+<pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> fast-logcount-32-correct
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 32 x)
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (fast-logcount-32 x)
+                  (<a href="COMMON-LISP____LOGCOUNT.html">logcount</a> x)))
+  :hints ((<a href="ACL2____GL-HINT.html">gl-hint</a> ...)))</pre> 
+ 
+<p>GL can generate counterexamples to non-theorems.  At first, we didn't 
+realize we needed to use a 32-bit multiply in <span class="v">fast-logcount-32</span>, and we 
+just used an arbitrary-precision multiply instead.  The function still worked 
+for test cases like <span class="v">0</span>, <span class="v">1</span> <span class="v">#b111</span>, and <span class="v">#b10111</span>, but when we 
+tried to prove its correctness, GL showed us three counterexamples: 
+<span class="v">#x80000000</span>, <span class="v">#xFFFFFFFF</span>, and <span class="v">#x9448C263</span>.  By default, GL 
+generates a first counterexample by setting bits to 0 wherever possible, a 
+second by setting bits to 1, and a third with random bit settings.</p>
+</body>
+</html>

@@ -1,0 +1,159 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Dimacs-reader</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=DIMACS-READER____DIMACS-READER">Click for Dimacs-reader in the Full Manual</a></h3>
+
+<p>A reader and parser for satisfiability instances stored in the DIMACS 
+  SAT format.</p><h2>Background and Description</h2> 
+ 
+<p>Satisfiability (SAT) instances are typically stored on disk in a format 
+called the DIMACS SAT/CNF format.  The name DIMACS comes from the Rutgers 
+University research group Center for Discrete Mathematics and Theoretical 
+Computer Science (DIMACS).  The DIMACS group hosted several challenges in the 
+1990s on algorithms and implementations related to graphs and other NP hard 
+problems (<a href="http://dimacs.rutgers.edu/Challenges/" target="_blank"><nobr> 
+http://dimacs.rutgers.edu/Challenges/<img src="../Icon_External_Link.png" title="External link to http://dimacs.rutgers.edu/Challenges/"></nobr></a>).  In 1992, the Second DIMACS 
+Implementation Challenge included problems on graph cliques, graph coloring, 
+and satisfiability.  The original DIMACS format for satisfiablity problems 
+comes from this challenge, although it's hard to find evidence of this 
+today.  (In fact, there used to be a document online describing the format used 
+in this challenge, but that has since been removed.  It's quite difficult to 
+find any mention of the format or challenge in the literature either.  This 
+makes the reason behind the <i>DIMACS</i> part of the satisfiability format 
+somewhat mysterious.)</p> 
+ 
+<p>The SAT community has since taken ownership of this format and uses versions 
+of it for SAT competitions.  The format seems to change at times, but is always 
+based around the DIMACS CNF format.  Recent competitions use the definition 
+from the 2009 SAT Competition (<a href="http://www.satcompetition.org/2009/format-benchmarks2009.html" target="_blank"><nobr> 
+http://www.satcompetition.org/2009/format-benchmarks2009.html<img src="../Icon_External_Link.png" title="External link to http://www.satcompetition.org/2009/format-benchmarks2009.html"></nobr></a>).  This 
+specification is far from complete, however, and it is unfortunate there is no 
+research paper that defines and evaluates a SAT problem specification.</p> 
+ 
+<p>Here, we define a reader and parser for files in the DIMACS SAT format.  The 
+general strategy will be to read the entire file into a list of bytes.  This 
+list will be interpreted as a list of integers (but this could be changed to a 
+list of bytes or list of signed bytes, etc.).  We then parse this list into 
+either a list of clauses (which are lists of integers) or a flat list of 
+integers (where clauses are separated by zeroes).  If the parsing fails, an 
+error string is generated.  This string contains a call stack of sorts, so the 
+offending part of the file can be located.  If the string is empty, then 
+parsing succeeded.</p> 
+ 
+<h3>Related work:</h3> 
+<p>Jared Davis and Sol Swords have defined a DIMACS writer and a SAT solver 
+output reader for their SATLINK books.  Additional information can be found 
+at: books/centaur/satlink/.</p> 
+ 
+ 
+<h2>Format Specification</h2> 
+ 
+Here, we define, in English, our interpretation of the most common 
+specification for the DIMACS CNF format.  A DIMACS CNF file is divided into two 
+sections: the preamble and the clauses section. 
+ 
+The preamble is divided into two subsections: the comment section and the 
+problem line.  The comment section is optional and comes before the problem 
+line, if it exists.  The comment section is composed of comment lines where 
+each comment line begins with the prefix <span class="tt">c </span> (that is, the character 
+<span class="tt">c</span> followed by a space).  There is no whitespace before the prefix. 
+ 
+The problem line is the second part of the preamble and is mandatory.  The 
+problem line begins with the prefix <span class="tt">p </span> (the character <span class="tt">p</span> followed by a 
+space).  (As an aside, the <span class="tt">p</span> is short for <i>problem</i>.)  Again, there is no 
+whitespace before the prefix.  This prefix is followed by the string <span class="tt">cnf </span> 
+indicating the problem is in the conjunctive normal form (CNF) format. 
+(There are other formats from the DIMACS group with other problem identifiers.) 
+The problem line then contains a positive integer indicating the highest 
+variable used in the formula.  Finally, the problem line ends in a positive 
+integer indicating the number of clauses in the formula.  An example problem 
+line looks like <span class="tt">p cnf 4 8</span> which indicated the CNF formula described in 
+the clauses section uses a maximum of 4 variables and contains exactly 8 
+clauses. 
+ 
+The clauses section immediately follows the problem line and occupies the 
+remainder of the file.  A CNF formula consists of a conjunction of clauses 
+which are disjunctions of literals.  The ANDs and ORs of the formula are 
+implicit in the DIMACS CNF representation.  The clauses section is a series of 
+integers separated by any amount of whitespace including spaces, tabs, and 
+newlines.  Zero is a special integer that indicates the end of a clause.  Each 
+clause consists of literals, indicated by positive and negative integers, 
+followed by a zero.  The absolute value of any integer indicates the variable. 
+Positive integers indicate the positive literal and negative integers indicate 
+the negative literal, which is the negation of the associated variable.  An 
+example clause in the DIMACS CNF format is <span class="tt">1 -2 -3 0</span> which represents 
+the logical clause <span class="tt">x_1 OR NOT x_2 OR NOT x_3</span>. 
+ 
+Furthermore, variables cannot exceed the maximum variable provided on the 
+problem line, and the number of clauses in the clauses section must be exactly 
+the number provided on the problem line.  Both literals and variables must be 
+unique in each clause.  Clauses must be unique sets in the formula: no two 
+clauses may be permuatations of each other.  The empty clause is 
+permissable (but makes the formula trivially unsatisfiable when 
+present).  (None of these features are checked in the parser below.  They would 
+require a formula validator and hashing mechanism to examine the formula 
+during/after parsing.) 
+ 
+ 
+<h2>Specification Issues</h2> 
+ 
+There are several inconsistencies in documented DIMACS CNF specifications.  It 
+would be nice to support each of these variations with parser options. 
+ 
+In most representations, the comments subsection is limited to the beginning of 
+the file.  However, some specifications allow for comments to be interspersed 
+throughout the clauses sections.  This encourages organizational descriptions 
+of sets of clauses. 
+ 
+Usually, the components of a problem line are separated by one space.  However, 
+some specifications allow for multiple spaces (but not newlines) inside the 
+problem line. 
+ 
+The maximum variable in the problem line exists to indicate the amount of space 
+to allocate in a solver.  This can be quite inefficient for benchmarks where 
+many variables are unused in the formula.  These types of benchmarks exist 
+because some encoding schemes might not be compact.  Some specifications 
+require each variable from 1 to the maximum variable appear in the clauses 
+section.  One application of this parser might be to report unused variables or 
+condense a formula that skips certain variable numberings. 
+ 
+Some specifications require that each clause occupy a single line of the file. 
+That is, every clause-terminating zero should be followed by a newline and the 
+whitespace separating literals cannot contain newlines.  This makes parsing a 
+bit easier and makes the file easier to debug.  This requirement is probably 
+the most common difference between DIMACS CNF specifications. 
+ 
+While the most common specification disallows tautologies (clauses that contain 
+both a literal and its negation), many specifications allow these clauses. 
+ 
+Duplicate literals within a single clause could be allowed, but it seems like a 
+poor idea. 
+ 
+Some specifications disallow the empty clause (a clause with no literals before 
+the terminating zero). 
+ 
+A specification could allow the number of clauses in the clauses section to be 
+different from number listed on the problem line. 
+ 
+ 
+<h2>Future Specifications</h2> 
+ 
+Donald Knuth proposes a new format/specification for satisfiability instances 
+in his new volume of The Art of Computer Programming 
+(<a href="http://www-cs-faculty.stanford.edu/~uno/taocp.html" target="_blank"><nobr> 
+http://www-cs-faculty.stanford.edu/~uno/taocp.html<img src="../Icon_External_Link.png" title="External link to http://www-cs-faculty.stanford.edu/~uno/taocp.html"></nobr></a>).  The DIMACS format is 
+not very human-friendly.  Knuth's <span class="tt">SAT</span> format allows for human-readable 
+formulas.  In this format, variables can be strings of (up to eight?) ASCII 
+characters, negation is represented by a tilde character (~), whitespace is 
+limited to one space character, clauses are limited to one per line, and 
+clauses are not zero-terminated. 
+ 
+ 
+
+</body>
+</html>

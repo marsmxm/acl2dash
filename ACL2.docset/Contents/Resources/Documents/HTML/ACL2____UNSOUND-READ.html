@@ -1,0 +1,93 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Unsound-read</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____UNSOUND-READ">Click for Unsound-read in the Full Manual</a></h3>
+
+<p>A faster alternative to <a href="ACL2____SERIALIZE-READ.html">serialize-read</a>, which is unsound in 
+general, but may be fine in many common cases.</p><p>The <span class="v">unsound-read</span> is like <a href="ACL2____SERIALIZE-READ.html">serialize-read</a> except that it 
+does not take <a href="ACL2____STATE.html">state</a>.  This means it works even in ordinary <a href="ACL2____DEFCONST.html">defconst</a> events, which avoids the performance penalty of using <a href="ACL2____MAKE-EVENT.html">make-event</a> to read files, as described in <a href="ACL2____SERIALIZE-IN-BOOKS.html">serialize-in-books</a>.</p> 
+ 
+<p>As its name suggests, <span class="v">unsound-read</span> is unsound and it can easily be used 
+to prove <span class="v">nil</span>; see below.  Because of this, unlike the other <a href="ACL2____SERIALIZE.html">serialize</a> routines, it is not build it into ACL2; instead, to use it you must 
+first include its book, which requires a <a href="ACL2____DEFTTAG.html">trust 
+tag</a>:</p> 
+ 
+<pre class="code">(<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "std/io/unsound-read" :dir :system :ttags (:unsound-read))</pre> 
+ 
+<p>General form:</p> 
+ 
+<pre class="code">(<a href="ACL2____UNSOUND-READ.html">unsound-read</a> filename
+              [:hons-mode {:always, :never, :smart}]
+              [:verbose   {t, nil}])
+  --&gt;
+obj</pre> 
+ 
+<p>The arguments are as in <a href="ACL2____SERIALIZE-READ.html">serialize-read</a>.</p> 
+ 
+ 
+<h3>Explanation of Unsoundness</h3> 
+ 
+<p>The logical problem with <span class="v">unsound-read</span> is that, like any other function, 
+it is expected to satisfy the functional equality axiom schema, namely,</p> 
+ 
+<pre class="code">(<a href="COMMON-LISP____EQUAL.html">equal</a> (unsound-read-fn filename hons-mode verbosep)
+       (unsound-read-fn filename hons-mode verbosep))</pre> 
+ 
+<p>But we can easily violate this property by modifying the file system between 
+calls of <span class="v">unsound-read</span>.  For instance, here is a proof of <span class="v">nil</span> that is 
+carried out in <span class="v">std/io/serialize-tests.lisp</span>:</p> 
+ 
+<pre class="code">(<a href="ACL2____LOCAL.html">local</a>
+ (<a href="ACL2____ENCAPSULATE.html">encapsulate</a>
+  ()
+  ;; Write NIL to test.sao
+  (<a href="ACL2____MAKE-EVENT.html">make-event</a>
+   (<a href="COMMON-LISP____LET.html">let</a> ((<a href="ACL2____STATE.html">state</a> (<a href="ACL2____SERIALIZE-WRITE.html">serialize-write</a> "test.sao" nil)))
+     (<a href="ACL2____VALUE.html">value</a> '(<a href="ACL2____VALUE-TRIPLE.html">value-triple</a> :invisible))))
+
+  ;; Prove that test.sao contains NIL.
+  (<a href="ACL2____DEFTHM.html">defthm</a> lemma-1
+    (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____UNSOUND-READ.html">unsound-read</a> "test.sao") nil)
+    :rule-classes nil)
+
+  ;; Write T to test.sao
+  (<a href="ACL2____MAKE-EVENT.html">make-event</a>
+   (<a href="COMMON-LISP____LET.html">let</a> ((<a href="ACL2____STATE.html">state</a> (<a href="ACL2____SERIALIZE-WRITE.html">serialize-write</a> "test.sao" t)))
+     (<a href="ACL2____VALUE.html">value</a> '(<a href="ACL2____VALUE-TRIPLE.html">value-triple</a> :invisible))))
+
+  ;; Prove that test.sao contains T.
+  (<a href="ACL2____DEFTHM.html">defthm</a> lemma-2
+    (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____UNSOUND-READ.html">unsound-read</a> "test.sao") t)
+    :rule-classes nil)
+
+  ;; Arrive at our contradiction.
+  (<a href="ACL2____DEFTHM.html">defthm</a> qed
+    nil
+    :rule-classes nil
+    :hints(("Goal"
+            :use ((:instance lemma-1)
+                  (:instance lemma-2))
+            :in-theory (<a href="ACL2____DISABLE.html">disable</a> (unsound-read-fn)))))))</pre> 
+ 
+<h3>Avoiding Unsoundness</h3> 
+ 
+<p>If you want to safely use <span class="v">unsound-read</span> to read some file, <span class="v">foo.sao</span>, 
+then you should not change <span class="v">foo.sao</span> after reading it.</p> 
+ 
+<p>A common scenario is that you have some book, <span class="v">foo.lisp</span>, that uses 
+<span class="v">unsound-read</span> to load <span class="v">foo.sao</span>, using a <a href="ACL2____DEFCONST.html">defconst</a> event.  In this 
+case, simply adding a <span class="v">depends-on</span> line such as:</p> 
+ 
+<pre class="code">; (depends-on "foo.sao")
+(<a href="ACL2____DEFCONST.html">defconst</a> *contents* (<a href="ACL2____UNSOUND-READ.html">unsound-read</a> "foo.sao"))</pre> 
+ 
+<p>May, at least for users of <span class="v">cert.pl</span>, offer some minimal 
+protection. (This <span class="v">depends-on</span> line tells cert.pl to rebuild <span class="v">foo.cert</span> 
+any time that <span class="v">foo.sao</span> changes.)</p>
+</body>
+</html>

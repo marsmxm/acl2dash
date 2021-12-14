@@ -1,0 +1,140 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Accumulated-persistence-subtleties</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____ACCUMULATED-PERSISTENCE-SUBTLETIES">Click for Accumulated-persistence-subtleties in the Full Manual</a></h3>
+
+<p>Some subtle aspects of the counting done by <span class="tt"><a href="ACL2____ACCUMULATED-PERSISTENCE.html">accumulated-persistence</a></span></p><p>In this topic we cover the overcounting of ``useful'' <a href="ACL2____RUNE.html">rune</a> 
+ application attempts, and we describe how ``useless'' rune application 
+ attempts can actually be critical for a proof's success.  We conclude with a 
+ few words about counting frames when there are nested (recursive) applications 
+ of a rune.</p> 
+ 
+ <p><i>Overcounting of ``useful'' rune application attempts.</i> Not every 
+ <a href="ACL2____RUNE.html">rune</a> application may be necessary for a proof's success.  Consider for 
+ example:</p> 
+ 
+ <pre class="code">(<a href="ACL2____THM.html">thm</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____CAR.html">car</a> (<a href="COMMON-LISP____CONS.html">cons</a> a (<a href="COMMON-LISP____CDR.html">cdr</a> (<a href="COMMON-LISP____CONS.html">cons</a> b x))))
+            a))</pre> 
+ 
+ <p>Then <span class="v">show-accumulated-persistence</span> will tell us that <span class="v">:</span><span class="tt"><a href="ACL2____REWRITE.html">rewrite</a></span> rules <span class="v">car-cons</span> and <span class="v">cdr-cons</span> each had one useful 
+ application.  However, the rule <span class="v">cdr-cons</span> is used to simplify <span class="v">(<a href="COMMON-LISP____CDR.html">cdr</a>
+ (<a href="COMMON-LISP____CONS.html">cons</a> b x))</span> to <span class="v">x</span>, and this simplification is unnecessary for the proof. 
+ Indeed, the proof succeeds even when preceded by the event: <span class="v">(<a href="ACL2____IN-THEORY.html">in-theory</a>
+ (<a href="ACL2____DISABLE.html">disable</a> cdr-cons))</span>.  We thus see that a <a href="ACL2____RUNE.html">rune</a> application labeled as 
+ ``useful'' may be simplifying a term that is not relevant to the proof.</p> 
+ 
+ <p>As of this writing, we consider every <span class="v">:</span><span class="tt"><a href="ACL2____FORWARD-CHAINING.html">forward-chaining</a></span> rule 
+ application to be ``useful'', for simplicity of the implementation.  Moreover, 
+ our counting of these rules is such that a single rule may be counted more 
+ than once.</p> 
+ 
+ <p><i>How ``useless'' attempts can be critical for a proof's success.</i> The 
+ command <span class="v">(<a href="ACL2____ACCUMULATED-PERSISTENCE.html">accumulated-persistence</a> :useless</span>) will list rules that did not 
+ contribute directly to the proof (see <a href="ACL2____ACCUMULATED-PERSISTENCE.html">accumulated-persistence</a>, in 
+ particular the discussion of ``useless'' there).  However, a ``useless'' rule 
+ can on rare occasions be critical to the success of a proof.  In the following 
+ example, we have a ``bad'' rule that can take the proof in the wrong 
+ direction, but a ``useless'' rule does a rewrite that prevents the successful 
+ relieving of a hypothesis of the ``bad'' rule.  In summary:</p> 
+ 
+ <pre class="code">; Assume p0.  We want to prove p1.
+
+; Key rule:
+p0 -&gt; p1 = t
+
+; Bad rule that could ruin the proof:
+p3 -&gt; p1 = p2
+
+; But unfortunately, we know p3:
+p0 -&gt; p3
+
+; Important ``useless'' rule, preventing ``bad rule'' above from firing:
+p3 = p4</pre> 
+ 
+ <p>The following event captures the rules described above.</p> 
+ 
+ <pre class="code">(<a href="ACL2____ENCAPSULATE.html">encapsulate</a>
+ ((p0 (x) t)
+  (p1 (x) t)
+  (p2 (x) t)
+  (p3 (x) t)
+  (p4 (x) t))
+ (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> p0 (x) x))
+ (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> p1 (x) x))
+ (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> p2 (x) x))
+ (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> p3 (x) x))
+ (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> p4 (x) x))
+
+; Key rule:
+ (<a href="ACL2____DEFTHM.html">defthm</a> p0-implies-p1
+   (<a href="ACL2____IMPLIES.html">implies</a> (p0 x)
+            (p1 x)))
+
+; Bad rule that could ruin the proof:
+ (<a href="ACL2____DEFTHM.html">defthm</a> p3-implies-p1-is-p2
+   (<a href="ACL2____IMPLIES.html">implies</a> (p3 x)
+            (<a href="COMMON-LISP____EQUAL.html">equal</a> (p1 x) (p2 x))))
+
+; But unfortunately, we know p3:
+ (<a href="ACL2____DEFTHM.html">defthm</a> p0-implies-p3
+   (<a href="ACL2____IMPLIES.html">implies</a> (p0 x)
+            (p3 x)))
+
+; Important ``useless'' rule, preventing p3-implies-p1-is-p2 from firing:
+ (<a href="ACL2____DEFTHM.html">defthm</a> p3-is-p4
+   (<a href="COMMON-LISP____EQUAL.html">equal</a> (p3 x) (p4 x))))</pre> 
+ 
+ <p>Now we can see that <span class="v">p3-is-p4</span> is labeled as ``useless'', by evaluating 
+ these commands.</p> 
+ 
+ <pre class="code">(<a href="ACL2____ACCUMULATED-PERSISTENCE.html">accumulated-persistence</a> t)
+(<a href="ACL2____THM.html">thm</a> (<a href="ACL2____IMPLIES.html">implies</a> (p0 x) (p1 x)))
+(<a href="ACL2____SHOW-ACCUMULATED-PERSISTENCE.html">show-accumulated-persistence</a>)</pre> 
+ 
+ <p>If instead we first evaluate <span class="v">(<a href="ACL2____IN-THEORY.html">in-theory</a> (<a href="ACL2____DISABLE.html">disable</a> p3-is-p4))</span> before the 
+ <span class="v">thm</span> above, then the proof fails, even though <span class="v">p3-is-p4</span> was labeled as 
+ ``useless''!</p> 
+ 
+ <p>Nevertheless, in general it is probably safe to disable rules reported as 
+ ``useless'' by <span class="v">(<a href="ACL2____SHOW-ACCUMULATED-PERSISTENCE.html">show-accumulated-persistence</a> :useless)</span>, and doing so may 
+ speed up a proof considerably.</p> 
+ 
+ <p>Remark. The example above suggests a surprising fact: on rare occasions, a 
+ proof may fail when you give an <span class="v">:</span><span class="tt"><a href="ACL2____IN-THEORY.html">in-theory</a></span> hint consisting of 
+ exactly the <a href="ACL2____RUNE.html">rune</a>s reported in a proof that succeeds.  For, imagine a 
+ rule R that is needed in part of the proof but is ``bad'' in a second part, 
+ and that some other, ``useless'' rule prevents the application of R in that 
+ second part.  The example above suggests that disabling this ``useless'' rule 
+ can allow the second application of R, thus preventing the proof.</p> 
+ 
+ <p>Finally we discuss accumulation into frame counts in the case of a nested 
+ (recursive) application of a rule: that is, the case that during the 
+ application of a rule, the rule is applied again — in particular, while 
+ relieving a hypothesis or rewriting the right-hand side from the original rule 
+ application.  Recall that the implementation of <a href="ACL2____ACCUMULATED-PERSISTENCE.html">accumulated-persistence</a> 
+ keeps a stack of <a href="ACL2____RUNE.html">rune</a>s currently being applied; thus, we are 
+ considering here the case that a rune is pushed onto a stack on which it 
+ already resides.  In that case, we count tries as usual but we avoid 
+ accumulating until we reach the outermost (topmost) application of that rune. 
+ 
+ Consider the following example.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> mem (a x)
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ATOM.html">atom</a> x)
+      nil
+    (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> a (<a href="COMMON-LISP____CAR.html">car</a> x)) (mem a (<a href="COMMON-LISP____CDR.html">cdr</a> x)))))</pre> 
+ 
+ <p>Now suppose we consider the theorem <span class="v">(mem a (<a href="COMMON-LISP____LIST.html">list</a> 1 2 3 a))</span>.  Each time 
+ the definition of <span class="v">mem</span> is applied, a new stack frame is pushed.  We avoid 
+ accumulating into the <span class="v">:frames</span> count for that stack frame unless it is the 
+ topmost stack frame for that definition.  Otherwise the final <span class="v">:frames</span> 
+ count would be the sum of the counts for those individual frames, which form a 
+ linear sequence whose sum would therefore be quadratic in the number of 
+ applications of the definition of <span class="v">mem</span>.</p>
+</body>
+</html>

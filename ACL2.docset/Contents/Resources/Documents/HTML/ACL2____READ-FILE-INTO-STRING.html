@@ -1,0 +1,191 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Read-file-into-string</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____READ-FILE-INTO-STRING">Click for Read-file-into-string in the Full Manual</a></h3>
+
+<p>The contents of a file (or part of it) as a string</p><p>When this macro is passed a valid filename (and the ACL2 <a href="ACL2____STATE.html">state</a>), it generally returns the contents of the file (or a specified part of 
+ the file) as a string.  Otherwise, it returns <span class="v">nil</span> or causes an error.</p> 
+ 
+ <pre class="code">Example Forms:
+
+(<a href="ACL2____READ-FILE-INTO-STRING.html">read-file-into-string</a> "foo.lisp")
+(<a href="ACL2____READ-FILE-INTO-STRING.html">read-file-into-string</a> "foo.lisp" :start 0 :bytes nil) ; same as above
+(<a href="ACL2____READ-FILE-INTO-STRING.html">read-file-into-string</a> "foo.lisp" :start 20000 :bytes 10000)
+
+General Form:
+
+(<a href="ACL2____READ-FILE-INTO-STRING.html">read-file-into-string</a> filename :start s :bytes b)</pre> 
+ 
+ <p>where <span class="v">filename</span> is a string, which is typically the name of a file; and 
+ where <span class="v">:start s</span> and <span class="v">:bytes b</span> are optional, where <span class="v">s</span> has default 
+ <span class="v">0</span> and <span class="v">b</span> has default <span class="v">nil</span>, <span class="v">s</span> is a natural number, and <span class="v">b</span> 
+ is either a natural number or <span class="v">nil</span>.</p> 
+ 
+ <p>For examples, see <a href="ACL2____COMMUNITY-BOOKS.html">community-books</a> file 
+ <span class="v">books/system/tests/read-file-into-string.lisp</span>.</p> 
+ 
+ <p>The result, when not <span class="v">nil</span> or an error, is a string representing the 
+ specified file contents.  For the default of <span class="v">:start 0</span> and <span class="v">:bytes
+ nil</span>, or equivalently, when no keyword arguments are specified, then the 
+ entire file contents are returned as a string.  In general, <span class="v">:start s</span> 
+ specifies the part of the file starting at the <span class="v">s</span>-th byte, and <span class="v">:bytes
+ b</span> specifies that only the first <span class="v">b</span> bytes are to be read starting at that 
+ position, stopping at end of file in what we call the ``truncation case'': 
+ where <span class="v">b+s</span> exceeds the length of the file.</p> 
+ 
+ <p>If <span class="v">:start s</span> is specified where <span class="v">s &gt; 0</span>, then the next read must 
+ start where the previous read left off.  More precisely: in this case ACL2 
+ expects that there was an earlier call of read-file-into-string on the same 
+ file, where the most recent such call must not have been the ``truncation 
+ case'' (see above) and must have have specified <span class="v">:bytes</span> such that the 
+ first unread byte position is <span class="v">s</span>.  Otherwise, an error occurs.  Note that 
+ if <span class="v">s</span> is <span class="v">0</span> then there is no such restriction; the read is viewed as a 
+ new ``first'' read of the file.</p> 
+ 
+ <p>WARNING: A Lisp stream is created for the specified file, and is left open 
+ until a call of <span class="v">read-file-into-string</span> is either made with <span class="v">:bytes</span> 
+ having value <span class="v">nil</span> (the default) or is in the ``truncation case'' described 
+ above.  Operating systems can complain when too many streams are open at the 
+ same time.  In particular, consider the case that <span class="v">:start s</span> and <span class="v">:bytes
+ b</span> are specified where <span class="v">s &gt; 0</span>, and where <span class="v">s+b</span> is exactly the length 
+ of the file.  Thus we are barely not in the ``truncation case'' described 
+ above, so one more read will be necessary in order to close that stream.  Your 
+ code might thus include code such as the following (for example) after a call 
+ of <span class="v">read-file-into-string</span> with non-<span class="v">nil</span> <span class="v">:bytes</span>:</p> 
+ 
+ <pre class="code">(<a href="ACL2____PROG2_42.html">prog2$</a>
+ (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP_____D3.html">=</a> (<a href="COMMON-LISP_____B2.html">+</a> position bytes) file-length)
+
+; Then close the stream:
+
+      (<a href="ACL2____READ-FILE-INTO-STRING.html">read-file-into-string</a>
+       filename
+       :start file-length
+       :bytes 1))
+ &lt;more_code&gt;)</pre> 
+ 
+ <p>End of warning.</p> 
+ 
+ <p>This macro provides functionality that can be obtained through the usual 
+ <a href="ACL2____IO.html">io</a> routines provided by ACL2, as shown by the sequence of definitions 
+ below.  However, under-the-hood raw Lisp code provides an implementation that 
+ not only is efficient, but also does not return <span class="tt"><a href="ACL2____STATE.html">state</a></span>.  Note that the 
+ expansion of a call of this macro does take <span class="v">state</span> as an argument, 
+ which (as usual for functions that take <span class="v">state</span>) necessitates either that 
+ <span class="v">(<a href="ACL2____SET-STATE-OK.html">set-state-ok</a> t)</span> has already been evaluated, or else that a suitable 
+ <span class="v">:stobjs</span> declaration, typically <span class="v">:stobjs state</span>, is provided (see <a href="ACL2____XARGS.html">xargs</a>).</p> 
+ 
+ <p>The value of the constant <span class="v">*read-file-into-string-bound*</span> 
+ (see the definition below) is a strict upper bound on the size of the string 
+ returned.  If the file (or portion thereof) contains more bytes than this, 
+ then <span class="v">nil</span> is returned.</p> 
+ 
+ <p>There are two checks to guarantee that <span class="v">read-file-into-string</span> is truly 
+ a function — that is, it returns the same value for two calls with the 
+ same inputs.  One check ensures that the write date of the file has not 
+ changed between two such calls; otherwise ACL2 will cause a raw Lisp error of 
+ the following form.</p> 
+ 
+ <pre class="code">************ ABORTING from raw Lisp ***********
+********** (see :DOC raw-lisp-error) **********
+Error:  Illegal consecutive reads from file "MY-FILE".
+See :DOC read-file-into-string.
+***********************************************</pre> 
+ 
+ <p>The other check ensures that the write date of the file has not changed 
+ while the second call is in progress.  For simplicity, ACL2 actually makes 
+ this check even for the first call.  When the check fails the corresponding 
+ raw Lisp error is of the following form.</p> 
+ 
+ <pre class="code">************ ABORTING from raw Lisp ***********
+********** (see :DOC raw-lisp-error) **********
+Error:  Illegal attempt to call READ-FILE-INTO-STRING concurrently with some write to that file!
+See :DOC read-file-into-string.
+***********************************************</pre> 
+ 
+ <p>The first of these errors can actually occur when the second read is 
+ performed by <span class="tt"><a href="ACL2____OPEN-INPUT-CHANNEL.html">open-input-channel</a></span> of type <span class="v">:character</span>.  But we 
+ expect all such errors to be rare, since they only occur when there are two 
+ reads to the same file with an intervening external write, in the case that 
+ the two ACL2 states have the same <span class="v">file-clock</span> field (see <a href="ACL2____STATE.html">state</a>). 
+ That field is updated any time a channel is opened or closed.</p> 
+ 
+ <p>We close by showing the relevant ACL2 definitions in the logic, that is, 
+ not including the special raw Lisp (under the hood) code in the definition of 
+ <span class="v">read-file-into-string2</span>.</p> 
+ 
+ <p><b>Function: </b>read-file-into-string1</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ read-file-into-string1
+ (channel state ans bound)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs state
+                 :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> channel)
+                             (<a href="ACL2____OPEN-INPUT-CHANNEL-P.html">open-input-channel-p</a> channel
+                                                   :character state)
+                             (<a href="ACL2____CHARACTER-LISTP.html">character-listp</a> ans)
+                             (<a href="ACL2____NATP.html">natp</a> bound))))
+ (<a href="COMMON-LISP____COND.html">cond</a>
+  ((<a href="ACL2____ZP.html">zp</a> bound) (<a href="ACL2____MV.html">mv</a> nil state))
+  (t
+   (<a href="ACL2____MV-LET.html">mv-let</a>
+       (val state)
+       (<a href="ACL2____READ-CHAR_42.html">read-char$</a> channel state)
+       (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____CHARACTERP.html">characterp</a> val))
+              (<a href="ACL2____MV.html">mv</a> (<a href="COMMON-LISP____COERCE.html">coerce</a> (<a href="COMMON-LISP____REVERSE.html">reverse</a> ans) 'string)
+                  state))
+             (t (read-file-into-string1 channel state (<a href="COMMON-LISP____CONS.html">cons</a> val ans)
+                                        (<a href="COMMON-LISP____1-.html">1-</a> bound))))))))</pre> 
+ 
+ <p><b>Definition: </b>*read-file-into-string-bound*</p><pre class="code">(<a href="ACL2____DEFCONST.html">defconst</a> *read-file-into-string-bound*
+          (<a href="COMMON-LISP____1-.html">1-</a> (<a href="COMMON-LISP____ASH.html">ash</a> 1 60)))</pre> 
+ 
+ <p><b>Function: </b>read-file-into-string2-logical</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ read-file-into-string2-logical
+ (filename start bytes state)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs state
+                 :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____STRINGP.html">stringp</a> filename)
+                             (<a href="ACL2____NATP.html">natp</a> start)
+                             (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____NULL.html">null</a> bytes) (<a href="ACL2____NATP.html">natp</a> bytes)))))
+ (<a href="ACL2____NON-EXEC.html">non-exec</a>
+  (<a href="ACL2____MV-LET.html">mv-let</a>
+   (erp val state)
+   (<a href="ACL2____MV-LET.html">mv-let</a>
+    (chan state)
+    (<a href="ACL2____OPEN-INPUT-CHANNEL.html">open-input-channel</a> filename
+                        :character state)
+    (<a href="COMMON-LISP____COND.html">cond</a>
+       ((<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____NULL.html">null</a> chan) (<a href="COMMON-LISP____NOT.html">not</a> (state-p state)))
+        (<a href="ACL2____MV.html">mv</a> nil nil state))
+       (t (<a href="ACL2____MV-LET.html">mv-let</a> (val state)
+                  (read-file-into-string1
+                       chan
+                       state nil *read-file-into-string-bound*)
+                  (<a href="ACL2____PPROGN.html">pprogn</a> (<a href="ACL2____EC-CALL.html">ec-call</a> (<a href="ACL2____CLOSE-INPUT-CHANNEL.html">close-input-channel</a> chan state))
+                          (<a href="ACL2____MV.html">mv</a> nil val state))))))
+   (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORE.html">ignore</a> erp state))
+   (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____STRINGP.html">stringp</a> val)
+        (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> start (<a href="COMMON-LISP____LENGTH.html">length</a> val))
+        (<a href="COMMON-LISP____SUBSEQ.html">subseq</a> val start
+                (<a href="COMMON-LISP____IF.html">if</a> bytes (<a href="COMMON-LISP____MIN.html">min</a> (<a href="COMMON-LISP_____B2.html">+</a> start bytes) (<a href="COMMON-LISP____LENGTH.html">length</a> val))
+                    (<a href="COMMON-LISP____LENGTH.html">length</a> val)))))))</pre> 
+ 
+ <p><b>Function: </b>read-file-into-string2</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> read-file-into-string2
+       (filename start bytes state)
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs state
+                       :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____STRINGP.html">stringp</a> filename)
+                                   (<a href="ACL2____NATP.html">natp</a> start)
+                                   (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____NULL.html">null</a> bytes) (<a href="ACL2____NATP.html">natp</a> bytes)))))
+       (read-file-into-string2-logical filename start bytes state))</pre> 
+ 
+ <p><b>Macro: </b>read-file-into-string</p><pre class="code">(<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> read-file-into-string
+          (filename &amp;key (start '0) bytes)
+          (<a href="COMMON-LISP____CONS.html">cons</a> 'read-file-into-string2
+                (<a href="COMMON-LISP____CONS.html">cons</a> filename
+                      (<a href="COMMON-LISP____CONS.html">cons</a> start
+                            (<a href="COMMON-LISP____CONS.html">cons</a> bytes (<a href="COMMON-LISP____CONS.html">cons</a> 'state 'nil))))))</pre>
+</body>
+</html>

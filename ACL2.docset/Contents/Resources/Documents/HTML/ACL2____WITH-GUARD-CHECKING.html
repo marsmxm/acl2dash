@@ -1,0 +1,100 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>With-guard-checking</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____WITH-GUARD-CHECKING">Click for With-guard-checking in the Full Manual</a></h3>
+
+<p>Suppress or enable guard-checking for a form</p><pre class="code">Example:
+
+; Turn off all guard-checking for the indicated calls of append and car:
+(<a href="ACL2____WITH-GUARD-CHECKING.html">with-guard-checking</a> :none
+                     (<a href="COMMON-LISP____APPEND.html">append</a> 3 4))
+
+General Form:
+(<a href="ACL2____WITH-GUARD-CHECKING.html">with-guard-checking</a> val form)</pre> 
+ 
+ <p>where <span class="v">val</span> evaluates to a legal <a href="ACL2____GUARD.html">guard</a>-checking value (see <a href="ACL2____SET-GUARD-CHECKING.html">set-guard-checking</a>, or evaluate <span class="v">*guard-checking-values*</span> to see the list 
+ of such values), and <span class="v">form</span> is a form that does not mention <span class="tt"><a href="ACL2____STATE.html">state</a></span> 
+ (unless there is an active trust tag, in which case mention of <span class="v">state</span> can 
+ be unsound; see below).  See <a href="ACL2____WITH-GUARD-CHECKING-ERROR-TRIPLE.html">with-guard-checking-error-triple</a> and <a href="ACL2____WITH-GUARD-CHECKING-EVENT.html">with-guard-checking-event</a> for analogous utilities to be used with forms that 
+ return <a href="ACL2____ERROR-TRIPLE.html">error-triple</a>s.  <span class="v">Form</span> is to be evaluated in a scope such 
+ that, in essence, <span class="v">(<a href="ACL2____SET-GUARD-CHECKING.html">set-guard-checking</a> val)</span> is first executed locally in 
+ that scope.  However, this guard-checking setting is ignored once evaluation 
+ passes into raw Lisp functions (see <a href="ACL2____GUARDS-AND-EVALUATION.html">guards-and-evaluation</a>).</p> 
+ 
+ <p>Note that the addition of <span class="v">with-guard-checking</span> does not change the 
+ proof obligations generated for guard verification.  However, <span class="tt"><a href="ACL2____EC-CALL.html">ec-call</a></span> 
+ can be used in order to eliminate those proof obligations.  Consider the 
+ following example.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> f1 (x)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t))
+  (<a href="ACL2____WITH-GUARD-CHECKING.html">with-guard-checking</a> nil (<a href="ACL2____EC-CALL.html">ec-call</a> (<a href="COMMON-LISP____NTH.html">nth</a> t x))))</pre> 
+ 
+ <p>Then guard verification succeeds, and evaluation of the form <span class="v">(f1 '(1 2
+ 3))</span> will return <span class="v">1</span>, without causing a guard violation.  However, if 
+ <span class="v">ec-call</span> is instead removed from this definition, then guard verification 
+ will fail, and for good reason, as illustrated by the following example.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> f2 (x)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t))
+  (<a href="ACL2____WITH-GUARD-CHECKING.html">with-guard-checking</a> nil (<a href="COMMON-LISP____NTH.html">nth</a> t x)))
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> f3 (x)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t))
+  (f2 x))</pre> 
+ 
+ <p>Suppose guard verification were to succeed for <span class="v">f2</span>.  Then of course it 
+ would also succeed for <span class="v">f3</span>.  But the call <span class="v">(f3 nil)</span> would then cause a 
+ raw Lisp error (at least in many host Lisps), because it would lead to a 
+ raw-Lisp call of <span class="v">nth</span> whose first argument is not a number.</p> 
+ 
+ <p>The remainder of this topic provides a remark for advanced users. 
+ <span class="v">With-guard-checking</span> is implemented using <span class="tt"><a href="ACL2____RETURN-LAST.html">return-last</a></span>, which you 
+ can in principle call directly; use <span class="v">:</span><span class="tt"><a href="ACL2____TRANS.html">trans</a></span> or <span class="v">:</span><span class="tt"><a href="ACL2____TRANS1.html">trans1</a></span> to see how a call of <span class="v">with-guard-checking</span> expands to a 
+ corresponding call of <span class="v">return-last</span>.  However, ACL2 enforces a couple of 
+ checks that can only be circumvented if there is an active trust tag.  The 
+ following example from Jared Davis shows why those checks are required 
+ (in particular, it shows how circumventing them with a trust tag can be 
+ unsound).  We start by defining our own version of the utility, which omits 
+ the check that the form has no occurrences of <span class="v">state</span>.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> my-with-guard-checking (val form)
+  `(with-guard-checking1 (chk-with-guard-checking-arg ,val)
+                         ,form))</pre> 
+ 
+ <p>Submitting the following event results in the error shown just below 
+ it.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> foo (<a href="ACL2____STATE.html">state</a>)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs state
+                  :guard (<a href="ACL2____F-BOUNDP-GLOBAL.html">f-boundp-global</a> 'guard-checking-on state)))
+  (my-with-guard-checking :all (<a href="ACL2____F-GET-GLOBAL.html">f-get-global</a> 'guard-checking-on state)))
+
+ACL2 Error in ( DEFUN FOO ...):  The form
+(<a href="ACL2____RETURN-LAST.html">RETURN-LAST</a> 'WITH-GUARD-CHECKING1-RAW
+             (CHK-WITH-GUARD-CHECKING-ARG :ALL)
+             (<a href="ACL2____F-GET-GLOBAL.html">F-GET-GLOBAL</a> 'GUARD-CHECKING-ON STATE))
+is essentially a call of WITH-GUARD-CHECKING, but without certain checks
+performed.  This is illegal unless there is an active trust tag; see
+:DOC defttag.  To avoid this error without use of a trust tag, call
+WITH-GUARD-CHECKING directly.  Note:  this error occurred in the context
+(WITH-GUARD-CHECKING1 (CHK-WITH-GUARD-CHECKING-ARG :ALL)
+                      (<a href="ACL2____F-GET-GLOBAL.html">F-GET-GLOBAL</a> 'GUARD-CHECKING-ON
+                                    STATE)).</pre> 
+ 
+ <p>But if we first evaluate <span class="v">(<a href="ACL2____DEFTTAG.html">defttag</a> t)</span>, then the <span class="tt"><a href="COMMON-LISP____DEFUN.html">defun</a></span> event 
+ above is admitted, and we can subsequently prove something that is not 
+ true.</p> 
+ 
+ <pre class="code">(<a href="ACL2____THM.html">thm</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (foo state)
+            (<a href="ACL2____F-GET-GLOBAL.html">f-get-global</a> 'guard-checking-on state)))
+
+(<a href="ACL2____ASSERT-EVENT.html">assert-event</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (foo state)
+                          (<a href="ACL2____F-GET-GLOBAL.html">f-get-global</a> 'guard-checking-on state))))</pre>
+</body>
+</html>

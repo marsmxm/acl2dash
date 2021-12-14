@@ -1,0 +1,921 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Note-5-0</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____NOTE-5-0">Click for Note-5-0 in the Full Manual</a></h3>
+
+<p>ACL2 Version  5.0 (August, 2012) Notes</p><p>NOTE!  New users can ignore these release notes, because the <a href="COMMON-LISP____DOCUMENTATION.html">documentation</a> has been updated to reflect all changes that are recorded 
+ here.</p> 
+ 
+ <p>Below we roughly organize the changes since Version 4.3 into the following 
+ categories of changes: existing features, new features, heuristic 
+ improvements, bug fixes, changes at the system level and to distributed books, 
+ Emacs support, and experimental versions.  Each change is described in just 
+ one category, though of course many changes could be placed in more than one 
+ category.</p> 
+ 
+ <p>NOTE: ACL2 is now distributed under Version 2 of the GNU General Public 
+ License.  [Added later: The license has changed since Version_5.0.  See 
+ LICENSE.]  Formerly, any later version had been acceptable.  Moreover, books 
+ are no longer distributed from a University of Texas website, but rather, from 
+ Google Code at the <a href="http://code.google.com/p/acl2-books/downloads/" target="_blank"><nobr>ACL2 Books Downloads<img src="../Icon_External_Link.png" title="External link to http://code.google.com/p/acl2-books/downloads/"></nobr></a> 
+ page.</p> 
+ 
+ <p><b>CHANGES TO EXISTING FEATURES</b></p> 
+ 
+ <p>A fatal error now occurs if environment variable <span class="v">ACL2_CUSTOMIZATION</span> 
+ has a value other than <span class="v">NONE</span> or the empty string, but is not the name of 
+ an existing file.  Thanks to Harsh Raju Chamarthi for requesting such a 
+ change.</p> 
+ 
+ <p>Functions <span class="v">read-acl2-oracle</span> (and <span class="v">read-acl2-oracle@par</span>), 
+ <span class="v">read-run-time</span>, and <span class="v">main-timer</span> are no longer untouchable (see <a href="ACL2____REMOVE-UNTOUCHABLE.html">remove-untouchable</a>).</p> 
+ 
+ <p>We now avoid certain duplicate conjuncts in the <a href="ACL2____CONSTRAINT.html">constraint</a> stored 
+ for <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span> <a href="ACL2____EVENTS.html">events</a>.  For example, the constraint stored for 
+ the following event formerly included <span class="v">(<a href="COMMON-LISP____EQUAL.html">EQUAL</a> (FOOP (<a href="COMMON-LISP____CONS.html">CONS</a> X Y)) (FOOP Y))</span> 
+ and <span class="v">(<a href="ACL2____BOOLEANP.html">BOOLEANP</a> (FOOP X))</span> twice each, but no more.</p> 
+ 
+ <pre class="code">(<a href="ACL2____ENCAPSULATE.html">encapsulate</a>
+ ((foop (x) t))
+ (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> foop (x) (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORE.html">ignore</a> x)) t))
+ (<a href="ACL2____DEFTHM.html">defthm</a> foop-constraints
+   (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____BOOLEANP.html">booleanp</a> (foop x))
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (foop (<a href="COMMON-LISP____CONS.html">cons</a> x y)) (foop y)))
+   :rule-classes
+   ((:type-prescription :corollary (<a href="ACL2____BOOLEANP.html">booleanp</a> (foop x)))
+    (:rewrite :corollary (<a href="COMMON-LISP____EQUAL.html">equal</a> (foop (<a href="COMMON-LISP____CONS.html">cons</a> x y)) (foop y))))))</pre> 
+ 
+ <p>The <span class="v">:</span><span class="tt"><a href="ACL2____GUARD.html">guard</a></span> for a constrained function (see <a href="ACL2____SIGNATURE.html">signature</a>) 
+ may now mention function symbols introduced in the same <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span> 
+ event that introduces that function.  Thanks to Nathan Wetzler for a helpful 
+ discussion leading to this improvement.</p> 
+ 
+ <p>The test for redundancy (see <a href="ACL2____REDUNDANT-EVENTS.html">redundant-events</a>) of <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span> <a href="ACL2____EVENTS.html">events</a> has been improved in cases involving redefinition 
+ (see <a href="ACL2____LD-REDEFINITION-ACTION.html">ld-redefinition-action</a>).  Thanks to Jared Davis for providing the 
+ following example, which illustrates the problem.</p> 
+ 
+ <pre class="code">(<a href="ACL2____REDEF_12.html">redef!</a>)
+
+(<a href="ACL2____ENCAPSULATE.html">encapsulate</a> ()
+  (<a href="COMMON-LISP____DEFUN.html">defun</a> g (x)
+    (<a href="COMMON-LISP_____B2.html">+</a> 3 x)))
+
+(<a href="ACL2____G.html">g</a> 0) ; 3, as expected
+
+(<a href="ACL2____ENCAPSULATE.html">encapsulate</a> ()
+  (<a href="COMMON-LISP____DEFUN.html">defun</a> g (x)
+    (<a href="COMMON-LISP_____B2.html">+</a> 4 x)))
+
+(<a href="ACL2____G.html">g</a> 0) ; 4, as expected
+
+; Unfortunately, the following was flagged as redundant because it agreed
+; with the first encapsulate above.  That has been fixed; now, it is
+; recognized as not being redundant.
+(<a href="ACL2____ENCAPSULATE.html">encapsulate</a> ()
+  (<a href="COMMON-LISP____DEFUN.html">defun</a> g (x)
+    (<a href="COMMON-LISP_____B2.html">+</a> 3 x)))</pre> 
+ 
+ <p>The test for redundancy of <span class="tt"><a href="COMMON-LISP____DEFUN.html">defun</a></span> and <span class="tt"><a href="ACL2____DEFCONST.html">defconst</a></span> events has 
+ been improved in the case that redefinition is active.  In that case, 
+ redundancy now additionally requires that the ``translated'' body is 
+ unchanged, i.e., even after expanding macro calls and replacing constants 
+ (defined by <span class="tt"><a href="ACL2____DEFCONST.html">defconst</a></span>) with their values.  Thanks to Sol Swords for 
+ requesting this enhancement, and to Jared Davis for pointing out a bug in a 
+ preliminary change.  See <a href="ACL2____REDUNDANT-EVENTS.html">redundant-events</a>, in particular the ``Note 
+ About Unfortunate Redundancies''.  Note that this additional requirement was 
+ already in force for redundancy of <span class="tt"><a href="COMMON-LISP____DEFMACRO.html">defmacro</a></span> events.</p> 
+ 
+ <p>The macro <span class="tt"><a href="ACL2____DEFMACRO-LAST.html">defmacro-last</a></span> and the <a href="ACL2____TABLE.html">table</a> <span class="tt"><a href="ACL2____RETURN-LAST-TABLE.html">return-last-table</a></span> have been modified so that when they give special treatment 
+ to a macro <span class="v">mac</span> and its raw Lisp counterpart <span class="v">mac-raw</span>, a call 
+ <span class="v">(<a href="ACL2____RETURN-LAST.html">return-last</a> 'mac-raw ...)</span>  can be made illegal when encountered directly 
+ in the top level loop, as opposed to inside a function body.  See <a href="ACL2____RETURN-LAST.html">return-last</a>.  Thanks to Harsh Raju Chamarthi for showing us an example that 
+ led us to make this improvement.</p> 
+ 
+ <p>We removed a barrier to admitting function definitions, as we explain using 
+ the following example.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> foo (m state)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs state))
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____CONSP.html">consp</a> m)
+      (<a href="COMMON-LISP____LET.html">let</a> ((<a href="ACL2____STATE.html">state</a> (<a href="ACL2____F-PUT-GLOBAL.html">f-put-global</a> 'last-m m state)))
+        (foo (<a href="COMMON-LISP____CDR.html">cdr</a> m) state))
+    state))</pre> 
+ 
+ <p>Previously, ACL2 complained that it could not determine the outputs of the 
+ <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span> form, as is necessary in order to ensure that <span class="tt"><a href="ACL2____STATE.html">state</a></span> is 
+ returned by it.  ACL2 now works harder to solve this problem as well as the 
+ analogous problem for <span class="tt"><a href="ACL2____MV-LET.html">mv-let</a></span> and, more generally for <span class="tt"><a href="ACL2____MUTUAL-RECURSION.html">mutual-recursion</a></span>.  (The main idea is to reverse the order of processing the 
+ <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span> branches if necessary.)  We thank Sol Swords for contributing a 
+ version of the above example and requesting this improvement.</p> 
+ 
+ <p>It is no longer the case that <span class="tt"><a href="ACL2____BREAK-ON-ERROR.html">break-on-error</a></span> causes a Lisp break 
+ when encountering an error during translation of user input into internal 
+ (translated) form (see <a href="ACL2____TERM.html">term</a>).  The reason is that an improvement to the 
+ translation process, specifically the one described in the preceding 
+ paragraph, allows certain backtracking from ``errors'', which are intended to 
+ be silent rather than causing breaks into raw Lisp.  Thanks to Jared Davis for 
+ sending an example leading to this change.</p> 
+ 
+ <p>(CCL and SBCL only) When the host Lisp is CCL or SBCL, then since all 
+ functions are compiled, a <span class="tt"><a href="ACL2____CERTIFY-BOOK.html">certify-book</a></span> command will no longer load the 
+ newly-compiled file (and similarly for <span class="tt"><a href="ACL2____INCLUDE-BOOK.html">include-book</a></span> with argument 
+ <span class="v">:load-compiled-file :comp</span>).</p> 
+ 
+ <p><span class="tt"><a href="ACL2____SET-WRITE-ACL2X.html">Set-write-acl2x</a></span> now returns an error triple and can take more 
+ values, some of which automatically allow including uncertified books when 
+ <span class="tt"><a href="ACL2____CERTIFY-BOOK.html">certify-book</a></span> is called with argument :acl2x t.</p> 
+ 
+ <p>The environment variable <span class="v">COMPILE_FLG</span> has been renamed 
+ <span class="v">ACL2_COMPILE_FLG</span>; see <a href="ACL2____CERTIFY-BOOK.html">certify-book</a>.</p> 
+ 
+ <p>The macros <span class="tt"><a href="ACL2____DEFTHMD.html">defthmd</a></span> and <span class="tt"><a href="ACL2____DEFUND.html">defund</a></span> no longer return an error 
+ triple with value <span class="v">:SKIPPED</span> when proofs are being skipped.  Rather, the 
+ value returned is the same as would be returned on success when proofs are not 
+ skipped.</p> 
+ 
+ <p>For those who use <span class="tt"><a href="ACL2____SET-WRITE-ACL2X.html">set-write-ACL2x</a></span>: now, when <span class="tt"><a href="ACL2____CERTIFY-BOOK.html">certify-book</a></span> 
+ is called without a <span class="v">:ttagsx</span> argument supplied, then the value of 
+ <span class="v">:ttagsx</span> defaults to the (explicit or default) value of the <span class="v">:ttags</span> 
+ argument.</p> 
+ 
+ <p>The <span class="v">:</span><span class="tt"><a href="ACL2____PL.html">pl</a></span> and <span class="v">:</span><span class="tt"><a href="ACL2____PL2.html">pl2</a></span> <a href="ACL2____COMMAND.html">command</a>s can now accept 
+ <a href="ACL2____TERM.html">term</a>s that had previously been rejected.  For example, the command 
+ <span class="v">:pl (<a href="COMMON-LISP____MEMBER.html">member</a> a (<a href="COMMON-LISP____APPEND.html">append</a> x y))</span> had caused an error, but now it works as one 
+ might reasonably expect, treating <span class="tt"><a href="COMMON-LISP____MEMBER.html">member</a></span> as <span class="tt"><a href="ACL2____MEMBER-EQUAL.html">member-equal</a></span> (see 
+ <a href="ACL2____EQUALITY-VARIANTS.html">equality-variants</a> for relevant background).  Thanks to Jared Davis for 
+ reporting this problem by sending the above example.</p> 
+ 
+ <p>We have eliminated some hypotheses in built-in <a href="ACL2____REWRITE.html">rewrite</a> rules 
+ <span class="v">characterp-nth</span> and <span class="v">ordered-symbol-alistp-delete-assoc-eq</span>.</p> 
+ 
+ <p>Added the symbols <span class="tt"><a href="ACL2____F-GET-GLOBAL.html">f-get-global</a></span>, <span class="tt"><a href="ACL2____F-PUT-GLOBAL.html">f-put-global</a></span>, and <span class="tt"><a href="ACL2____STATE-GLOBAL-LET_A2.html">state-global-let*</a></span> to <span class="v">*acl2-exports*</span>.</p> 
+ 
+ <p>Added to the <a href="ACL2____GUARD.html">guard</a>s of <span class="tt"><a href="ACL2____PUSH-UNTOUCHABLE.html">push-untouchable</a></span> and <span class="tt"><a href="ACL2____REMOVE-UNTOUCHABLE.html">remove-untouchable</a></span> the requirement that the second argument must be a 
+ Boolean.  Thanks to Jared Davis for sending an example that led to this 
+ change.</p> 
+ 
+ <p>The built-in function <span class="v">string-for-tilde-@-clause-id-phrase</span> has been put 
+ into <span class="v">:</span><span class="tt"><a href="ACL2____LOGIC.html">logic</a></span> mode and had its guards verified, as have some 
+ subsidiary functions.  A few new rules have been added in support of this 
+ work; search for <span class="v">string-for-tilde-@-clause-id-phrase</span> in ACL2 source file 
+ <span class="v">boot-strap-pass-2.lisp</span> if interested.  Thanks to David Rager for 
+ contributing an initial version of this improvement.</p> 
+ 
+ <p>All trust tags are now in the <a href="COMMON-LISP____KEYWORD.html">keyword</a> package.  The <span class="tt"><a href="ACL2____DEFTTAG.html">defttag</a></span> 
+ event may still take a symbol in an arbitrary package, but the trust tag 
+ created will be in the keyword package (with the same <span class="tt"><a href="COMMON-LISP____SYMBOL-NAME.html">symbol-name</a></span> as 
+ the symbol provided).  Similarly, non-<span class="v">nil</span> symbols occurring in the 
+ <span class="v">:ttags</span> argument of an <span class="tt"><a href="ACL2____INCLUDE-BOOK.html">include-book</a></span> or <span class="tt"><a href="ACL2____CERTIFY-BOOK.html">certify-book</a></span> 
+ command will be converted to corresponding keywords.  See <a href="ACL2____DEFTTAG.html">defttag</a>.</p> 
+ 
+ <p>There have been several changes to <a href="ACL2____GAG-MODE.html">gag-mode</a>.  It is now is initially 
+ set to <span class="v">:goals</span>, suppressing most proof commentary other than key 
+ checkpoints; see <a href="ACL2____SET-GAG-MODE.html">set-gag-mode</a>.  (As before, see <a href="ACL2____PSO.html">pso</a> for how to 
+ recover the proof output.)  Also, top-level induction schemes are once again 
+ printed when gag-mode is on, though these as well as printing of guard 
+ conjectures can be abbreviated (``eviscerated'') with a new <a href="ACL2____EVISC-TUPLE.html">evisc-tuple</a>; see <a href="ACL2____SET-EVISC-TUPLE.html">set-evisc-tuple</a>, in particular the discussion there 
+ of <span class="v">:GAG-MODE</span>.  Finally, the commentary printed within <a href="ACL2____GAG-MODE.html">gag-mode</a> 
+ that is related to <a href="ACL2____FORCING-ROUND.html">forcing-round</a>s is now less verbose.  Thanks to Dave 
+ Greve and David Rager for discussions leading to the change in the printing of 
+ induction schemes under gag-mode; thanks to Warren Hunt for an email that led 
+ us to similar handling for printing of guard conjectures; and thanks to Robert 
+ Krug for a suggestion that led us to restore, in abbreviated form, important 
+ information about the sources of forcing round goals.</p> 
+ 
+ <p>An error now occurs if <span class="tt"><a href="ACL2____LD.html">ld</a></span> is called while loading a compiled book. 
+ See <a href="ACL2____CALLING-LD-IN-BAD-CONTEXTS.html">calling-ld-in-bad-contexts</a>.  Thanks to David Rager for reporting a 
+ low-level assertion failure that led us to make this change.</p> 
+ 
+ <p>The <a href="ACL2____PROOF-BUILDER.html">proof-builder</a> interactive loop is more robust: most errors will 
+ leave you in that loop, rather than kicking you out of the proof-builder and 
+ thus back to the main ACL2 read-eval-print loop.  Thanks to David Hardin for 
+ suggesting this improvement in the case of errors arising from extra right 
+ parentheses.</p> 
+ 
+ <p>The summary at the end of a proof now prints the following note when 
+ appropriate:</p> 
+ 
+ <pre class="code">[NOTE: A goal of NIL was generated.  See :DOC nil-goal.]</pre> 
+ 
+ <p>See <a href="ACL2____NIL-GOAL.html">nil-goal</a>.</p> 
+ 
+ <p>Improved <span class="tt"><a href="ACL2____DMR.html">dmr</a></span> to show the function being called in the case of 
+ explicit evaluation: ``<span class="v">(EV-FNCALL function-being-called)</span>''.</p> 
+ 
+ <p>It is now permitted to bind any number of <a href="ACL2____STOBJS.html">stobjs</a> to themselves in 
+ the bindings of a <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span> expression.  But if any stobj is bound to other 
+ than itself in <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span> bindings, then there still must be only one binding 
+ in that <span class="v">LET</span> expression.  The analogous relaxation holds for <span class="tt"><a href="COMMON-LISP____LAMBDA.html">lambda</a></span> expressions.  Thanks to Sol Swords for requesting such a change, which 
+ was needed for some code generated by macro calls.</p> 
+ 
+ <p>The macro <span class="tt"><a href="ACL2____TOP-LEVEL.html">top-level</a></span> now returns without error; See <a href="ACL2____TOP-LEVEL.html">top-level</a>.  Formerly, this macro always returned an error triple <span class="v">(<a href="ACL2____MV.html">mv</a> t
+ .. state)</span>, which meant that normal calls of <span class="tt"><a href="ACL2____LD.html">ld</a></span> would stop after 
+ encountering a call of <span class="v">top-level</span>.  Thanks to Jared Davis for bringing 
+ this issue to our attention.</p> 
+ 
+ <p>It is no longer the case that when you specify <span class="tt"><a href="ACL2____XARGS.html">xargs</a></span> keyword 
+ <span class="v">:non-executable t</span> in a <span class="tt"><a href="COMMON-LISP____DEFUN.html">defun</a></span> form rather than using <span class="tt"><a href="ACL2____DEFUN-NX.html">defun-nx</a></span>, then the form of the body need match only the shape <span class="v">(<a href="ACL2____PROG2_42.html">prog2$</a>
+ (throw-nonexec-error ... ...) ...)</span>.  We now require that the body of the 
+ definition of a function symbol, <span class="v">fn</span>, with formals <span class="v">(x1 ... xk)</span>, be of 
+ the form <span class="v">(<a href="ACL2____PROG2_42.html">prog2$</a> (throw-nonexec-error 'fn (<a href="COMMON-LISP____LIST.html">list</a> x1 ... xk)) ...)</span>.  This 
+ fixes the following odd behavior, which could be considered a bug.  Consider a 
+ book that contains the following two events.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> foo (x)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t :non-executable t :mode :logic))
+  (<a href="ACL2____PROG2_42.html">prog2$</a> (throw-nonexec-error 'bar (<a href="COMMON-LISP____LIST.html">list</a> x))
+          (<a href="COMMON-LISP____CONS.html">cons</a> 3 x)))
+(<a href="ACL2____DEFN.html">defn</a> h (x)
+  (foo x))</pre> 
+ 
+ <p>After certifying this book and then including it in a new session, the 
+ behavior occurred that is displayed below; notice the mention of <span class="v">BAR</span>. 
+ However, if the two forms were submitted directly in the loop, then the error 
+ message had mentioned <span class="v">FOO</span> instead of <span class="v">BAR</span>.  This discrepancy has been 
+ eliminated, by rejecting the proposed definition of <span class="v">foo</span> because the name 
+ in the first argument of <span class="v">throw-nonexec-error</span> was <span class="v">'bar</span> where now it 
+ must be <span class="v">'foo</span>.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(h 3)
+
+ACL2 Error in TOP-LEVEL:  ACL2 cannot ev the call of undefined function
+BAR on argument list:
+
+(3)
+
+To debug see :DOC print-gv, see :DOC trace, and see :DOC wet.
+
+ACL2 !&gt;</pre> 
+ 
+ <p>A tautology checker used in the ACL2 sources (function <span class="v">if-tautologyp</span>) 
+ has been limited somewhat in the effort it makes to recognize a tautology. 
+ While we expect it to be rare for the effect of this change to be noticeable, 
+ we thank Sol Swords for sending us an example that motivated this change: a 
+ <a href="ACL2____GUARD.html">guard</a> verification that took about 5 seconds in Version_4.3 now takes, 
+ on the same machine, about 0.07 seconds.</p> 
+ 
+ <p>The behavior of backquote (<span class="v">`</span>) has been changed slightly to be 
+ compatible with its behavior in raw Lisp.  The change is to allow the use of 
+ comma-atsign (<span class="v">,@</span>) at the end of a list, as in the following example.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____LET.html">let</a> ((x 3) (y 2) (z 7)) `(,x ,y ,@z))</pre> 
+ 
+ <p>Formerly, evaluation of this form had caused a guard violation in the ACL2 
+ loop unless guard-checking was off (i.e., <span class="tt"><a href="ACL2____SET-GUARD-CHECKING.html">set-guard-checking</a></span> was 
+ invoked with <span class="v">nil</span> or <span class="v">:none</span>), in which case it returned <span class="v">(3 2)</span>. 
+ But we observed evaluation of this form to return <span class="v">(3 2 . 7)</span> in every host 
+ Lisp on which ACL2 runs (Allegro CL, CCL, CLISP, CMUCL, GCL, LispWorks, and 
+ SBCL).  Now, ACL2 behaves like these Lisps.</p> 
+ 
+ <p>A call of the <span class="tt"><a href="ACL2____THEORY.html">theory</a></span> macro had previously returned <span class="v">nil</span> when 
+ applied to other than the name of name of a previously executed <span class="tt"><a href="ACL2____DEFTHEORY.html">deftheory</a></span> event.  Now, a hard error occurs.</p> 
+ 
+ <p>The <a href="ACL2____TABLE.html">table</a> <span class="v">binop-table</span> has been replaced by the table <span class="tt"><a href="ACL2____UNTRANS-TABLE.html">untrans-table</a></span>.  However, <span class="tt"><a href="ACL2____ADD-BINOP.html">add-binop</a></span> and <span class="tt"><a href="ACL2____REMOVE-BINOP.html">remove-binop</a></span> continue 
+ to have the same effect as before.  See <a href="ACL2____ADD-MACRO-FN.html">add-macro-fn</a>, which is a new 
+ feature discussed below.</p> 
+ 
+ <p>The function <span class="tt"><a href="ACL2____BOOLEANP.html">booleanp</a></span> is now defined using <span class="tt"><a href="COMMON-LISP____EQ.html">eq</a></span> instead of 
+ <span class="tt"><a href="COMMON-LISP____EQUAL.html">equal</a></span>, which may increase its efficiency.  Thanks to Jared Davis for 
+ this change.</p> 
+ 
+ <p>For pairs <span class="v">(key . val)</span> in the <span class="tt"><a href="ACL2____MACRO-ALIASES-TABLE.html">macro-aliases-table</a></span>, there had 
+ been a requirement that <span class="v">val</span> is a known function symbol.  Now, it only 
+ needs to be a symbol.  (This change was made to support the new feature, 
+ <span class="tt"><a href="ACL2____DEFUN-INLINE.html">defun-inline</a></span>, described elsewhere in these release notes.)</p> 
+ 
+ <p><b>NEW FEATURES</b></p> 
+ 
+ <p>A new ``tau system'' provides a kind of ``type checker.''  See <a href="ACL2____TAU-SYSTEM.html">tau-system</a>.  Thanks to Dave Greve for supplying a motivating example (on 
+ which this system can provide significant speedup), and to Sol Swords for 
+ sending a very helpful bug report on a preliminary implementation.</p> 
+ 
+ <p>Users may now arrange for additional summary information to be printed at 
+ the end of <a href="ACL2____EVENTS.html">events</a>.  [Note added at Version_6.1: Formerly we pointed 
+ here to <span class="v">print-summary-user</span>, but now, see <a href="ACL2____FINALIZE-EVENT-USER.html">finalize-event-user</a>; also 
+ see <a href="ACL2____NOTE-6-1.html">note-6-1</a>].  Thanks to Harsh Raju Chamarthi for requesting this 
+ feature and participating in a design discussion.</p> 
+ 
+ <p>A new, advanced <a href="ACL2____PROOF-BUILDER.html">proof-builder</a> command, <span class="v">geneqv</span>, shows the 
+ generated equivalence relation at the current subterm.  Thanks to Dave Greve 
+ for an inquiry leading to this enhancement.</p> 
+ 
+ <p>A new reader macro, <span class="v">#u</span>, permits the use of underscore characters in a 
+ number.  See <a href="ACL2____SHARP-U-READER.html">sharp-u-reader</a>.  Thanks to Jared Davis for requesting this 
+ capability.</p> 
+ 
+ <p>New <a href="ACL2____PROOF-BUILDER.html">proof-builder</a> commands <span class="v">pl</span> and <span class="v">pr</span> provide interfaces to 
+ the ACL2 commands <span class="v">:</span><span class="tt"><a href="ACL2____PL.html">pl</a></span> and <span class="v">:</span><span class="tt"><a href="ACL2____PR.html">pr</a></span>, respectively.  These 
+ can be useful if you want to see trivially-proved hypotheses, as now clarified 
+ in the <a href="ACL2____PROOF-BUILDER.html">proof-builder</a> documentation for its <span class="v">show-rewrites</span> command. 
+ See <a href="ACL2____PROOF-BUILDER-COMMANDS.html">proof-builder-commands</a>.  Thanks to Pete Manolios for suggesting 
+ such clarification and capability.</p> 
+ 
+ <p>It is now legal to call <a href="ACL2____NON-EXECUTABLE.html">non-executable</a> functions without the usual 
+ <a href="ACL2____SIGNATURE.html">signature</a> restrictions imposed on executable code.  For example, the 
+ third event below was not admissible, but now it is.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFSTOBJ.html">defstobj</a> foo fld)
+(<a href="ACL2____DEFUN-NX.html">defun-nx</a> id (x)
+  x)
+(<a href="COMMON-LISP____DEFUN.html">defun</a> f (foo)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs foo :verify-guards nil))
+  (<a href="COMMON-LISP____CONS.html">cons</a> 3 (id foo)))</pre> 
+ 
+ <p>Thanks to Jared Davis for requesting this enhancement, in particular for 
+ calling non-executable functions in the <span class="v">:logic</span> part of an <span class="tt"><a href="ACL2____MBE.html">mbe</a></span> 
+ call.  Here is Jared's example, which is admissible now but formerly was 
+ not.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFSTOBJ.html">defstobj</a> foo (fld))
+(<a href="ACL2____DEFUN-NX.html">defun-nx</a> my-identity (x) x)
+(<a href="COMMON-LISP____DEFUN.html">defun</a> my-fld (foo)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs foo))
+  (<a href="ACL2____MBE.html">mbe</a> :logic (my-identity foo)
+       :exec (<a href="COMMON-LISP____LET.html">let</a> ((val (fld foo)))
+               (update-fld val foo))))</pre> 
+ 
+ <p>A new macro, <span class="tt"><a href="ACL2____NON-EXEC.html">non-exec</a></span>, allows the use of non-executable code, for 
+ example inside ordinary function definitions.  Thanks to Sol Swords for 
+ requesting this enhancement.</p> 
+ 
+ <p>A new ``provisional certification'' process is supported that can allow 
+ <a href="ACL2____BOOKS.html">books</a> to be certified before their included sub-books have been 
+ certified, thus allowing for potentially much greater `make'-level 
+ parallelism.  See <a href="ACL2____PROVISIONAL-CERTIFICATION.html">provisional-certification</a>.  Thanks to Jared Davis for 
+ requesting this feature and for helpful discussions, based in part on 
+ rudimentary provisional certification schemes that he developed first at 
+ Rockwell Collins and later for his `Milawa' project.  Also, thanks to Jared 
+ and to Sol Swords for testing this feature and for providing a fix for a bug 
+ in a preliminary implementation, and thanks to Sol for providing performance 
+ feedback and a crucial suggestion that led to an improved implementation.</p> 
+ 
+ <p>Event summaries now show the names of events that were mentioned in <a href="ACL2____HINTS.html">hints</a> of type <span class="v">:use</span>, <span class="v">:by</span>, or <span class="v">:clause-processor</span>.  See <a href="ACL2____SET-INHIBITED-SUMMARY-TYPES.html">set-inhibited-summary-types</a>.  Thanks to Francisco J. Martin Mateos for 
+ requesting such an enhancement (actually thanks to the community, as his 
+ request is the most recent but this has come up from time to time before).</p> 
+ 
+ <p>ACL2 now stores a data structure representing the relation ``Event A is 
+ used in the proof of Event B.''  See <a href="ACL2____DEAD-EVENTS.html">dead-events</a>, which explains this 
+ data structure and mentions one application: to identify dead code and unused 
+ theorems.  Thanks to Shilpi Goel for requesting such a feature and for helpful 
+ feedback.</p> 
+ 
+ <p>A new <a href="COMMON-LISP____DOCUMENTATION.html">documentation</a> topic provides a guide to programming with 
+ state; see <a href="ACL2____PROGRAMMING-WITH-STATE.html">programming-with-state</a>.  Thanks to Sarah Weissman for 
+ suggesting that such a guide might be useful, and to David Rager for helpful 
+ feedback on a preliminary version.  There also has been some corresponding 
+ reorganization of the documentation as well as creation of additional 
+ documentation (e.g., see <a href="ACL2____STATE-GLOBAL-LET_A2.html">state-global-let*</a>).  Now, most built-in 
+ functions and macros commonly used in programs (as opposed to <a href="ACL2____EVENTS.html">events</a> 
+ like <span class="tt"><a href="COMMON-LISP____DEFUN.html">defun</a></span>, for example) are subtopics of a new topic — see 
+ <a href="ACL2____ACL2-BUILT-INS.html">ACL2-built-ins</a> — which is a subtopic of <a href="ACL2____PROGRAMMING.html">programming</a>, a 
+ topic that in turn has considerably fewer direct subtopics than before.</p> 
+ 
+ <p>It is now possible to bind extra variables in a <span class="v">:USE</span> hint, thus 
+ avoiding the error message: ``The formula you wish to instantiate, ..., 
+ mentions only the variable(s) ...''.  See <a href="ACL2____LEMMA-INSTANCE.html">lemma-instance</a>, in particular 
+ the discussion of keyword <span class="v">:extra-bindings-ok</span>.  Thanks to Sol Swords for 
+ requesting such an enhancement.</p> 
+ 
+ <p>The function <span class="v">read-object-suppress</span> is like <span class="v">read-object</span> except that 
+ it avoids errors and discards the value read.  See <a href="ACL2____IO.html">io</a>.</p> 
+ 
+ <p>A <a href="ACL2____STOBJ.html">stobj</a> may now be passed as an argument where another stobj is 
+ expected if the two are ``congruent''.  See <a href="ACL2____DEFSTOBJ.html">defstobj</a>, in particular, 
+ its discussion of the new <span class="v">:congruent-to</span> keyword of <span class="v">defstobj</span>.  Thanks 
+ to Sol Swords for requesting this enhancement and for useful discussions 
+ contributing to its design.</p> 
+ 
+ <p>A new top-level utility has been provided that shows the assembly language 
+ for a defined function symbol; see <a href="ACL2____DISASSEMBLE_42.html">disassemble$</a>.  Thanks to Jared Davis 
+ for requesting such a utility and to Shilpi Goel for pointing out an 
+ inconvenience with the initial implementation.  Note that it uses the 
+ distributed book <span class="v">books/misc/disassemble.lisp</span>, which users are welcome to 
+ modify (see <a href="ACL2____COMMUNITY-BOOKS.html">community-books</a>).</p> 
+ 
+ <p>The macro <span class="v">set-accumulated-persistence</span> is an alias for <span class="tt"><a href="ACL2____ACCUMULATED-PERSISTENCE.html">accumulated-persistence</a></span>.  Thanks to Robert Krug for suggesting this 
+ addition.</p> 
+ 
+ <p>A new <a href="COMMON-LISP____DOCUMENTATION.html">documentation</a> topic lists lesser-known and advanced ACL2 
+ features, intended for those with prior ACL2 experience who wish to extend 
+ their knowledge of ACL2 capabilities.  See <a href="ACL2____ADVANCED-FEATURES.html">advanced-features</a>.  Thanks 
+ to Warren Hunt and Anna Slobodova for requesting such information.</p> 
+ 
+ <p>A new macro, <span class="tt"><a href="ACL2____DEFTHEORY-STATIC.html">deftheory-static</a></span>, provides a variant of <span class="tt"><a href="ACL2____DEFTHEORY.html">deftheory</a></span> such that the resulting theory is the same at <span class="tt"><a href="ACL2____INCLUDE-BOOK.html">include-book</a></span> 
+ time as it was at <span class="tt"><a href="ACL2____CERTIFY-BOOK.html">certify-book</a></span> time.  Thanks to Robert Krug for 
+ helpful discussions on this new feature and for updating his 
+ <span class="v">books/arithmetic-5/</span> distributed books to use this feature.</p> 
+ 
+ <p>A new event, <span class="tt"><a href="ACL2____DEFABSSTOBJ.html">defabsstobj</a></span>, provides a new way to introduce 
+ single-threaded objects (see <a href="ACL2____STOBJ.html">stobj</a> and see <a href="ACL2____DEFSTOBJ.html">defstobj</a>).  These 
+ so-called ``abstract <a href="ACL2____STOBJ.html">stobj</a>s'' permit user-provided logical definitions 
+ for primitive operations on stobjs, for example using an alist-based 
+ representation instead of a list-based representation for array fields. 
+ Moreover, the proof obligations guarantee that the recognizer is preserved; 
+ hence the implementation avoids executing the recognizer, which may be an 
+ arbitrarily complex invariant that otherwise would be an expensive part of 
+ <a href="ACL2____GUARD.html">guard</a> checks.  Thanks to Warren Hunt for a request leading us to design 
+ and implement this new feature, and thanks to Rob Sumners for a request 
+ leading us to implement a related utility, <span class="tt"><a href="ACL2____DEFABSSTOBJ-MISSING-EVENTS.html">defabsstobj-missing-events</a></span>. 
+ See <a href="ACL2____DEFABSSTOBJ.html">defabsstobj</a>.  Also thanks to Sol Swords for sending an example 
+ exhibiting a bug in the initial implementation, which has been fixed.</p> 
+ 
+ <p>A new command, <span class="v">:psof &lt;filename&gt;</span>, is like <span class="v">:pso</span> but directs proof 
+ replay output to the specified file.  For large proofs, <span class="v">:</span><span class="tt"><a href="ACL2____PSOF.html">psof</a></span> may 
+ complete much more quickly than <span class="v">:</span><span class="tt"><a href="ACL2____PSO.html">pso</a></span>.  see <a href="ACL2____PSOF.html">psof</a>.  More 
+ generally, a new utility, <span class="tt"><a href="ACL2____WOF.html">wof</a></span> (an acronym for ``With Output File''), 
+ directs standard output and proofs output to a file; see <a href="ACL2____WOF.html">wof</a>.</p> 
+ 
+ <p>The new macro <span class="tt"><a href="ACL2____DEFND.html">defnd</a></span> defines a function with <span class="v">:</span><span class="tt"><a href="ACL2____GUARD.html">guard</a></span> 
+ <span class="v">t</span> and <a href="ACL2____DISABLE.html">disable</a>s that function, in analogy to how <span class="tt"><a href="ACL2____DEFUND.html">defund</a></span> 
+ defines with <span class="tt"><a href="COMMON-LISP____DEFUN.html">defun</a></span> and then <a href="ACL2____DISABLE.html">disable</a>s.  Thanks to Shilpi Goel 
+ for requesting this feature.</p> 
+ 
+ <p>The <span class="v">:</span><span class="tt"><a href="ACL2____PL2.html">pl2</a></span> command now shows <span class="v">:</span><span class="tt"><a href="ACL2____LINEAR.html">linear</a></span> rules; and a 
+ new <a href="ACL2____PROOF-BUILDER.html">proof-builder</a> command, <span class="v">show-linears</span> (equivalently, <span class="v">sls</span>), 
+ is an analogue of the <a href="ACL2____PROOF-BUILDER.html">proof-builder</a> <span class="v">show-rewrites</span> (<span class="v">sr</span>) 
+ command, but for <a href="ACL2____LINEAR.html">linear</a> rules.  Thanks to Shilpi Goel for requesting 
+ this new proof-builder command.  Finally, a corresponding new proof-builder 
+ command, <span class="v">apply-linear</span> (<span class="v">al</span>), is an analogue of the <a href="ACL2____PROOF-BUILDER.html">proof-builder</a> <span class="v">rewrite</span> (<span class="v">r</span>) command, but for <a href="ACL2____LINEAR.html">linear</a> rules.</p> 
+ 
+ <p>The macros <span class="tt"><a href="ACL2____ADD-MACRO-FN.html">add-macro-fn</a></span> and <span class="tt"><a href="ACL2____REMOVE-MACRO-FN.html">remove-macro-fn</a></span> replace macros 
+ <span class="tt"><a href="ACL2____ADD-BINOP.html">add-binop</a></span> and <span class="tt"><a href="ACL2____REMOVE-BINOP.html">remove-binop</a></span>, respectively, though the latter 
+ continue to work.  The new macros allow you to decide whether or not to 
+ display calls of binary macros as flat calls for right-associated arguments, 
+ e.g., <span class="v">(<a href="COMMON-LISP____APPEND.html">append</a> x y z)</span> rather than <span class="v">(<a href="COMMON-LISP____APPEND.html">append</a> x (<a href="COMMON-LISP____APPEND.html">append</a> y z))</span>.  See <a href="ACL2____ADD-MACRO-FN.html">add-macro-fn</a>.</p> 
+ 
+ <p>It is now possible to request that the host Lisp compiler inline calls of 
+ specified functions, or to direct that the host Lisp compiler not inline such 
+ calls.  See <a href="ACL2____DEFUN-INLINE.html">defun-inline</a> and see <a href="ACL2____DEFUN-NOTINLINE.html">defun-notinline</a>.  We thank 
+ Jared Davis for several extensive, relevant conversations, and for finding a 
+ bug in a preliminary implementation.  We also thank others who have engaged in 
+ discussions with us about inlining for ACL2; besides Jared Davis, we recall 
+ such conversations with Rob Sumners, Dave Greve, and Shilpi Goel.</p> 
+ 
+ <p><b>HEURISTIC IMPROVEMENTS</b></p> 
+ 
+ <p>Reading of ACL2 <span class="tt"><a href="ACL2____ARRAYS.html">arrays</a></span> (see <a href="ACL2____AREF1.html">aref1</a>, see <a href="ACL2____AREF2.html">aref2</a>) has 
+ been made more efficient (as tested with CCL as the host Lisp) in the case of 
+ consecutive repeated reads of the same named array.  Thanks to Jared Davis and 
+ Sol Swords for contributing this improvement.</p> 
+ 
+ <p>Slightly modified the induction schemes stored, so that calls of so-called 
+ ``guard-holders'' (such as <span class="tt"><a href="ACL2____MBE.html">mbe</a></span> and <span class="tt"><a href="ACL2____PROG2_42.html">prog2$</a></span> — indeed, any 
+ call of <span class="tt"><a href="ACL2____RETURN-LAST.html">return-last</a></span> — and <span class="tt"><a href="COMMON-LISP____THE.html">the</a></span>) are expanded away.  In 
+ particular, calls of equality variants such as <span class="tt"><a href="COMMON-LISP____MEMBER.html">member</a></span> are treated as 
+ their corresponding function calls, e.g., <span class="tt"><a href="ACL2____MEMBER-EQUAL.html">member-equal</a></span>; see <a href="ACL2____EQUALITY-VARIANTS.html">equality-variants</a>.  Guard-holders are also now expanded away before storing 
+ <a href="ACL2____CONSTRAINT.html">constraint</a>s for <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span> <a href="ACL2____EVENTS.html">events</a>, which can sometimes 
+ result in simpler constraints.</p> 
+ 
+ <p>Improved the performance of <span class="tt"><a href="ACL2____DMR.html">dmr</a></span> (technical note: by modifying raw 
+ Lisp code for function <span class="v">dmr-flush</span>, replacing <span class="v">finish-output</span> by 
+ <span class="v">force-output</span>).</p> 
+ 
+ <p>We now avoid certain rewriting loops.  A long comment about this change, 
+ including an example of a loop that no longer occurs, may be found in source 
+ function <span class="v">expand-permission-result</span>.</p> 
+ 
+ <p>Slightly strengthened <a href="ACL2____TYPE-SET.html">type-set</a> reasoning at the level of literals 
+ (i.e., top-level hypotheses and conclusions).  See the comment in ACL2 source 
+ function <span class="v">rewrite-atm</span> about the ``use of dwp = t'' for an example of a 
+ theorem provable only after this change.</p> 
+ 
+ <p>Strengthened the ability of <a href="ACL2____TYPE-SET.html">type-set</a> reasoning to make deductions 
+ about terms being integers or non-integer rationals.  The following example 
+ illustrates the enhancement: before the change, no simplification was 
+ performed, but after the change, the conclusion simplifies to <span class="v">(foo t)</span>. 
+ Thanks to Robert Krug for conveying the problem to us and outlining a 
+ solution.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFSTUB.html">defstub</a> foo (x) t)
+(<a href="ACL2____THM.html">thm</a> ; should reduce conclusion to (foo t)
+ (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____RATIONALP.html">rationalp</a> x)
+               (<a href="COMMON-LISP____RATIONALP.html">rationalp</a> y)
+               (<a href="COMMON-LISP____INTEGERP.html">integerp</a> (<a href="COMMON-LISP_____B2.html">+</a> x (<a href="COMMON-LISP_____A2.html">*</a> 1/3 y))))
+          (foo (<a href="COMMON-LISP____INTEGERP.html">integerp</a> (<a href="COMMON-LISP_____B2.html">+</a> y (<a href="COMMON-LISP_____A2.html">*</a> 3 x))))))</pre> 
+ 
+ <p><b>BUG FIXES</b></p> 
+ 
+ <p>Fixed a class of soundness bugs involving each of the following functions: 
+ <span class="tt"><a href="ACL2____GETENV_42.html">getenv$</a></span>, <span class="tt"><a href="ACL2____GET-WORMHOLE-STATUS.html">get-wormhole-status</a></span>, <span class="tt"><a href="ACL2____CPU-CORE-COUNT.html">cpu-core-count</a></span>, <span class="tt"><a href="ACL2____WORMHOLE-P.html">wormhole-p</a></span>, <span class="tt"><a href="ACL2____RANDOM_42.html">random$</a></span>, <span class="v">file-write-date$</span>, and 
+ <span class="v">serialize-read-fn</span>, and (for the HONS version of ACL2) <span class="tt"><a href="ACL2____CLEAR-MEMOIZE-TABLE.html">clear-memoize-table</a></span> and <span class="tt"><a href="ACL2____CLEAR-MEMOIZE-TABLES.html">clear-memoize-tables</a></span> as well as (possible 
+ soundness bug) <span class="v">serialize-write-fn</span>.  For example, we were able to admit 
+ the following events, but that is no longer the case (neither for <span class="v">getenv$</span> 
+ as shown, nor analogously for other functions listed above).</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> not-true
+  (<a href="COMMON-LISP____STRINGP.html">stringp</a> (<a href="COMMON-LISP____CADR.html">cadr</a> (<a href="ACL2____GETENV_42.html">getenv$</a> "PWD" (build-state))))
+  :rule-classes nil)
+
+(<a href="ACL2____DEFTHM.html">defthm</a> contradiction
+  nil
+  :hints (("Goal"
+           :in-theory (<a href="ACL2____DISABLE.html">disable</a> (<a href="ACL2____GETENV_42.html">getenv$</a>))
+           :use not-true))
+  :rule-classes nil)</pre> 
+ 
+ <p>Fixed a soundness bug involving <span class="v">with-live-state</span>, which could cause an 
+ error in the use of <span class="tt"><a href="ACL2____ADD-INCLUDE-BOOK-DIR.html">add-include-book-dir</a></span> or <span class="tt"><a href="ACL2____DELETE-INCLUDE-BOOK-DIR.html">delete-include-book-dir</a></span> in a book or its <a href="ACL2____PORTCULLIS.html">portcullis</a> commands.  See 
+ <a href="ACL2____WITH-LIVE-STATE.html">with-live-state</a>, as the documentation for this macro has been updated; 
+ in particular it is now untouchable (see <a href="ACL2____REMOVE-UNTOUCHABLE.html">remove-untouchable</a>) and is 
+ intended only for system hackers.  Thanks to Jared Davis for reporting a bug 
+ in the use of <span class="tt"><a href="ACL2____ADD-INCLUDE-BOOK-DIR.html">add-include-book-dir</a></span> after our first attempt at a 
+ fix.</p> 
+ 
+ <p>Fixed a soundness bug based on the use of <span class="tt"><a href="ACL2____SKIP-PROOFS.html">skip-proofs</a></span> together with 
+ the little-used argument <span class="v">k=t</span> for <span class="tt"><a href="ACL2____CERTIFY-BOOK.html">certify-book</a></span>.  An example proof 
+ of <span class="v">nil</span> appears in a comment in the ACL2 sources, in <span class="v">(<a href="ACL2____DEFLABEL.html">deflabel</a> note-5-0
+ ...)</span>.</p> 
+ 
+ <p>Fixed a soundness bug that allowed users to define new <a href="ACL2____PROOF-BUILDER.html">proof-builder</a> 
+ primitive commands.  Before this fix, a book proving <span class="v">nil</span> could be 
+ certified, as shown in a comment now in the introduction of the <a href="ACL2____TABLE.html">table</a> 
+ <span class="v">pc-command-table</span> in source file <span class="v">proof-builder-a.lisp</span>.</p> 
+ 
+ <p>(Technical change, primarily related to <span class="tt"><a href="ACL2____MAKE-EVENT.html">make-event</a></span>:) Plugged a 
+ security hole that allowed <a href="ACL2____BOOKS.html">books</a>' <a href="ACL2____CERTIFICATE.html">certificate</a>s to be out-of-date 
+ with respect to <span class="tt"><a href="ACL2____MAKE-EVENT.html">make-event</a></span> expansions, but not recognized as such. 
+ The change is to include the so-called expansion-alist in the certificate's 
+ checksum.  An example appears in a comment in the ACL2 sources, in 
+ <span class="v">(<a href="ACL2____DEFLABEL.html">deflabel</a> note-5-0 ...)</span>.</p> 
+ 
+ <p>Fixed a bug in <a href="ACL2____GUARD.html">guard</a> verification due to expanding calls of 
+ primitives when translating user-level terms to internal form, so called 
+ ``translated terms'' (see <a href="ACL2____TERM.html">term</a>).  While we have not observed a 
+ soundness hole due to this bug, we have not ruled it out.  Before the bug fix, 
+ the following event was admissible, as guard verification succeeded (but 
+ clearly should not have).</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> f ()
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t))
+  (<a href="COMMON-LISP____CAR.html">car</a> (<a href="COMMON-LISP____IDENTITY.html">identity</a> 3)))</pre> 
+ 
+ <p>For those who want details about this bug, we analyze how ACL2 generates 
+ <a href="ACL2____GUARD.html">guard</a> proof obligations for this example.  During that process, it 
+ evaluates ground subexpressions.  Thus, <span class="v">(<a href="COMMON-LISP____IDENTITY.html">identity</a> '3)</span> is first simplified 
+ to <span class="v">'3</span>; so a term must be built from the application of <span class="v">car</span> to 
+ <span class="v">'3</span>.  Guard-checking is always turned on when generating guard proof 
+ obligations, so now, ACL2 refuses to simplify <span class="v">(<a href="COMMON-LISP____CAR.html">car</a> '3)</span> to <span class="v">'nil</span>. 
+ However, before this bug fix, when ACL2 was building a term by applying 
+ <span class="v">car</span> to argument <span class="v">'3</span>, it did so directly without checking guards; 
+ source code function <span class="v">cons-term</span> is `smart' that way.  After the fix, such 
+ term-building reduction is only performed when the primitive's guard is 
+ met.</p> 
+ 
+ <p>While calls of many event macros had been prohibited inside executable 
+ code, others should have been but were not.  For example, the following was 
+ formerly allowed.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> foo (<a href="ACL2____STATE.html">state</a>)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :mode :program :stobjs state))
+  (<a href="ACL2____ADD-CUSTOM-KEYWORD-HINT.html">add-custom-keyword-hint</a> :my-hint (<a href="COMMON-LISP____IDENTITY.html">identity</a> nil)))
+(foo state) ; Caused hard raw Lisp error!</pre> 
+ 
+ <p>Thus, several event macros (including for example <span class="tt"><a href="ACL2____ADD-CUSTOM-KEYWORD-HINT.html">add-custom-keyword-hint</a></span>) may no longer be called inside executable code.</p> 
+ 
+ <p>Fixed an assertion that could occur, for example, after reverting to prove 
+ the original goal by induction and generating a goal of <span class="v">NIL</span>.  Thanks to 
+ Jared Davis for sending us a helpful example to bring this bug to our 
+ attention.</p> 
+ 
+ <p>It was possible for <span class="tt"><a href="ACL2____DEFSTOBJ.html">defstobj</a></span> to generate raw Lisp code with 
+ excessively restrictive type declarations.  This has been fixed.  Thanks to 
+ Warren Hunt for reporting this bug and sending an example that illustrates it. 
+ See <a href="ACL2____STOBJ-EXAMPLE-2.html">stobj-example-2</a> for examples of such raw Lisp code; now, one finds 
+ <span class="v">(<a href="COMMON-LISP____AND.html">and</a> fixnum (integer 0 *))</span> where formerly the type was restricted to 
+ <span class="v">(integer 0 268435455)</span>.</p> 
+ 
+ <p>Fixed a bug in that was ignoring the use of <span class="v">:computed-hint-replacement</span> 
+ in certain cases involving a combination of computed hints and custom keyword 
+ hints.  Thanks to Robert Krug for reporting this bug and sending a very 
+ helpful example.</p> 
+ 
+ <p>Fixed a bug in the output from <span class="tt"><a href="ACL2____DEFATTACH.html">defattach</a></span>, which was failing to list 
+ previous <a href="ACL2____EVENTS.html">events</a> in the message about ``bypassing constraints that have 
+ been proved when processing the event(s)''.</p> 
+ 
+ <p>(GCL only) Fixed a bug in <span class="tt"><a href="ACL2____SET-DEBUGGER-ENABLE.html">set-debugger-enable</a></span> (which was only a bug 
+ in GCL, not an issue for other host Lisps).</p> 
+ 
+ <p>Fixed ACL2 trace output to indent properly for levels above 99 (up to 
+ 9999).  Thanks to Warren Hunt for bringing this bug to our attention.</p> 
+ 
+ <p>Fixed a bug in the reporting of times in event summaries — probably 
+ one that has been very long-standing!  The times reported had often been too 
+ small in the case of compound <a href="ACL2____EVENTS.html">events</a>, notably <span class="tt"><a href="ACL2____INCLUDE-BOOK.html">include-book</a></span>. 
+ Thanks to everyone who reported this problem (we have a record of emails from 
+ Eric Smith and Jared Davis on this issue).</p> 
+ 
+ <p>Fixed a bug in <span class="v">:expand</span> <a href="ACL2____HINTS.html">hints</a>, where the use of <span class="v">:lambdas</span> 
+ could prevent other parts of such a hint.  For example, the following 
+ invocation of <span class="tt"><a href="ACL2____THM.html">thm</a></span> failed before this fix was made.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFUND.html">defund</a> foo (x) (<a href="COMMON-LISP____CONS.html">cons</a> x x))
+(<a href="ACL2____THM.html">thm</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____CAR.html">car</a> (foo x)) x)
+:hints (("Goal" :expand (:lambdas (foo x)))))</pre> 
+ 
+ <p>Certain ``program-only'' function calls will now cause hard Lisp errors. 
+ (The rather obscure reason for this fix is to support logical modeling of the 
+ ACL2 evaluator.  A relevant technical discussion may be found in source 
+ function <span class="v">oneify-cltl-code</span>, at the binding of variable 
+ <span class="v">fail_program-only-safe</span>.)</p> 
+ 
+ <p>There was an unnecessary restriction that <span class="tt"><a href="COMMON-LISP____FLET.html">flet</a></span>-bound functions must 
+ return all <a href="ACL2____STOBJ.html">stobj</a>s among their inputs.  For example, the following 
+ definition was rejected because <span class="v">state</span> was not among the outputs of 
+ <span class="v">h</span>.  This restriction has been removed.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> foo (<a href="ACL2____STATE.html">state</a>)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs state))
+  (<a href="COMMON-LISP____FLET.html">flet</a> ((h (<a href="ACL2____STATE.html">state</a>) (<a href="ACL2____F-BOUNDP-GLOBAL.html">f-boundp-global</a> 'x state)))
+    (h state)))</pre> 
+ 
+ <p>We fixed a bug, introduced in the preceding release (Version 4.3), in the 
+ check for irrelevant formals (see <a href="ACL2____IRRELEVANT-FORMALS.html">irrelevant-formals</a>).  That check had 
+ been too lenient in its handling of lambda (<a href="COMMON-LISP____LET.html">let</a>) expressions, for 
+ example allowing the following definition to be admitted in spite of its first 
+ formal parameter obviously being irrelevant.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> foo (x clk)
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2____ZP.html">zp</a> clk)
+      :diverge
+    (<a href="COMMON-LISP____LET.html">let</a> ((clk (<a href="COMMON-LISP____1-.html">1-</a> clk)))
+      (foo x clk))))</pre> 
+ 
+ <p>Fixed a bug in the <span class="v">mini-proveall</span> target in <span class="v">GNUmakefile</span>.  The fix 
+ includes a slight change to the <span class="v">:mini-proveall</span> <a href="ACL2____COMMAND.html">command</a> (an extra 
+ event at the end).  Thanks to Camm Maguire for reporting this bug.</p> 
+ 
+ <p>Fixed a bug that occurred when <span class="tt"><a href="ACL2____CERTIFY-BOOK.html">certify-book</a></span> was called after using 
+ <span class="tt"><a href="ACL2____SET-FMT-SOFT-RIGHT-MARGIN.html">set-fmt-soft-right-margin</a></span> or <span class="tt"><a href="ACL2____SET-FMT-HARD-RIGHT-MARGIN.html">set-fmt-hard-right-margin</a></span> to set 
+ a small right margin.</p> 
+ 
+ <p>Fixed <span class="tt"><a href="ACL2____SET-INHIBIT-WARNINGS.html">set-inhibit-warnings</a></span> so that it takes effect for a subsequent 
+ <span class="tt"><a href="ACL2____INCLUDE-BOOK.html">include-book</a></span> event.  Thanks to Jared Davis and David Rager for queries 
+ that led to this fix.</p> 
+ 
+ <p>Hard Lisp errors are now avoided for certain <span class="v">:</span><span class="tt"><a href="ACL2____REWRITE.html">rewrite</a></span> rules: 
+ those whose <a href="ACL2____EQUIVALENCE.html">equivalence</a> relation is other than <span class="v">equal</span> when the rule 
+ is originally processed, but is no longer a known equivalence relation when 
+ the rule is to be stored.  Thanks to Jared Davis for sending a useful example, 
+ a minor variant of which is included in a comment in source function 
+ <span class="v">interpret-term-as-rewrite-rule</span> (file <span class="v">defthm.lisp</span>).</p> 
+ 
+ <p>Fixed a bug in the ACL2 evaluator (source function <span class="v">raw-ev-fncall</span>), 
+ which was unlikely to be exhibited in practice.</p> 
+ 
+ <p>Fixed a hard Lisp error that could occur for ill-formed <span class="v">:</span><span class="tt"><a href="ACL2____META.html">meta</a></span> 
+ <a href="ACL2____RULE-CLASSES.html">rule-classes</a>, e.g., <span class="v">(:meta :trigger-fns '(foo))</span>.</p> 
+ 
+ <p>It is now an error to include a <a href="ACL2____STOBJ.html">stobj</a> name in the <span class="v">:renaming</span> 
+ alist (see <a href="ACL2____DEFSTOBJ.html">defstobj</a>).</p> 
+ 
+ <p>Some bogus warnings about non-recursive function symbols have been 
+ eliminated for rules of class <span class="v">:</span><span class="tt"><a href="ACL2____TYPE-PRESCRIPTION.html">type-prescription</a></span>.</p> 
+ 
+ <p>(Allegro CL host Lisp only) Fixed an obsolete setting of compiler variable 
+ <span class="v">comp:declared-fixnums-remain-fixnums-switch</span>, which may have been 
+ responsible for intermittent (and infrequent) checksum errors encountered 
+ while including books during certification of the regression suite.</p> 
+ 
+ <p>Fixed a <a href="ACL2____PROOF-BUILDER.html">proof-builder</a> bug that could result in duplicate goal names 
+ in the case of forced hypotheses.  An example showing this bug, before the 
+ fix, appears in a comment in the ACL2 sources, in <span class="v">(<a href="ACL2____DEFLABEL.html">deflabel</a> note-5-0
+ ...)</span>.</p> 
+ 
+ <p>We fixed a bug in a prover routine involved in <a href="ACL2____TYPE-SET.html">type-set</a> computations 
+ involving linear arithmetic.  This bug has been around since at least as far 
+ back as Version_3.3 (released November, 2007).  We are not aware of any 
+ resulting unsoundness, though it did have the potential to weaken the prover. 
+ For example, the following is proved now, but was not proved before the bug 
+ was fixed.</p> 
+ 
+ <pre class="code">(<a href="ACL2____THM.html">thm</a>
+ (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____RATIONALP.html">rationalp</a> x)
+               (<a href="COMMON-LISP____RATIONALP.html">rationalp</a> y)
+               (<a href="COMMON-LISP____INTEGERP.html">integerp</a> (<a href="COMMON-LISP_____B2.html">+</a> (<a href="COMMON-LISP_____A2.html">*</a> 1/3 y) x)))
+          (<a href="COMMON-LISP____INTEGERP.html">integerp</a> (<a href="COMMON-LISP_____B2.html">+</a> y (<a href="COMMON-LISP_____A2.html">*</a> 3 x))))
+ :hints (("Goal" :in-theory (<a href="ACL2____DISABLE.html">disable</a> commutativity-of-+))))</pre> 
+ 
+ <p>Although all bets are off when using redefinition (see <a href="ACL2____LD-REDEFINITION-ACTION.html">ld-redefinition-action</a>), we wish to minimize negative effects of its use, 
+ especially raw Lisp errors.  The examples below had caused raw Lisp errors, 
+ but no longer.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFSTOBJ.html">defstobj</a> st fld :inline t)
+(<a href="ACL2____REDEF_12.html">redef!</a>)
+(<a href="ACL2____DEFSTOBJ.html">defstobj</a> st new0 fld)
+(<a href="ACL2____U.html">u</a>)
+(fld st) ; previously an error, which is now fixed
+
+; Fresh ACL2 session:
+(<a href="ACL2____REDEF_12.html">redef!</a>)
+(<a href="COMMON-LISP____DEFUN.html">defun</a> foo (x) x)
+(<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> foo (x) `(<a href="COMMON-LISP____QUOTE.html">quote</a> ,x))
+(<a href="ACL2____U.html">u</a>)
+
+; Fresh ACL2 session:
+(<a href="ACL2____REDEF_12.html">redef!</a>)
+(<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> foo (x) (<a href="COMMON-LISP____CONS.html">cons</a> 'list x))
+(<a href="COMMON-LISP____DEFUN.html">defun</a> foo (x) x)</pre> 
+ 
+ <p>Fixed a bug that could cause hard Lisp errors in an <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span> 
+ event.  Thanks to Sol Swords for sending an example that exhibited this bug. 
+ Here is a simpler such example; the bug was in how it was checked whether the 
+ <a href="ACL2____GUARD.html">guard</a> for a guard-verified function (here, <span class="v">g</span>) depends on some 
+ function introduced in the <a href="ACL2____SIGNATURE.html">signature</a> of the <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span> (here, 
+ the function <span class="v">f</span>).</p> 
+ 
+ <pre class="code">(<a href="ACL2____ENCAPSULATE.html">encapsulate</a>
+ ((f (x) t))
+ (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> f (x) (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t)) x))
+ (<a href="COMMON-LISP____DEFUN.html">defun</a> g (x)
+   (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> x) (f x) t)))
+   x))</pre> 
+ 
+ <p>Fixed a bug in <span class="v">mfc-relieve-hyp</span> that we believe could prohibit its use 
+ on the last hypothesis.  Thanks to Sol Swords for reporting this bug and 
+ providing a fix.</p> 
+ 
+ <p>The syntax <span class="v">#!</span> (see <a href="ACL2____SHARP-BANG-READER.html">sharp-bang-reader</a>) was broken after a 
+ skipped readtime conditional.  For example, the following input line caused an 
+ error.</p> 
+ 
+ <pre class="code">#+skip #!acl2(<a href="COMMON-LISP____QUOTE.html">quote</a> 3)</pre> 
+ 
+ <p>This bug has been fixed.</p> 
+ 
+ <p>Fixed a bug in the <a href="ACL2____BREAK-REWRITE.html">break-rewrite</a> utility, which was evidenced by 
+ error messages that could occur when dealing with free variables.  An example 
+ of such an error message is the following; we thank Robert Krug for sending us 
+ an example that produced this error and enabled us to produce a fix.</p> 
+ 
+ <pre class="code">HARD ACL2 ERROR in TILDE-@-FAILURE-REASON-PHRASE1:  Unrecognized failure
+reason, ((MEM-ARRAY . X86) (ADDR QUOTE 9)).</pre> 
+ 
+ <p>We fixed an obscure bug that we believe could interfere with <span class="tt"><a href="ACL2____DEFPROXY.html">defproxy</a></span> because of an incorrect <span class="v">(declaim (notinline &lt;function&gt;))</span> 
+ form.</p> 
+ 
+ <p><b>CHANGES AT THE SYSTEM LEVEL AND TO DISTRIBUTED BOOKS</b></p> 
+ 
+ <p>Improvements have been made related to the reading of characters.  In 
+ particular, checks are now done for ASCII encoding and for the expected <span class="tt"><a href="COMMON-LISP____CHAR-CODE.html">char-code</a></span> values for <span class="v">Space</span>, <span class="v">Tab</span>, <span class="v">Newline</span>, <span class="v">Page</span>, and 
+ <span class="v">Rubout</span>.  Also, an error no longer occurs with certain uses of 
+ non-standard characters.  For example, it had caused an error to certify a 
+ book after a single <a href="ACL2____PORTCULLIS.html">portcullis</a> <a href="ACL2____COMMAND.html">command</a> of <span class="v">(<a href="ACL2____MAKE-EVENT.html">make-event</a>
+ `(<a href="ACL2____DEFCONST.html">defconst</a> *my-null* ,(<a href="COMMON-LISP____CODE-CHAR.html">code-char</a> 0)))</span>; but this is no longer an issue. 
+ Thanks to Jared Davis for helpful correspondence that led us to make these 
+ improvements.</p> 
+ 
+ <p>The character encoding for reading from files has been fixed at ISO-8859-1. 
+ See <a href="ACL2____CHARACTER-ENCODING.html">character-encoding</a>.  Thanks to Jared Davis for bringing this 
+ portability issue to our attention (as this change arose in order to deal with 
+ a change in the default character encoding for the host Lisp, CCL), and 
+ pointing us in the right direction for dealing with it.  In many cases, the 
+ character encoding for reading from the terminal is also ISO-8859-1; but this 
+ is not guaranteed.  In particular, when the host Lisp is SBCL this may not be 
+ the case.</p> 
+ 
+ <p>Although the HTML documentation is distributed with ACL2, it had not been 
+ possible for users to build that documentation without omitting graphics, for 
+ example on the ACL2 home page.  That has been fixed, as files 
+ <span class="v">graphics/*.gif</span> are now distributed.</p> 
+ 
+ <p>Compiler warnings are suppressed more completely than they had been before. 
+ For example, the following had produced a compiler warning when the host Lisp 
+ is CCL, but no longer does so.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> f () (<a href="COMMON-LISP____CAR.html">car</a> 3))
+(<a href="ACL2____TRACE_42.html">trace$</a> f)</pre> 
+ 
+ <p>Removed support for ``tainted'' <a href="ACL2____CERTIFICATE.html">certificate</a>s.  One reason is that 
+ there are rarely incremental releases.  A stronger reason is that for the 
+ compatibility of a new release is with the previous non-incremental release, 
+ it's not particularly relevant whether or not the new release is 
+ incremental.</p> 
+ 
+ <p>The `make' variable <span class="v">BOOKS</span> can now be defined above the line that 
+ includes Makefile-generic.  (For relevant background, see <a href="ACL2____BOOKS-CERTIFICATION-CLASSIC.html">books-certification-classic</a>.)</p> 
+ 
+ <p>(SBCL only) ACL2 images built on SBCL now have an option, 
+ <span class="v">--dynamic-space-size 2000</span>, that can avoid space problems that could 
+ previously have caused the session to die.</p> 
+ 
+ <p>The default value for variable <span class="v">LISP</span> in file <span class="v">GNUmakefile</span> is now 
+ <span class="v">ccl</span>.  Thus, if you use `make' in the standard way to build an ACL2 
+ executable, the default host Lisp is <span class="v">ccl</span> rather than <span class="v">gcl</span>.</p> 
+ 
+ <p><b>EMACS SUPPORT</b></p> 
+ 
+ <p><b>EXPERIMENTAL VERSIONS</b></p> 
+ 
+ <p>For the version supporting the reals, ACL2(r) (see <a href="COMMON-LISP____REAL.html">real</a>), the 
+ supporting function <span class="v">floor1</span> has been defined in raw Lisp.  This avoids an 
+ error such as in the following case.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> f () (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t)) (floor1 8/3))
+(f) ; had caused raw Lisp error, before the fix</pre> 
+ 
+ <p>Among the enhancements for the parallel version, ACL2(p) (see <a href="ACL2____PARALLELISM.html">parallelism</a>), are the following.  We thank David Rager for his work in 
+ developing ACL2(p) and these improvements in particular.</p> 
+ 
+ <blockquote> 
+ 
+ <p>The macro <span class="v">set-parallel-evaluation</span> has been renamed <span class="tt"><a href="ACL2____SET-PARALLEL-EXECUTION.html">set-parallel-execution</a></span>.</p> 
+ 
+ <p>Calls of the macro <span class="tt"><a href="ACL2____SET-WATERFALL-PRINTING.html">set-waterfall-printing</a></span> are no longer <a href="ACL2____EVENTS.html">events</a>, so may not be placed at the top level of <a href="ACL2____BOOKS.html">books</a>.  However, it 
+ is easy to create events that have these effects; see <a href="ACL2____SET-WATERFALL-PRINTING.html">set-waterfall-printing</a>.  Note that now, <span class="v">:</span><span class="tt"><a href="ACL2____UBT.html">ubt</a></span> and similar 
+ commands do not change the settings for either waterfall-parallelism or 
+ waterfall-printing.</p> 
+ 
+ <p>The implementation of <span class="tt"><a href="ACL2____DEFLOCK.html">deflock</a></span> has been improved.  Now, the macro it 
+ defines can provide a lock when invoked inside a <a href="ACL2____GUARD.html">guard</a>-verified or 
+ <span class="v">:</span><span class="tt"><a href="ACL2____PROGRAM.html">program</a></span> mode function.  Previously, this was only the case if 
+ the function definition was loaded from raw Lisp, typically via a compiled 
+ file.</p> 
+ 
+ <p>The underlying implementation for waterfall parallelism (see <a href="ACL2____SET-WATERFALL-PARALLELISM.html">set-waterfall-parallelism</a>) has been improved.  As a result, even the largest 
+ proofs in the regression suite can be run efficiently in <span class="v">:resource-based</span> 
+ waterfall parallelism mode.  Among these improvements is one that can prevent 
+ machines from rebooting because operating system limits have been exceeded; 
+ thanks to Robert Krug for bringing this issue to our attention.</p> 
+ 
+ <p>There is also a new flag for configuring the way waterfall parallelism 
+ behaves once underlying system resource limits are reached.  This flag is most 
+ relevant to <span class="v">:full</span> waterfall parallelism.  see <a href="ACL2____SET-TOTAL-PARALLELISM-WORK-LIMIT.html">set-total-parallelism-work-limit</a> for more information.</p> 
+ 
+ <p>The <span class="tt"><a href="ACL2____DMR.html">dmr</a></span> utility has the same behavior in ACL2(p) as it has in ACL2 
+ unless waterfall-parallelism has been set to a non-<span class="v">nil</span> value (see <a href="ACL2____SET-WATERFALL-PARALLELISM.html">set-waterfall-parallelism</a>), in which case statistics about parallel execution 
+ are printed instead of the usual information.</p> 
+ 
+ <p>The user can now build the regression suite using waterfall <a href="ACL2____PARALLELISM.html">parallelism</a>.  See the distributed file <span class="v">acl2-customization-files/README</span> 
+ for details, and see <a href="ACL2____UNSUPPORTED-WATERFALL-PARALLELISM-FEATURES.html">unsupported-waterfall-parallelism-features</a> for a 
+ disclaimer related to building the regression suite using waterfall 
+ parallelism.</p> 
+ 
+ <p>When building ACL2 with both the hons and parallelism extensions (what is 
+ called ``ACL2(p)'' or, equivalently, ``ACL2(hp)''), the functions that are 
+ automatically memoized by the hons extension are now automatically unmemoized 
+ and memoized when the user toggles waterfall parallelism on and off, 
+ respectively.</p> 
+ 
+ <p>Calling <span class="tt"><a href="ACL2____SET-WATERFALL-PARALLELISM.html">set-waterfall-parallelism</a></span> with a flag of <span class="v">t</span> now results 
+ in the same settings as if it were called with a flag of <span class="v">:resource-based</span>, 
+ which is now the recommended mode for waterfall parallelism.  Thanks to Shilpi 
+ Goel for requesting this feature.</p> 
+ 
+ <p>The prover now aborts in a timely way in response to interrupts issued 
+ during a proof with waterfall parallelism enabled.  (This had often not been 
+ the case.)  Thanks to Shilpi Goel for requesting this 
+ improvement.</p>
+</blockquote> 
+ 
+ <p>Among the enhancements for the HONS extension (see <a href="ACL2____HONS-AND-MEMOIZATION.html">hons-and-memoization</a>) are the following.</p> 
+ 
+ <blockquote> 
+ 
+ <p>The compact-print code has been replaced by new serialization routines 
+ contributed by Jared Davis.  This may improve performance when including books 
+ that contain <span class="tt"><a href="ACL2____MAKE-EVENT.html">make-event</a></span>s that expand to very large constants.  You can 
+ also now save objects to disk without going into raw lisp; see <a href="ACL2____SERIALIZE.html">serialize</a> for details.</p> 
+ 
+ <p>Printing of certain messages has been sped up (by using Lisp function 
+ <span class="v">force-output</span> in place of <span class="v">finish-output</span>).  Thanks to Jared Davis for 
+ contributing this improvement.</p> 
+ 
+ <p><a href="ACL2____STOBJ.html">Stobj</a> array writes are perhaps twice as fast.</p> 
+ 
+ <p>It is now permitted to <a href="ACL2____MEMOIZE.html">memoize</a> functions that take user-defined 
+ <a href="ACL2____STOBJ.html">stobj</a>s as inputs, provided that no <a href="ACL2____STOBJ.html">stobj</a>s are returned.  Even if 
+ stobjs are returned, memoization is permitted provided the condition is 
+ <span class="v">nil</span>, as when profiling (see <a href="ACL2____PROFILE.html">profile</a>).  Thanks to Sol Swords for an 
+ observation that led to this improvement and for useful conversations, 
+ including follow-up leading us to improve our initial implementation.</p> 
+ 
+ <p>Fixes have been made for memoizing with a non-<span class="v">nil</span> value of 
+ <span class="v">:ideal-okp</span>.  Errors had occurred when memoizing with a <span class="v">:condition</span> 
+ other than <span class="v">t</span> for a <span class="v">:</span><span class="tt"><a href="ACL2____LOGIC.html">logic</a></span> mode function that had not been 
+ <a href="ACL2____GUARD.html">guard</a>-verified, even with a non-<span class="v">nil</span> value of <span class="v">:ideal-okp</span>; and 
+ after successfully memoizing such a function (without such <span class="v">:condition</span>), 
+ it had not been possible to <span class="tt"><a href="ACL2____UNMEMOIZE.html">unmemoize</a></span> it.  Thanks to Sol Swords for 
+ reporting issues with the <span class="v">:ideal-okp</span> argument of <span class="tt"><a href="ACL2____MEMOIZE.html">memoize</a></span>.</p> 
+ 
+ <p>If a book defined a function that was subsequently <a href="ACL2____MEMOIZE.html">memoize</a>d in that 
+ book, the function would no longer behaves as memoized upon completion of book 
+ certification (unless that <span class="tt"><a href="ACL2____CERTIFY-BOOK.html">certify-book</a></span> command was undone and 
+ replaced by evaluation of a corresponding <span class="tt"><a href="ACL2____INCLUDE-BOOK.html">include-book</a></span> command).  This 
+ has been fixed.  Thanks to David Rager for pointing out the problem by sending 
+ an example.</p> 
+ 
+ <p>We now support ACL2(h) built not only on 64-bit CCL but also on all 
+ supported host Ansi Common Lisps (i.e., all supported host Lisps except GCL). 
+ Thanks to Jared Davis for doing much of the work to make this improvement. 
+ Note that performance will likely be best for 64-bit CCL; for some Lisps, 
+ performance may be much worse, probably depending in part on the underlying 
+ implementation of hash tables.</p>
+</blockquote>
+</body>
+</html>

@@ -1,0 +1,177 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Gl-aside</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____GL-ASIDE">Click for Gl-aside in the Full Manual</a></h3>
+
+<p>A debugging facility that is typically used for printing messages 
+during GL symbolic execution.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(gl-aside form) → *</pre></dt> 
+</dl></div> 
+<p>In the logic and during ordinary execution, <span class="tt">(gl-aside form)</span> is 
+just an ordinary function that ignores its argument and returns <span class="v">nil</span>. 
+However, during GL symbolic execution it has a special meaning which is useful 
+for printing debugging messages and doing other kinds of low-level hacking.</p> 
+ 
+<p><b>Note:</b> <span class="v">gl-aside</span> is fairly flexible but it can be <b>tricky to 
+use</b> correctly.  You should probably read this documentation carefully and 
+also see the ``Tricks and Pitfalls'' section below!</p> 
+ 
+ 
+<h3>Basic Example</h3> 
+ 
+<p>Here is a typical usage of gl-aside:</p> 
+ 
+<pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> spec1 (x y)
+  (<a href="ACL2____B_A2.html">b*</a> ((sum (<a href="COMMON-LISP_____B2.html">+</a> x y))
+       (?msg (<a href="ACL2____GL-ASIDE.html">gl-aside</a> (<a href="ACL2____CW.html">cw</a> "Note: X is ~x0 and Y is ~x1.~%" x y))))
+    sum))</pre> 
+ 
+<p>During the normal execution of <span class="v">spec1</span>, this Note will (of course) be 
+printed: <span class="v">gl-aside</span> is just an ordinary function, so ACL2 will (eagerly) 
+evaluate the <span class="v">cw</span> call before even invoking <span class="v">gl-aside</span>.</p> 
+ 
+<p>What happens during symbolic execution?  If we try to prove the following, 
+simple GL theorem, e.g.,:</p> 
+ 
+<pre class="code">(<a href="ACL2____DEF-GL-THM.html">def-gl-thm</a> spec1-correct
+  :hyp (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 3 x)
+            (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 3 y))
+  :concl (<a href="COMMON-LISP____EQUAL.html">equal</a> (spec1 x y)
+                (<a href="COMMON-LISP_____B2.html">+</a> x y))
+  :g-bindings
+  (<a href="GL____AUTO-BINDINGS.html">auto-bindings</a> (:nat x 3) (:nat y 3)))</pre> 
+ 
+<p>then our Note will still be printed <b>even though X and Y are <a href="GL____SYMBOLIC-OBJECTS.html">symbolic-objects</a></b> when <span class="v">spec1</span> is being executed!  In particular, we 
+will see, in <a href="GL____GL-SATLINK-MODE.html">gl-satlink-mode</a>:</p> 
+ 
+<pre class="code">Note: X is (:G-INTEGER 0 1 2 NIL) and Y is
+(:G-NUMBER 4 5 6 NIL).</pre> 
+ 
+<p>The numbers 0-6 here are AIG variables.  If we were instead in <a href="ACL2____GL-BDD-MODE.html">gl-bdd-mode</a>, we would see large BDD variables (trees of T and NIL) here 
+instead of these numbers.</p> 
+ 
+<p>The technical explanation of how this works is: when GL's symbolic 
+interpreter encounters a call of <span class="v">(<a href="ACL2____GL-ASIDE.html">gl-aside</a> form</span>), it executes <span class="v">form</span> 
+inside a <a href="ACL2____WORMHOLE.html">wormhole</a>, with the variables bound to their symbolic 
+versions.</p> 
+ 
+ 
+<h3>Why do we even need this?</h3> 
+ 
+<p>Couldn't we just write our spec without <span class="v">gl-aside</span>?  If we just 
+wrote:</p> 
+ 
+<pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> spec2 (x y)
+  (<a href="ACL2____B_A2.html">b*</a> ((sum (<a href="COMMON-LISP_____B2.html">+</a> x y))
+       (?msg (<a href="ACL2____CW.html">cw</a> "Note: X is ~x0 and Y is ~x1.~%" x y)))
+    sum))</pre> 
+ 
+<p>Then our Note would still get printed during normal execution.  It would 
+also get printed during <i>some</i> symbolic executions.  In particular, if 
+we know that X and Y are particular concrete values, then we will still see 
+our note.  For example, if we heavily constrain <span class="v">X</span> and <span class="v">Y</span> so to be 
+constants:</p> 
+ 
+<pre class="code">(<a href="ACL2____DEF-GL-THM.html">def-gl-thm</a> spec2-correct-for-3-and-4
+  :hyp (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> x 3)
+            (<a href="COMMON-LISP____EQUAL.html">equal</a> y 4))
+  :concl (<a href="COMMON-LISP____EQUAL.html">equal</a> (spec2 x y)
+                (<a href="COMMON-LISP_____B2.html">+</a> x y))
+  :g-bindings
+  (<a href="GL____AUTO-BINDINGS.html">auto-bindings</a> (:nat x 3) (:nat y 3)))</pre> 
+ 
+<p>then we will indeed see our Note printed:</p> 
+ 
+<pre class="code">Note: X is 3 and Y is 4.</pre> 
+ 
+<p>here, the <a href="ACL2____CW.html">cw</a> form is being applied to all-constant arguments, so GL 
+can simply evaluate it, causing the message to be printed.  However, if we 
+instead submit something more like our original theorem:</p> 
+ 
+<pre class="code">(<a href="ACL2____DEF-GL-THM.html">def-gl-thm</a> spec2-correct
+  :hyp (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 3 x)
+            (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 3 y))
+  :concl (<a href="COMMON-LISP____EQUAL.html">equal</a> (spec2 x y)
+                (<a href="COMMON-LISP_____B2.html">+</a> x y))
+  :g-bindings
+  (<a href="GL____AUTO-BINDINGS.html">auto-bindings</a> (:nat x 3) (:nat y 3)))</pre> 
+ 
+<p>then the Note is not printed.  Why not?  In this case, when GL's interpreter 
+reaches the <span class="v">cw</span> form, <span class="v">x</span> and <span class="v">y</span> are still symbolic objects, so it 
+cannot simply concretely execute <span class="v">cw</span>.  Instead, GL symbolically executes 
+the logical definition of <span class="v">cw</span>—really <a href="ACL2____FMT-TO-COMMENT-WINDOW.html">fmt-to-comment-window</a>. 
+But in the logic, this function (of course) does not print anything, but 
+instead just returns <span class="v">nil</span>.  At any rate, GL ends up binding <span class="v">msg</span> to 
+<span class="v">nil</span> and nothing gets printed.</p> 
+ 
+ 
+<h3>Tricks and Pitfalls</h3> 
+ 
+<h5>Pitfall: <a href="ACL2____PROGN_42.html">progn$</a> and its ilk</h5> 
+ 
+<p>You probably <b>never</b> want to use <a href="ACL2____PROG2_42.html">prog2$</a> or <a href="ACL2____PROGN_42.html">progn$</a> to 
+invoke a <span class="v">gl-aside</span>.  For instance, you do NOT want to do this:</p> 
+ 
+<pre class="code">(<a href="ACL2____PROGN_42.html">progn$</a> (<a href="ACL2____GL-ASIDE.html">gl-aside</a> ...)      ;; WRONG
+        sum)</pre> 
+ 
+<p>Why not?  During symbolic execution, GL just completely skips directly to 
+the last form in the <span class="v">progn$</span>, so it will never even see your 
+<span class="v">gl-aside</span>!</p> 
+ 
+<p>For similar reasons, you should also generally not use <a href="ACL2____B_A2.html">b*</a> binders 
+like <span class="v">-</span>, <span class="v">&amp;</span>, and <span class="v">?!</span>, or the implicit <span class="v">progn$</span> forms that <span class="v">b*</span> 
+permits.  For example:</p> 
+ 
+<pre class="code">(<a href="ACL2____B_A2.html">b*</a> ((ans   (f x y ...))
+     (?msg  (<a href="ACL2____GL-ASIDE.html">gl-aside</a> ...))  ;; GOOD, bind to an ignored variable
+     (?!msg (<a href="ACL2____GL-ASIDE.html">gl-aside</a> ...))  ;; BAD, won't get evaluated
+     (<a href="COMMON-LISP____-.html">-</a>     (<a href="ACL2____GL-ASIDE.html">gl-aside</a> ...))  ;; BAD, won't get evaluated
+
+     ((when condition)
+      ;; implicit b* progn$:
+      (<a href="ACL2____GL-ASIDE.html">gl-aside</a> ...)         ;; BAD, won't get evaluated
+      ans))
+
+   ;; implicit b* progn$:
+   (<a href="ACL2____GL-ASIDE.html">gl-aside</a> ...)            ;; BAD, won't get evaluated
+   ans)</pre> 
+ 
+<h5>Trick: print only during symbolic execution</h5> 
+ 
+<p>The above <span class="v">spec1</span> function will print its Note during <b>both</b> regular 
+execution and symbolic execution.  It is also possible to use <a href="ACL2____MBE.html">mbe</a> to get 
+a message that only prints during symbolic execution.</p> 
+ 
+<pre class="code">(<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> gl-aside-symbolic (form)
+  `(<a href="ACL2____MBE.html">mbe</a> :logic (<a href="ACL2____GL-ASIDE.html">gl-aside</a> ,form)
+        :exec nil))
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> spec3 (x y)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____NATP.html">natp</a> x) (<a href="ACL2____NATP.html">natp</a> y))))
+  (<a href="ACL2____B_A2.html">b*</a> ((sum (<a href="COMMON-LISP_____B2.html">+</a> x y))
+       (?msg (<a href="GL____GL-ASIDE-SYMBOLIC.html">gl-aside-symbolic</a> (<a href="ACL2____CW.html">cw</a> "Note: X is ~x0 and Y is ~x1.~%" x y))))
+    sum))
+
+(spec3 3 4)      ;; No Note is printed
+7
+
+(<a href="ACL2____DEF-GL-THM.html">def-gl-thm</a> spec3-correct ...) ;; Note is printed</pre> 
+ 
+<p>Of course, this only works for guard-verified functions.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>gl-aside</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> gl-aside (form)
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORE.html">ignore</a> form))
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t))
+       (<a href="COMMON-LISP____LET.html">let</a> ((__function__ 'gl-aside))
+            (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+            nil))</pre> 
+
+</body>
+</html>

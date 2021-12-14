@@ -1,0 +1,118 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Vl-atts</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL2014____VL-ATTS">Click for Vl-atts in the Full Manual</a></h3>
+
+<p>Representation of <span class="v">(<a href="COMMON-LISP_____A2.html">*</a> foo = 3, bar *)</span> style attributes.</p><p>Verilog-2005 and SystemVerilog-2012 allow many constructs, (e.g., 
+module instances, wire declarations, assignments, subexpressions, and so on) to 
+be annotated with <b>attributes</b>.</p> 
+ 
+<p>Each individual attribute can either be a single key with no value (e.g., 
+<span class="v">baz</span> above), or can have the form <span class="v">key = value</span>.  The keys are always 
+identifiers, and the values (if provided) are expressions.  Both Verilog-2005 
+and SystemVerilog-2012 agree that an attribute with no explicit value is to be 
+treated as having value <span class="v">1</span>.</p> 
+ 
+ 
+<h3>Representation</h3> 
+ 
+<p>We represent attributes as alists mapping names to their values.  We use 
+ordinary ACL2 strings to represent the keys.  These strings are typically 
+honsed to improve memory sharing.  Each explicit value is represented by an 
+ordinary <a href="VL2014____VL-EXPR-P.html">vl-expr-p</a>, and keys with no values are bound to <span class="v">nil</span> 
+instead.</p> 
+ 
+<p><b>Function: </b>vl-atts-p</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> vl-atts-p (x)
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t))
+       (<a href="COMMON-LISP____LET.html">let</a> ((__function__ 'vl-atts-p))
+            (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+            (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ATOM.html">atom</a> x)
+                (<a href="COMMON-LISP____EQ.html">eq</a> x nil)
+                (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____CONSP.html">consp</a> (<a href="COMMON-LISP____CAR.html">car</a> x))
+                     (<a href="COMMON-LISP____STRINGP.html">stringp</a> (<a href="COMMON-LISP____CAAR.html">caar</a> x))
+                     (<a href="VL2014____VL-MAYBE-EXPR-P.html">vl-maybe-expr-p</a> (<a href="COMMON-LISP____CDAR.html">cdar</a> x))
+                     (<a href="VL2014____VL-ATTS-P.html">vl-atts-p</a> (<a href="COMMON-LISP____CDR.html">cdr</a> x))))))</pre> 
+ 
+<h3>Size/Types of Attribute Values</h3> 
+ 
+<p>Verilog-2005 doesn't say anything about the types of attribute 
+expressions.</p> 
+ 
+<p>SystemVerilog-2012 says (Section 5.12) that the type of an attribute with no 
+value is <span class="v">bit</span>, and that otherwise its type is the (presumably 
+self-determined) type of the expression.</p> 
+ 
+<p>This is not really an adequate spec.  Consider for instance an attribute 
+like:</p> 
+ 
+<pre class="code">(<a href="COMMON-LISP_____A2.html">*</a> foo = a + b *)</pre> 
+ 
+<p>Attributes live in their own namespace and are generally not very 
+well-specified.  It isn't clear what <span class="v">a</span> and <span class="v">b</span> refer to here.  For 
+instance, are they wires in this module, or perhaps global values that are 
+known by the Verilog tool.  It doesn't seem at all clear what the type or size 
+of such an expression is supposed to be.</p> 
+ 
+<p>Well, no matter.  Attributes are not used for much and if their sizes and 
+types aren't well specified, that's not necessarily any kind of problem.  For 
+VL's part, our sizing code simply ignores attributes and does not try to 
+determine their sizes and types at all.</p> 
+ 
+ 
+<h3>Nesting Attributes</h3> 
+ 
+<p>Note that both Verilog-2005 and SystemVerilog-2012 prohibit the nesting of 
+attributes.  That is, expressions like the following are not allowed:</p> 
+ 
+<pre class="code">(<a href="COMMON-LISP_____A2.html">*</a> foo = a + (<a href="COMMON-LISP_____A2.html">*</a> bar *) b *)</pre> 
+ 
+<p>VL's parser enforces this restriction and will not allow expressions to have 
+nested attributes; see <a href="VL2014____VL-PARSE-0_B2-ATTRIBUTE-INSTANCES.html">vl-parse-0+-attribute-instances</a>.</p> 
+ 
+<p>Internally we make <b>no such restriction</b>.  Our <a href="VL2014____VL-EXPR-P.html">vl-expr-p</a> 
+structures can have attributes nested to any arbitrary depth.</p> 
+ 
+ 
+<h3>Redundant and Conflicting Attributes</h3> 
+ 
+<p>When the same attribute name is given repeatedly, both Verilog-2005 and 
+SystemVerilog-2012 agree that the last occurrences of the attribute should be 
+used.  That is, the value of <span class="v">foo</span> below should be 5:</p> 
+ 
+<pre class="code">(<a href="COMMON-LISP_____A2.html">*</a> foo = 1, foo = 5 *)
+assign w = a + b;</pre> 
+ 
+<p>VL's parser properly handles this case.  It issues warnings when duplicate 
+attributes are used, and always produces <span class="v">vl-atts-p</span> structures that are 
+free from duplicate keys, and where the entry for each attribute corresponds to 
+the last occurrence of it; see <a href="VL2014____VL-PARSE-0_B2-ATTRIBUTE-INSTANCES.html">vl-parse-0+-attribute-instances</a>.</p> 
+ 
+<p>Internally we make <b>no such restriction</b>.  We treat <span class="v">vl-atts-p</span> 
+structures as ordinary alists.</p> 
+ 
+ 
+<h3>Internal Use of Attributes by VL</h3> 
+ 
+<p>VL transformations occasionally add attributes throughout modules.  As a 
+couple of examples:</p> 
+ 
+<ul> 
+ 
+<li>The <span class="v">VL_HANDS_OFF</span> attribute is used to say that a module is somehow 
+special and should not be modified by transformations.</li> 
+ 
+<li>VL may add <span class="v">VL_ORIG_EXPR</span> annotations to remember the "original" 
+versions of expressions, before any rewriting or other simplification has taken 
+place; these annotations can be useful in error messages.</li> 
+ 
+</ul> 
+ 
+<p>As a general rule, attributes added by VL <i>should</i> be prefixed with 
+<span class="v">VL_</span>.  In practice, we may sometimes forget to follow this rule.</p>
+</body>
+</html>

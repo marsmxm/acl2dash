@@ -1,0 +1,591 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Get-prefixes</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=X86ISA____GET-PREFIXES">Click for Get-prefixes in the Full Manual</a></h3>
+
+<p>Fetch and store legacy and REX prefixes, if any, of an instruction</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(get-prefixes proc-mode start-rip prefixes rex-byte cnt x86) 
+  → 
+(mv flg new-prefixes new-rex-byte new-x86)</pre></dt>
+<dt>Returns</dt>
+<dd>
+<span class="tt">new-prefixes</span> — <font color="#606060">Type <span class="v">(<a href="ACL2____NATP.html">natp</a> new-prefixes)</span>, given <span class="v">(forced-and (<a href="ACL2____NATP.html">natp</a> prefixes)
+            (<a href="X86ISA____CANONICAL-ADDRESS-P.html">canonical-address-p</a> start-rip)
+            (x86p x86))
+</span>.</font>
+</dd> 
+<dd>
+<span class="tt">new-rex-byte</span> — <font color="#606060">Type <span class="v">(<a href="ACL2____NATP.html">natp</a> new-rex-byte)</span>, given <span class="v">(forced-and (<a href="ACL2____NATP.html">natp</a> rex-byte) (<a href="ACL2____NATP.html">natp</a> prefixes) (x86p x86))</span>.</font>
+</dd> 
+<dd>
+<span class="tt">new-x86</span> — <font color="#606060">Type <span class="v">(x86p new-x86)</span>, given <span class="v">(forced-and (x86p x86) (<a href="X86ISA____CANONICAL-ADDRESS-P.html">canonical-address-p</a> start-rip))</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>The function <span class="v">get-prefixes</span> fetches the legacy and REX prefixes 
+  of an instruction and also returns the first byte following the last such 
+  prefix.  The input <span class="v">start-rip</span> points to the first byte of an instruction, 
+  which may potentially be a legacy prefix.  The initial value of <span class="v">cnt</span> 
+  should be <span class="v">15</span> so that the result <span class="v">(<a href="COMMON-LISP____-.html">-</a> 15 cnt)</span> returned at the end of 
+  the recursion is the correct number of legacy and/or REX bytes parsed by this 
+  function.</p> 
+ 
+  <h3>Legacy Prefixes</h3> 
+ 
+  <p>From Intel Manual, Vol. 2, May 2018, Section 2.1.1 (Instruction 
+  Prefixes):</p> 
+ 
+  <p>Instruction prefixes are divided into four groups, each with a set of 
+     allowable prefix codes. For each instruction, it is only useful to include 
+     up to one prefix code from each of the four groups (Groups 1, 2, 3, 
+     4). Groups 1 through 4 may be placed in any order relative to each 
+     other.</p> 
+ 
+  <p>Despite the quote from the Intel Manual above, the order of the legacy 
+  prefixes does matter when there is more than one prefix from the same group 
+  --- <b>all but the last prefix from a single prefix group are ignored</b>. 
+  The only <b>exception</b> in this case is for <b>Group 1</b> prefixes --- see 
+  below for details.</p> 
+ 
+  <ul> 
+  <li>
+<span class="v">0x64_88_00</span>    is <span class="v">mov byte ptr fs:[rax], al</span>
+</li> 
+  <li>
+<span class="v">0x65_88_00</span>    is <span class="v">mov byte ptr gs:[rax], al</span>
+</li> 
+  <li>
+<span class="v">0x64_65_88_00</span> is <span class="v">mov byte ptr gs:[rax], al</span>
+</li> 
+  <li>
+<span class="v">0x65_64_88_00</span> is <span class="v">mov byte ptr fs:[rax], al</span>
+</li> 
+  </ul> 
+ 
+  <ul> 
+  <li>
+<span class="v">0xf2_a4</span>    is <span class="v">repne movsb byte ptr [rdi], byte ptr [rsi]</span>
+</li> 
+  <li>
+<span class="v">0xf3_a4</span>    is <span class="v">repe  movsb byte ptr [rdi], byte ptr [rsi]</span>
+</li> 
+  <li>
+<span class="v">0xf2_f3_a4</span> is <span class="v">repe  movsb byte ptr [rdi], byte ptr [rsi]</span>
+</li> 
+  <li>
+<span class="v">0xf3_f2_a4</span> is <span class="v">repne movsb byte ptr [rdi], byte ptr [rsi]</span>
+</li> 
+  </ul> 
+ 
+  <p>We now discuss the Group 1 exception below.</p> 
+ 
+  <p><span class="v">0xf0_f2_a4</span> is <b>NOT</b> <br> 
+  <span class="v">repne movsb byte ptr [rdi], byte ptr [rsi]</span> <br> 
+  It is: <br> 
+  <span class="v">lock repne movsb byte ptr [rdi], byte ptr [rsi]</span> <br> 
+ 
+  Note that lock and rep/repne are Group 1 prefixes.  It is important to record 
+  the lock prefix, even if it is overshadowed by a rep/repne prefix, because 
+  the former instruction will not <span class="v">#UD</span>, but the latter instruction will. 
+  This is akin to the lock prefix being in a separate group than the rep/repne 
+  prefixes; in fact, AMD manuals (Section 1.2.1: Summary of Legacy Prefixes, 
+  Vol. 3 May 2018 Edition) treat them as such.</p> 
+ 
+  <p>For details about how mandatory prefixes are picked from legacy prefixes, 
+  see <a href="X86ISA____MANDATORY-PREFIXES-COMPUTATION.html">mandatory-prefixes-computation</a>.</p> 
+ 
+  <h3>REX Prefixes</h3> 
+ 
+  <p>A REX prefix (applicable only to 64-bit mode) is treated as a null prefix 
+  if it is followed by a legacy prefix.  Here is an illustrative example (using 
+  Intel's XED, x86 Encoder Decoder --- see 
+  <span class="v">https://intelxed.github.io/</span>):</p> 
+ 
+  <ul> 
+ 
+  <li>
+<span class="v">xed -64 -d 48670100</span> is <span class="v">add dword ptr [eax], eax</span>; the REX.W 
+  prefix does not have any effect on the operand size, which remains 32 (i.e., 
+  the default operand size in the 64-bit mode).</li> 
+ 
+  <li>
+<span class="v">xed -64 -d 67480100</span> is <span class="v">add qword ptr [eax], rax</span>; the REX prefix 
+  has the intended effect of promoting the operand size to 64 bits.</li> 
+ 
+  </ul> 
+ 
+  <p>Note that the prefixes structure output of this function does not include 
+  the REX byte (which is a separate return value of this function), but its 
+  <span class="v">:num-prefixes</span> field includes a count of the REX prefixes encountered. 
+  This is because adding an 8-bit field to the prefixes structure to store a 
+  REX byte will make it a bignum, thereby impacting execution efficiency.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Theorem: </b>return-type-of-prefixes-&gt;num-linear</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> return-type-of-prefixes-&gt;num-linear
+        (<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="X86ISA____PREFIXES-_E3NUM.html">prefixes-&gt;num</a> prefixes) 16)
+        :rule-classes :linear)</pre> 
+<p><b>Theorem: </b>return-type-of-prefixes-&gt;lck-linear</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> return-type-of-prefixes-&gt;lck-linear
+        (<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="X86ISA____PREFIXES-_E3LCK.html">prefixes-&gt;lck</a> prefixes) 256)
+        :rule-classes :linear)</pre> 
+<p><b>Theorem: </b>return-type-of-prefixes-&gt;rep-linear</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> return-type-of-prefixes-&gt;rep-linear
+        (<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="X86ISA____PREFIXES-_E3REP.html">prefixes-&gt;rep</a> prefixes) 256)
+        :rule-classes :linear)</pre> 
+<p><b>Theorem: </b>return-type-of-prefixes-&gt;seg-linear</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> return-type-of-prefixes-&gt;seg-linear
+        (<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="X86ISA____PREFIXES-_E3SEG.html">prefixes-&gt;seg</a> prefixes) 256)
+        :rule-classes :linear)</pre> 
+<p><b>Theorem: </b>return-type-of-prefixes-&gt;opr-linear</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> return-type-of-prefixes-&gt;opr-linear
+        (<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="X86ISA____PREFIXES-_E3OPR.html">prefixes-&gt;opr</a> prefixes) 256)
+        :rule-classes :linear)</pre> 
+<p><b>Theorem: </b>return-type-of-prefixes-&gt;adr-linear</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> return-type-of-prefixes-&gt;adr-linear
+        (<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="X86ISA____PREFIXES-_E3ADR.html">prefixes-&gt;adr</a> prefixes) 256)
+        :rule-classes :linear)</pre> 
+<p><b>Theorem: </b>return-type-of-prefixes-&gt;nxt-linear</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> return-type-of-prefixes-&gt;nxt-linear
+        (<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="X86ISA____PREFIXES-_E3NXT.html">prefixes-&gt;nxt</a> prefixes) 256)
+        :rule-classes :linear)</pre> 
+<p><b>Theorem: </b>return-type-of-prefixes-&gt;num-rewrite</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> return-type-of-prefixes-&gt;num-rewrite
+        (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 4 (<a href="X86ISA____PREFIXES-_E3NUM.html">prefixes-&gt;num</a> prefixes))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>return-type-of-prefixes-&gt;lck-rewrite</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> return-type-of-prefixes-&gt;lck-rewrite
+        (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 8 (<a href="X86ISA____PREFIXES-_E3LCK.html">prefixes-&gt;lck</a> prefixes))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>return-type-of-prefixes-&gt;rep-rewrite</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> return-type-of-prefixes-&gt;rep-rewrite
+        (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 8 (<a href="X86ISA____PREFIXES-_E3REP.html">prefixes-&gt;rep</a> prefixes))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>return-type-of-prefixes-&gt;seg-rewrite</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> return-type-of-prefixes-&gt;seg-rewrite
+        (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 8 (<a href="X86ISA____PREFIXES-_E3SEG.html">prefixes-&gt;seg</a> prefixes))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>return-type-of-prefixes-&gt;opr-rewrite</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> return-type-of-prefixes-&gt;opr-rewrite
+        (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 8 (<a href="X86ISA____PREFIXES-_E3OPR.html">prefixes-&gt;opr</a> prefixes))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>return-type-of-prefixes-&gt;adr-rewrite</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> return-type-of-prefixes-&gt;adr-rewrite
+        (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 8 (<a href="X86ISA____PREFIXES-_E3ADR.html">prefixes-&gt;adr</a> prefixes))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>return-type-of-prefixes-&gt;nxt-rewrite</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> return-type-of-prefixes-&gt;nxt-rewrite
+        (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 8 (<a href="X86ISA____PREFIXES-_E3NXT.html">prefixes-&gt;nxt</a> prefixes))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>return-type-of-!prefixes-&gt;*-linear</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> return-type-of-!prefixes-&gt;*-linear
+        (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 52 (<a href="X86ISA_____12PREFIXES-_E3NUM.html">!prefixes-&gt;num</a> x prefixes))
+             (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 52 (<a href="X86ISA_____12PREFIXES-_E3LCK.html">!prefixes-&gt;lck</a> x prefixes))
+             (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 52 (<a href="X86ISA_____12PREFIXES-_E3REP.html">!prefixes-&gt;rep</a> x prefixes))
+             (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 52 (<a href="X86ISA_____12PREFIXES-_E3SEG.html">!prefixes-&gt;seg</a> x prefixes))
+             (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 52 (<a href="X86ISA_____12PREFIXES-_E3OPR.html">!prefixes-&gt;opr</a> x prefixes))
+             (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 52 (<a href="X86ISA_____12PREFIXES-_E3ADR.html">!prefixes-&gt;adr</a> x prefixes))
+             (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 52 (<a href="X86ISA_____12PREFIXES-_E3NXT.html">!prefixes-&gt;nxt</a> x prefixes)))
+        :rule-classes
+        ((:rewrite)
+         (:linear :corollary (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="X86ISA_____12PREFIXES-_E3NUM.html">!prefixes-&gt;num</a> x prefixes)
+                                     4503599627370496)
+                                  (<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="X86ISA_____12PREFIXES-_E3LCK.html">!prefixes-&gt;lck</a> x prefixes)
+                                     4503599627370496)
+                                  (<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="X86ISA_____12PREFIXES-_E3REP.html">!prefixes-&gt;rep</a> x prefixes)
+                                     4503599627370496)
+                                  (<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="X86ISA_____12PREFIXES-_E3SEG.html">!prefixes-&gt;seg</a> x prefixes)
+                                     4503599627370496)
+                                  (<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="X86ISA_____12PREFIXES-_E3OPR.html">!prefixes-&gt;opr</a> x prefixes)
+                                     4503599627370496)
+                                  (<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="X86ISA_____12PREFIXES-_E3ADR.html">!prefixes-&gt;adr</a> x prefixes)
+                                     4503599627370496)
+                                  (<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="X86ISA_____12PREFIXES-_E3NXT.html">!prefixes-&gt;nxt</a> x prefixes)
+                                     4503599627370496)))))</pre> 
+<p><b>Theorem: </b>loghead-ash-0</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> loghead-ash-0
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____NATP.html">natp</a> i)
+                      (<a href="ACL2____NATP.html">natp</a> j)
+                      (<a href="ACL2____NATP.html">natp</a> x)
+                      (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> i j))
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____LOGHEAD.html">loghead</a> i (<a href="COMMON-LISP____ASH.html">ash</a> x j)) 0)))</pre> 
+<p><b>Function: </b>get-prefixes</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ get-prefixes
+ (proc-mode start-rip prefixes rex-byte cnt x86)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (x86)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____TYPE.html">type</a> (integer 0 4) proc-mode)
+          (<a href="COMMON-LISP____TYPE.html">type</a> (signed-byte 48) start-rip)
+          (<a href="COMMON-LISP____TYPE.html">type</a> (unsigned-byte 52) prefixes)
+          (<a href="COMMON-LISP____TYPE.html">type</a> (unsigned-byte 8) rex-byte)
+          (<a href="COMMON-LISP____TYPE.html">type</a> (integer 0 15) cnt))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="X86ISA____PREFIXES-P.html">prefixes-p</a> prefixes)))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'get-prefixes))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="COMMON-LISP____IF.html">if</a>
+   (<a href="ACL2____MBE.html">mbe</a> :logic (<a href="ACL2____ZP.html">zp</a> cnt) :exec (<a href="COMMON-LISP____EQL.html">eql</a> cnt 0))
+   (<a href="ACL2____MV.html">mv</a> t prefixes rex-byte x86)
+   (<a href="ACL2____B_A2.html">b*</a>
+    ((<a href="ACL2____CTX.html">ctx</a> 'get-prefixes)
+     ((<a href="ACL2____MV.html">mv</a> flg (<a href="COMMON-LISP____THE.html">the</a> (unsigned-byte 8) byte)
+          x86)
+      (rme08-opt proc-mode start-rip 1
+                 :x x86))
+     ((when flg)
+      (<a href="ACL2____MV.html">mv</a> (<a href="COMMON-LISP____CONS.html">cons</a> ctx flg) byte rex-byte x86))
+     (prefix-byte-group-code
+          (<a href="COMMON-LISP____THE.html">the</a> (integer 0 4)
+               (<a href="X86ISA____GET-ONE-BYTE-PREFIX-ARRAY-CODE.html">get-one-byte-prefix-array-code</a> byte))))
+    (<a href="COMMON-LISP____CASE.html">case</a>
+     prefix-byte-group-code
+     (0
+      (<a href="ACL2____B_A2.html">b*</a>
+         ((rex? (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQL.html">eql</a> proc-mode 0)
+                     (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____THE.html">the</a> (unsigned-byte 4) (<a href="COMMON-LISP____ASH.html">ash</a> byte -4))
+                            4)))
+          ((when rex?)
+           (<a href="ACL2____MV-LET.html">mv-let</a>
+                (flg next-rip)
+                (<a href="X86ISA____ADD-TO-_A2IP.html">add-to-*ip</a> proc-mode start-rip 1 x86)
+                (<a href="COMMON-LISP____IF.html">if</a> flg (<a href="ACL2____MV.html">mv</a> flg prefixes rex-byte x86)
+                    (<a href="X86ISA____GET-PREFIXES.html">get-prefixes</a> proc-mode next-rip prefixes
+                                  byte (<a href="COMMON-LISP____THE.html">the</a> (integer 0 15) (<a href="COMMON-LISP____1-.html">1-</a> cnt))
+                                  x86)))))
+         (<a href="COMMON-LISP____LET.html">let</a> ((<a href="X86ISA____PREFIXES.html">prefixes</a> (<a href="COMMON-LISP____THE.html">the</a> (unsigned-byte 52)
+                              (<a href="X86ISA_____12PREFIXES-_E3NXT.html">!prefixes-&gt;nxt</a> byte prefixes))))
+              (<a href="ACL2____MV.html">mv</a> nil
+                  (<a href="COMMON-LISP____THE.html">the</a> (unsigned-byte 52)
+                       (<a href="X86ISA_____12PREFIXES-_E3NUM.html">!prefixes-&gt;num</a> (<a href="COMMON-LISP____-.html">-</a> 15 cnt) prefixes))
+                  rex-byte x86))))
+     (1 (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> flg next-rip)
+              (<a href="X86ISA____ADD-TO-_A2IP.html">add-to-*ip</a> proc-mode start-rip 1 x86))
+             ((when flg)
+              (<a href="ACL2____MV.html">mv</a> flg prefixes rex-byte x86))
+             ((<a href="COMMON-LISP____THE.html">the</a> (unsigned-byte 52) prefixes)
+              (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> byte 240)
+                  (<a href="X86ISA_____12PREFIXES-_E3LCK.html">!prefixes-&gt;lck</a> byte prefixes)
+                  (<a href="X86ISA_____12PREFIXES-_E3REP.html">!prefixes-&gt;rep</a> byte prefixes))))
+            (<a href="X86ISA____GET-PREFIXES.html">get-prefixes</a> proc-mode next-rip
+                          prefixes 0 (<a href="COMMON-LISP____THE.html">the</a> (integer 0 15) (<a href="COMMON-LISP____1-.html">1-</a> cnt))
+                          x86)))
+     (2
+      (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> flg next-rip)
+            (<a href="X86ISA____ADD-TO-_A2IP.html">add-to-*ip</a> proc-mode start-rip 1 x86))
+           ((when flg)
+            (<a href="ACL2____MV.html">mv</a> flg prefixes rex-byte x86)))
+          (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQL.html">eql</a> proc-mode 0)
+                       (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> byte 100) (<a href="COMMON-LISP____EQUAL.html">equal</a> byte 101)))
+                  (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQL.html">eql</a> proc-mode 0)))
+              (<a href="X86ISA____GET-PREFIXES.html">get-prefixes</a> proc-mode next-rip
+                            (<a href="COMMON-LISP____THE.html">the</a> (unsigned-byte 52)
+                                 (<a href="X86ISA_____12PREFIXES-_E3SEG.html">!prefixes-&gt;seg</a> byte prefixes))
+                            0 (<a href="COMMON-LISP____THE.html">the</a> (integer 0 15) (<a href="COMMON-LISP____1-.html">1-</a> cnt))
+                            x86)
+              (<a href="X86ISA____GET-PREFIXES.html">get-prefixes</a> proc-mode next-rip
+                            prefixes 0 (<a href="COMMON-LISP____THE.html">the</a> (integer 0 15) (<a href="COMMON-LISP____1-.html">1-</a> cnt))
+                            x86))))
+     (3
+      (<a href="ACL2____MV-LET.html">mv-let</a> (flg next-rip)
+              (<a href="X86ISA____ADD-TO-_A2IP.html">add-to-*ip</a> proc-mode start-rip 1 x86)
+              (<a href="COMMON-LISP____IF.html">if</a> flg (<a href="ACL2____MV.html">mv</a> flg prefixes rex-byte x86)
+                  (<a href="X86ISA____GET-PREFIXES.html">get-prefixes</a> proc-mode next-rip
+                                (<a href="COMMON-LISP____THE.html">the</a> (unsigned-byte 52)
+                                     (<a href="X86ISA_____12PREFIXES-_E3OPR.html">!prefixes-&gt;opr</a> byte prefixes))
+                                0 (<a href="COMMON-LISP____THE.html">the</a> (integer 0 15) (<a href="COMMON-LISP____1-.html">1-</a> cnt))
+                                x86))))
+     (4
+      (<a href="ACL2____MV-LET.html">mv-let</a> (flg next-rip)
+              (<a href="X86ISA____ADD-TO-_A2IP.html">add-to-*ip</a> proc-mode start-rip 1 x86)
+              (<a href="COMMON-LISP____IF.html">if</a> flg (<a href="ACL2____MV.html">mv</a> flg prefixes rex-byte x86)
+                  (<a href="X86ISA____GET-PREFIXES.html">get-prefixes</a> proc-mode next-rip
+                                (<a href="COMMON-LISP____THE.html">the</a> (unsigned-byte 52)
+                                     (<a href="X86ISA_____12PREFIXES-_E3ADR.html">!prefixes-&gt;adr</a> byte prefixes))
+                                0 (<a href="COMMON-LISP____THE.html">the</a> (integer 0 15) (<a href="COMMON-LISP____1-.html">1-</a> cnt))
+                                x86))))
+     (otherwise (<a href="ACL2____MV.html">mv</a> t prefixes rex-byte x86)))))))</pre> 
+<p><b>Theorem: </b>natp-of-get-prefixes.new-prefixes</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ natp-of-get-prefixes.new-prefixes
+ (<a href="ACL2____IMPLIES.html">implies</a> (forced-and (<a href="ACL2____NATP.html">natp</a> prefixes)
+                      (<a href="X86ISA____CANONICAL-ADDRESS-P.html">canonical-address-p</a> start-rip)
+                      (x86p x86))
+          (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?flg
+                    ?new-prefixes ?new-rex-byte ?new-x86)
+                (<a href="X86ISA____GET-PREFIXES.html">get-prefixes</a> proc-mode
+                              start-rip prefixes rex-byte cnt x86)))
+              (<a href="ACL2____NATP.html">natp</a> new-prefixes)))
+ :rule-classes :type-prescription)</pre> 
+<p><b>Theorem: </b>natp-of-get-prefixes.new-rex-byte</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ natp-of-get-prefixes.new-rex-byte
+ (<a href="ACL2____IMPLIES.html">implies</a> (forced-and (<a href="ACL2____NATP.html">natp</a> rex-byte)
+                      (<a href="ACL2____NATP.html">natp</a> prefixes)
+                      (x86p x86))
+          (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?flg
+                    ?new-prefixes ?new-rex-byte ?new-x86)
+                (<a href="X86ISA____GET-PREFIXES.html">get-prefixes</a> proc-mode
+                              start-rip prefixes rex-byte cnt x86)))
+              (<a href="ACL2____NATP.html">natp</a> new-rex-byte)))
+ :rule-classes :type-prescription)</pre> 
+<p><b>Theorem: </b>x86p-of-get-prefixes.new-x86</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ x86p-of-get-prefixes.new-x86
+ (<a href="ACL2____IMPLIES.html">implies</a> (forced-and (x86p x86)
+                      (<a href="X86ISA____CANONICAL-ADDRESS-P.html">canonical-address-p</a> start-rip))
+          (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?flg
+                    ?new-prefixes ?new-rex-byte ?new-x86)
+                (<a href="X86ISA____GET-PREFIXES.html">get-prefixes</a> proc-mode
+                              start-rip prefixes rex-byte cnt x86)))
+              (x86p new-x86)))
+ :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>prefixes-width-p-of-get-prefixes.new-prefixes</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ prefixes-width-p-of-get-prefixes.new-prefixes
+ (<a href="ACL2____IMPLIES.html">implies</a>
+  (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 52 prefixes)
+       (<a href="X86ISA____CANONICAL-ADDRESS-P.html">canonical-address-p</a> start-rip)
+       (x86p x86))
+  (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a>
+       52
+       (<a href="ACL2____MV-NTH.html">mv-nth</a> 1
+               (<a href="X86ISA____GET-PREFIXES.html">get-prefixes</a> proc-mode
+                             start-rip prefixes rex-byte cnt x86))))
+ :rule-classes
+ (:rewrite
+  (:linear
+   :corollary
+   (<a href="ACL2____IMPLIES.html">implies</a>
+    (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 52 prefixes)
+         (<a href="X86ISA____CANONICAL-ADDRESS-P.html">canonical-address-p</a> start-rip)
+         (x86p x86))
+    (<a href="COMMON-LISP____AND.html">and</a>
+     (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a>
+        0
+        (<a href="ACL2____MV-NTH.html">mv-nth</a> 1
+                (<a href="X86ISA____GET-PREFIXES.html">get-prefixes</a> proc-mode
+                              start-rip prefixes rex-byte cnt x86)))
+     (<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 1
+                (<a href="X86ISA____GET-PREFIXES.html">get-prefixes</a> proc-mode
+                              start-rip prefixes rex-byte cnt x86))
+        4503599627370496)))
+   :hints (("Goal" :in-theory (<a href="ACL2____E_F2D.html">e/d</a> nil (<a href="X86ISA____GET-PREFIXES.html">get-prefixes</a>)))))))</pre> 
+<p><b>Theorem: </b>byte-p-of-get-prefixes.new-rex-byte</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ byte-p-of-get-prefixes.new-rex-byte
+ (<a href="ACL2____IMPLIES.html">implies</a>
+  (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 8 rex-byte)
+       (<a href="ACL2____NATP.html">natp</a> prefixes)
+       (x86p x86))
+  (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a>
+       8
+       (<a href="ACL2____MV-NTH.html">mv-nth</a> 2
+               (<a href="X86ISA____GET-PREFIXES.html">get-prefixes</a> proc-mode
+                             start-rip prefixes rex-byte cnt x86))))
+ :rule-classes
+ (:rewrite
+  (:linear
+   :corollary
+   (<a href="ACL2____IMPLIES.html">implies</a>
+    (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 8 rex-byte)
+         (<a href="ACL2____NATP.html">natp</a> prefixes)
+         (x86p x86))
+    (<a href="COMMON-LISP____AND.html">and</a>
+     (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a>
+        0
+        (<a href="ACL2____MV-NTH.html">mv-nth</a> 2
+                (<a href="X86ISA____GET-PREFIXES.html">get-prefixes</a> proc-mode
+                              start-rip prefixes rex-byte cnt x86)))
+     (<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 2
+                (<a href="X86ISA____GET-PREFIXES.html">get-prefixes</a> proc-mode
+                              start-rip prefixes rex-byte cnt x86))
+        256)))
+   :hints (("Goal" :in-theory (<a href="ACL2____E_F2D.html">e/d</a> nil (<a href="X86ISA____GET-PREFIXES.html">get-prefixes</a>)))))))</pre> 
+<p><b>Theorem: </b>get-prefixes-does-not-modify-x86-state-in-app-view</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> get-prefixes-does-not-modify-x86-state-in-app-view
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?flg
+                  ?new-prefixes ?new-rex-byte ?new-x86)
+              (<a href="X86ISA____GET-PREFIXES.html">get-prefixes</a> proc-mode
+                            start-rip prefixes rex-byte cnt x86)))
+            (<a href="ACL2____IMPLIES.html">implies</a> (<a href="X86ISA____APP-VIEW.html">app-view</a> x86)
+                     (<a href="COMMON-LISP____EQUAL.html">equal</a> new-x86 x86))))</pre> 
+<p><b>Theorem: </b>get-prefixes-does-not-modify-x86-state-in-system-level-non-marking-view</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ get-prefixes-does-not-modify-x86-state-in-system-level-non-marking-view
+ (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?flg
+           ?new-prefixes ?new-rex-byte ?new-x86)
+       (<a href="X86ISA____GET-PREFIXES.html">get-prefixes</a> proc-mode
+                     start-rip prefixes rex-byte cnt x86)))
+     (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="X86ISA____APP-VIEW.html">app-view</a> x86))
+                   (<a href="COMMON-LISP____NOT.html">not</a> (marking-view x86))
+                   (x86p x86)
+                   (<a href="COMMON-LISP____NOT.html">not</a> flg))
+              (<a href="COMMON-LISP____EQUAL.html">equal</a> new-x86 x86))))</pre> 
+<p><b>Theorem: </b>num-prefixes-get-prefixes-bound</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ num-prefixes-get-prefixes-bound
+ (<a href="ACL2____IMPLIES.html">implies</a>
+  (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> cnt 15)
+       (x86p x86)
+       (<a href="X86ISA____CANONICAL-ADDRESS-P.html">canonical-address-p</a> start-rip)
+       (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 52 prefixes)
+       (<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="ACL2____PART-SELECT.html">part-select</a> prefixes :low 0 :high 2)
+          5))
+  (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a>
+   (<a href="X86ISA____PREFIXES-_E3NUM.html">prefixes-&gt;num</a>
+        (<a href="ACL2____MV-NTH.html">mv-nth</a> 1
+                (<a href="X86ISA____GET-PREFIXES.html">get-prefixes</a> proc-mode
+                              start-rip prefixes rex-byte cnt x86)))
+   15))
+ :rule-classes :linear)</pre> 
+<p><b>Theorem: </b>get-prefixes-opener-lemma-zero-cnt</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+  get-prefixes-opener-lemma-zero-cnt
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____ZP.html">zp</a> cnt)
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="X86ISA____GET-PREFIXES.html">get-prefixes</a> proc-mode
+                                start-rip prefixes rex-byte cnt x86)
+                  (<a href="ACL2____MV.html">mv</a> t prefixes rex-byte x86))))</pre> 
+<p><b>Theorem: </b>get-prefixes-opener-lemma-no-prefix-byte</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ get-prefixes-opener-lemma-no-prefix-byte
+ (<a href="ACL2____IMPLIES.html">implies</a>
+  (<a href="ACL2____B_A2.html">b*</a>
+    (((<a href="ACL2____MV.html">mv</a> flg byte &amp;)
+      (<a href="X86ISA____RME08.html">rme08</a> proc-mode start-rip 1 :x x86))
+     (prefix-byte-group-code (<a href="X86ISA____GET-ONE-BYTE-PREFIX-ARRAY-CODE.html">get-one-byte-prefix-array-code</a> byte)))
+    (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____NOT.html">not</a> flg)
+         (<a href="ACL2____ZP.html">zp</a> prefix-byte-group-code)
+         (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> proc-mode 0)
+             (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____ASH.html">ash</a> byte -4) 4))
+             t)
+         (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____ZP.html">zp</a> cnt))))
+  (<a href="COMMON-LISP____EQUAL.html">equal</a>
+   (<a href="X86ISA____GET-PREFIXES.html">get-prefixes</a> proc-mode
+                 start-rip prefixes rex-byte cnt x86)
+   (<a href="COMMON-LISP____LET.html">let</a>
+     ((<a href="X86ISA____PREFIXES.html">prefixes</a> (<a href="X86ISA_____12PREFIXES-_E3NXT.html">!prefixes-&gt;nxt</a>
+                     (<a href="ACL2____MV-NTH.html">mv-nth</a> 1 (<a href="X86ISA____RME08.html">rme08</a> proc-mode start-rip 1 :x x86))
+                     prefixes)))
+     (<a href="ACL2____MV.html">mv</a> nil (<a href="X86ISA_____12PREFIXES-_E3NUM.html">!prefixes-&gt;num</a> (<a href="COMMON-LISP____-.html">-</a> 15 cnt) prefixes)
+         rex-byte
+         (<a href="ACL2____MV-NTH.html">mv-nth</a> 2
+                 (<a href="X86ISA____RME08.html">rme08</a> proc-mode start-rip 1
+                        :x x86)))))))</pre> 
+<p><b>Theorem: </b>get-prefixes-opener-lemma-no-legacy-prefix-but-rex-prefix</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ get-prefixes-opener-lemma-no-legacy-prefix-but-rex-prefix
+ (<a href="ACL2____IMPLIES.html">implies</a>
+  (<a href="ACL2____B_A2.html">b*</a>
+    (((<a href="ACL2____MV.html">mv</a> flg byte &amp;)
+      (<a href="X86ISA____RME08.html">rme08</a> proc-mode start-rip 1 :x x86))
+     (prefix-byte-group-code (<a href="X86ISA____GET-ONE-BYTE-PREFIX-ARRAY-CODE.html">get-one-byte-prefix-array-code</a> byte)))
+    (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> proc-mode 0)
+         (<a href="COMMON-LISP____NOT.html">not</a> flg)
+         (<a href="ACL2____ZP.html">zp</a> prefix-byte-group-code)
+         (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____ASH.html">ash</a> byte -4) 4)
+         (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____ZP.html">zp</a> cnt))))
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="X86ISA____GET-PREFIXES.html">get-prefixes</a> proc-mode
+                       start-rip prefixes rex-byte cnt x86)
+         (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> &amp; byte byte-x86)
+               (<a href="X86ISA____RME08.html">rme08</a> proc-mode start-rip 1 :x x86))
+              ((<a href="ACL2____MV.html">mv</a> flg next-rip)
+               (<a href="X86ISA____ADD-TO-_A2IP.html">add-to-*ip</a> proc-mode start-rip 1 byte-x86)))
+             (<a href="COMMON-LISP____IF.html">if</a> flg (<a href="ACL2____MV.html">mv</a> flg prefixes rex-byte byte-x86)
+                 (<a href="X86ISA____GET-PREFIXES.html">get-prefixes</a> proc-mode
+                               next-rip prefixes byte (<a href="COMMON-LISP____1-.html">1-</a> cnt)
+                               byte-x86))))))</pre> 
+<p><b>Theorem: </b>get-prefixes-opener-lemma-group-1-prefix</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ get-prefixes-opener-lemma-group-1-prefix
+ (<a href="ACL2____B_A2.html">b*</a>
+   (((<a href="ACL2____MV.html">mv</a> flg byte x86)
+     (<a href="X86ISA____RME08.html">rme08</a> proc-mode start-rip 1 :x x86))
+    (prefix-byte-group-code (<a href="X86ISA____GET-ONE-BYTE-PREFIX-ARRAY-CODE.html">get-one-byte-prefix-array-code</a> byte)))
+   (<a href="ACL2____IMPLIES.html">implies</a>
+        (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____OR.html">or</a> (<a href="X86ISA____APP-VIEW.html">app-view</a> x86)
+                 (<a href="COMMON-LISP____NOT.html">not</a> (marking-view x86)))
+             (<a href="COMMON-LISP____NOT.html">not</a> flg)
+             (<a href="COMMON-LISP____EQUAL.html">equal</a> prefix-byte-group-code 1)
+             (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____ZP.html">zp</a> cnt))
+             (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 0
+                          (<a href="X86ISA____ADD-TO-_A2IP.html">add-to-*ip</a> proc-mode start-rip 1 x86))))
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="X86ISA____GET-PREFIXES.html">get-prefixes</a> proc-mode
+                             start-rip prefixes rex-byte cnt x86)
+               (<a href="COMMON-LISP____LET.html">let</a> ((<a href="X86ISA____PREFIXES.html">prefixes</a> (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> byte 240)
+                                   (<a href="X86ISA_____12PREFIXES-_E3LCK.html">!prefixes-&gt;lck</a> byte prefixes)
+                                   (<a href="X86ISA_____12PREFIXES-_E3REP.html">!prefixes-&gt;rep</a> byte prefixes))))
+                    (<a href="X86ISA____GET-PREFIXES.html">get-prefixes</a> proc-mode (<a href="COMMON-LISP____1_B2.html">1+</a> start-rip)
+                                  prefixes 0 (<a href="COMMON-LISP____1-.html">1-</a> cnt)
+                                  x86))))))</pre> 
+<p><b>Theorem: </b>get-prefixes-opener-lemma-group-2-prefix</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ get-prefixes-opener-lemma-group-2-prefix
+ (<a href="ACL2____B_A2.html">b*</a>
+    (((<a href="ACL2____MV.html">mv</a> flg byte byte-x86)
+      (<a href="X86ISA____RME08.html">rme08</a> proc-mode start-rip 1 :x x86))
+     (prefix-byte-group-code (<a href="X86ISA____GET-ONE-BYTE-PREFIX-ARRAY-CODE.html">get-one-byte-prefix-array-code</a> byte)))
+    (<a href="ACL2____IMPLIES.html">implies</a>
+         (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____OR.html">or</a> (<a href="X86ISA____APP-VIEW.html">app-view</a> x86)
+                  (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="X86ISA____APP-VIEW.html">app-view</a> x86))
+                       (<a href="COMMON-LISP____NOT.html">not</a> (marking-view x86))))
+              (<a href="COMMON-LISP____NOT.html">not</a> flg)
+              (<a href="COMMON-LISP____EQUAL.html">equal</a> prefix-byte-group-code 2)
+              (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____ZP.html">zp</a> cnt))
+              (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 0
+                           (<a href="X86ISA____ADD-TO-_A2IP.html">add-to-*ip</a> proc-mode start-rip 1 x86))))
+         (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="X86ISA____GET-PREFIXES.html">get-prefixes</a> proc-mode
+                              start-rip prefixes rex-byte cnt x86)
+                (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQL.html">eql</a> proc-mode 0)
+                             (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> byte 100) (<a href="COMMON-LISP____EQUAL.html">equal</a> byte 101)))
+                        (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQL.html">eql</a> proc-mode 0)))
+                    (<a href="X86ISA____GET-PREFIXES.html">get-prefixes</a> proc-mode (<a href="COMMON-LISP____1_B2.html">1+</a> start-rip)
+                                  (<a href="X86ISA_____12PREFIXES-_E3SEG.html">!prefixes-&gt;seg</a> byte prefixes)
+                                  0 (<a href="COMMON-LISP____1-.html">1-</a> cnt)
+                                  byte-x86)
+                    (<a href="X86ISA____GET-PREFIXES.html">get-prefixes</a> proc-mode (<a href="COMMON-LISP____1_B2.html">1+</a> start-rip)
+                                  prefixes 0 (<a href="COMMON-LISP____1-.html">1-</a> cnt)
+                                  byte-x86))))))</pre> 
+<p><b>Theorem: </b>get-prefixes-opener-lemma-group-3-prefix</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ get-prefixes-opener-lemma-group-3-prefix
+ (<a href="ACL2____IMPLIES.html">implies</a>
+  (<a href="COMMON-LISP____AND.html">and</a>
+   (<a href="COMMON-LISP____OR.html">or</a> (<a href="X86ISA____APP-VIEW.html">app-view</a> x86)
+       (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="X86ISA____APP-VIEW.html">app-view</a> x86))
+            (<a href="COMMON-LISP____NOT.html">not</a> (marking-view x86))))
+   (<a href="COMMON-LISP____LET_A2.html">let*</a> ((flg (<a href="ACL2____MV-NTH.html">mv-nth</a> 0 (<a href="X86ISA____RME08.html">rme08</a> proc-mode start-rip 1 :x x86)))
+          (prefix-byte-group-code
+               (<a href="X86ISA____GET-ONE-BYTE-PREFIX-ARRAY-CODE.html">get-one-byte-prefix-array-code</a>
+                    (<a href="ACL2____MV-NTH.html">mv-nth</a> 1
+                            (<a href="X86ISA____RME08.html">rme08</a> proc-mode start-rip 1 :x x86)))))
+         (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____NOT.html">not</a> flg)
+              (<a href="COMMON-LISP____EQUAL.html">equal</a> prefix-byte-group-code 3)))
+   (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____ZP.html">zp</a> cnt))
+   (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 0
+                (<a href="X86ISA____ADD-TO-_A2IP.html">add-to-*ip</a> proc-mode start-rip 1 x86))))
+  (<a href="COMMON-LISP____EQUAL.html">equal</a>
+   (<a href="X86ISA____GET-PREFIXES.html">get-prefixes</a> proc-mode
+                 start-rip prefixes rex-byte cnt x86)
+   (<a href="X86ISA____GET-PREFIXES.html">get-prefixes</a>
+     proc-mode (<a href="COMMON-LISP____1_B2.html">1+</a> start-rip)
+     (<a href="X86ISA_____12PREFIXES-_E3OPR.html">!prefixes-&gt;opr</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 1 (<a href="X86ISA____RME08.html">rme08</a> proc-mode start-rip 1 :x x86))
+                     prefixes)
+     0 (<a href="COMMON-LISP____1-.html">1-</a> cnt)
+     x86))))</pre> 
+<p><b>Theorem: </b>get-prefixes-opener-lemma-group-4-prefix</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ get-prefixes-opener-lemma-group-4-prefix
+ (<a href="ACL2____IMPLIES.html">implies</a>
+  (<a href="COMMON-LISP____AND.html">and</a>
+   (<a href="COMMON-LISP____OR.html">or</a> (<a href="X86ISA____APP-VIEW.html">app-view</a> x86)
+       (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="X86ISA____APP-VIEW.html">app-view</a> x86))
+            (<a href="COMMON-LISP____NOT.html">not</a> (marking-view x86))))
+   (<a href="COMMON-LISP____LET_A2.html">let*</a> ((flg (<a href="ACL2____MV-NTH.html">mv-nth</a> 0 (<a href="X86ISA____RME08.html">rme08</a> proc-mode start-rip 1 :x x86)))
+          (prefix-byte-group-code
+               (<a href="X86ISA____GET-ONE-BYTE-PREFIX-ARRAY-CODE.html">get-one-byte-prefix-array-code</a>
+                    (<a href="ACL2____MV-NTH.html">mv-nth</a> 1
+                            (<a href="X86ISA____RME08.html">rme08</a> proc-mode start-rip 1 :x x86)))))
+         (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____NOT.html">not</a> flg)
+              (<a href="COMMON-LISP____EQUAL.html">equal</a> prefix-byte-group-code 4)))
+   (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____ZP.html">zp</a> cnt))
+   (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 0
+                (<a href="X86ISA____ADD-TO-_A2IP.html">add-to-*ip</a> proc-mode start-rip 1 x86))))
+  (<a href="COMMON-LISP____EQUAL.html">equal</a>
+   (<a href="X86ISA____GET-PREFIXES.html">get-prefixes</a> proc-mode
+                 start-rip prefixes rex-byte cnt x86)
+   (<a href="X86ISA____GET-PREFIXES.html">get-prefixes</a>
+     proc-mode (<a href="COMMON-LISP____1_B2.html">1+</a> start-rip)
+     (<a href="X86ISA_____12PREFIXES-_E3ADR.html">!prefixes-&gt;adr</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 1 (<a href="X86ISA____RME08.html">rme08</a> proc-mode start-rip 1 :x x86))
+                     prefixes)
+     0 (<a href="COMMON-LISP____1-.html">1-</a> cnt)
+     x86))))</pre> 
+<p><b>Theorem: </b>64-bit-modep-of-get-prefixes</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> 64-bit-modep-of-get-prefixes
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?flg
+                  ?new-prefixes ?new-rex-byte ?new-x86)
+              (<a href="X86ISA____GET-PREFIXES.html">get-prefixes</a> proc-mode
+                            start-rip prefixes rex-byte cnt x86)))
+            (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="X86ISA____64-BIT-MODEP.html">64-bit-modep</a> new-x86)
+                   (<a href="X86ISA____64-BIT-MODEP.html">64-bit-modep</a> x86))))</pre> 
+<p><b>Theorem: </b>x86-operation-mode-of-get-prefixes</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> x86-operation-mode-of-get-prefixes
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?flg
+                  ?new-prefixes ?new-rex-byte ?new-x86)
+              (<a href="X86ISA____GET-PREFIXES.html">get-prefixes</a> proc-mode
+                            start-rip prefixes rex-byte cnt x86)))
+            (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="X86ISA____X86-OPERATION-MODE.html">x86-operation-mode</a> new-x86)
+                   (<a href="X86ISA____X86-OPERATION-MODE.html">x86-operation-mode</a> x86))))</pre> 
+
+</body>
+</html>

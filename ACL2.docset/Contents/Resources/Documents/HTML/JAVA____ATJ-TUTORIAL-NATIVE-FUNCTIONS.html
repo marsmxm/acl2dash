@@ -1,0 +1,96 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Atj-tutorial-native-functions</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=JAVA____ATJ-TUTORIAL-NATIVE-FUNCTIONS">Click for Atj-tutorial-native-functions in the Full Manual</a></h3>
+
+<p>ATJ tutorial: Native Java Implementations of ACL2 Functions.</p><p>The <a href="ACL2____PRIMITIVE.html">ACL2 primitive functions</a> have no definition. 
+    Thus, they cannot be translated to Java 
+    in the same way as functions with defining bodies can. <a href="JAVA____ATJ-TUTORIAL-AIJ.html">AIJ</a> provides native Java implementations 
+    of the ACL2 primitive functions, 
+    i.e. implementations of the ACL2 primitive functions 
+    written directly in Java. 
+    (Here `native' is with respect to ACL2, not Java; 
+    it has nothing to do with <a href="https://docs.oracle.com/javase/10/docs/specs/jni" target="_blank"><nobr>JNI<img src="../Icon_External_Link.png" title="External link to https://docs.oracle.com/javase/10/docs/specs/jni"></nobr></a>.) 
+     These native implementations are used in both <a href="JAVA____ATJ-TUTORIAL-DEEP-SHALLOW.html">the deep and shallow embedding approaches</a>. 
+    This tutorial page may be skipped at first reading.</p><h5>Accessing the Native Implementations</h5><p>These native implementations are run via 
+    the public static methods <span class="v">Acl2NativeFunction.exec...(...)</span>; 
+    this class is part of <a href="JAVA____ATJ-TUTORIAL-ACL2-TERMS.html">AIJ's representation of ACL2 terms</a>. For instance, <span class="v">Acl2NativeFunction.execStringp(Acl2Value)</span> 
+    natively implements <span class="tt"><a href="COMMON-LISP____STRINGP.html">stringp</a></span>.</p><p>Some of these methods have overloaded variants 
+    with different argument types, 
+    e.g. <span class="v">Acl2NativeFunction.execCharCode(Acl2Character)</span>; 
+    they also have non-overloaded variants with different result types, 
+    e.g. <span class="v">Acl2NativeFunction.execStringpBoolean(Acl2Value)</span>. 
+    Their purpose is explained elsewhere. 
+    For now, just consider the methods 
+    with all <span class="v">Acl2Value</span> arguments and results.</p><h5>Scope of the Native Implementations</h5><p>Besides native implementations of the ACL2 primitive functions, 
+    there are also native implementations of other built-in ACL2 functions, 
+    e.g. <span class="v">Acl2NativeFunction.execStringAppend(Acl2Value, Acl2Value)</span> 
+    for <span class="tt"><a href="ACL2____STRING-APPEND.html">string-append</a></span>. 
+    The main motivation is efficiency: 
+    a native Java implementation can be faster than 
+    mimicking ACL2's execution (in either the deep or shallow embedding). 
+    In fact, this is also why some built-in ACL2 functions have raw Lisp code, 
+    i.e. native Lisp implementations (see <a href="JAVA____ATJ-TUTORIAL-BACKGROUND.html">atj-tutorial-background</a>). 
+    Another motivation is to avoid circularities 
+    that exist in the ACL2 definitions 
+    unless the raw Lisp code is taken into account; 
+    an example circularity, involving <span class="tt"><a href="COMMON-LISP____CONCATENATE.html">concatenate</a></span>, 
+    is described in <a href="JAVA____ATJ-TUTORIAL-BACKGROUND.html">atj-tutorial-background</a>.</p><p>More native Java implementations can be added to AIJ as needed; 
+    it could be argued that all the ACL2 functions with raw Lisp code 
+    should be implemented natively in Java in AIJ, for ``symmetry''. 
+    The only drawback, besides the effort to do that, 
+    is a weakening of the assurance argument; 
+    however, for true assurance, 
+    the primitive function implementations will have to be formally verified, 
+    and if the machinery to do that is in place, 
+    formally verifying the non-primitive function implementations 
+    may not entail significantly more effort, 
+    or at least not ``superlinear'' effort.</p><h5>Implementation Approach</h5><p>Generally, AIJ's native Java implementations of ACL2 functions 
+    are realized by methods in <span class="v">Acl2Value</span> and its subclasses, 
+    called by the <span class="v">Acl2NativeFunction.exec...(...)</span> methods. 
+    This takes advantage of Java's dynamic dispatch 
+    to avoid checking types at run time.</p><p>For example, to implement <span class="tt"><a href="COMMON-LISP____STRINGP.html">stringp</a></span>, 
+    the <span class="v">Acl2Value.stringp()</span> method returns 
+    (the Java representation of) <span class="v">nil</span>; 
+    this default implementation is inherited 
+    by all the <span class="v">Acl2Value</span> subclasses except <span class="v">Acl2String</span>, 
+    which overrides it to return <span class="v">t</span> instead. 
+    <span class="v">Acl2NativeFunction.execStringp(Acl2Value)</span> 
+    invokes <span class="v">stringp()</span> on its argument: 
+    this selects, in constant time (via Java's dynamic dispatch), 
+    either the default implementation or the overriding one, 
+    based on the run-time type type of the argument <span class="v">Acl2Value</span>.</p><p>As another example, to implement <span class="tt"><a href="COMMON-LISP____CHAR-CODE.html">char-code</a></span>, 
+    the <span class="v">Acl2Value.charCode()</span> method returns 0, 
+    because this function's completion axiom says that 
+    this function returns 0 on non-characters; 
+    this default implementation is inherited 
+    by all the <span class="v">Acl2Value</span> subclasses except for <span class="v">Acl2Character</span>, 
+    which overrides it to return the character's code instead. 
+    <span class="v">Acl2NativeFunction.execCharCode(Acl2Value)</span> 
+    invokes <span class="v">charCode()</span> on its argument: 
+    this selects, in constant time (via Java's dynamic dispatch), 
+    either the default implementation or the overriding one, 
+    based on the run-time type of the argument <span class="v">Acl2Value</span>.</p><p>The ACL2 primitive functions for arithmetic (e.g. <span class="tt"><a href="ACL2____BINARY-_B2.html">binary-+</a></span>) 
+    are implemented by methods in <span class="v">Acl2Value</span> and subclasses 
+    that exhibit interesting patterns of dynamic dispatch 
+    and interplay among the methods for different operations; 
+    see AIJ's code and Javadoc for details.</p><h5>Another Possible Implementation Approach</h5><p>Instead of taking advantage of dynamic dispatch, 
+    an alternative implementation strategy could use 
+    run-time type checks and casts.</p><p>For example, <span class="v">Acl2NativeFunction.execStringp(Acl2Value)</span> 
+    could test whether the argument is an instance of <span class="v">Acl2String</span>, 
+    and return <span class="v">t</span> or <span class="v">nil</span> accordingly.</p><p>As another example, <span class="v">Acl2NativeFunction.execCharCode(Acl2Value)</span> 
+    could test whether the argument is an instance of <span class="v">Acl2Character</span>, 
+    and return the character's code or 0 accordingly.</p><p>It is not clear which approach is more efficient 
+    (dynamic dispatch or type checks/casts): 
+    on the one hand, it seems that dynamic dispatch should be more efficient; 
+    on the other hand, since type checks/casts are relatively frequent in Java, 
+    they are presumably realized efficiently in Java implementations. 
+    In any case, the dynamic dispatch approach looks elegant 
+    and is appropriate to Java's object-oriented paradigm.</p><div class="box"></div><p><b>Previous:</b> <a href="JAVA____ATJ-TUTORIAL-ACL2-ENVIRONMENT.html">Java Representation of the ACL2 Environment</a></p><p><b>Next:</b> <a href="JAVA____ATJ-TUTORIAL-EVALUATOR.html">ACL2 Evaluator Written in Java</a></p>
+</body>
+</html>

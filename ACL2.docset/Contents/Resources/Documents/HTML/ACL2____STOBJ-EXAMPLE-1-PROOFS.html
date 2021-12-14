@@ -1,0 +1,145 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Stobj-example-1-proofs</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____STOBJ-EXAMPLE-1-PROOFS">Click for Stobj-example-1-proofs in the Full Manual</a></h3>
+
+<p>Some proofs involving the <span class="v">counters</span> stobj</p><p>Consider again the event</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFSTOBJ.html">defstobj</a> counters
+  (NodeCnt     :type integer :initially 0)
+  (TipCnt      :type integer :initially 0)
+  (IntTipsSeen :type t       :initially nil))</pre> 
+ 
+ <p>discussed in <a href="ACL2____STOBJ-EXAMPLE-1.html">stobj-example-1</a>, followed by the definition</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> reset-counters (counters)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (counters)))
+  (<a href="ACL2____SEQ.html">seq</a> counters
+       (update-NodeCnt 0 counters)
+       (update-TipCnt 0 counters)
+       (update-IntTipsSeen nil counters)))</pre> 
+ 
+ <p>which, because of the <span class="v">seq</span> macro in <a href="ACL2____STOBJ-EXAMPLE-1.html">stobj-example-1</a>, is just 
+ syntactic sugar for</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> reset-counters (counters)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (counters)))
+  (<a href="COMMON-LISP____LET.html">let</a> ((counters (update-NodeCnt 0 counters)))
+    (<a href="COMMON-LISP____LET.html">let</a> ((counters (update-TipCnt 0 counters)))
+      (update-IntTipsSeen nil counters)))).</pre> 
+ 
+ <p>Here is a simple theorem about <span class="v">reset-counters</span>.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> reset-counters-is-constant
+  (<a href="ACL2____IMPLIES.html">implies</a> (countersp x)
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (reset-counters x)
+                  '(0 0 nil))))</pre> 
+ 
+ <p>Before we talk about how to prove this theorem, note that the theorem is 
+ unusual in two respects.</p> 
+ 
+ <p>First, it calls <span class="v">reset-counters</span> on an argument other than the variable 
+ <span class="v">counters</span>!  That is allowed in theorems; logically speaking, the stobj 
+ functions are indistinguishable from ordinary functions.  Their use is 
+ syntactically restricted only in <span class="v">defun</span>s, which might be compiled and run 
+ in raw Lisp.  Those restrictions allow us to implement stobj modification 
+ destructively.  But logically speaking, <span class="v">reset-counters</span> and other stobj 
+ ``modifying'' functions just create new objects, constructively.</p> 
+ 
+ <p>Second, the theorem above explicitly provides the hypothesis that 
+ <span class="v">reset-counters</span> is being applied to an object satisfying <span class="v">countersp</span>. 
+ Such a hypothesis is not always required: <span class="v">reset-counters</span> is total and 
+ will do something no matter what <span class="v">x</span> is.  But in this particular case, the 
+ result is not <span class="v">'(0 0 nil)</span> unless <span class="v">x</span> is, at least, a true-list of 
+ length three.</p> 
+ 
+ <p>To make a long story short, to prove theorems about stobj functions you 
+ behave in exactly the way you would to prove the same theorems about the same 
+ functions defined without the stobj features.</p> 
+ 
+ <p>How can we prove the above theorem?  Unfolding the definition of 
+ <span class="v">reset-counters</span> shows that <span class="v">(reset-counters x)</span> is equal to</p> 
+ 
+ <pre class="code">(update-IntTipsSeen nil
+  (update-TipCnt 0
+    (update-NodeCnt 0 x)))</pre> 
+ 
+ <p>which in turn is</p> 
+ 
+ <pre class="code">(<a href="ACL2____UPDATE-NTH.html">update-nth</a> 2 nil
+ (<a href="ACL2____UPDATE-NTH.html">update-nth</a> 1 0
+  (<a href="ACL2____UPDATE-NTH.html">update-nth</a> 0 0 x))).</pre> 
+ 
+ <p>Opening up the definition of <span class="v">update-nth</span> reduces this to</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____LIST_A2.html">list*</a> 0 0 nil (<a href="COMMON-LISP____CDDDR.html">cdddr</a> x)).</pre> 
+ 
+ <p>This is clearly equal to <span class="v">'(0 0 nil)</span>, provided we know that <span class="v">(<a href="COMMON-LISP____CDDDR.html">cdddr</a>
+ x)</span> is <span class="v">nil</span>.</p> 
+ 
+ <p>Unfortunately, that last fact requires a lemma.  The most specific lemma we 
+ could provide is</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> special-lemma-for-counters
+  (<a href="ACL2____IMPLIES.html">implies</a> (countersp x)
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____CDDDR.html">cdddr</a> x) nil)))</pre> 
+ 
+ <p>but if you try to prove that lemma you will find that it requires some 
+ reasoning about <span class="v">len</span> and <span class="v">true-listp</span>.  Furthermore, the special lemma 
+ above is of interest only for <span class="v">counters</span>.</p> 
+ 
+ <p>The following lemma about <span class="v">len</span> is the one we prefer.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> equal-len-n
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____SYNTAXP.html">syntaxp</a> (<a href="ACL2____QUOTEP.html">quotep</a> n))
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____LEN.html">len</a> x) n)
+                  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> n)
+                      (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP_____C3.html">&lt;</a> n 0)
+                          nil
+                        (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> n 0)
+                            (<a href="COMMON-LISP____ATOM.html">atom</a> x)
+                          (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x)
+                               (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____LEN.html">len</a> (<a href="COMMON-LISP____CDR.html">cdr</a> x)) (<a href="COMMON-LISP____-.html">-</a> n 1)))))
+                    nil))))</pre> 
+ 
+ <p>This lemma will simplify any equality in which a <span class="v">len</span> expression is 
+ equated to any explicitly given constant <i>n</i>, e.g., <span class="v">3</span>, reducing the 
+ equation to a conjunction of <span class="v">consp</span> terms about the first <i>n</i> 
+ <span class="v">cdr</span>s.</p> 
+ 
+ <p>If the above lemma is available then ACL2 immediately proves</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> reset-counters-is-constant
+  (<a href="ACL2____IMPLIES.html">implies</a> (countersp x)
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (reset-counters x)
+                  '(0 0 nil))))</pre> 
+ 
+ <p>The point is presumably well made: proving theorems about single-threaded 
+ object accessors and updaters is no different than proving theorems about 
+ other recursively defined functions on lists.</p> 
+ 
+ <p>As we have seen, operations on <a href="ACL2____STOBJ.html">stobj</a>s turn into definitions 
+ involving <span class="tt"><a href="COMMON-LISP____NTH.html">nth</a></span> and <span class="tt"><a href="ACL2____UPDATE-NTH.html">update-nth</a></span> in the logic.  Here are two 
+ lemmas, both due to Matt Wilding, that are useful for simplifying terms 
+ involving <span class="v">nth</span> and <span class="v">update-nth</span>, which are therefore useful in 
+ reasoning about single-threaded objects.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> update-nth-update-nth-same
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____NFIX.html">nfix</a> i1) (<a href="ACL2____NFIX.html">nfix</a> i2))
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____UPDATE-NTH.html">update-nth</a> i1 v1 (<a href="ACL2____UPDATE-NTH.html">update-nth</a> i2 v2 l))
+                  (<a href="ACL2____UPDATE-NTH.html">update-nth</a> i1 v1 l))))
+
+(<a href="ACL2____DEFTHM.html">defthm</a> update-nth-update-nth-diff
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____NFIX.html">nfix</a> i1) (<a href="ACL2____NFIX.html">nfix</a> i2)))
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____UPDATE-NTH.html">update-nth</a> i1 v1 (<a href="ACL2____UPDATE-NTH.html">update-nth</a> i2 v2 l))
+                  (<a href="ACL2____UPDATE-NTH.html">update-nth</a> i2 v2 (<a href="ACL2____UPDATE-NTH.html">update-nth</a> i1 v1 l))))
+  :rule-classes ((:rewrite :loop-stopper ((i1 i2)))))</pre> 
+ 
+ <p>We now recommend that you see <a href="ACL2____STOBJ-EXAMPLE-2.html">stobj-example-2</a>.</p>
+</body>
+</html>

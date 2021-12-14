@@ -1,0 +1,88 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Addnames</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL____ADDNAMES">Click for Addnames in the Full Manual</a></h3>
+
+<p>Name any unnamed gate instances, block statements, generates, etc.</p><p>Note: We used to name everything fairly arbitrarily, as 
+unnamed_elemtype_nnn, where "nnn" was a globally-unique number.  But this 
+turns out to be too fragile -- a localized design change can nonlocally affect 
+the numbering everywhere.  We ran into this when specifying signals for a 
+decomposition; those signals happened to be inside an unnamed generate block, 
+which likely would mean we'd have to change the signal names often as the 
+design changed.</p> 
+ 
+<p>In fact, there is a System Verilog spec-mandated scheme for naming unnamed 
+generate blocks, from Sec. 27.6 of the IEEE spec.  The names generated are 
+"genblkN", numbered within each scope starting at 1.  Explicitly named 
+generate blocks still take up an index -- the index N indicates the Nth 
+generate block in the scope, not the Nth unnamed generate block.  If another 
+item is named e.g. "genblk5", then leading zeros are added to the numeral 
+until there's no conflict, e.g. "genblk005".</p> 
+ 
+<p>A complication: if the name to be introduced exists in a higher scope, then 
+a reference to that name in the current scope (or below) now refers to the 
+genblock, not to the item from the higher scope.  E.g.:</p> 
+<pre class="code">module top;
+  wire genblk1;
+  if (1) begin // genblk01, to avoid conflict
+     if (1) begin // genblk1
+        wire b;
+     end
+     wire a = genblk1; // !!
+  end
+endmodule</pre> 
+ 
+<p>Implementations are split on what happens here.  NCVerilog allows the 
+reference to genblk1 to refer to the wire, while still naming the inner scope 
+genblk1 (in, e.g., VCD dumps).  So evidently the generate block is named 
+genblk1, but is not found when looking up module item genblk1.  (This is OK 
+because you're not allowed to use hierarchical references through unnamed 
+generate blocks.)  VCS complains about the reference to genblk1, nonsensically 
+saying it hasn't been declared yet.  Perhaps what it really means is that it 
+interprets the reference as a reference to the generate block, which isn't 
+allowed, and the error message just is making some invalid assumption about 
+what went wrong.  When the reference is removed, a VCD dump also indicates that 
+the inner block is called genblk1.</p> 
+ 
+<p>Summary: Both implementations agree that the inner block is called genblk1, 
+but they don't agree on whether a reference to wire genblk1 is disturbed by its 
+presence; ncv thinks it isn't, vcs thinks it is.</p> 
+ 
+<p>The situation changes again if there is a hierarchical reference through a 
+scope named genblk1:</p> 
+<pre class="code">module sub;
+  wire [3:0] foo = 2;
+endmodule
+module top;
+ sub genblk1 ();
+ if (1) begin // genblk01
+   if (1) begin // genblk1
+     wire [3:0] foo = 1;
+   end
+   wire [3:0] fooref = genblk1.foo + 8;
+ end
+endmodule</pre> 
+ 
+<p>Here ncv complains that implicit names aren't allowed in hierarchical names, 
+whereas VCS happily runs, with the value of fooref ending up as 9, indicating 
+that it took genblk1 as referring to the generate block, not the module 
+instance.</p> 
+ 
+<p>So for now, because it's simple, we'll go with VCS's behavior: unnamed 
+generate blocks become full named members of the hierarchy that can be looked 
+up by name.</p> 
+ 
+<p>The situation is tricky with elements other than generate blocks, because 
+implementations aren't supposed to give them names.  However, the other 
+elements we plan to name are ports, module and gate instances, and block 
+statements.  Ports and block statements aren't referenceable by HIDs, so they 
+won't interfere with any lookups.  Module and gate instances might, though. 
+BOZO Our solution for now is just to assume that we've chosen obscure enough 
+generated instance names that there won't be any conflicts.</p>
+</body>
+</html>

@@ -1,0 +1,95 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Fgl-counterexamples</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=FGL____FGL-COUNTEREXAMPLES">Click for Fgl-counterexamples in the Full Manual</a></h3>
+
+<p>Generating counterexamples from SAT checks in FGL</p><p>When FGL calls a SAT solver and it returns a satisfying assignment, 
+what we actually have is an assignment for the Boolean variables associated 
+with various symbolic objects in the Boolean variable database.  Often what we 
+really want is an assignment to the original variables of the theorem, or to 
+certain objects within our local context.  This topic discusses FGL's method of 
+deriving a term-level counterexample from a Boolean-level counterexample.</p> 
+ 
+<p>Note that what we are trying to do is not always possible! The underlying 
+problem is undecidable, and it depends very much on the set of rules in use 
+whether there might be interdependencies among the Boolean variables such that 
+the satisfying assignment for the SAT problem can't be realized in terms of the 
+theorem variables.  For example, if one Boolean variable is associated with 
+<span class="v">(<a href="COMMON-LISP____LOGBITP.html">logbitp</a> 0 x)</span> and assigned <span class="v">T</span> but another variable is associated with 
+<span class="v">(intcar x)</span> and assigned <span class="v">NIL</span>, that assignment can't be realized 
+because the two expressions are equal.  This topic as well as <a href="FGL____FGL-GETTING-BITS-FROM-OBJECTS.html">fgl-getting-bits-from-objects</a> offer advice for avoiding these 
+interdependencies and ensuring that term-level counterexamples may be easily 
+derived from Boolean satisfying assignments.</p> 
+ 
+<p>The input to our computation is essentially an assignment of Boolean values 
+to various FGL objects, namely the ones associated with Boolean variables in 
+the Boolean variable database.  More specifically, we have the <span class="v">bvar-db</span> 
+mapping Boolean variables to FGL objects and an <span class="v">env</span>, the satisfying 
+assignment for these Boolean variables; but we can view this as an assignment 
+of values to FGL objects instead, since the names of the Boolean variables are 
+interchangeable.</p> 
+ 
+ 
+<h3>Sketch of Algorithm</h3> 
+ 
+<p>We begin with an assignment <span class="v">a</span> of values to FGL objects, derived from the 
+<span class="v">bvar-db</span> and <span class="v">env</span>.  We want to extend this assignment so that 
+eventually it includes values for all the theorem variables that are 
+consistent, i.e. the evaluations of all the objects in <span class="v">a</span> match their 
+associated values.</p> 
+ 
+<p>The primary way of extending <span class="v">a</span> with new assignment pairs is to apply 
+certain rules that say how we may derive new assignments from existing ones. 
+These rules may be added by users.  The following example rules illustrate two 
+common types:</p> 
+ 
+<pre class="code">(<a href="FGL____DEF-CTREX-RULE.html">def-ctrex-rule</a> intcar-intcdr-ctrex-elim
+  :match ((<a href="COMMON-LISP____CAR.html">car</a> (intcar x))
+          (<a href="COMMON-LISP____CDR.html">cdr</a> (intcdr x)))
+  :match-conds ((cdr-match cdr)
+                (car-match car))
+  :assign (<a href="COMMON-LISP____LET.html">let</a> ((<a href="COMMON-LISP____CDR.html">cdr</a> (<a href="COMMON-LISP____IF.html">if</a> cdr-match cdr (intcdr x)))
+                (<a href="COMMON-LISP____CAR.html">car</a> (<a href="COMMON-LISP____IF.html">if</a> car-match car (intcar x))))
+            (intcons car cdr))
+  :assigned-var x
+  :ruletype :elim)
+
+(<a href="FGL____DEF-CTREX-RULE.html">def-ctrex-rule</a> assoc-equal-ctrex-rule
+  :match ((pair (<a href="ACL2____ASSOC-EQUAL.html">assoc-equal</a> k x)))
+  :assign (<a href="ACL2____PUT-ASSOC-EQUAL.html">put-assoc-equal</a> k (<a href="COMMON-LISP____CDR.html">cdr</a> pair) x)
+  :assigned-var x
+  :ruletype :property)</pre> 
+ 
+<p>The first rule says that if we have an assignment of a value to some object 
+matching <span class="v">(intcar x)</span> (that is, a <span class="v">:g-apply</span> FGL object whose function 
+symbol is <span class="v">intcar</span>) and an assignment to some other object matching 
+<span class="v">(intcdr x)</span> (that is, a <span class="v">:g-apply</span> object whose function symbol is 
+<span class="v">intcdr</span> and whose argument is the same as that of the <span class="v">intcar</span> object), 
+then we can derive a value for <span class="v">x</span> (the shared argument of the two objects), 
+namely the <span class="v">intcons</span> of the two values.  If we only have an assignment to 
+one or the other, <span class="v">intcar</span> or <span class="v">intcdr</span>, then the other part is defaulted 
+to the <span class="v">intcar/intcdr</span> of any current value tentatively assigned to 
+<span class="v">x</span>.</p> 
+ 
+<p>The second rule says that if we have an assignment of a value <span class="v">pair</span> to 
+<span class="v">(<a href="ACL2____ASSOC-EQUAL.html">assoc-equal</a> k x)</span>, then we can modify <span class="v">x</span> to accomodate that by setting 
+it to <span class="v">(<a href="ACL2____PUT-ASSOC-EQUAL.html">put-assoc-equal</a> k (<a href="COMMON-LISP____CDR.html">cdr</a> pair) x)</span>.  The <span class="v">:property</span> ruletype, as 
+distinguished from the <span class="v">:elim</span> ruletype of the previous rule, implies that 
+this rule can be applied several times to update the assignment to a term 
+<span class="v">x</span>; i.e. we can build up an alist given the values assigned to several 
+different keys.</p> 
+ 
+<p>Another method of adding pairs is to copy values on the basis of 
+equivalences that are assumed.  That is, if <span class="v">(equiv x y)</span> is assigned <span class="v">T</span> 
+and <span class="v">y</span> is assigned some value, then assign <span class="v">x</span> that same value.</p> 
+ 
+ 
+ 
+
+</body>
+</html>

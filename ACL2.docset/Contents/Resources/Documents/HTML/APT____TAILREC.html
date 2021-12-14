@@ -1,0 +1,816 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Tailrec</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=APT____TAILREC">Click for Tailrec in the Full Manual</a></h3>
+
+<p>APT tail recursion transformation: 
+          turn a recursive function that is not tail-recursive 
+          into an equivalent tail-recursive function.</p><h3>Introduction</h3><p>Under certain conditions, 
+      the computations performed by 
+      a recursive function that is not tail-recursive 
+      can be re-arranged so that they can be performed 
+      by a tail-recursive function 
+      whose arguments do not grow in the same way as the call stack 
+      of the original function. 
+      A tail-recursive function can be compiled into an imperative loop 
+      that does not run out of space due to the call stack growth.</p><p>The <span class="v">tailrec</span> <a href="res/kestrel-apt-design-notes/tailrec.pdf" target="_blank"><nobr>design notes<img src="../Icon_External_Link.png" title="External link to res/kestrel-apt-design-notes/tailrec.pdf"></nobr></a>, which use <a href="res/kestrel-design-notes/notation.pdf" target="_blank"><nobr>this notation<img src="../Icon_External_Link.png" title="External link to res/kestrel-design-notes/notation.pdf"></nobr></a>, provide the mathematical concepts and template proofs 
+      upon which this transformation is based. 
+      These notes should be read alongside this reference documentation, 
+      which refers to them in some places.</p><p>The file <span class="v">[books]/kestrel/apt/tailrec-examples.lisp</span> 
+      contains some commented examples of use of <span class="v">tailrec</span>.</p><h3>General Form</h3><pre class="code">(<a href="APT____TAILREC.html">tailrec</a> old
+         :variant                ; default :monoid
+         :domain                 ; default :auto
+         :new-name               ; default :auto
+         :new-enable             ; default :auto
+         :accumulator            ; default :auto
+         :wrapper                ; default nil
+         :wrapper-name           ; default :auto
+         :wrapper-enable         ; default from table
+         :old-to-new-name        ; default from table
+         :old-to-new-enable      ; default from table
+         :new-to-old-name        ; default from table
+         :new-to-old-enable      ; default from table
+         :old-to-wrapper-name    ; default from table
+         :old-to-wrapper-enable  ; default from table
+         :wrapper-to-old-name    ; default from table
+         :wrapper-to-old-enable  ; default from table
+         :verify-guards          ; default :auto
+         :hints                  ; default nil
+         :print                  ; default :result
+         :show-only              ; default nil
+  )</pre><h3>Inputs</h3><p><span class="v">old</span></p><blockquote>
+<p>Denotes the target function to transform.</p>
+<p>It must be the name of a function, 
+      or a <a href="ACL2____NUMBERED-NAMES.html">numbered name</a> 
+      with a wildcard index that 
+      <a href="ACL2____RESOLVE-NUMBERED-NAME-WILDCARD.html">resolves</a> 
+      to the name of a function. 
+      In the rest of this documentation page, for expository convenience, 
+      it is assumed that <span class="v">old</span> is the name of the denoted function.</p>
+<p><span class="v">old</span> must 
+       be in logic mode, 
+       be <a href="ACL2____FUNCTION-DEFINEDNESS.html">defined</a>, 
+       return a non-<a href="ACL2____MV.html">multiple</a> value, 
+       have no input or output <a href="ACL2____STOBJ.html">stobjs</a>, 
+       be singly (not mutually) recursive, and 
+       not have a <span class="v">:?</span> measure. 
+       If the <span class="v">:verify-guards</span> input of <span class="v">tailrec</span> is <span class="v">t</span>, 
+       <span class="v">old</span> must be guard-verified.</p>
+<p>In the <span class="v">tailrec</span> <a href="res/kestrel-apt-design-notes/tailrec.pdf" target="_blank"><nobr>design notes<img src="../Icon_External_Link.png" title="External link to res/kestrel-apt-design-notes/tailrec.pdf"></nobr></a>, 
+       <span class="v">old</span> is denoted by f.</p>
+<p>With the body in <a href="ACL2____TERM.html">translated</a> form, 
+       and after expanding all lambda expressions (i.e. <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span>s), 
+       the function must have one of the forms</p>
+<pre class="code">;; form 1:
+(<a href="COMMON-LISP____DEFUN.html">defun</a> old (x1 ... xn)
+  (<a href="COMMON-LISP____IF.html">if</a> test&lt;x1,...,xn&gt;
+      base&lt;x1,...,xn&gt;
+    combine&lt;nonrec&lt;x1,...,xn&gt;,
+            (old update-x1&lt;x1,...,xn&gt;
+                 ...
+                 update-xn&lt;x1,...,xn&gt;)&gt;))
+
+;; form 2:
+(<a href="COMMON-LISP____DEFUN.html">defun</a> old (x1 ... xn)
+  (<a href="COMMON-LISP____IF.html">if</a> ntest&lt;x1,...,xn&gt;
+      combine&lt;nonrec&lt;x1,...,xn&gt;,
+              (old update-x1&lt;x1,...,xn&gt;
+                   ...
+                   update-xn&lt;x1,...,xn&gt;)&gt;
+    base&lt;x1,...,xn&gt;))</pre>
+<p>where:</p>
+<ul>
+<li>The term <span class="v">test&lt;x1,...,xn&gt;</span> (in form 1) 
+        or <span class="v">ntest&lt;x1,...,xn&gt;</span> (in form 2) 
+        does not call <span class="v">old</span>. 
+        This term computes the exit test of the recursion (in form 1) 
+        or its negation (in form 2). 
+        If <span class="v">old</span> has form 2, 
+        let <span class="v">test&lt;x1,...,xn&gt;</span> be: 
+        either (i) the negation of <span class="v">ntest&lt;x1,...,xn&gt;</span>, 
+        i.e. <span class="v">(<a href="COMMON-LISP____NOT.html">not</a> ntest&lt;x1,...,xn&gt;)</span> 
+        if <span class="v">ntest&lt;x1,...,xn&gt;</span> is not a call of <span class="tt"><a href="COMMON-LISP____NOT.html">not</a></span>; 
+        or (ii) the argument of <span class="v">ntest&lt;x1,...,xn&gt;</span> 
+        if <span class="v">ntest&lt;x1,...,xn&gt;</span> is a call of <span class="tt"><a href="COMMON-LISP____NOT.html">not</a></span>, 
+        i.e. <span class="v">ntest&lt;x1,...,xn&gt;</span> is <span class="v">(<a href="COMMON-LISP____NOT.html">not</a> test&lt;x1,...,xn&gt;)</span>. 
+        Thus, in the rest of this documentation, 
+        we can assume that <span class="v">old</span> has form 1 without loss of generality. 
+        In the <span class="v">tailrec</span> <a href="res/kestrel-apt-design-notes/tailrec.pdf" target="_blank"><nobr>design notes<img src="../Icon_External_Link.png" title="External link to res/kestrel-apt-design-notes/tailrec.pdf"></nobr></a>, 
+        <span class="v">test&lt;x1,...,xn&gt;</span> is denoted by a(\overline{x}).</li>
+<li>The term <span class="v">base&lt;x1,...,xn&gt;</span> does not call <span class="v">old</span>. 
+        This term computes the base value of the recursion. 
+        In the <span class="v">tailrec</span> <a href="res/kestrel-apt-design-notes/tailrec.pdf" target="_blank"><nobr>design notes<img src="../Icon_External_Link.png" title="External link to res/kestrel-apt-design-notes/tailrec.pdf"></nobr></a>, 
+        <span class="v">base&lt;x1,...,xn&gt;</span> is denoted by b(\overline{x}). 
+        If the <span class="v">:variant</span> input of <span class="v">tailrec</span> 
+        is <span class="v">:monoid</span> or <span class="v">:monoid-alt</span> (see below), 
+        the term <span class="v">base&lt;x1,...,xn&gt;</span> must be ground, 
+        i.e. actually not contain any of the <span class="v">xi</span> variables. 
+        The section `Special case: Ground Base Value' of the design notes 
+        shows that this restriction (which may be lifted eventually) 
+        avoids the need to generate and use the function \beta. 
+        (When the <span class="v">:variant</span> input is <span class="v">:assoc</span> or <span class="v">:assoc-alt</span>, 
+        no \beta needs to be generated anyway, 
+        and thus the restriction does not apply.)</li>
+<li>The term 
+        <span class="v">combine&lt;nonrec&lt;x1,...,xn&gt;,
+                   (old update-x1&lt;x1,...,xn&gt; ... update-xn&lt;x1,...,xn&gt;)&gt;</span> 
+        contains one or more identical calls to <span class="v">old</span>, 
+        namely <span class="v">(old update-x1&lt;x1,...,xn&gt; ... update-xn&lt;x1,...,xn&gt;)</span>, 
+        where each <span class="v">update-xi&lt;x1,...,xn&gt;</span> is a term 
+        that does not call <span class="v">old</span>. 
+        In the <span class="v">tailrec</span> <a href="res/kestrel-apt-design-notes/tailrec.pdf" target="_blank"><nobr>design notes<img src="../Icon_External_Link.png" title="External link to res/kestrel-apt-design-notes/tailrec.pdf"></nobr></a>, 
+        <span class="v">update-xi&lt;x1,...,xn&gt;</span> is denoted by d_i(\overline{x}). 
+        Let <span class="v">combine&lt;nonrec&lt;x1,...,xn&gt;,r&gt;</span> be the result of 
+        replacing <span class="v">(old update-x1&lt;x1,...,xn&gt; ... update-xn&lt;x1,...,xn&gt;)</span> 
+        with a fresh variable <span class="v">r</span>.</li>
+<li>The term <span class="v">combine&lt;nonrec&lt;x1,...,xn&gt;,r&gt;</span> is not just <span class="v">r</span> 
+        (otherwise <span class="v">old</span> would already be tail-recursive).</li>
+<li>The term <span class="v">combine&lt;nonrec&lt;x1,...,xn&gt;,r&gt;</span> 
+        is not a call of <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span>.</li>
+<li>All the occurrences of <span class="v">x1</span>, ..., <span class="v">xn</span> 
+        in <span class="v">combine&lt;nonrec&lt;x1,...,xn&gt;,r&gt;</span> 
+        are within a subterm <span class="v">nonrec&lt;x1,...,xn&gt;</span> where <span class="v">r</span> does not occur. 
+        This means that if <span class="v">combine&lt;q,r&gt;</span> is 
+        the result of replacing all the occurrences of <span class="v">nonrec&lt;x1,...,xn&gt;</span> 
+        with a fresh variable <span class="v">q</span>, 
+        then no <span class="v">xi</span> occurs in <span class="v">combine&lt;q,r&gt;</span>. 
+        The term <span class="v">combine&lt;q,r&gt;</span> represents a binary operator 
+        that combines <span class="v">nonrec&lt;x1,...,xn&gt;</span> 
+        (which does not involve the recursive call to <span class="v">old</span>) 
+        with the result of the recursive call to <span class="v">old</span>. 
+        The constraints just given may be satisfied 
+        by multiple subterms <span class="v">nonrec&lt;x1,...,xn&gt;</span> 
+        of <span class="v">combine&lt;nonrec&lt;x1,...,xn&gt;,r&gt;</span>: 
+        the exact <span class="v">nonrec&lt;x1,...,xn&gt;</span> is determined 
+        via the procedure described in Section 
+        `Decomposition of the Recursive Branch' below. 
+        In the <span class="v">tailrec</span> <a href="res/kestrel-apt-design-notes/tailrec.pdf" target="_blank"><nobr>design notes<img src="../Icon_External_Link.png" title="External link to res/kestrel-apt-design-notes/tailrec.pdf"></nobr></a>, 
+        <span class="v">nonrec&lt;x1,...,xn&gt;</span> is denoted by c(\overline{x}), 
+        and <span class="v">(<a href="COMMON-LISP____LAMBDA.html">lambda</a> (q r) combine&lt;q,r&gt;)</span> is denoted by *.</li>
+</ul>
+</blockquote><p><span class="v">:variant</span> — default <span class="v">:monoid</span></p><blockquote>
+<p>Indicates the variant of the transformation to use:</p>
+<ul>
+<li>
+<span class="v">:monoid</span>, for the monoidal variant, 
+        where the applicability conditions below imply 
+        the algebraic structure of a monoid (i.e. associativity and identity) 
+        for the combination operator. 
+        In the <span class="v">tailrec</span> <a href="res/kestrel-apt-design-notes/tailrec.pdf" target="_blank"><nobr>design notes<img src="../Icon_External_Link.png" title="External link to res/kestrel-apt-design-notes/tailrec.pdf"></nobr></a>, 
+        this variant is described in the sections 
+        `Associative Binary Operator with Left and Right Identity' and 
+        `Restriction of Operator Properties to a Domain'.</li>
+<li>
+<span class="v">:monoid-alt</span>, for the alternative monoidal variant, 
+        where the applicability conditions below also imply 
+        the algebraic structure of a monoid (i.e. associativity and identity) 
+        for the combination operator. 
+        In the <span class="v">tailrec</span> <a href="res/kestrel-apt-design-notes/tailrec.pdf" target="_blank"><nobr>design notes<img src="../Icon_External_Link.png" title="External link to res/kestrel-apt-design-notes/tailrec.pdf"></nobr></a>, 
+        this variant is described in the section 
+        `Extension of Operator Associativity and Closure outside the Domain'.</li>
+<li>
+<span class="v">:assoc</span>, for the associative variant, 
+        where the applicability conditions below imply 
+        the algebraic structure of a semigroup (i.e. associativity only) 
+        for the combination operator. 
+        In the <span class="v">tailrec</span> <a href="res/kestrel-apt-design-notes/tailrec.pdf" target="_blank"><nobr>design notes<img src="../Icon_External_Link.png" title="External link to res/kestrel-apt-design-notes/tailrec.pdf"></nobr></a>, 
+        this variant is described in the sections 
+        `Associative Binary Operator' and 
+        `Restriction of Operator Properties to a Domain'.</li>
+<li>
+<span class="v">:assoc-alt</span>, for the alternative associative variant, 
+        where the applicability conditions below also imply 
+        the algebraic structure of a semigroup (i.e. associativity only) 
+        for the combination operator. 
+        In the <span class="v">tailrec</span> <a href="res/kestrel-apt-design-notes/tailrec.pdf" target="_blank"><nobr>design notes<img src="../Icon_External_Link.png" title="External link to res/kestrel-apt-design-notes/tailrec.pdf"></nobr></a>, 
+        this variant is described in the section 
+        `Associative-Only Variant,Extended outside the Domain'.</li>
+</ul>
+<p>The associative variants of the transformation is more widely applicable, 
+       but the monoidal variants yield simpler new functions. 
+       The applicability conditions for the alternative monoidal variant 
+       are neither stronger nor weaker than the ones for the monoidal variant, 
+       so these two variants apply to different cases. 
+       Similarly, 
+       the applicability conditions for the alternative associative variant 
+       are neither stronger nor weaker than the ones for the associative variant, 
+       so these two variants apply to different cases.</p>
+<p>While the <span class="v">tailrec</span> <a href="res/kestrel-apt-design-notes/tailrec.pdf" target="_blank"><nobr>design notes<img src="../Icon_External_Link.png" title="External link to res/kestrel-apt-design-notes/tailrec.pdf"></nobr></a>show how to handle variants in which, besides associativity, 
+       only either left or right identity holds, 
+       the current implementation does not handle them independently. 
+       They are either both absent 
+       (in the <span class="v">:assoc</span> and <span class="v">:assoc-alt</span> variants) 
+       or both present 
+       (in the <span class="v">:monoid</span> and <span class="v">:monoid-alt</span> variants). 
+       Support for their independent handling may be added eventually.</p>
+</blockquote><p><span class="v">:domain</span> — default <span class="v">:auto</span></p><blockquote>
+<p>Denotes the domain (i.e. predicate) <span class="v">domain</span> 
+       over which the combination operator <span class="v">combine&lt;q,r&gt;</span> 
+       must satisfy some of the applicability conditions below.</p>
+<p>It must be one of the following:</p>
+<ul>
+<li>The name of a unary logic-mode function. 
+         This function must have no input or output <a href="ACL2____STOBJ.html">ACL2::stobj</a>s. This function must return 
+              a single (i.e. non-<span class="tt"><a href="ACL2____MV.html">mv</a></span>) result. If the function(s) generated by <span class="v">tailrec</span> is/are guard-verified 
+              (which is determined by the <span class="v">:verify-guards</span> input; see below), then this function must be guard-verified. This function must be distinct from <span class="v">old</span>.</li>
+<li>A unary closed lambda expression 
+         that only references logic-mode functions. 
+         This lambda expression must have 
+         no input or output <a href="ACL2____STOBJ.html">ACL2::stobj</a>s. This lambda expression must return 
+              a single (i.e. non-<span class="tt"><a href="ACL2____MV.html">mv</a></span>) result. If the function(s) generated by <span class="v">tailrec</span> is/are guard-verified 
+              (which is determined by the <span class="v">:verify-guards</span> input; see below), then the body of this lambda expression 
+                     must only call guard-verified functions, 
+                     except possibly 
+                     in the <span class="v">:logic</span> subterms of <span class="tt"><a href="ACL2____MBE.html">mbe</a></span>s 
+                     or via <span class="tt"><a href="ACL2____EC-CALL.html">ec-call</a></span>. As an abbreviation, the name <span class="v">mac</span> of a macro stands for 
+         the lambda expression <span class="v">(<a href="COMMON-LISP____LAMBDA.html">lambda</a> (z1 z2 ...) (mac z1 z2 ...))</span>, 
+         where <span class="v">z1</span>, <span class="v">z2</span>, ... are the required parameters of <span class="v">mac</span>; 
+         that is, a macro name abbreviates its eta-expansion 
+         (considering only the macro's required parameters). This lambda expression must not reference <span class="v">old</span>.</li>
+<li>
+<span class="v">:auto</span>, to automatically infer a domain 
+        as described in Section `Automatic Inference of a Domain' below.</li>
+</ul>
+<p>In the rest of this documentation page, 
+       let <span class="v">domain</span> be this function or lambda expression.</p>
+<p>In the <span class="v">tailrec</span> <a href="res/kestrel-apt-design-notes/tailrec.pdf" target="_blank"><nobr>design notes<img src="../Icon_External_Link.png" title="External link to res/kestrel-apt-design-notes/tailrec.pdf"></nobr></a>, 
+       <span class="v">domain</span> is denoted by D.</p>
+</blockquote><p><span class="v">:new-name</span> — default <span class="v">:auto</span></p><blockquote>
+<p>Determines the name of the generated new function.</p>
+<p>It must be one of the following:</p>
+<ul>
+<li>
+<span class="v">:auto</span>, to generate the name automatically 
+       as described in <a href="APT____FUNCTION-NAME-GENERATION.html">function-name-generation</a>.</li>
+<li>Any other symbol, to use as the name of the function.</li>
+</ul>
+<p>In the rest of this documentation page, 
+      let <span class="v">new</span> be this function.</p>
+</blockquote><p><span class="v">:new-enable</span> — default <span class="v">:auto</span></p><blockquote>
+<p>Determines whether <span class="v">new</span> is enabled.</p>
+<p>It must be one of the following:</p>
+<ul>
+<li>
+<span class="v">t</span>, to enable it.</li>
+<li>
+<span class="v">nil</span>, to disable it.</li>
+<li>
+<span class="v">:auto</span>, to enable it iff <span class="v">old</span> is enabled.</li>
+</ul>
+</blockquote><p><span class="v">:accumulator</span> — default <span class="v">:auto</span></p><blockquote>
+<p>Determines the name of the accumulator argument of <span class="v">new</span>:</p>
+<ul>
+<li>
+<span class="v">:auto</span>, to use the fresh variable <span class="v">r</span> described above.</li>
+<li>Any other symbol that is a valid formal parameter name 
+        and that is distinct from <span class="v">x1</span>, ..., <span class="v">xn</span>.</li>
+</ul>
+<p>In the rest of this documentation page, 
+       let <span class="v">a</span> be this variable.</p>
+</blockquote><p><span class="v">:wrapper</span> — default <span class="v">nil</span></p><blockquote>
+<p>Determines whether the wrapper function is generated.</p>
+<p>It must be one of the following:</p>
+<ul>
+<li>
+<span class="v">t</span>, to generate it.</li>
+<li>
+<span class="v">nil</span>, to not generate it.</li>
+</ul>
+</blockquote><p><span class="v">:wrapper-name</span> — default <span class="v">:auto</span></p><blockquote>
+<p>Determines the name of the generated wrapper function.</p>
+<p>It must be one of the following:</p>
+<ul>
+<li>
+<span class="v">:auto</span>, to generate the name automatically 
+       as described in <a href="APT____FUNCTION-NAME-GENERATION.html">function-name-generation</a>.</li>
+<li>Any other symbol, to use as the name of the function.</li>
+</ul>
+<p>This input may be present only if the <span class="v">:wrapper</span> input is <span class="v">t</span>.</p>
+<p>In the rest of this documentation page, 
+      let <span class="v">wrapper</span> be this function.</p>
+</blockquote><p><span class="v">:wrapper-enable</span> — 
+     default from <a href="APT____DEFAULTS-TABLE.html">table</a></p><blockquote>
+<p>Determines whether the wrapper function is enabled.</p>
+<p>It must be one of the following:</p>
+<ul>
+<li>
+<span class="v">t</span>, to enable it.</li>
+<li>
+<span class="v">nil</span>, to disable it.</li>
+<li>Absent, to use the value from the APT defaults table, 
+       which is set via <span class="tt"><a href="APT____SET-DEFAULT-INPUT-WRAPPER-ENABLE.html">set-default-input-wrapper-enable</a></span>.</li>
+</ul>
+<p>This input may be present only if the <span class="v">:wrapper</span> input is <span class="v">t</span>.</p>
+</blockquote><p><span class="v">:old-to-new-name</span> — 
+     default from <a href="APT____DEFAULTS-TABLE.html">table</a></p><blockquote>
+<p>Determines the name of the theorem that 
+      rewrites the old function in terms of the new function.</p>
+<p>It must be one of the following:</p>
+<ul>
+<li>A keyword, to use as separator between 
+       the names of <span class="v">old</span> and <span class="v">new</span>. 
+       A keyword <span class="v">:kwd</span> specifies the theorem name <span class="v">oldkwdnew</span>, 
+       in the same package as <span class="v">new</span>.</li>
+<li>Any other symbol, to use as the name of the theorem.</li>
+<li>Absent, to use the value from the APT defaults table, 
+       which is set via <span class="tt"><a href="APT____SET-DEFAULT-INPUT-OLD-TO-NEW-NAME.html">set-default-input-old-to-new-name</a></span>.</li>
+</ul>
+<p>In the rest of this documentation page, 
+      let <span class="v">old-to-new</span> be the name of this theorem.</p>
+</blockquote><p><span class="v">:old-to-new-enable</span> — 
+     default from <a href="APT____DEFAULTS-TABLE.html">table</a></p><blockquote>
+<p>Determines whether the <span class="v">old-to-new</span> theorem is enabled.</p>
+<p>It must be one of the following:</p>
+<ul>
+<li>
+<span class="v">t</span>, to enable the theorem.</li>
+<li>
+<span class="v">nil</span>, to disable the theorem.</li>
+<li>Absent, to use the value from the APT defaults table, 
+       which is set via <span class="tt"><a href="APT____SET-DEFAULT-INPUT-OLD-TO-NEW-ENABLE.html">set-default-input-old-to-new-enable</a></span>.</li>
+</ul>
+<p>If this input is <span class="v">t</span>, 
+      the <span class="v">:new-to-old-enable</span> input must be <span class="v">nil</span>. 
+      At most one of these two inputs may be <span class="v">t</span> at any time.</p>
+</blockquote><p><span class="v">:new-to-old-name</span> — 
+     default from <a href="APT____DEFAULTS-TABLE.html">table</a></p><blockquote>
+<p>Determines the name of the theorem that 
+      rewrites the new function in terms of the old function.</p>
+<p>It must be one of the following:</p>
+<ul>
+<li>A keyword, to use as separator between 
+       the names of <span class="v">new</span> and <span class="v">old</span>. 
+       A keyword <span class="v">:kwd</span> specifies the theorem name <span class="v">newkwdold</span>, 
+       in the same package as <span class="v">new</span>.</li>
+<li>Any other symbol, to use as the name of the theorem.</li>
+<li>Absent, to use the value from the APT defaults table, 
+       which is set via <span class="tt"><a href="APT____SET-DEFAULT-INPUT-NEW-TO-OLD-NAME.html">set-default-input-new-to-old-name</a></span>.</li>
+</ul>
+<p>In the rest of this documentation page, 
+      let <span class="v">new-to-old</span> be the name of this theorem.</p>
+</blockquote><p><span class="v">:new-to-old-enable</span> — 
+     default from <a href="APT____DEFAULTS-TABLE.html">table</a></p><blockquote>
+<p>Determines whether the <span class="v">new-to-old</span> theorem is enabled.</p>
+<p>It must be one of the following:</p>
+<ul>
+<li>
+<span class="v">t</span>, to enable the theorem.</li>
+<li>
+<span class="v">nil</span>, to disable the theorem.</li>
+<li>Absent, to use the value from the APT defaults table, 
+       which is set via <span class="tt"><a href="APT____SET-DEFAULT-INPUT-NEW-TO-OLD-ENABLE.html">set-default-input-new-to-old-enable</a></span>.</li>
+</ul>
+<p>If this input is <span class="v">t</span>, 
+      the <span class="v">:old-to-new-enable</span> input must be <span class="v">nil</span>. 
+      At most one of these two inputs may be <span class="v">t</span> at any time.</p>
+</blockquote><p><span class="v">:old-to-wrapper-name</span> — 
+     default from <a href="APT____DEFAULTS-TABLE.html">table</a></p><blockquote>
+<p>Determines the name of the theorem that 
+      rewrites the old function in terms of the wrapper function.</p>
+<p>It must be one of the following:</p>
+<ul>
+<li>A keyword, to use as separator between 
+       the names of <span class="v">old</span> and <span class="v">wrapper</span>. 
+       A keyword <span class="v">:kwd</span> specifies the theorem name <span class="v">oldkwdwrapper</span>, 
+       in the same package as <span class="v">wrapper</span>.</li>
+<li>Any other symbol, to use as the name of the theorem.</li>
+<li>Absent, to use the value from the APT defaults table, 
+       which is set via <span class="tt"><a href="APT____SET-DEFAULT-INPUT-OLD-TO-WRAPPER-NAME.html">set-default-input-old-to-wrapper-name</a></span>.</li>
+</ul>
+<p>This input may be present only if the <span class="v">:wrapper</span> input is <span class="v">t</span>.</p>
+<p>In the rest of this documentation page, 
+      let <span class="v">old-to-wrapper</span> be the name of this theorem 
+      (if it is generated).</p>
+</blockquote><p><span class="v">:old-to-wrapper-enable</span> — 
+     default from <a href="APT____DEFAULTS-TABLE.html">table</a></p><blockquote>
+<p>Determines whether the <span class="v">old-to-wrapper</span> theorem is enabled.</p>
+<p>It must be one of the following:</p>
+<ul>
+<li>
+<span class="v">t</span>, to enable the theorem.</li>
+<li>
+<span class="v">nil</span>, to disable the theorem.</li>
+<li>Absent, to use the value from the APT defaults table, 
+       which is set via <span class="tt"><a href="APT____SET-DEFAULT-INPUT-OLD-TO-WRAPPER-ENABLE.html">set-default-input-old-to-wrapper-enable</a></span>.</li>
+</ul>
+<p>This input may be present only if the <span class="v">:wrapper</span> input is <span class="v">t</span>.</p>
+<p>If this input is <span class="v">t</span>, 
+      the <span class="v">:wrapper-to-old-enable</span> input must be <span class="v">nil</span>. 
+      At most one of these two inputs may be <span class="v">t</span> at any time.</p>
+</blockquote><p><span class="v">:wrapper-to-old-name</span> — 
+     default from <a href="APT____DEFAULTS-TABLE.html">table</a></p><blockquote>
+<p>Determines the name of the theorem that 
+      rewrites the wrapper function in terms of the old function.</p>
+<p>It must be one of the following:</p>
+<ul>
+<li>A keyword, to use as separator between 
+       the names of <span class="v">wrapper</span> and <span class="v">old</span>. 
+       A keyword <span class="v">:kwd</span> specifies the theorem name <span class="v">wrapperkwdold</span>, 
+       in the same package as <span class="v">wrapper</span>.</li>
+<li>Any other symbol, to use as the name of the theorem.</li>
+<li>Absent, to use the value from the APT defaults table, 
+       which is set via <span class="tt"><a href="APT____SET-DEFAULT-INPUT-WRAPPER-TO-OLD-NAME.html">set-default-input-wrapper-to-old-name</a></span>.</li>
+</ul>
+<p>This input may be present only if the <span class="v">:wrapper</span> input is <span class="v">t</span>.</p>
+<p>In the rest of this documentation page, 
+      let <span class="v">wrapper-to-old</span> be the name of this theorem 
+      (if it is generated).</p>
+</blockquote><p><span class="v">:wrapper-to-old-enable</span> — 
+     default from <a href="APT____DEFAULTS-TABLE.html">table</a></p><blockquote>
+<p>Determines whether the <span class="v">wrapper-to-old</span> theorem is enabled.</p>
+<p>It must be one of the following:</p>
+<ul>
+<li>
+<span class="v">t</span>, to enable the theorem.</li>
+<li>
+<span class="v">nil</span>, to disable the theorem.</li>
+<li>Absent, to use the value from the APT defaults table, 
+       which is set via <span class="tt"><a href="APT____SET-DEFAULT-INPUT-WRAPPER-TO-OLD-ENABLE.html">set-default-input-wrapper-to-old-enable</a></span>.</li>
+</ul>
+<p>This input may be present only if the <span class="v">:wrapper</span> input is <span class="v">t</span>.</p>
+<p>If this input is <span class="v">t</span>, 
+      the <span class="v">:old-to-wrapper-enable</span> input must be <span class="v">nil</span>. 
+      At most one of these two inputs may be <span class="v">t</span> at any time.</p>
+</blockquote><p><span class="v">:verify-guards</span> — default <span class="v">:auto</span></p><blockquote>
+<p>Determines whether the guards of the generated functions are verified or not.</p>
+<p>It must be one of the following:</p>
+<ul>
+<li>
+<span class="v">t</span>, to verify the guards.</li>
+<li>
+<span class="v">nil</span>, to not verify guards.</li>
+<li>
+<span class="v">:auto</span>, to verify the guards if and only if 
+       the guards of the target function <span class="v">old</span> are verified.</li>
+</ul>
+</blockquote><p><span class="v">:hints</span> — default <span class="v">nil</span></p><blockquote>
+<p>Hints to prove the applicability conditions.</p>
+<p>It must be one of the following:</p>
+<ul>
+<li>A <a href="ACL2____KEYWORD-VALUE-LISTP.html">keyword-value list</a> <span class="v">(appcond1 hints1 appcond2 hints2 ...)</span>, 
+         where each <span class="v">appcondk</span> is a keyword 
+         that identifies one of the applicability conditions 
+         listed in the `Applicability Conditions' section and each <span class="v">hintsk</span> is a list of hints of the kind 
+         that may appear just after <span class="v">:hints</span> in a <span class="tt"><a href="ACL2____DEFTHM.html">defthm</a></span>. 
+         The hints <span class="v">hintsk</span> are used 
+         to prove applicability condition <span class="v">appcondk</span>. 
+         The <span class="v">appcond1</span>, <span class="v">appcond2</span>, ... keywords must be all distinct. 
+         An <span class="v">appcondk</span> keyword is allowed only if 
+         the corresponding applicability condition is present, 
+         as specified in the `Applicability Conditions' section.</li>
+<li>A list of hints of the kind 
+         that may appear just after <span class="v">:hints</span> in a <span class="tt"><a href="ACL2____DEFTHM.html">defthm</a></span>. 
+         In this case, these same hints are used 
+         to prove every applicability condition,.</li>
+</ul>
+</blockquote><p><span class="v">:print</span> — default <span class="v">:result</span></p><blockquote>
+<p>Specifies what is printed on the screen 
+        (see <a href="ACL2____EVENT-MACRO-SCREEN-PRINTING.html">ACL2::event-macro-screen-printing</a>).</p>
+<p>It must be one of the following:</p>
+<ul>
+<li>
+<span class="v">nil</span>, to print nothing (not even error output).</li>
+<li>
+<span class="v">:error</span>, to print only error output (if any).</li>
+<li>
+<span class="v">:result</span>, to print, besides any error output, 
+         also the <a href="ACL2____EVENT-MACRO-RESULTS.html">results</a> of <span class="v">tailrec</span>. 
+         This is the default value of the <span class="v">:print</span> input.</li>
+<li>
+<span class="v">:info</span>, to print, 
+         besides any error output and the results, 
+         also some additional information about 
+         the internal operations of <span class="v">tailrec</span>.</li>
+<li>
+<span class="v">:all</span>, to print, 
+          besides any error output, 
+          the results, 
+          and the additional information, 
+          also ACL2's output in response to all the submitted events.</li>
+</ul>
+<p>If the call of <span class="v">tailrec</span> is redundant, 
+        an indication to that effect is printed on the screen, 
+        unless <span class="v">:print</span> is <span class="v">nil</span>.</p>
+</blockquote><p><span class="v">:show-only</span> — default <span class="v">nil</span></p><blockquote>
+<p>Determines whether the event expansion of <span class="v">tailrec</span> is submitted to ACL2 or just printed on the screen:</p>
+<ul>
+<li>
+<span class="v">nil</span>, to submit it.</li>
+<li>
+<span class="v">t</span>, to just print it. 
+            In this case: 
+            the event expansion is printed even if <span class="v">:print</span> is <span class="v">nil</span> 
+            (because the user has explicitly asked to show the event expansion); 
+            the resulting events are not re-printed separately 
+            (other than their appearance in the printed event expansion) 
+            even if <span class="v">:print</span> is <span class="v">:result</span> or <span class="v">:info</span> or <span class="v">:all</span>; 
+            no ACL2 output is printed for the event expansion 
+            even if <span class="v">:print</span> is <span class="v">:all</span> 
+            (because the event expansion is not submitted). 
+            If the call of <span class="v">tailrec</span> is redundant 
+            (as defined in the `Redundancy' section), the event expansion generated by the existing call 
+            is printed.</li>
+</ul>
+</blockquote><h4>Decomposition of the Recursive Branch</h4><p>Replace every occurrence of the recursive call 
+      <span class="v">(old update-x1&lt;x1,...,xn&gt; ... update-xn&lt;x1,...,xn&gt;)</span> 
+      in the recursive branch 
+      <span class="v">combine&lt;nonrec&lt;x1,...,xn&gt;,
+                 (old update-x1&lt;x1,...,xn&gt; ... update-xn&lt;x1,...,xn&gt;)&gt;</span> 
+      of <span class="v">old</span> 
+      with a fresh variable <span class="v">r</span>, 
+      obtaining <span class="v">combine&lt;nonrec&lt;x1,...,xn&gt;,r&gt;</span>.</p><p>Try to find the maximal and leftmost subterm <span class="v">nr</span> 
+      of <span class="v">combine&lt;nonrec&lt;x1,...,xn&gt;,r&gt;</span> 
+      such that <span class="v">r</span> does not occur in <span class="v">nr</span> 
+      and such that all the occurrences of <span class="v">x1</span>, ..., <span class="v">xn</span> 
+      in <span class="v">combine&lt;nonrec&lt;x1,...,xn&gt;,r&gt;</span> 
+      occur within occurrences of <span class="v">nr</span> in <span class="v">combine&lt;nonrec&lt;x1,...,xn&gt;,r&gt;</span>. 
+      The latter constraint is equivalent to saying that 
+      after replacing all the occurrences of <span class="v">nr</span> 
+      in <span class="v">combine&lt;nonrec&lt;x1,...,xn&gt;,r&gt;</span> 
+      with a fresh variable <span class="v">q</span>, 
+      the resulting term will have only <span class="v">r</span> and <span class="v">q</span> as free variables.</p><p>If such a term <span class="v">nr</span> exists, 
+      that term is <span class="v">nonrec&lt;x1,...,xn&gt;</span>, 
+      and <span class="v">combine&lt;q,r&gt;</span> is the result of replacing 
+      every occurrence of <span class="v">nonrec&lt;x1,...,xn&gt;</span> 
+      in <span class="v">combine&lt;nonrec&lt;x1,...,xn&gt;,r&gt;</span> 
+      with <span class="v">q</span>.</p><p>If such a term <span class="v">nr</span> does not exist, decomposition fails.</p><p>In the <span class="v">tailrec</span> <a href="res/kestrel-apt-design-notes/tailrec.pdf" target="_blank"><nobr>design notes<img src="../Icon_External_Link.png" title="External link to res/kestrel-apt-design-notes/tailrec.pdf"></nobr></a>, 
+      the section `Decomposition of the Old Function' 
+      describes a more general decomposition process, 
+      which has multiple solutions in general. 
+      The current implementation follows the procedure 
+      detailed in the paragraphs above.</p><h4>Automatic Inference of a Domain</h4><p>Consider the following conditions:</p><ol>
+<li>The <span class="v">:variant</span> input of <span class="v">tailrec</span> 
+       is <span class="v">:monoid</span> or <span class="v">:monoid-alt</span>.</li>
+<li>The term <span class="v">combine&lt;q,r&gt;</span> (described above) 
+       has the form <span class="v">(op q r)</span> or <span class="v">(op r q)</span>, 
+       where <span class="v">op</span> is a named function, with formals <span class="v">y1</span> and <span class="v">y2</span>.</li>
+<li>The guard term of <span class="v">op</span> has one of the forms 
+       (i) <span class="v">(<a href="COMMON-LISP____AND.html">and</a> (dom y1) (dom y2))</span>, 
+       (ii) <span class="v">(<a href="COMMON-LISP____AND.html">and</a> (dom y2) (dom y1))</span>, 
+       (iii) <span class="v">(dom y1)</span>, and 
+       (iv) <span class="v">(dom y2)</span>, 
+       where <span class="v">dom</span> is a named function.</li>
+</ol><p>If all the above coditions hold, the inferred domain is <span class="v">dom</span>. 
+      Otherwise, the inferred domain is <span class="v">(<a href="COMMON-LISP____LAMBDA.html">lambda</a> (x) t)</span>, 
+      i.e. the domain consisting of all values.</p><p>This domain inference is a heuristic. 
+      It has no impact on soundness, 
+      since the user could supply any domain anyhow. 
+      Inferring a tigther domain than the one consisting of all values 
+      may be helpful to prove left and right identity, 
+      which may not hold over all values 
+      (e.g. left and right identity of addition). 
+      On the other hand, associativity may hold over all values 
+      (e.g. associativity of addition), 
+      particularly when the combination operator fixes its arguments. 
+      Given that using a tighter domain than all values 
+      involves additional applicability conditions below, 
+      it seems most useful to attempt to infer a tighter domain 
+      only for the monoidal variants, 
+      and use the domain of all values for the associative variants.</p><h3>Applicability Conditions</h3><p>In order for <span class="v">tailrec</span> to apply, 
+        in addition to the requirements on the inputs 
+        stated in the `Inputs' section, the following <a href="ACL2____EVENT-MACRO-APPLICABILITY-CONDITIONS.html">applicability conditions</a> must be proved. 
+         The proofs are attempted when <span class="v">tailrec</span> is called, 
+        using the hints optionally supplied as the <span class="v">:hints</span> input 
+        described in the `Inputs' section.</p><p><span class="v">:domain-of-base</span></p><blockquote>
+<p>The base computation always returns values in the domain:</p>
+<pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> test&lt;x1,...,xn&gt;
+         (domain base&lt;x1,...,xn&gt;))</pre>
+<p>This corresponds to \mathit{Db} in the <span class="v">tailrec</span> <a href="res/kestrel-apt-design-notes/tailrec.pdf" target="_blank"><nobr>design notes<img src="../Icon_External_Link.png" title="External link to res/kestrel-apt-design-notes/tailrec.pdf"></nobr></a>.</p>
+<p>This applicability condition is present if and only if the <span class="v">:variant</span> input of <span class="v">tailrec</span> 
+                is <span class="v">:monoid</span> or <span class="v">:monoid-alt</span> or <span class="v">:assoc</span>.</p>
+</blockquote><p><span class="v">:domain-of-nonrec</span></p><blockquote>
+<p>The non-recursive operand of the combination operator 
+        always returns values in the domain, 
+        when the exit test of the recursion fails:</p>
+<pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____NOT.html">not</a> test&lt;x1,...,xn&gt;)
+         (domain nonrec&lt;x1,...,xn&gt;))</pre>
+<p>This corresponds to \mathit{Dc} in the <span class="v">tailrec</span> <a href="res/kestrel-apt-design-notes/tailrec.pdf" target="_blank"><nobr>design notes<img src="../Icon_External_Link.png" title="External link to res/kestrel-apt-design-notes/tailrec.pdf"></nobr></a>.</p>
+<p>This applicability condition is present if and only if the <span class="v">:variant</span> input of <span class="v">tailrec</span> 
+                is <span class="v">:monoid</span> or <span class="v">:assoc</span>.</p>
+</blockquote><p><span class="v">:domain-of-combine</span></p><blockquote>
+<p>The domain is closed under the combination operator:</p>
+<pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (domain u)
+              (domain v))
+         (domain combine&lt;u,v&gt;))</pre>
+<p>This corresponds to D* in the <span class="v">tailrec</span> <a href="res/kestrel-apt-design-notes/tailrec.pdf" target="_blank"><nobr>design notes<img src="../Icon_External_Link.png" title="External link to res/kestrel-apt-design-notes/tailrec.pdf"></nobr></a>.</p>
+<p>This applicability condition is present if and only if the <span class="v">:variant</span> input of <span class="v">tailrec</span> 
+                is <span class="v">:monoid</span> or <span class="v">:assoc</span> or <span class="v">:assoc-alt</span>.</p>
+</blockquote><p><span class="v">:domain-of-combine-uncond</span></p><blockquote>
+<p>The combination operator unconditionally returns values in the domain:</p>
+<pre class="code">(domain combine&lt;u,v&gt;)</pre>
+<p>This corresponds to D*' in the <span class="v">tailrec</span> <a href="res/kestrel-apt-design-notes/tailrec.pdf" target="_blank"><nobr>design notes<img src="../Icon_External_Link.png" title="External link to res/kestrel-apt-design-notes/tailrec.pdf"></nobr></a>.</p>
+<p>This applicability condition is present if and only if the <span class="v">:variant</span> input of <span class="v">tailrec</span> 
+                is <span class="v">:monoid-alt</span>.</p>
+</blockquote><p><span class="v">:combine-associativity</span></p><blockquote>
+<p>The combination operator is associative over the domain:</p>
+<pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (domain u)
+              (domain v)
+              (domain w))
+         (<a href="COMMON-LISP____EQUAL.html">equal</a> combine&lt;u,combine&lt;v,w&gt;&gt;
+                combine&lt;combine&lt;u,v&gt;,w&gt;))</pre>
+<p>This corresponds to \mathit{ASC} in the <span class="v">tailrec</span> <a href="res/kestrel-apt-design-notes/tailrec.pdf" target="_blank"><nobr>design notes<img src="../Icon_External_Link.png" title="External link to res/kestrel-apt-design-notes/tailrec.pdf"></nobr></a>.</p>
+<p>This applicability condition is present if and only if the <span class="v">:variant</span> input of <span class="v">tailrec</span> 
+                is <span class="v">:monoid</span> or <span class="v">:assoc</span>.</p>
+</blockquote><p><span class="v">:combine-associativity-uncond</span></p><blockquote>
+<p>The combination operator is unconditionally associative:</p>
+<pre class="code">(<a href="COMMON-LISP____EQUAL.html">equal</a> combine&lt;u,combine&lt;v,w&gt;&gt;
+       combine&lt;combine&lt;u,v&gt;,w&gt;)</pre>
+<p>This corresponds to \mathit{ASC}' in the <span class="v">tailrec</span> <a href="res/kestrel-apt-design-notes/tailrec.pdf" target="_blank"><nobr>design notes<img src="../Icon_External_Link.png" title="External link to res/kestrel-apt-design-notes/tailrec.pdf"></nobr></a>.</p>
+<p>This applicability condition is present if and only if the <span class="v">:variant</span> input of <span class="v">tailrec</span> 
+                is <span class="v">:monoid-alt</span> or <span class="v">:assoc-alt</span>.</p>
+</blockquote><p><span class="v">:combine-left-identity</span></p><blockquote>
+<p>The base value of the recursion 
+      is left identity of the combination operator:</p>
+<pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> test&lt;x1,...,xn&gt;
+              (domain u))
+         (<a href="COMMON-LISP____EQUAL.html">equal</a> combine&lt;base&lt;x1...,xn&gt;,u&gt;
+                u))</pre>
+<p>This corresponds to \mathit{LI} in the <span class="v">tailrec</span> <a href="res/kestrel-apt-design-notes/tailrec.pdf" target="_blank"><nobr>design notes<img src="../Icon_External_Link.png" title="External link to res/kestrel-apt-design-notes/tailrec.pdf"></nobr></a>.</p>
+<p>This applicability condition is present if and only if the <span class="v">:variant</span> input of <span class="v">tailrec</span> 
+                is <span class="v">:monoid</span> or <span class="v">:monoid-alt</span>.</p>
+</blockquote><p><span class="v">:combine-right-identity</span></p><blockquote>
+<p>The base value of the recursion 
+       is right identity of the combination operator:</p>
+<pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> test&lt;x1,...,xn&gt;
+              (domain u))
+         (<a href="COMMON-LISP____EQUAL.html">equal</a> combine&lt;u,base&lt;x1...,xn&gt;&gt;
+                u))</pre>
+<p>This corresponds to \mathit{RI} in the <span class="v">tailrec</span> <a href="res/kestrel-apt-design-notes/tailrec.pdf" target="_blank"><nobr>design notes<img src="../Icon_External_Link.png" title="External link to res/kestrel-apt-design-notes/tailrec.pdf"></nobr></a>.</p>
+<p>This applicability condition is present if and only if the <span class="v">:variant</span> input of <span class="v">tailrec</span> 
+                is <span class="v">:monoid</span> or <span class="v">:monoid-alt</span>.</p>
+</blockquote><p><span class="v">:domain-guard</span></p><blockquote>
+<p>The domain is well-defined (according to its guard) on every value:</p>
+<pre class="code">domain-guard&lt;z&gt;</pre>
+<p>where <span class="v">domain-guard&lt;z&gt;</span> is the guard term of <span class="v">domain</span> 
+        if <span class="v">domain</span> is a function name, 
+        while it is the guard obligation of <span class="v">domain</span> 
+        if <span class="v">domain</span> is a lambda expression.</p>
+<p>This corresponds to \mathit{GD} in the <span class="v">tailrec</span> <a href="res/kestrel-apt-design-notes/tailrec.pdf" target="_blank"><nobr>design notes<img src="../Icon_External_Link.png" title="External link to res/kestrel-apt-design-notes/tailrec.pdf"></nobr></a>.</p>
+<p>This applicability condition is present if and only if the function(s) generated by <span class="v">tailrec</span> is/are guard-verified 
+                (which is determined by 
+                the <span class="v">:verify-guards</span> input of <span class="v">tailrec</span>)..</p>
+</blockquote><p><span class="v">:combine-guard</span></p><blockquote>
+<p>The combination operator is well-defined (according to its guard) 
+        on every value in the domain:</p>
+<pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (domain q)
+              (domain r))
+         combine-guard&lt;q,r&gt;)</pre>
+<p>where <span class="v">combine-guard&lt;q,r&gt;</span> is 
+        the guard obligation of <span class="v">combine&lt;q,r&gt;</span>.</p>
+<p>This corresponds to G* in the <span class="v">tailrec</span> <a href="res/kestrel-apt-design-notes/tailrec.pdf" target="_blank"><nobr>design notes<img src="../Icon_External_Link.png" title="External link to res/kestrel-apt-design-notes/tailrec.pdf"></nobr></a>.</p>
+<p>This applicability condition is present if and only if the function(s) generated by <span class="v">tailrec</span> is/are guard-verified 
+                (which is determined by 
+                the <span class="v">:verify-guards</span> input of <span class="v">tailrec</span>)..</p>
+</blockquote><p><span class="v">:domain-of-base-when-guard</span></p><blockquote>
+<p>The base computation returns values in the domain, 
+        when the exit test of the recursion succeeds, 
+        and under the guard of <span class="v">old</span>:</p>
+<pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> old-guard&lt;x1,...,xn&gt;
+              test&lt;x1,...,xn&gt;)
+         (domain base&lt;x1,...,xn&gt;))</pre>
+<p>where <span class="v">old-guard&lt;x1,...,xn&gt;</span> is the guard term of <span class="v">old</span>.</p>
+<p>This corresponds to \mathit{GDb} in the <span class="v">tailrec</span> <a href="res/kestrel-apt-design-notes/tailrec.pdf" target="_blank"><nobr>design notes<img src="../Icon_External_Link.png" title="External link to res/kestrel-apt-design-notes/tailrec.pdf"></nobr></a>.</p>
+<p>This applicability condition is present if and only if the function(s) generated by <span class="v">tailrec</span> is/are guard-verified 
+                (which is determined by 
+                the <span class="v">:verify-guards</span> input of <span class="v">tailrec</span>) 
+                and the <span class="v">:variant</span> input of <span class="v">tailrec</span> 
+                is <span class="v">:assoc-alt</span>.</p>
+</blockquote><p><span class="v">:domain-of-nonrec-when-guard</span></p><blockquote>
+<p>The non-recursive operand of the combination operator 
+        returns values in the domain, 
+        when the exit test of the recursion fails, 
+        and under the guard of <span class="v">old</span>:</p>
+<pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> old-guard&lt;x1,...,xn&gt;
+              (<a href="COMMON-LISP____NOT.html">not</a> test&lt;x1,...,xn&gt;))
+         (domain nonrec&lt;x1,...,xn&gt;))</pre>
+<p>where <span class="v">old-guard&lt;x1,...,xn&gt;</span> is the guard term of <span class="v">old</span>.</p>
+<p>This corresponds to \mathit{GDc} in the <span class="v">tailrec</span> <a href="res/kestrel-apt-design-notes/tailrec.pdf" target="_blank"><nobr>design notes<img src="../Icon_External_Link.png" title="External link to res/kestrel-apt-design-notes/tailrec.pdf"></nobr></a>.</p>
+<p>This applicability condition is present if and only if the function(s) generated by <span class="v">tailrec</span> is/are guard-verified 
+                (which is determined by 
+                the <span class="v">:verify-guards</span> input of <span class="v">tailrec</span>) 
+                and the <span class="v">:variant</span> input of <span class="v">tailrec</span> 
+                is <span class="v">:monoid-alt</span> or <span class="v">:assoc-alt</span>.</p>
+</blockquote><p>When present, 
+      <span class="v">:combine-left-identity</span> and <span class="v">:combine-right-identity</span>, 
+      together with 
+      either <span class="v">:combine-associativity</span> or <span class="v">:combine-associativity-uncond</span> 
+      (one of them is always present), 
+      and together with 
+      either <span class="v">:domain-of-combine</span> or <span class="v">:domain-of-combine-uncond</span> 
+      (one of them is always present), 
+      mean that the domain has the algebraic structure of a monoid, 
+      with the combination operator as the binary operator 
+      and with the base value of the recursion as identity. 
+      When <span class="v">:combine-left-identity</span> and <span class="v">:combine-right-identity</span> 
+      are absent, 
+      the domain has the algebraic structure of a semigroup.</p><h3>Generated Events</h3><p><span class="v">new</span></p><blockquote>
+<p>Tail-recursive equivalent of <span class="v">old</span>:</p>
+<pre class="code">;; when the :variant input of tailrec is :monoid or :monoid-alt:
+(<a href="COMMON-LISP____DEFUN.html">defun</a> new (x1 ... xn a)
+  (<a href="COMMON-LISP____IF.html">if</a> test&lt;x1,...,xn&gt;
+      a
+    (new update-x1&lt;x1,...,xn&gt;
+         ...
+         update-xn&lt;x1,...,xn&gt;
+         combine&lt;a,nonrec&lt;x1,...,xn&gt;&gt;)))
+
+;; when the :variant input of tailrec is :assoc or :assoc-alt:
+(<a href="COMMON-LISP____DEFUN.html">defun</a> new (x1 ... xn a)
+  (<a href="COMMON-LISP____IF.html">if</a> test&lt;x1,...,xn&gt;
+      combine&lt;a,base&lt;x1,...,xn&gt;&gt;
+    (new update-x1&lt;x1,...,xn&gt;
+         ...
+         update-xn&lt;x1,...,xn&gt;
+         combine&lt;a,nonrec&lt;x1,...,xn&gt;&gt;)))</pre>
+<p>The measure term and well-founded relation of <span class="v">new</span> 
+       are the same as <span class="v">old</span>.</p>
+<p>The guard is <span class="v">(<a href="COMMON-LISP____AND.html">and</a> old-guard&lt;x1,...,xn&gt; (domain a))</span>, 
+       where <span class="v">old-guard&lt;x1,...,xn&gt;</span> is the guard term of <span class="v">old</span>.</p>
+<p>In the <span class="v">tailrec</span> <a href="res/kestrel-apt-design-notes/tailrec.pdf" target="_blank"><nobr>design notes<img src="../Icon_External_Link.png" title="External link to res/kestrel-apt-design-notes/tailrec.pdf"></nobr></a>, 
+       <span class="v">new</span> is denoted by f'.</p>
+</blockquote><p><span class="v">wrapper</span></p><blockquote>
+<p>Non-recursive wrapper of <span class="v">new</span>:</p>
+<pre class="code">;; when the :variant input of tailrec is :monoid or :monoid-alt:
+(<a href="COMMON-LISP____DEFUN.html">defun</a> wrapper (x1 ... xn)
+  (new x1 ... xn base&lt;x1,...,xn&gt;))
+
+;; when the :variant input tailrec is :assoc or :assoc-alt:
+(<a href="COMMON-LISP____DEFUN.html">defun</a> wrapper (x1 ... xn)
+  (<a href="COMMON-LISP____IF.html">if</a> test&lt;x1,...,xn&gt;
+      base&lt;x1,...,xn&gt;
+    (new update-x1&lt;x1,...,xn&gt;
+         ...
+         update-xn&lt;x1,...,xn&gt;
+         nonrec&lt;x1,...,xn&gt;)))</pre>
+<p>The guard is the same as <span class="v">old</span>.</p>
+<p>This is generated only if the <span class="v">:wrapper</span> input is <span class="v">t</span>.</p>
+<p>In the <span class="v">tailrec</span> <a href="res/kestrel-apt-design-notes/tailrec.pdf" target="_blank"><nobr>design notes<img src="../Icon_External_Link.png" title="External link to res/kestrel-apt-design-notes/tailrec.pdf"></nobr></a>, 
+       <span class="v">new</span> is denoted by \tilde{f}.</p>
+</blockquote><p><span class="v">old-to-new</span></p><blockquote>
+<p>Theorem that rewrites <span class="v">old</span> in terms of <span class="v">new</span>:</p>
+<pre class="code">;; when the :variant input of tailrec is :monoid or :monoid-alt:
+(<a href="ACL2____DEFTHM.html">defthm</a> old-to-new
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> (old x1 ... xn)
+         (new x1 ... xn base&lt;x1,...,xn&gt;)))
+
+;; when the :variant input of tailrec is :assoc or :assoc-alt:
+(<a href="ACL2____DEFTHM.html">defthm</a> old-to-new
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> (old x1 ... xn)
+         (<a href="COMMON-LISP____IF.html">if</a> test&lt;x1,...,xn&gt;
+             base&lt;x1,...,xn&gt;
+           (new update-x1&lt;x1,...,xn&gt;
+                ...
+                update-xn&lt;x1,...,xn&gt;
+                nonrec&lt;x1,...,xn&gt;))))</pre>
+<p>In the <span class="v">tailrec</span> <a href="res/kestrel-apt-design-notes/tailrec.pdf" target="_blank"><nobr>design notes<img src="../Icon_External_Link.png" title="External link to res/kestrel-apt-design-notes/tailrec.pdf"></nobr></a>, 
+       <span class="v">old-to-new</span> is denoted by f\!f'.</p>
+</blockquote><p><span class="v">new-to-old</span></p><blockquote>
+<p>Theorem that rewrites <span class="v">new</span> in terms of <span class="v">old</span>:</p>
+<pre class="code">;; when the :variant input of tailrec is
+;; :monoid or :monoid-alt or :assoc:
+(<a href="ACL2____DEFTHM.html">defthm</a> new-to-old
+  (<a href="ACL2____IMPLIES.html">implies</a> (domain a)
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (new x1 ... xn a)
+                  combine&lt;a,(old x1 ... xn)&gt;)))
+
+;; when the :variant input of tailrec is :assoc-alt:
+(<a href="ACL2____DEFTHM.html">defthm</a> new-to-old
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> (new x1 ... xn a)
+         combine&lt;a,(old x1 ... xn)&gt;))</pre>
+<p>In the <span class="v">tailrec</span> <a href="res/kestrel-apt-design-notes/tailrec.pdf" target="_blank"><nobr>design notes<img src="../Icon_External_Link.png" title="External link to res/kestrel-apt-design-notes/tailrec.pdf"></nobr></a>, 
+       <span class="v">new-to-old</span> is denoted by f'\!f.</p>
+</blockquote><p><span class="v">old-to-wrapper</span></p><blockquote>
+<p>Theorem that rewrites <span class="v">old</span> in terms of <span class="v">wrapper</span>:</p>
+<pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> old-to-wrapper
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> (old x1 ... xn)
+         (wrapper x1 ... xn)))</pre>
+<p>This is generated only if the <span class="v">:wrapper</span> input is <span class="v">t</span>.</p>
+<p>In the <span class="v">tailrec</span> <a href="res/kestrel-apt-design-notes/tailrec.pdf" target="_blank"><nobr>design notes<img src="../Icon_External_Link.png" title="External link to res/kestrel-apt-design-notes/tailrec.pdf"></nobr></a>, 
+       <span class="v">old-to-wrapper</span> is denoted by f\!\tilde{f}.</p>
+</blockquote><p><span class="v">wrapper-to-old</span></p><blockquote>
+<p>Theorem that rewrites <span class="v">wrapper</span> in terms of <span class="v">old</span>:</p>
+<pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> wrapper-to-old
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> (wrapper x1 ... xn)
+         (old x1 ... xn)))</pre>
+<p>This is generated only if the <span class="v">:wrapper</span> input is <span class="v">t</span>.</p>
+<p>In the <span class="v">tailrec</span> <a href="res/kestrel-apt-design-notes/tailrec.pdf" target="_blank"><nobr>design notes<img src="../Icon_External_Link.png" title="External link to res/kestrel-apt-design-notes/tailrec.pdf"></nobr></a>, 
+       <span class="v">old-to-wrapper</span> is denoted by \tilde{f}\!f.</p>
+</blockquote><p>A theory invariant is also generated to prevent 
+      <span class="v">old-to-new</span> and <span class="v">new-to-old</span> 
+      from being enabled at the same time.</p><p>A theory invariant is also generated to prevent 
+      <span class="v">old-to-wrapper</span> and <span class="v">wrapper-to-old</span> 
+      from being enabled at the same time.</p><h3>Redundancy</h3><p>A call of <span class="v">tailrec</span> is redundant if and only if 
+         it is identical to a previous successful call of <span class="v">tailrec</span> whose <span class="v">:show-only</span> input is not <span class="v">t</span>, 
+         except that the two calls may differ in 
+         their <span class="v">:print</span> and <span class="v">:show-only</span> inputs. 
+         These inputs do not affect the generated events, 
+         and thus they are ignored for the purpose of redundancy.</p><p>A call of <span class="v">tailrec</span> whose <span class="v">:show-only</span> input is <span class="v">t</span> 
+         does not generate any event. 
+         Thus, no successive call may be redundant with such a call.</p>
+</body>
+</html>

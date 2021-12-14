@@ -1,0 +1,132 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Write-*ip</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=X86ISA____WRITE-_A2IP">Click for Write-*ip in the Full Manual</a></h3>
+
+<p>Write an instruction pointer into the register RIP, EIP, or IP.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(write-*ip proc-mode *ip x86) → x86-new</pre></dt>
+<dt>Returns</dt>
+<dd>
+<span class="tt">x86-new</span> — <font color="#606060">Type <span class="v">(x86p x86-new)</span>, given <span class="v">(x86p x86)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p> 
+     In 64-bit mode, a 64-bit instruction pointer is written into the full RIP. 
+     Since, in the model, this is a 48-bit signed integer, 
+     this function consumes a 48-bit signed integer. 
+     </p> 
+     <p> 
+     In 32-bit mode, the instruction pointer is 32 or 16 bits 
+     based on the CS.D bit, i.e. the D bit of the current code segment descriptor. 
+     In these cases, the argument to this function should be 
+     a 32-bit or 16-bit unsigned integer, which is also a 48-bit signed integer. 
+     </p> 
+     <p> 
+     See AMD manual, Oct'13, Vol. 1, Sec. 2.2.4 and Sec. 2.5. 
+     AMD manual, Apr'16, Vol. 2, Sec 4.7.2., 
+     and Intel manual, Mar'17, Vol. 1, Sec. 3.6. 
+     </p> 
+     <p> 
+     According to Intel manual, Mar'17, Vol. 1, Table 3-1, 
+     it seems that 
+     when writing a 32-bit instruction pointer (EIP) 
+     the high 32 bits of RIP should be set to 0, 
+     and when writing a 16-bit instruction pointer (IP) 
+     the high 48 bits of RIP should be left unmodified; 
+     since in our model the RIP is 48 bits, 
+     the above applies to the high 16 and 32 bits, respectively. 
+     The pseudocode for the JMP instruction in Intel manual, Mar'17, Vol. 2 
+     shows an assignment <span class="v">EIP &lt;- tempEIP AND 0000FFFFh</span> for the 16-bit case, 
+     which seems to imply that 
+     the high 32 (or 16, in our model) bits are left unmodified 
+     and the high 16 bits of EIP are set to 0, 
+     which would contradict Table 3-1; 
+     the pseudocode for some other instructions 
+     that directly write the instruction pointer (e.g. RET and Jcc) 
+     show similar assignments. 
+     However, it is possible that this assignment has a typo and should be 
+     <span class="v">IP &lt;- tempEIP AND 0000FFFFh</span> instead, 
+     which would be consistent with Table 3-1. 
+     But we also note that the pseudocode for the JMP instruction 
+     shows an assignment <span class="v">EIP &lt;- tempEIP</span> for the 32-bit case, 
+     which seems to imply that 
+     the high 32 (or 16, in our model) bits are left unmodified, 
+     which would contradict Table 3-1. 
+     The AMD manuals do not show pseudocode for these instructions, 
+     and AMD manual, Oct'13, Vol. 1, Fig. 2-10 
+     (which is somewhat analogous to Intel's Table 3-1) 
+     shows the high bits simply grayed out; 
+     so the AMD manuals do not provide disambiguation help. 
+     It is also possible that Table 3-1 has a typo and should say 
+     that a 16-bit instruction pointer is zero-extended, 
+     but that is not quite consistent with the pseudocode assignments to EIP, 
+     which seem to imply that the high bits are untouched. 
+     Table 3-1 is under a section titled 
+     `Address Calculation in 64-Bit Mode', 
+     which may suggest that the table may not apply to 32-bit mode, 
+     but then it is not clear how it would just apply to 64-bit mode. 
+     For now, we decide to have this function follow Intel's Table 3-1, 
+     but we may revise that if we manage to resolve these ambiguities. 
+     We also note that Intel's Table 3-1 is consistent with the way in which 
+     32-bit and 16-bit values are written to general-purpose registers 
+     (even though RIP/EIP/IP is not a general-purpose register); 
+     see <span class="tt"><a href="X86ISA____WR32.html">wr32</a></span> and <span class="tt"><a href="X86ISA____WR16.html">wr16</a></span>. 
+     </p> 
+     <p> 
+     This function should be always called 
+     with an instruction pointer of the right type 
+     (48-bit signed, 32-bit unsigned, or 16-bit unsigned) 
+     based on the mode and code segment. 
+     We may add a guard to ensure that in the future, 
+     but for now in the code below 
+     we coerce the instruction pointer to 32 and 16 bits as appropriate, 
+     to verify guards; 
+     these coercions are expected not to change 
+     the argument instruction pointer. 
+     </p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>write-*ip$inline</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ write-*ip$inline (proc-mode *ip x86)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (x86)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____TYPE.html">type</a> (integer 0 4) proc-mode)
+          (<a href="COMMON-LISP____TYPE.html">type</a> (signed-byte 48) *ip))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> proc-mode 0)
+                            t (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 32 *ip))))
+ (<a href="COMMON-LISP____CASE.html">case</a>
+  proc-mode (0 (!rip *ip x86))
+  (1
+    (<a href="ACL2____B_A2.html">b*</a> ((cs-attr (<a href="COMMON-LISP____THE.html">the</a> (unsigned-byte 16)
+                       (seg-hidden-attri 1 x86)))
+         (cs.d (<a href="X86ISA____CODE-SEGMENT-DESCRIPTOR-ATTRIBUTESBITS-_E3D.html">code-segment-descriptor-attributesbits-&gt;d</a> cs-attr)))
+        (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP_____D3.html">=</a> cs.d 1)
+            (<a href="ACL2____MBE.html">mbe</a> :logic (!rip (<a href="X86ISA____N32.html">n32</a> *ip) x86)
+                 :exec (!rip (<a href="COMMON-LISP____THE.html">the</a> (unsigned-byte 32) *ip) x86))
+            (<a href="ACL2____B_A2.html">b*</a> ((rip (<a href="COMMON-LISP____THE.html">the</a> (signed-byte 48) (rip x86)))
+                 ((<a href="COMMON-LISP____THE.html">the</a> (signed-byte 48) rip-new)
+                  (<a href="ACL2____MBE.html">mbe</a> :logic (<a href="ACL2____PART-INSTALL.html">part-install</a> (<a href="X86ISA____N16.html">n16</a> *ip)
+                                            rip
+                                            :low 0
+                                            :width 16)
+                       :exec (<a href="COMMON-LISP____LOGIOR.html">logior</a> (<a href="COMMON-LISP____LOGAND.html">logand</a> -65536 rip)
+                                     (<a href="COMMON-LISP____LOGAND.html">logand</a> 65535 *ip)))))
+                (!rip rip-new x86)))))
+  (otherwise x86)))</pre> 
+<p><b>Theorem: </b>x86p-of-write-*ip</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     x86p-of-write-*ip
+     (<a href="ACL2____IMPLIES.html">implies</a> (x86p x86)
+              (<a href="ACL2____B_A2.html">b*</a> ((x86-new (write-*ip$inline proc-mode *ip x86)))
+                  (x86p x86-new)))
+     :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>write-*ip-when-64-bit-modep</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> write-*ip-when-64-bit-modep
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="X86ISA____WRITE-_A2IP.html">write-*ip</a> 0 *ip x86)
+               (!rip *ip x86)))</pre> 
+
+</body>
+</html>

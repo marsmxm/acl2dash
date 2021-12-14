@@ -1,0 +1,199 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Defexec</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____DEFEXEC">Click for Defexec in the Full Manual</a></h3>
+
+<p>Attach a terminating executable function to a definition</p><p>Suppose you define a function <span class="v">(fn x)</span> with a <a href="ACL2____GUARD.html">guard</a> of 
+ <span class="v">(good-input-p x)</span>, and you know that when the guard holds, the measure 
+ decreases on each recursive call.  Unfortunately, the definitional principle 
+ (see <a href="COMMON-LISP____DEFUN.html">defun</a>) ignores the guard.  For example, if the definition has the 
+ form</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> fn (x)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (good-input-p x)))
+  (<a href="COMMON-LISP____IF.html">if</a> (not-done-yet x)
+      (... (fn (destr x)) ...)
+    ...))</pre> 
+ 
+ <p>then in order to admit this definition, ACL2 must prove the appropriate 
+ formula asserting that <span class="v">(destr x)</span> is ``smaller than'' <span class="v">x</span> under the 
+ assumption <span class="v">(not-done-yet x)</span> but without the assumption <span class="v">(good-input-p
+ x)</span>, even if <span class="v">(not-done-yet x)</span> is true.  In essence, it may be necessary 
+ to submit instead the following definition.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> fn (x)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (good-input-p x)))
+  (<a href="COMMON-LISP____IF.html">if</a> (good-input-p x)
+      (<a href="COMMON-LISP____IF.html">if</a> (not-done-yet x)
+          (... (fn (destr x)) ...)
+        ...)
+    nil)</pre> 
+ 
+ <p>But it is unfortunate that when calls of <span class="v">fn</span> are evaluated, for example 
+ when <span class="v">fn</span> is applied to an explicit constant during a proof, then a call of 
+ <span class="v">good-input-p</span> must now be evaluated on each recursive call.</p> 
+ 
+ <p>Fortunately, <span class="v">defexec</span> provides a way to keep the execution efficient. 
+ For the example above we could use the following form.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFEXEC.html">defexec</a> fn (x)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (good-input-p x)))
+  (<a href="ACL2____MBE.html">mbe</a> :logic (<a href="COMMON-LISP____IF.html">if</a> (good-input-p x)
+                  (<a href="COMMON-LISP____IF.html">if</a> (not-done-yet x)
+                      (... (fn (destr x)) ...)
+                    ...)
+                nil)
+       :exec  (<a href="COMMON-LISP____IF.html">if</a> (not-done-yet x)
+                  (... (fn (destr x)) ...)
+                ...)))</pre> 
+ 
+ <p>Here ``<span class="tt"><a href="ACL2____MBE.html">mbe</a></span>'' stands for ``must be equal'' and, roughly speaking, 
+ its call above is logically equal to the <span class="v">:logic</span> form but is evaluated 
+ using the <span class="v">:exec</span> form when the guard holds.  See <a href="ACL2____MBE.html">mbe</a>.  The effect 
+ is thus to define <span class="v">fn</span> as shown in the <span class="tt"><a href="COMMON-LISP____DEFUN.html">defun</a></span> form above, but to 
+ cause execution of <span class="v">fn</span> using the <span class="v">:exec</span> body.  The use of <span class="v">defexec</span> 
+ instead of <span class="tt"><a href="COMMON-LISP____DEFUN.html">defun</a></span> in the example above causes a termination proof to be 
+ performed, in order to guarantee that evaluation always theoretically 
+ terminates, even when using the <span class="v">:exec</span> form for evaluation.</p> 
+ 
+ <pre class="code">Example:
+
+; Some of the keyword arguments in the declarations below are irrelevant or
+; unnecessary, but they serve to illustrate their use.
+
+(<a href="ACL2____DEFEXEC.html">defexec</a> f (x)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :measure (<a href="COMMON-LISP_____B2.html">+</a> 15 (<a href="ACL2____ACL2-COUNT.html">acl2-count</a> x))
+                  :ruler-extenders :basic
+                  :hints (("Goal" :in-theory (<a href="ACL2____DISABLE.html">disable</a> nth)))
+                  :guard-hints (("Goal" :in-theory (<a href="ACL2____DISABLE.html">disable</a> last)))
+                  :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> x) (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> 0 x) (<a href="COMMON-LISP_____C3.html">&lt;</a> x 25)))
+           (exec-xargs
+                  :test (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> x) (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> 0 x))
+                  :default-value 'undef ; defaults to nil
+                  :measure (<a href="ACL2____NFIX.html">nfix</a> x)
+                  :ruler-extenders :basic
+                  :well-founded-relation o&lt;))
+  (<a href="ACL2____MBE.html">mbe</a> :logic (<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2____ZP.html">zp</a> x)
+                  1
+                (<a href="COMMON-LISP_____A2.html">*</a> x (f (<a href="COMMON-LISP____-.html">-</a> x 1))))
+       :exec  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP_____D3.html">=</a> x 0)
+                  1
+                (<a href="COMMON-LISP_____A2.html">*</a> x (f (<a href="COMMON-LISP____-.html">-</a> x 1))))))</pre> 
+ 
+ <p>The above example macroexpands to the following.</p> 
+ 
+ <pre class="code">(<a href="ACL2____ENCAPSULATE.html">ENCAPSULATE</a> ()
+ (<a href="ACL2____LOCAL.html">LOCAL</a>
+  (<a href="ACL2____ENCAPSULATE.html">ENCAPSULATE</a> ()
+   (<a href="ACL2____SET-IGNORE-OK.html">SET-IGNORE-OK</a> T)
+   (<a href="ACL2____SET-IRRELEVANT-FORMALS-OK.html">SET-IRRELEVANT-FORMALS-OK</a> T)
+   (<a href="ACL2____LOCAL.html">LOCAL</a> (<a href="COMMON-LISP____DEFUN.html">DEFUN</a> F (X)
+            (<a href="COMMON-LISP____DECLARE.html">DECLARE</a>
+             (<a href="ACL2____XARGS.html">XARGS</a> :VERIFY-GUARDS NIL
+                    :HINTS (("Goal" :IN-THEORY (<a href="ACL2____DISABLE.html">DISABLE</a> NTH)))
+                    :MEASURE (<a href="ACL2____NFIX.html">NFIX</a> X)
+                    :RULER-EXTENDERS :BASIC
+                    :WELL-FOUNDED-RELATION O&lt;))
+            (<a href="COMMON-LISP____IF.html">IF</a> (<a href="COMMON-LISP____AND.html">AND</a> (<a href="COMMON-LISP____INTEGERP.html">INTEGERP</a> X) (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> 0 X))
+                (<a href="COMMON-LISP____IF.html">IF</a> (<a href="COMMON-LISP_____D3.html">=</a> X 0) 1 (<a href="COMMON-LISP_____A2.html">*</a> X (F (<a href="COMMON-LISP____-.html">-</a> X 1))))
+                'UNDEF)))
+   (<a href="ACL2____LOCAL.html">LOCAL</a> (<a href="ACL2____DEFTHM.html">DEFTHM</a> F-GUARD-IMPLIES-TEST
+            (<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____AND.html">AND</a> (<a href="COMMON-LISP____INTEGERP.html">INTEGERP</a> X) (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> 0 X) (<a href="COMMON-LISP_____C3.html">&lt;</a> X 25))
+                     (<a href="COMMON-LISP____AND.html">AND</a> (<a href="COMMON-LISP____INTEGERP.html">INTEGERP</a> X) (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> 0 X)))
+            :RULE-CLASSES NIL))))
+ (<a href="COMMON-LISP____DEFUN.html">DEFUN</a> F (X)
+   (<a href="COMMON-LISP____DECLARE.html">DECLARE</a> (<a href="ACL2____XARGS.html">XARGS</a> :MEASURE (<a href="COMMON-LISP_____B2.html">+</a> 15 (<a href="ACL2____ACL2-COUNT.html">ACL2-COUNT</a> X))
+                   :RULER-EXTENDERS :BASIC
+                   :HINTS (("Goal" :IN-THEORY (<a href="ACL2____DISABLE.html">DISABLE</a> NTH)))
+                   :GUARD-HINTS (("Goal" :IN-THEORY (<a href="ACL2____DISABLE.html">DISABLE</a> LAST)))
+                   :GUARD (<a href="COMMON-LISP____AND.html">AND</a> (<a href="COMMON-LISP____INTEGERP.html">INTEGERP</a> X) (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> 0 X) (<a href="COMMON-LISP_____C3.html">&lt;</a> X 25))))
+   (<a href="ACL2____MBE.html">MBE</a> :LOGIC
+        (<a href="COMMON-LISP____IF.html">IF</a> (<a href="ACL2____ZP.html">ZP</a> X) 1 (<a href="COMMON-LISP_____A2.html">*</a> X (F (<a href="COMMON-LISP____-.html">-</a> X 1))))
+        :EXEC
+        (<a href="COMMON-LISP____IF.html">IF</a> (<a href="COMMON-LISP_____D3.html">=</a> X 0) 1 (<a href="COMMON-LISP_____A2.html">*</a> X (F (<a href="COMMON-LISP____-.html">-</a> X 1)))))))</pre> 
+ 
+ <p>Notice that in the example above, the <span class="v">:</span><span class="tt"><a href="ACL2____HINTS.html">hints</a></span> in the <span class="tt"><a href="ACL2____LOCAL.html">local</a></span> definition of <span class="v">F</span> are inherited from the <span class="v">:hints</span> in the <span class="tt"><a href="ACL2____XARGS.html">xargs</a></span> of the <span class="v">defexec</span> form.  We discuss such inheritance below.</p> 
+ 
+ <p>CAVEAT: Termination is not considered for calls of <span class="tt"><a href="ACL2____MBE.html">mbe</a></span> under the 
+ top-level call.  Moreover, the <span class="v">:exec</span> part of an <span class="tt"><a href="ACL2____MBE.html">mbe</a></span> call under 
+ the <span class="v">:logic</span> part of any superior <span class="v">mbe</span> call is completely ignored.</p> 
+ 
+ <pre class="code">General Form:
+(<a href="ACL2____DEFEXEC.html">defexec</a> fn (var1 ... varn) doc-string dcl ... dcl
+  (<a href="ACL2____MBE.html">mbe</a> :LOGIC logic-body
+       :EXEC  exec-body))</pre> 
+ 
+ <p>where the syntax is identical to the syntax of <span class="tt"><a href="COMMON-LISP____DEFUN.html">defun</a></span> where the body 
+ is a call of <span class="v">mbe</span>, with the exceptions described below.  Thus, <span class="v">fn</span> is 
+ the symbol you wish to define and is a new symbolic name and <span class="v">(var1
+ ... varn)</span> is its list of formal parameters (see <a href="ACL2____NAME.html">name</a>).  The first 
+ exception is that at least one <span class="v">dcl</span> (i.e., <span class="tt"><a href="COMMON-LISP____DECLARE.html">declare</a></span> form) must 
+ specify a <span class="v">:guard</span>, <span class="v">guard</span>.  The second exception is that one of the 
+ <span class="v">dcl</span>s is allowed to contain an element of the form <span class="v">(exec-xargs ...)</span>. 
+ The <span class="v">exec-xargs</span> form, if present, must specify a non-empty <span class="tt"><a href="ACL2____KEYWORD-VALUE-LISTP.html">keyword-value-listp</a></span> each of whose keys is one of <span class="v">:test</span>, 
+ <span class="v">:default-value</span>, or one of the standard <span class="tt"><a href="ACL2____XARGS.html">xargs</a></span> keys of 
+ <span class="v">:measure</span>, <span class="v">:ruler-extenders</span>, <span class="v">:well-founded-relation</span>, 
+ <span class="v">:hints</span>, or <span class="v">:stobjs</span>.  Any of these five standard <span class="v">xargs</span> keys that 
+ is present in an <span class="v">xargs</span> of some <span class="v">dcl</span> but is not specified in the 
+ (possibly nonexistent) <span class="v">exec-xargs</span> form is considered to be specified in 
+ the <span class="v">exec-xargs</span> form, as illustrated in the example above for <span class="v">:hints</span>. 
+ (So for example, if you want <span class="v">:hints</span> in the final, non-local definition 
+ but not in the local definition, then specify the <span class="v">:hints</span> in the 
+ <span class="v">xargs</span> but specify <span class="v">:hints nil</span> in the <span class="v">exec-xargs</span>.)  If <span class="v">:test</span> 
+ is specified and not <span class="v">nil</span>, let <span class="v">test</span> be its value; otherwise let 
+ <span class="v">test</span> default to <span class="v">guard</span>.  If <span class="v">:default-value</span> is specified, let 
+ <span class="v">default-value</span> be its value; else <span class="v">default-value</span> is <span class="v">nil</span>. 
+ <span class="v">Default-value</span> should have the same <a href="ACL2____SIGNATURE.html">signature</a> as <span class="v">exec-body</span>; 
+ otherwise the <span class="v">defexec</span> form will fail to be admitted.</p> 
+ 
+ <p>The above General Form's macroexpansion is of the form <span class="v">(<a href="COMMON-LISP____PROGN.html">PROGN</a> encap
+ final-def)</span>, where <span class="v">encap</span> and <span class="v">final-def</span> are as follows. 
+ <span class="v">Final-def</span> is simply the result of removing the <span class="v">exec-xargs</span> 
+ declaration (if any) from its <span class="tt"><a href="COMMON-LISP____DECLARE.html">declare</a></span> form, and is the result of 
+ evaluating the given <span class="v">defexec</span> form, since <span class="v">encap</span> is of the following 
+ form.</p> 
+ 
+ <pre class="code">; encap
+(<a href="ACL2____ENCAPSULATE.html">ENCAPSULATE</a> ()
+  (<a href="ACL2____SET-IGNORE-OK.html">set-ignore-ok</a> t)             ; harmless for proving termination
+  (<a href="ACL2____SET-IRRELEVANT-FORMALS-OK.html">set-irrelevant-formals-ok</a> t) ; harmless for proving termination
+  (<a href="ACL2____LOCAL.html">local</a> local-def)
+  (<a href="ACL2____LOCAL.html">local</a> local-thm))</pre> 
+ 
+ <p>The purpose of <span class="v">encap</span> is to ensure the the executable version of 
+ <span class="v">name</span> terminates on all arguments.  Thus, <span class="v">local-def</span> and 
+ <span class="v">local-thm</span> are as follows, where the <span class="v">xargs</span> of the <span class="tt"><a href="COMMON-LISP____DECLARE.html">declare</a></span> 
+ form are the result of adding <span class="v">:VERIFY-GUARDS NIL</span> to the result of 
+ removing the <span class="v">:test</span> and (optional) <span class="v">:default-value</span> from the 
+ <span class="v">exec-xargs</span>.</p> 
+ 
+ <pre class="code">; local-def
+(<a href="COMMON-LISP____DEFUN.html">DEFUN</a> fn formals
+  (<a href="COMMON-LISP____DECLARE.html">DECLARE</a> (<a href="ACL2____XARGS.html">XARGS</a> :VERIFY-GUARDS NIL ...))
+  (<a href="COMMON-LISP____IF.html">IF</a> test
+      exec-body
+    default-value))
+
+; local-thm
+(<a href="ACL2____DEFTHM.html">DEFTHM</a> fn-EXEC-GUARD-HOLDS
+  (<a href="ACL2____IMPLIES.html">IMPLIES</a> guard test)
+  :RULE-CLASSES NIL)</pre> 
+ 
+ <p>We claim that if the above <span class="v">local-def</span> and <span class="v">local-thm</span> are admitted, 
+ then all evaluations of calls of <span class="v">fn</span> terminate.  The concern is that the 
+ use of <span class="tt"><a href="ACL2____MBE.html">mbe</a></span> in <span class="v">final-def</span> allows for the use of <span class="v">exec-body</span> for 
+ a call of <span class="v">fn</span>, as well as for subsequent recursive calls, when <span class="v">guard</span> 
+ holds and assuming that the guards have been verified for <span class="v">final-def</span>. 
+ However, by <span class="v">local-thm</span> we can conclude in this case that <span class="v">test</span> holds, 
+ in which case the call of <span class="v">fn</span> may be viewed as a call of the version of 
+ <span class="v">fn</span> defined in <span class="v">local-def</span>.  Moreover, since guards have been verified 
+ for <span class="v">final-def</span>, then guards hold for subsequent evaluation of 
+ <span class="v">exec-body</span>, and in particular for recursive calls of <span class="v">fn</span>, which can 
+ thus continue to be viewed as calls using <span class="v">local=def</span>.</p>
+</body>
+</html>

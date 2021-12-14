@@ -1,0 +1,117 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Define-sk-implies-handling</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=STD____DEFINE-SK-IMPLIES-HANDLING">Click for Define-sk-implies-handling in the Full Manual</a></h3>
+
+<p>Explanation of the <span class="v">:implies :smart</span> option for <a href="STD____DEFINE-SK.html">define-sk</a>.</p><p>By default, the <a href="STD____DEFINE-SK.html">define-sk</a> macro handles calls of 
+<span class="v">implies</span> in its function's body in a ``smart'' way.  Below we explain what 
+problem this special handling is meant to help with and the way it works.</p> 
+ 
+<p>Note: you can disable this behavior via <span class="v">:implies :dumb</span>.</p> 
+ 
+ 
+<h3>Sketch of the problem</h3> 
+ 
+<p>Consider a quantified function definition like:</p> 
+ 
+<pre class="code">(<a href="ACL2____DEFUN-SK.html">defun-sk</a> all-greaterp (<a href="COMMON-LISP____MIN.html">min</a> list)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> min)
+                              (<a href="ACL2____INTEGER-LISTP.html">integer-listp</a> list))
+                  :verify-guards nil))
+  (<a href="ACL2____FORALL.html">forall</a> (elem)
+          (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____MEMBER.html">member</a> elem list)
+                   (<a href="COMMON-LISP_____C3.html">&lt;</a> min elem))))</pre> 
+ 
+<p>Unfortunately, the above produces a lousy <span class="v">-necc</span> theorem that isn't 
+really the rule you usually want:</p> 
+ 
+<pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> all-greaterp-necc
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____MEMBER.html">member</a> elem list)
+                         (<a href="COMMON-LISP_____C3.html">&lt;</a> min elem)))
+           (<a href="COMMON-LISP____NOT.html">not</a> (all-greaterp min list))))</pre> 
+ 
+<p>We can get a better rule by adding the <span class="v">:rewrite :direct</span> option to the 
+<a href="ACL2____DEFUN-SK.html">defun-sk</a>.  After we do that, we get a better rule:</p> 
+ 
+<pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> all-greaterp-necc
+  (<a href="ACL2____IMPLIES.html">implies</a> (all-greaterp min list)
+           (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____MEMBER.html">member</a> elem list)
+                    (<a href="COMMON-LISP_____C3.html">&lt;</a> min elem))))</pre> 
+ 
+<p>So that's great.  The problem comes in when we try to verify the guards of 
+<span class="v">all-greaterp</span>.  For that, we need to know that <span class="v">elem</span> is a number when 
+we call <span class="v">(<a href="COMMON-LISP_____C3.html">&lt;</a> min elem)</span>.  This is obviously true since <span class="v">elem</span> is a member 
+of <span class="v">list</span>, an integer list—except wait, <a href="ACL2____IMPLIES.html">implies</a> is a real 
+function, so when we call <span class="v">(<a href="COMMON-LISP_____C3.html">&lt;</a> min elem)</span>, we haven't yet established that 
+<span class="v">elem</span> is in <span class="v">list</span>.</p> 
+ 
+<p>To fix this, we might try to rewrite our function to get rid of the 
+<span class="v">implies</span>.  For instance, we might write:</p> 
+ 
+<pre class="code">(<a href="ACL2____DEFUN-SK.html">defun-sk</a> all-greaterp (<a href="COMMON-LISP____MIN.html">min</a> list)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____INTEGERP.html">integerp</a> min)
+                              (<a href="ACL2____INTEGER-LISTP.html">integer-listp</a> list))
+                  :verify-guards nil))
+  (<a href="ACL2____FORALL.html">forall</a> (elem)
+          (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____MEMBER.html">member</a> elem list)
+              (<a href="COMMON-LISP_____C3.html">&lt;</a> min elem)
+            t))
+  :rewrite :direct)</pre> 
+ 
+<p>But now we run into a different problem: the <span class="v">-necc</span> theorem now ends up 
+looking like this:</p> 
+ 
+<pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> all-greaterp-necc
+  (<a href="ACL2____IMPLIES.html">implies</a> (all-greaterp min list)
+           (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____MEMBER.html">member</a> elem list)
+               (<a href="COMMON-LISP_____C3.html">&lt;</a> min elem)
+             t)))</pre> 
+ 
+<p>But this isn't a valid <a href="ACL2____REWRITE.html">rewrite</a> rule 
+because of the <a href="COMMON-LISP____IF.html">if</a> in the conclusion!</p> 
+ 
+<p>In short: for guard verification we generally want to use something like 
+<span class="v">if</span> or <a href="ACL2____IMPLIEZ.html">impliez</a> instead of 
+<span class="v">implies</span>, but to get good rewrite rules we need to use <span class="v">implies</span>.</p> 
+ 
+ 
+<h3>Solution</h3> 
+ 
+<p>To try to help with this, <a href="STD____DEFINE-SK.html">define-sk</a> does something special with 
+<span class="v">implies</span> forms inside the body.  In particular, when we submit:</p> 
+ 
+<pre class="code">(<a href="STD____DEFINE-SK.html">define-sk</a> all-greaterp ((<a href="COMMON-LISP____MIN.html">min</a> integerp) (<a href="COMMON-LISP____LIST.html">list</a> integer-listp))
+  (<a href="ACL2____FORALL.html">forall</a> (elem)
+          (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____MEMBER.html">member</a> elem list)
+                   (<a href="COMMON-LISP_____C3.html">&lt;</a> min elem))))</pre> 
+ 
+<p>The <span class="v">implies</span> terms in the resulting <a href="COMMON-LISP____DEFUN.html">defun</a> for <span class="v">all-greaterp</span> 
+will automatically get expanded into <span class="v">if</span> terms.  That is, the real <a href="COMMON-LISP____DEFUN.html">defun</a> that we submit will look something like this:</p> 
+ 
+<pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> all-greaterp (<a href="COMMON-LISP____MIN.html">min</a> list)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> ...)
+  (<a href="COMMON-LISP____LET.html">let</a> ((elem (all-greaterp-witness min list)))
+     (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____MEMBER.html">member</a> elem list)
+         (<a href="COMMON-LISP_____C3.html">&lt;</a> min elem)
+       t)))</pre> 
+ 
+<p>This will generally help to make guard verification more straightforward 
+because you'll be able to assume the hyps hold during the conclusion.  But note 
+that this rewriting of <span class="v">implies</span> is done only in the function's body, not in 
+the <span class="v">-necc</span> theorem where it would ruin the <a href="ACL2____REWRITE.html">rewrite</a> rule.</p> 
+ 
+<p>Is this safe?  There's of course no logical difference between <span class="v">implies</span> 
+and <span class="v">impliez</span>, but there certainly is a big difference in the execution, viz 
+evaluation order.  Fortunately, this difference will not matter for what we are 
+trying to do: we're only changing <span class="v">implies</span> to <span class="v">if</span> in code that follows 
+a call of the <span class="v">-witness</span> function.  This code can never be reached in real 
+execution, because calling the <span class="v">-witness</span> function will cause an error.  So: 
+logically we aren't changing anything, and this term is never executed anyway, 
+so execution differences don't matter.</p>
+</body>
+</html>

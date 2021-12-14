@@ -1,0 +1,242 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Ipasir</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=IPASIR____IPASIR">Click for Ipasir in the Full Manual</a></h3>
+
+<p>ACL2 bindings for the ipasir incremental SAT solving interface</p><p>IPASIR is a simple C interface to incremental SAT solvers.  (It 
+stands for Reentrant Incremental Sat solver API, in reverse.) This interface is 
+supported by a few different solvers because it is used in the SAT 
+competition's incremental track.  The ipasir distribution, containing the 
+interface and some sample solvers, can be found at <a href="https://github.com/biotomas/ipasir" target="_blank"><nobr>this GitHub repository<img src="../Icon_External_Link.png" title="External link to https://github.com/biotomas/ipasir"></nobr></a>.  The 
+ACL2 ipasir library is an attempt to semi-soundly allow ACL2 programs to 
+interface with such SAT solver libraries.</p> 
+ 
+<h3>Getting Started</h3> 
+ 
+<p>First, if you just want to reason about an incremental solver without 
+actually running it, you can include "ipasir-logic.lisp", which sets up the 
+abstract stobj representing the solver and its logical story, but doesn't 
+install the under-the-hood backend and therefore doesn't require any trust 
+tags.  Additionally, "ipasir-tools.lisp" builds on that to create some useful 
+shortcuts, also without any trust tags.</p> 
+ 
+<p>To load the backend, include "ipasir-backend.lisp".  This book first loads 
+the shared library specified by the environment variable 
+IPASIR_SHARED_LIBRARY, which should contain the path to a SAT solver shared 
+library. It then overrides the executable definitions of the ipasir interface 
+functions so that they instead call the appropriate functions from the shared 
+library.</p> 
+ 
+<p>There are several SAT solver libraries that implement the IPASIR interface; 
+to obtain one, see <a href="IPASIR____BUILDING-AN-IPASIR-SOLVER-LIBRARY.html">building-an-ipasir-solver-library</a>.</p> 
+ 
+<h3>Using ipasir functions</h3> 
+ 
+<p>Note: If you are familiar with ipasir, you'll notice that the ACL2 wrappers 
+work slightly differently than the underlying ipasir implementation.  The 
+differences are listed below under "Departures from the C Interface."</p> 
+ 
+<p>The following interfacing 
+functions are provided:</p> 
+ 
+<ul> 
+ 
+<li>
+<span class="v">(<a href="IPASIR____IPASIR-INIT.html">ipasir-init</a> ipasir state)</span> initializes the solver object so that other 
+functions can then be used.  This is already done for you if you use 
+<span class="v">with-local-ipasir</span>.  It requires that the state of the solver is 
+<span class="v">:undef</span> and it puts the solver in state <span class="v">:input</span>.  It takes and returns 
+state because (in the logical story) it reads the oracle into the <span class="v">init</span> 
+field in order to eliminate a source of unsoundness.</li> 
+ 
+<li>
+<span class="v">(<a href="IPASIR____IPASIR-REINIT.html">ipasir-reinit</a> ipasir)</span> initializes a solver object, just like 
+<span class="v">ipasir-init</span>, except that it has an additional guard, <span class="v">(<a href="COMMON-LISP____CONSP.html">consp</a>
+ipasir.history)</span>, which ensures that it can only be called on a solver that 
+has previously been initialized and subsequently released.</li> 
+ 
+<li>
+<span class="v">(<a href="IPASIR____IPASIR-RELEASE.html">ipasir-release</a> ipasir)</span> frees the solver object when you are done with 
+it.  This is also taken care of by <span class="v">with-local-ipasir</span>.  It requires that 
+the solver state not be <span class="v">:undef</span> and it puts it in state <span class="v">:undef</span>.</li> 
+ 
+<li>
+<span class="v">(<a href="IPASIR____IPASIR-ADD-LIT.html">ipasir-add-lit</a> ipasir lit)</span> is the mechanism by which new clauses may 
+be added to the formula.  A clause is added by calling this function once for 
+each literal in the clause, then calling <span class="v">ipasir-finalize-clause</span>, which 
+adds the clause to the formula.  (Literals are represented as natural numbers 
+where the LSB indicates negation and the rest is the variable number; see <a href="SATLINK____LITP.html">litp</a>.) Requires that the solver not be in state <span class="v">:undef</span>, and puts the 
+solver in state <span class="v">:input</span>.</li> 
+ 
+<li>
+<span class="v">(<a href="IPASIR____IPASIR-FINALIZE-CLAUSE.html">ipasir-finalize-clause</a> ipasir)</span> adds the clause built up by calls of 
+<span class="v">ipasir-add-lit</span> to the formula, and empties the clause buffer.  Requires 
+that the solver not be in state <span class="v">:undef</span>, and puts the solver in state 
+<span class="v">:input</span>.</li> 
+ 
+<li>
+<span class="v">(<a href="IPASIR____IPASIR-ASSUME.html">ipasir-assume</a> ipasir lit)</span> adds a literal to the current assumption 
+cube.  Whereas clauses added with <span class="v">ipasir-add-lit</span> are permanent, the assumption 
+is emptied each time <span class="v">ipasir-solve</span> is called.  Requires that the solver not 
+be in state <span class="v">:undef</span>, and puts the solver in state <span class="v">:input</span>.</li> 
+ 
+<li>
+<span class="v">(<a href="IPASIR____IPASIR-INPUT.html">ipasir-input</a> ipasir)</span> requires that the solver not be in state 
+<span class="v">:undef</span> and puts the solver in state <span class="v">:input</span>.  In reality, this is a 
+logical fiction that is convenient for functions that normally add some 
+literals, clauses, or assumptions but may sometimes not do anything.</li> 
+ 
+<li>
+<span class="v">(<a href="IPASIR____IPASIR-SOLVE.html">ipasir-solve</a> ipasir)</span> determines the satisfiability of the formula 
+under the assumption.  It returns <span class="v">(<a href="ACL2____MV.html">mv</a> status ipasir)</span>, where status is one 
+of <span class="v">:unsat</span>, <span class="v">:sat</span>, or <span class="v">:failed</span>.  When it returns <span class="v">:sat</span>, then 
+until the next call of <span class="v">ipasir-add-lit</span> or <span class="v">ipasir-assume</span>, the solver can be 
+queried with <span class="v">ipasir-val</span> to assess the values of literals under the 
+satisfying assignment.  Similarly, when it returns <span class="v">:unsat</span>, then until the 
+next call of <span class="v">ipasir-add-lit</span> or <span class="v">ipasir-assume</span> the solver can be queried 
+with <span class="v">ipasir-failed</span> to determine whether a given assumption literal was in 
+the unsatisfiable core subset of the assumption.  Requires that the solver not 
+be in state <span class="v">:undef</span>, and puts the solver in state <span class="v">:sat</span>, <span class="v">:unsat</span>, 
+or (when failed) <span class="v">:input).&lt;/li&gt;
+
+&lt;li&gt;@('(<a href="IPASIR____IPASIR-VAL.html">ipasir-val</a> ipasir lit)</span> determines the value of lit under the current 
+satisfying assignment, returning 1 if true, 0 if false, or <span class="v">nil</span> 
+if not determined.  Requires that the solver be in state <span class="v">:sat</span> and leaves 
+it in that state.</li> 
+ 
+<li>
+<span class="v">(<a href="IPASIR____IPASIR-FAILED.html">ipasir-failed</a> ipasir lit)</span> determines whether lit, which must be a 
+member of the assumptions from the previous call of <span class="v">ipasir-solve</span>, was in 
+the unsatisfiable core, which is a subset of that assumption under which the 
+formula is unsat.  Requires that the solver be in state <span class="v">:unsat</span> and leaves 
+it in that state.</li> 
+ 
+<li>
+<span class="v">(<a href="IPASIR____IPASIR-SET-LIMIT.html">ipasir-set-limit</a> ipasir count-or-nil)</span> limits the effort spent by the 
+solver.  Logically, all this does is cons something onto the history and reset 
+the callback count to 0.  Under the hood, it sets a callback function for the 
+solver to call every so often.  If count-or-nil is a positive number, then each 
+call of solve may only call the callback that many times before it fails. 
+Setting it to nil or 0 removes the limit.  If 0, the callbacks are still 
+performed and counted, but will not cause termination.  The frequency with 
+which the callback is called varies by solver.</li> 
+ 
+<li>
+<span class="v">(ipasir-get-status ipasir)</span> simply returns the current status :undef, 
+:input, :sat, or :unsat. Mostly used in guards to allow executable guards for 
+most of the ipasir functions.</li> 
+ 
+<li>
+<span class="v">(ipasir-some-history ipasir) (ipasir-empty-new-clause ipasir)
+ (ipasir-get-assumption ipasir) (ipasir-solved-assumption ipasir)</span> are 
+functions similar in spirit to <span class="v">ipasir-get-status</span> in that they are intended 
+to only be used to define executable guards for the ipasir stobj.</li> 
+ 
+<li>
+<span class="v">(<a href="IPASIR____IPASIR-CALLBACK-COUNT.html">ipasir-callback-count</a> ipasir)</span> queries how many times the 
+<span class="v">ipasir-set-limit</span> callback has been called since the last initialization or 
+call of <span class="v">ipasir-set-limit</span>.</li> 
+ 
+</ul> 
+ 
+<h4>Departures from the C Interface</h4> 
+ 
+<ul> 
+ 
+<li>Literals are represented as <span class="v">(var &lt;&lt; 1) | neg</span> rather than 
+<span class="v">var*(-1^^neg)</span>, for compatibility with other ACL2 libraries such as <a href="ACL2____SATLINK.html">satlink</a> and <a href="ACL2____AIGNET.html">ACL2::aignet</a>.</li> 
+ 
+<li> <span class="v">ipasir-solve</span> returns a symbol as its status rather than an integer 
+code.</li> 
+ 
+<li> <span class="v">ipasir-finalize-clause</span> is used to complete a clause and add it to the 
+formula, rather than <span class="v">ipasir-add-lit</span> with literal 0.</li> 
+ 
+<li> <span class="v">ipasir-val</span> returns a bit or NIL rather than a 
+literal to indicate the value of the literal in the counterexample.</li> 
+ 
+<li> <span class="v">ipasir-set-limit</span> is used to set resource limitations, replacing the 
+callback mechanism of ipasir_set_terminate.</li> 
+ 
+<li> The ACL2 interface does not yet support the API <span class="v">ipasir_set_learn</span>.</li> 
+ 
+</ul> 
+ 
+ 
+<h3>Logical story</h3> 
+ 
+<p>There are several problems to solve when trying to soundly model an 
+interface with an external library in ACL2.  First, we need a logical 
+description of the behavior of the external library that is specific enough to 
+be useful, but not so specific that unexpected behaviors produce soundness 
+bugs.  Second, we need to restrict user access to functions that break the 
+abstraction that allows us to model the external behavior logically.  Third, we 
+need to think about possible nondeterminism and how we can rule it out or 
+soundly account for it.</p> 
+ 
+<h4>Logical description of behavior</h4> 
+ 
+<p>The logical definitions for the ipasir abstract stobj's interface functions 
+are described in terms of a product data structure, <a href="IPASIR____IPASIR_42A.html">ipasir$a</a>. 
+The fields of the <span class="v">ipasir$a</span> contain information such as the full 
+clausal formula and the current assumption, solver status, and current 
+satisfying assignment or unsat core.  The behavior of the interface functions 
+above is modeled by updating and retrieving information from these fields. 
+However, the <span class="v">ipasir-solve</span> function is special because it is a constrained 
+function: we don't know for any given solver state whether it will solve the 
+SAT problem or fail due to resource limitations.  We constrain it so that when 
+it returns <span class="v">:unsat</span> it implies the formula is unsatisfiable under the 
+assumption, and assume certain other behaviors, e.g., it doesn't change the 
+formula and it updates the assumption, solution, and status fields 
+appropriately.</p> 
+ 
+<h4>Preventing Abstraction Breakage</h4> 
+ 
+<p>The concrete stobj used to introduce the abstract stobj (prior to loading 
+the under-the-hood C interface) is a single-field stobj whose one field is 
+the (logical) solver object.  The under-the-hood code smashes definitions built 
+upon this stobj's accessor/updater.  So if a user were to use this concrete 
+stobj, after calling any of these smashed definitions he/she would find that 
+the stobj accessor (e.g.) returns some foreign pointer object.  This would be a 
+logical problem, so we disallow execution of the accessor and updater for the 
+concrete stobj.</p> 
+ 
+<h4>Handling Nondeterminism</h4> 
+ 
+<p>A possible soundness problem with any external tool is that the logical 
+model may pretend something is a function which actually isn't.  Calling an 
+external SAT solver on the same problem multiple times could yield different 
+results even if the solver is correct; e.g., it could produce different 
+satisfying assignments.</p> 
+ 
+<p>One way this could occur is by calling <span class="v">ipasir-solve</span> on the same solver 
+object twice, without changing the formula and with the same assumptions.  We 
+deal with this possibility in the logical story by having every function that 
+updates the solver also extend a history field in the solver model, so that you 
+can't ever get back to the same solver object on which you already called 
+<span class="v">ipasir-solve</span>.</p> 
+ 
+<p>This takes care of multiple calls on the same solver object.  But we could 
+also construct two different solvers and run exactly the same series of 
+functions on them, and possibly yield different results due to nondeterminism 
+in the external library.  To solve this, <span class="v">ipasir-init</span> sets the <span class="v">init</span> 
+field of the solver model to the result of reading the ACL2 state's oracle. 
+The abstract stobj interface provides no way to access this field so we can't 
+know what its value is for any particular instance of the solver, and there's 
+no way to provably get the same value from the oracle twice, so this ensures 
+there's no way to make two solvers in such a way that they can logically be 
+proven to be equal.</p> 
+ 
+<p>This solution is a bit onerous because it means that any function that ever 
+uses an ipasir solver has to take and return state.  This can be worked around 
+using <span class="v">with-local-state</span> if necessary, at the cost of possible unsoundness 
+due to nondeterminism in the external library.  Additionally, 
+<span class="v">ipasir-reinit</span> can be used to reinitialize a previously released solver 
+without involving state.</p>
+</body>
+</html>

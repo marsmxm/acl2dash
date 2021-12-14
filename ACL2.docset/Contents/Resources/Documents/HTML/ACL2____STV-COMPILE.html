@@ -1,0 +1,138 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Stv-compile</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____STV-COMPILE">Click for Stv-compile in the Full Manual</a></h3>
+
+<p>Syntactically transform a symbolic test vector, readying it for 
+evaluation, debugging, etc.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(stv-compile stv mod) → cstv</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">stv</span> — An <a href="ACL2____STVDATA-P.html">stvdata-p</a> that has already had its lines widened and any 
+         Verilog-style names expanded; see <a href="ACL2____STV-WIDEN.html">stv-widen</a> and <a href="ACL2____STV-EXPAND.html">stv-expand</a>.<br>    <font color="#606060">Guard <span class="v">(<a href="ACL2____STVDATA-P.html">stvdata-p</a> stv)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">mod</span> — The <a href="ACL2____ESIM.html">esim</a> module this STV is about.<br>    <font color="#606060">Guard <span class="v">(good-esim-modulep mod)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">cstv</span> — <font color="#606060">Type <span class="v">(<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____COMPILED-STV-P.html">compiled-stv-p</a> cstv) (<a href="COMMON-LISP____IF.html">if</a> cstv t nil))</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>Compiling an STV involves doing lots of error checking to ensure 
+the STV is syntactically well-formed, only refers to legitimate inputs and 
+outputs, and so forth.  After sanity checking, our basic goal is to compile the 
+STV into a form that functions like <a href="ACL2____STV-RUN.html">stv-run</a> and <a href="ACL2____STV-DEBUG.html">stv-debug</a> can 
+efficiently process.</p> 
+ 
+<p>In particular, after (successfully) compiling an STV we obtain a <a href="ACL2____COMPILED-STV-P.html">compiled-stv-p</a> structure that says says how many steps we need to run for, 
+explains the mappings from user-level simulation variables to their internal 
+bit-encodings, and and has pre-computed alists for restricting the a <a href="ACL2____ESIM.html">esim</a> run and extracting the results.</p> 
+ 
+<p>Compilation is a syntactic process that is relatively cheap.  We <a href="ACL2____MEMOIZE.html">memoize</a> it mainly in the hopes of keeping the various alists we create the 
+same across multiple evaluations of an STV.</p> 
+ 
+<p>Note that to reuse the same <a href="ACL2____ESIM.html">esim</a> simulations across related STVs, our 
+basic approach in <a href="ACL2____STV-RUN.html">stv-run</a> is to do a fully general simulation of the 
+module for N cycles.  In this general simulation, we set <span class="v">|foo[0]|</span> to 
+<span class="v">|foo[0].P3|</span> during phase 3, and so forth.  The idea is that instead of 
+re-running <a href="ACL2____ESIM.html">esim</a> for each STV, we will just specialize this alist by 
+using <a href="ACL2____4V-SEXPR-RESTRICT.html">4v-sexpr-restrict</a> to replace <span class="v">|foo[0].P3|</span> with whatever value 
+we want for <span class="v">|foo[0]|</span> at phase 3.</p> 
+ 
+<p>The function <a href="ACL2____STV-RESTRICT-ALIST.html">stv-restrict-alist</a> pre-computes these bindings. 
+Essentially it just needs to build a big alist that binds the suffixed input 
+names to the sexprs that we generated in <a href="ACL2____STV-EXPAND-INPUT-LINES.html">stv-expand-input-lines</a>, 
+above.</p> 
+ 
+<p>The outputs are somewhat similar.  The function <a href="ACL2____STV-EXTRACTION-ALISTS.html">stv-extraction-alists</a> 
+builds a list of alists that say, for each step, which output bits we want to 
+collect and how we want to name them.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>stv-compile</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ stv-compile (<a href="ACL2____STV.html">stv</a> mod)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____STVDATA-P.html">stvdata-p</a> stv)
+                             (good-esim-modulep mod))))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'stv-compile))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+   (((<a href="ACL2____STVDATA.html">stvdata</a> stv) stv)
+    (nphases (<a href="ACL2____STV-NUMBER-OF-PHASES.html">stv-number-of-phases</a> stv))
+    ((unless (<a href="ACL2____POSP.html">posp</a> nphases))
+     (<a href="ACL2____RAISE.html">raise</a> "Trying to compile an STV without any phases?"))
+    (override-paths (stv-append-alist-keys stv.overrides))
+    (<a href="COMMON-LISP____MOD.html">mod</a> (stv-cut-module override-paths mod))
+    (in-usersyms nil)
+    ((<a href="ACL2____MV.html">mv</a> inputs gensyms in-usersyms)
+     (<a href="ACL2____STV-EXPAND-INPUT-LINES.html">stv-expand-input-lines</a> stv.inputs nil in-usersyms))
+    (restrict-alist nil)
+    (restrict-alist (<a href="ACL2____STV-RESTRICT-ALIST.html">stv-restrict-alist</a> inputs restrict-alist))
+    (out-usersyms nil)
+    ((<a href="ACL2____MV.html">mv</a> outputs out-usersyms)
+     (<a href="ACL2____STV-EXPAND-OUTPUT-LINES.html">stv-expand-output-lines</a> stv.outputs out-usersyms))
+    ((<a href="ACL2____MV.html">mv</a> internals out-usersyms)
+     (<a href="ACL2____STV-EXPAND-INTERNAL-LINES.html">stv-expand-internal-lines</a> stv.internals out-usersyms mod))
+    (out-extract-alists (<a href="ACL2____STV-EXTRACTION-ALISTS.html">stv-extraction-alists</a> (<a href="COMMON-LISP____-.html">-</a> nphases 1)
+                                               outputs nil))
+    (int-extract-alists (<a href="ACL2____STV-EXTRACTION-ALISTS.html">stv-extraction-alists</a> (<a href="COMMON-LISP____-.html">-</a> nphases 1)
+                                               internals nil))
+    ((<a href="ACL2____MV.html">mv</a> override-ins
+         override-outs in-usersyms out-usersyms)
+     (stv-expand-override-lines
+          stv.overrides in-usersyms out-usersyms))
+    (restrict-alist
+         (<a href="ACL2____STV-RESTRICT-ALIST.html">stv-restrict-alist</a> override-ins restrict-alist))
+    (nst-extract-alists (<a href="ACL2____STV-EXTRACTION-ALISTS.html">stv-extraction-alists</a> (<a href="COMMON-LISP____-.html">-</a> nphases 1)
+                                               override-outs nil))
+    (all-in-bits (<a href="ACL2____ALIST-KEYS.html">alist-keys</a> restrict-alist))
+    ((unless (<a href="ACL2____UNIQUEP.html">uniquep</a> all-in-bits))
+     (<a href="ACL2____RAISE.html">raise</a>
+      "Name clash.  Multiple input/initial bindings were generated ~
+                for ~x0."
+      (duplicated-members all-in-bits)))
+    (in-simvars (<a href="ACL2____ALIST-KEYS.html">alist-keys</a> in-usersyms))
+    (out-simvars (<a href="ACL2____ALIST-KEYS.html">alist-keys</a> out-usersyms))
+    ((unless (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____UNIQUEP.html">uniquep</a> in-simvars)
+                  (<a href="ACL2____UNIQUEP.html">uniquep</a> out-simvars)
+                  (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> in-simvars)
+                  (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> out-simvars)))
+     (<a href="ACL2____RAISE.html">raise</a>
+      "Programming error.  in-simvars or out-simvars aren't unique ~
+                symbols.  This shouldn't be possible."))
+    (all-in-bits (<a href="ACL2____APPEND-ALIST-VALS-EXEC.html">append-alist-vals-exec</a> in-usersyms gensyms))
+    ((unless (<a href="ACL2____UNIQUEP.html">uniquep</a> all-in-bits))
+     (<a href="ACL2____RAISE.html">raise</a> "Name clash for ~x0."
+            (duplicated-members all-in-bits)))
+    (override-bits (stv-append-alist-keys override-ins))
+    ((unless (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> override-bits))
+     (<a href="ACL2____RAISE.html">raise</a>
+      "Programming error -- override-bits should be a symbol-list: ~x0"
+      override-bits))
+    (ret (<a href="ACL2____MAKE-COMPILED-STV.html">make-compiled-stv</a>
+              :nphases nphases
+              :restrict-alist restrict-alist
+              :out-extract-alists out-extract-alists
+              :int-extract-alists int-extract-alists
+              :nst-extract-alists nst-extract-alists
+              :override-bits override-bits
+              :in-usersyms (<a href="ACL2____MAKE-FAST-ALIST.html">make-fast-alist</a> (<a href="ACL2____REV.html">rev</a> in-usersyms))
+              :out-usersyms (<a href="ACL2____MAKE-FAST-ALIST.html">make-fast-alist</a> (<a href="ACL2____REV.html">rev</a> out-usersyms))
+              :expanded-ins inputs
+              :override-paths override-paths)))
+   (<a href="ACL2____FAST-ALIST-FREE.html">fast-alist-free</a> in-usersyms)
+   (<a href="ACL2____FAST-ALIST-FREE.html">fast-alist-free</a> out-usersyms)
+   ret)))</pre> 
+<p><b>Theorem: </b>return-type-of-stv-compile</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> return-type-of-stv-compile
+        (<a href="ACL2____B_A2.html">b*</a> ((cstv (<a href="ACL2____STV-COMPILE.html">stv-compile</a> stv mod)))
+            (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____COMPILED-STV-P.html">compiled-stv-p</a> cstv)
+                   (<a href="COMMON-LISP____IF.html">if</a> cstv t nil)))
+        :rule-classes :rewrite)</pre> 
+
+</body>
+</html>

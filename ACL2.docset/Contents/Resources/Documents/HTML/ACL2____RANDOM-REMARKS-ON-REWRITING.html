@@ -1,0 +1,254 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Random-remarks-on-rewriting</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____RANDOM-REMARKS-ON-REWRITING">Click for Random-remarks-on-rewriting in the Full Manual</a></h3>
+
+<p>Some basic facts about the ACL2 rewriter</p><p>The ACL2 rewriter is technically part of the simplifier, but in 
+  this documentation we often conflate the two and say things like ``the 
+  conclusion simplifies to <span class="v">T</span>'' when in fact we should say ``the conclusion 
+  rewrites to <span class="v">T</span> during simplification'' In addition, both the simplifier 
+  and the rewriter are enormously complicated and contain so many heuristics 
+  that users are not often helped by studying the details.  For example, the 
+  rewriter takes 18 arguments (some of which are bundles of more rarely used 
+  arguments) and is part of a mutually recursive clique containing 50 functions 
+  as of Version 8.3, including the linear (and non-linear) arithmetic 
+  semi-decision procedures.  The rewriter and its clique consume about 6500 
+  lines of code.</p> 
+ 
+  <p>But to understand how <span class="v">:</span><span class="tt"><a href="ACL2____REWRITE.html">rewrite</a></span>, <span class="v">:</span><span class="tt"><a href="ACL2____REWRITE-QUOTED-CONSTANT.html">rewrite-quoted-constant</a></span>, <span class="v">:</span><span class="tt"><a href="ACL2____LINEAR.html">linear</a></span>, <span class="v">:</span><span class="tt"><a href="ACL2____CONGRUENCE.html">congruence</a></span>, 
+  <span class="v">:</span><span class="v">forward-chaining</span> and other rules behave, the user has to have a 
+  fairly weak model of the simplifier and rewriter, so we sketch that here.</p> 
+ 
+  <p>In ACL2, the goals you see printed in proof output are represented 
+  internally as clauses.  A clause in our sense is a list of terms and the 
+  meaning of a clause is the ACL2 disjunction of those terms where a term 
+  <span class="v">p</span> is considered ``false'' if ``<span class="v">p</span> = <span class="v">nil</span>'' and is true 
+  otherwise.  The elements of a clause are called ``literals,'' even though 
+  they are just terms.  For example the goal <span class="v">(<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____AND.html">AND</a> p q) r)</span> is 
+  internally represented as the clause <span class="v">((<a href="COMMON-LISP____NOT.html">NOT</a> p) (<a href="COMMON-LISP____NOT.html">NOT</a> q) r)</span>.  The literals 
+  of that clause are the terms <span class="v">(<a href="COMMON-LISP____NOT.html">NOT</a> p)</span>, <span class="v">(<a href="COMMON-LISP____NOT.html">NOT</a> q)</span>, and <span class="v">r</span>.</p> 
+ 
+  <p>The job of the simplifier is to simplify a clause, returning a set of 
+  clauses whose conjunction is propositionally equivalent to the input clause. 
+  The most desirable output set is the empty set, because the conjunction over 
+  the empty set is <span class="v">T</span>, which means the goal clause was proved.  For related 
+  discussions, see <a href="ACL2____HINTS-AND-THE-WATERFALL.html">hints-and-the-waterfall</a>, where we discuss how 
+  repeated simplifications are performed.</p> 
+ 
+  <p>Note that if you are trying to simplify the clause <span class="v">(lit1 lit2
+  ... litk)</span> and you manage to rewrite, say, the <span class="v">liti</span> to <span class="v">T</span>, then the 
+  clause is true.  Furthermore, when rewriting a literal of a clause you may 
+  assume all the other literals false because if one were true the clause would 
+  be true.  Finally, when you rewrite a literal you are justified in replacing 
+  it with one that is propositional equivalent, since the literals are 
+  disjoined.</p> 
+ 
+  <p>The simplifier works by first generating several data structures, here 
+  called the ``context,'' which codify governing assumptions available for the 
+  rewriting of each literal.  These data structures include the <a href="ACL2____TYPE-ALIST.html">type-alist</a> and <a href="ACL2____LINEAR-ARITHMETIC.html">linear-arithmetic</a> data base.  They are built using 
+  various rules derived from previously proved lemmas, including <span class="v">:</span><span class="tt"><a href="ACL2____TYPE-PRESCRIPTION.html">type-prescription</a></span>, <span class="v">:</span><span class="tt"><a href="ACL2____FORWARD-CHAINING.html">forward-chaining</a></span>, and <span class="v">:</span><span class="tt"><a href="ACL2____LINEAR.html">linear</a></span> 
+  rules.  It then calls the rewriter successively on each literal passing it 
+  the appropriate context and stipulating that the result of the rewriting must 
+  be propositionally equivalent to the input.  The rewriter returns a suitable 
+  term.  If the result is the unchanged, the simplifier just moves on to the 
+  next literal.  If the result contains no <span class="v">IF</span>-expressions, the simplifier 
+  just replaces the old literal with the new one.  But if the new term contains 
+  <span class="v">IF</span>-expressions, the simplifier splits them out into a set of clause 
+  segments, i.e., if the literal simplifies to <span class="v">(<a href="COMMON-LISP____IF.html">IF</a> a b c)</span>, then the 
+  simplifier gets two new clause segments, <span class="v">((<a href="COMMON-LISP____NOT.html">NOT</a> a) b)</span> and <span class="v">(a c)</span>, and 
+  then it splices each segment into the goal clause where the literal was, 
+  producing a set of new clauses, and then resumes rewriting literals in each 
+  new clause.  Heuristics try to prevent excessive case splitting, e.g., see 
+  <a href="ACL2____CASE-SPLIT-LIMITATIONS.html">case-split-limitations</a>.</p> 
+ 
+  <p>The job of the rewriter is to take a term, some context, and an 
+  equivalence relation, and return a ``simpler'' term that is equivalent to the 
+  input term under the assumptions in the context.</p> 
+ 
+  <p>The rewriter works by exploring the term, possibly changing the context 
+  and the equivalence relation as appropriate for the subterms it rewrites.</p> 
+ 
+  <ul> 
+ 
+  <li>If the term is a variable, the rewriter just returns it (unless the 
+  context tells it something interesting about that variable, such as that the 
+  variable is equal to <span class="v">nil</span>).  Sometimes you might wish that the value of a 
+  bound variable be rewritten, usually because the value found on the alist was 
+  rewritten under a different equivalence relation than the variable is now 
+  being used.  See <span class="v">double-rewrite</span>.</li> 
+ 
+  <li>If the term is a quoted constant, the rewriter tries to apply 
+  <span class="v">:</span><span class="tt"><a href="ACL2____REWRITE-QUOTED-CONSTANT.html">rewrite-quoted-constant</a></span> rules to that constant.</li> 
+ 
+  <li>If the term is <span class="v">(<a href="COMMON-LISP____IF.html">IF</a> a b c)</span>, it rewrites the test, <span class="v">a</span>, under the 
+  equivalence relation <span class="v">IFF</span> to get some (possibly) new term, <span class="v">a'</span>.  If 
+  <span class="v">a'</span> is <span class="v">nil</span> or is obviously different from <span class="v">nil</span> (like <span class="v">T</span>), 
+  the rewriter replaces the <span class="v">IF</span>-term by <span class="v">b</span> or <span class="v">c</span>, appropriately, 
+  and rewrites that.  If on the other hand, the rewriter can't decide whether 
+  <span class="v">a'</span> is <span class="v">nil</span> or not, it rewrites <span class="v">b</span> to <span class="v">b'</span> in an extended 
+  context in which <span class="v">a'</span> is assumed non-<span class="v">nil</span> and rewrites <span class="v">c</span> to 
+  <span class="v">c'</span> in an extended context in which <span class="v">a'</span> is <span class="v">nil</span>.  In rewriting 
+  both branches it preserves the outer equivalence relation -- the one to be 
+  maintained while rewriting the <span class="v">IF</span>-term.  Then the rewriter returns 
+  <span class="v">(<a href="COMMON-LISP____IF.html">IF</a> a' b' c</span>').</li> 
+ 
+  <li>If the term is a call of an arithmetic inequality, like <span class="v">(<a href="COMMON-LISP_____C3.html">&lt;</a> a b)</span>, the 
+  rewriter rewrites <span class="v">a</span> and <span class="v">b</span> and then considers whether the context 
+  allows it deduce the truth or falsity of the inequality using a <a href="ACL2____LINEAR-ARITHMETIC.html">linear-arithmetic</a> decision procedure.  The decision procedure, which is 
+  complete for linear inequalities over the rationals, uses heuristics to 
+  decide many integer cases, to select the order in which inequalities are 
+  combined to eliminate variables, and to handle some <a href="ACL2____NON-LINEAR-ARITHMETIC.html">non-linear-arithmetic</a> problems.</li> 
+ 
+  <li>If the term is a call of a function symbol, <span class="v">fn</span>, on some argument 
+  terms, <span class="v">a1</span>, ..., <span class="v">an</span>, the rewriter rewrites each argument, <span class="v">ai</span> to 
+  <span class="v">ai'</span>.  For each argument the rewriter uses known <span class="v">:</span><span class="tt"><a href="ACL2____CONGRUENCE.html">congruence</a></span> 
+  rules to determine which equivalence relations can be used to rewrite terms 
+  in that argument position so as to maintain the outer equivalence.  Then, 
+  having transformed <span class="v">(fn a1 ... an)</span> to <span class="v">(fn a1' ... an</span>') the rewriter 
+  tries to apply <span class="v">:</span><span class="tt"><a href="ACL2____REWRITE.html">rewrite</a></span> rules to that transformed term, called 
+  the ``target.''.</li> 
+ 
+  <li>Among the rewrite rules generally available for <span class="v">(fn a1' ... an</span>') is 
+  the definition of <span class="v">fn</span> itself.  The rewriter considers ``expanding'' the 
+  call, i.e., replacing it by the body of <span class="v">fn</span> after substituting the 
+  <span class="v">ai'</span> for the formal variables, if the definition is <a href="ACL2____ENABLE.html">enable</a>d, and 
+  then rewriting that.  But heuristics are used to prevent the indefinite 
+  expansion of recursive definitions.</li> 
+ 
+  </ul> 
+ 
+  <p>For an elementary tutorial on the application of a <span class="v">:</span><span class="v">rewrite</span> rule 
+  to a target term, see <a href="ACL2____INTRODUCTION-TO-REWRITE-RULES-PART-1.html">introduction-to-rewrite-rules-part-1</a> and <a href="ACL2____INTRODUCTION-TO-REWRITE-RULES-PART-2.html">introduction-to-rewrite-rules-part-2</a>.  Those topics also lead to 
+  documentation on how to design effective rules.  But just to summarize very 
+  briefly, we offer the following.</p> 
+ 
+  <p><span class="v">:Rewrite</span> rules take the general form</p> 
+ 
+  <pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> hyp1 ... hypk) (equiv lhs rhs))</pre> 
+ 
+  <p>where <span class="v">equiv</span> is a known <a href="ACL2____EQUIVALENCE.html">equivalence</a> relation.  Recall that the 
+  rewriter has a target term to rewrite in some context and is required to 
+  return a term that is equivalent modulo a given equivalence relation, here 
+  called the ``outer'' equivalence.  Furthermore, if the target term is a 
+  function application, e.g., <span class="v">(fn a1' ... an</span>'), the argument subterms have 
+  already been rewritten.</p> 
+ 
+  <p>If the rule in question is enabled and its <span class="v">equiv</span> refines the outer 
+  equivalence, the rewriter tries to match <span class="v">lhs</span> with the target.  By 
+  ``match'' we mean it tries to find a substition for the variables in <span class="v">lhs</span> 
+  that make the instantiated <span class="v">lhs</span> identical to the target.  We discuss 
+  matching further below.  Second, having found a suitable substitution, tries 
+  to ``relieve'' the hypotheses, as discussed below.  If successful, that means 
+  each <span class="v">hypi</span>, when instantiated with the substitution, is non-<span class="v">nil</span>. 
+  Third, if all the hypotheses are relieved, the target is ``replaced'' by the 
+  result of rewriting <span class="v">rhs</span> under the substitution.  We discuss that step 
+  more below too.</p> 
+ 
+  <p><b>Matching</b>: Technically, ACL2 uses a restriction of ordinary 
+  first-order unification -- the restriction being that only variables in the 
+  pattern (here the <span class="v">lhs</span> of the rule) may be instantiated.  Thus, the 
+  pattern <span class="v">(<a href="ACL2____G.html">G</a> x (H x))</span> matches <span class="v">(<a href="ACL2____G.html">G</a> (M A B) (H (M A B)))</span> by binding 
+  <span class="v">x</span> to <span class="v">(M A B)</span>.  It does not match <span class="v">(<a href="ACL2____G.html">G</a> (M A B) (H (M A A)))</span> even 
+  though those two terms ``unify'' by binding <span class="v">x</span> to <span class="v">(M A A)</span> and <span class="v">B</span> 
+  to <span class="v">A</span>.  Our pattern matcher is the function <span class="v">one-way-unify</span> in our 
+  source code.</p> 
+ 
+  <p>However, our pattern matcher knows some things about the structure of 
+  quoted constants.  For example, the pattern <span class="v">(<a href="COMMON-LISP____CONS.html">CONS</a> x y)</span> matches the 
+  quoted constant <span class="v">'(A B C)</span>, by binding <span class="v">x</span> to <span class="v">'A</span> and <span class="v">y</span> to 
+  <span class="v">'(B C)</span>.  This can be seen by running <span class="v">one-way-unify</span> on those two 
+  terms:</p> 
+ 
+  <pre class="code">ACL2 !&gt;(one-way-unify '(<a href="COMMON-LISP____CONS.html">cons</a> x y) ''(A B C))
+(T ((Y QUOTE (B C)) (X QUOTE A)))</pre> 
+ 
+  <p>Note the quote marks in our input.  Since <span class="v">one-way-unify</span> expects both 
+  of its arguments to be fully translated formal terms, we have to quote every 
+  constant we write here.  And since the arguments to <span class="v">one-way-unify</span> are 
+  evaluated before the function is called, we have to quote the two terms.  We 
+  see that <span class="v">one-way-unify</span> returns two results.  The first is <span class="v">T</span>, 
+  meaning that a suitable substitution was found.  The second is the 
+  substitution.  Lisp's abbreviation convention for printed ``dotted pairs,'' 
+  its ``quote convention,'' its convention of reading symbols in uppercase, and 
+  our convention here of writing terms (and variables) in lower case but 
+  constants in upper case, all conspire to make the substitution a little hard 
+  to read for novices.  Another way to display the exact same substitution 
+  is:</p> 
+ 
+  <pre class="code">((y . '(B C)) (x . 'A))</pre> 
+ 
+  <p>i.e., <span class="v">x</span> is bound to <span class="v">'A</span> and <span class="v">y</span> is bound to <span class="v">(B C)</span>.</p> 
+ 
+  <p>Below are some other examples, but we've re-displayed the substitutions.</p> 
+ 
+ 
+  <pre class="code">ACL2 !&gt;(one-way-unify '(<a href="COMMON-LISP____COERCE.html">coerce</a> x 'string) ''"Hello!")
+(T ((x . (#H #e #l #l #o #!))))
+ACL2 !&gt;(one-way-unify '(<a href="ACL2____INTERN-IN-PACKAGE-OF-SYMBOL.html">intern-in-package-of-symbol</a> x y) ''ACL2::TEMP)
+(T ((y . 'TEMP) (x . '"TEMP")))
+ACL2 !&gt;(one-way-unify '(<a href="ACL2____BINARY-_B2.html">binary-+</a> '3 x) ''7)
+(T ((X . '4)))
+ACL2 !&gt;(one-way-unify '(<a href="ACL2____UNARY--.html">unary--</a> x) ''-7)
+(T ((X QUOTE 7)))
+ACL2 !&gt;(one-way-unify '(<a href="ACL2____UNARY--.html">unary--</a> x) ''7)
+(NIL NIL)
+ACL2 !&gt;(one-way-unify '(<a href="ACL2____BINARY-_A2.html">binary-*</a> '2 y) ''8)
+(T ((Y QUOTE 4)))
+ACL2 !&gt;(one-way-unify '(<a href="ACL2____BINARY-_A2.html">binary-*</a> x y) ''8)
+(NIL NIL)</pre> 
+ 
+  <p>Note that the pattern matching algorithm is incomplete on quoted 
+  constants!  For example, it fails to match <span class="v">(<a href="ACL2____UNARY--.html">unary--</a> x)</span> with <span class="v">'7</span> even 
+  though <span class="v">(<a href="ACL2____UNARY--.html">unary--</a> '-7)</span> is <span class="v">'7</span>.  It similarly fails to match 
+  <span class="v">(<a href="ACL2____BINARY-_A2.html">binary-*</a> x y)</span> with <span class="v">'8</span> even though <span class="v">(<a href="ACL2____BINARY-_A2.html">binary-*</a> '33 '8/33)</span> is 
+  <span class="v">8</span>; indeed, there are in infinite number of suitable substitutions for 
+  this case, but <span class="v">one-way-unify</span> is designed to return at most one so as to 
+  limit the applicability of rewrite rules to ``reasonable'' cases.</p> 
+ 
+  <p><b>Relieving the Hypotheses</b>: The hypotheses of a rewrite rule are 
+  relieved one at a time starting with the left-most one.  The basic strategy 
+  is just to rewrite each hypothesis, assuming the current context and if 
+  <span class="v">IFF</span> equivalence relation.  If the result comes back non-<span class="v">NIL</span> the 
+  hypothesis is equivalent to <span class="v">T</span> in the current context.  But there are 
+  various special considerations.</p> 
+ 
+  <ul> 
+ 
+  <li>Free variables: It is possible that a hypothesis contains variables that 
+  are not bound by the substitution generated by the match.  We call these 
+  ``free variables'' and the system tries to bind them to make the instantiated 
+  hypothesis appear among the contextual assumptions.  New bindings are 
+  accumulated as hypotheses are relieved.  It is possible to find multiple 
+  successful substitutions, some possibly filtered out by subsequent 
+  hypotheses.  See <span class="v">free-variables</span> and the documentation topics it 
+  cites.</li> 
+ 
+  <li>Pragmas: It is possible to mark a hypothesis so that it is temporarily 
+  assumed true so that the rewrite rule can be applied.  This essentially 
+  spawns another subgoal to prove the hypothesis and thus brings the full power 
+  of the prover (not just the rewriter) to bear on the hypothesis.  See <span class="tt"><a href="ACL2____FORCE.html">force</a></span> and <span class="tt"><a href="ACL2____CASE-SPLIT.html">case-split</a></span>.  It is also possible to include hypotheses 
+  that are logically always true but which cause the attempt to apply the rule 
+  to fail if a certain user-specified compuation so indicates.  This can be 
+  used to restrict the application of a rule to certain syntactic situations. 
+  See <span class="v">syntaxp</span>.</li> 
+ 
+  </ul> 
+ 
+  <p><b>Replacement</b>: Before the target is replaced by the rewritten 
+  <span class="v">rhs</span>, a heuristic check is made to prevent certain trivial forms of 
+  rewrite loops.  See <span class="tt"><a href="ACL2____LOOP-STOPPER.html">loop-stopper</a></span>.  Otherwise, if the hypotheses are 
+  relieved (or assumed), the rewriter rewrites <span class="v">rhs</span> under the substitution 
+  generated by the match and the hypotheses.  It then makes certain heuristic 
+  checks to decide if replacing the target by this new term is a ``good idea'' 
+  in the opinion of the ACL2 implementors.  The two main checks are designed to 
+  avoid runaway expansion of recursive functions (see <a href="ACL2____DEFINITION.html">definition</a>), and 
+  introducing ``too many <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span>s'' (see <a href="ACL2____TOO-MANY-IFS.html">too-many-ifs</a>.  The latter 
+  check is used to prevent unmanageable case explosions.  (In general, the 
+  number of cases rises exponentially with the number of <span class="v">IF</span>s.)</p>
+</body>
+</html>

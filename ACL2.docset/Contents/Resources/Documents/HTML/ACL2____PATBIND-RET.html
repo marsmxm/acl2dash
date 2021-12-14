@@ -1,0 +1,167 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>ACL2::patbind-ret</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____PATBIND-RET">Click for ACL2::patbind-ret in the Full Manual</a></h3>
+
+<p><a href="ACL2____B_A2.html">b*</a> binder for named return values from functions.</p><div class="box"><p>BETA.  Interface may change.</p></div> 
+ 
+<p><span class="v">ret</span> is a very fancy <a href="ACL2____B_A2.html">b*</a> binder that can be used to treat the return 
+values from a function as a single bundle which you can then access by their 
+names.</p> 
+ 
+<p>This feature is <b>turned off by default</b>.  That is, by default 
+<span class="v">define</span> does not add the necessary mechanism to allow the function it's 
+defining to be used by the <span class="v">ret</span> patbinder; however, if it is enabled for a 
+given function, then the <span class="v">ret</span> patbinder can be used for calls of that 
+function from anywhere.  It can be enabled in two ways: by running 
+the (implicitly local) event</p> 
+ <pre class="code">(make-define-config :ret-patbinder t)</pre> 
+<p>which enables this feature for subsequent functions defined in the book, or 
+by adding the keyword argument <span class="v">:ret-patbinder t</span> to a function's <span class="v">define</span> 
+form.</p> 
+ 
+ 
+<h3>Introductory Example</h3> 
+ 
+<p>Here is a function, written with <a href="ACL2____DEFINE.html">define</a>, that returns two values.</p> 
+ 
+<pre class="code">(<a href="ACL2____DEFINE.html">define</a> mathstuff ((a natp)
+                   (b natp))
+  :returns (<a href="ACL2____MV.html">mv</a> (sum natp)
+               (prod natp))
+  :ret-patbinder t
+  (<a href="ACL2____B_A2.html">b*</a> ((a (<a href="ACL2____NFIX.html">nfix</a> a))
+       (b (<a href="ACL2____NFIX.html">nfix</a> b)))
+    (<a href="ACL2____MV.html">mv</a> (<a href="COMMON-LISP_____B2.html">+</a> a b)
+        (<a href="COMMON-LISP_____A2.html">*</a> a b))))</pre> 
+ 
+<p>Normally, to call this function from <a href="ACL2____B_A2.html">b*</a>, you might use an <a href="ACL2____MV.html">mv</a> 
+form like this:</p> 
+ 
+<pre class="code">(<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> mysum myprod) (mathstuff 3 4)))      ;; (:sum 7 :prod 12)
+  (<a href="COMMON-LISP____LIST.html">list</a> :sum  mysum
+        :prod myprod))</pre> 
+ 
+<p>Using the <span class="v">ret</span> binder, you might instead write:</p> 
+ 
+<pre class="code">(<a href="ACL2____B_A2.html">b*</a> (((ret mystuff) (mathstuff 3 4)))          ;; (:sum 7 :prod 12)
+  (<a href="COMMON-LISP____LIST.html">list</a> :sum  mystuff.sum
+        :prod mystuff.prod))</pre> 
+ 
+<p>In other words, the <span class="v">ret</span> binder lets you to treat all of the return 
+values for a function as if they were a single aggregate and then refer to the 
+individually returned values using a <a href="STD____DEFAGGREGATE.html">defaggregate</a>- or C-like 
+<span class="v">foo.bar</span> style syntax.</p> 
+ 
+ 
+<h3>Mechanics</h3> 
+ 
+<p>To a first approximation, the <span class="v">ret</span> binder just expands into an 
+equivalent <a href="ACL2____MV.html">mv</a> binder that sets up names like <span class="v">mystuff.sum</span> and 
+<span class="v">mystuff.prod</span>.  However, there are (unfortunately) many subtleties that you 
+should be aware of.</p> 
+ 
+ 
+<h4>Finding the function</h4> 
+ 
+<p>To be able to know the names of the function's return values, the <span class="v">ret</span> 
+binder obviously needs to "know" what function is being invoked.</p> 
+ 
+<p>It does this, completely barbarically, by just looking at the form on the 
+right hand side of the binder, even before any macro expansion.  For instance, 
+if we write a binding form like this:</p> 
+ 
+<pre class="code">((ret myreturn) (myfn ...))</pre> 
+ 
+<p>Then the <span class="v">ret</span> binder will look at the right-hand side and sees that it 
+is a call of <span class="v">myfn</span>.</p> 
+ 
+<p>Note that it is easy to write right-hand sides that <span class="v">ret</span> <b>does not 
+understand</b>.  For instance, if you just put a simple identity functions or 
+macro like <a href="ACL2____TIME_42.html">time$</a> around your function call, e.g.,</p> 
+ 
+<pre class="code">((ret myreturn) (<a href="ACL2____TIME_42.html">time$</a> (myfn ...)))</pre> 
+ 
+<p>then the <span class="v">ret</span> binder will not understand that you are calling <span class="v">myfn</span> 
+and macroexpansion will fail.  Similarly, you can't use <a href="COMMON-LISP____LET.html">let</a>-bindings or 
+similar on the right-hand side.</p> 
+ 
+ 
+<h4>Introducing the bindings</h4> 
+ 
+<p>Once we know that the function being invoked is <span class="v">myfn</span>, the <span class="v">ret</span> 
+binder itself expands into a call of <span class="v">patbind-myfn-ret</span>.  Normally, this 
+should be a function that is introduced for you automatically at <a href="ACL2____DEFINE.html">define</a> 
+time.</p> 
+ 
+<p>Because the <span class="v">patbind</span> function is constructed at <span class="v">define</span> time, it 
+implicitly "knows" the names of the return values for your functions.  It 
+also "knows" which of your function's return values are <a href="ACL2____STOBJ.html">ACL2::stobj</a>s 
+and how any such stobjs correspond to the arguments of your function.</p> 
+ 
+<p>Given all of this information, it is possible to construct a suitable <a href="ACL2____MV.html">mv</a> binding that will bind:</p> 
+ 
+<ul> 
+ 
+<li>Each non-stobj return value to a new symbol with a dotted name like 
+<span class="v">myreturn.foo</span>, <span class="v">myreturn.bar</span>, or similar; and</li> 
+ 
+<li>Each output stobj to the correct stobj name.</li> 
+ 
+</ul> 
+ 
+<p>Aside from some technical details regarding congruent stobjs (see <a href="ACL2____STOBJ.html">ACL2::stobj</a>) this is almost straightforward.  However, in purely logical 
+contexts such as theorem bodies and non-executable functions, it might be 
+desirable to ignore stobjs and name the stobj outputs just like all the rest. 
+You can use <span class="v">:ignore-stobjs t</span> as an optional argument to the <span class="v">ret</span> 
+binder, occurring after the name (if any), to get this behavior.</p> 
+ 
+ 
+<h5>Ignorability</h5> 
+ 
+<p>Consider our <span class="v">mathstuff</span> example.  We might imagine that a binding such 
+as:</p> 
+ 
+<pre class="code">((ret mystuff) (mathstuff 3 4))</pre> 
+ 
+<p>would be expanded into:</p> 
+ 
+<pre class="code">((<a href="ACL2____MV.html">mv</a> mystuff.sum mystuff.prod) (mathstuff 3 4))</pre> 
+ 
+<p>This works fine if we use all of the return values, but if we (say) don't 
+need <span class="v">mystuff.prod</span>, then we'd get errors unless we went out of our way to 
+use something like <a href="ACL2____SET-IGNORE-OK.html">set-ignore-ok</a>.  To avoid this, the <span class="v">ret</span> binders 
+will currently declare <b>all return values as ignorable.</b> We may eventually 
+revisit this decision and require some kind of more strict checking here.</p> 
+ 
+ 
+<h5>Package Naming</h5> 
+ 
+<p>What <a href="COMMON-LISP____PACKAGE.html">package</a> does <span class="v">mystuff.sum</span> belong in?  The most obvious 
+candidate is to <a href="COMMON-LISP____INTERN.html">intern</a> it into the package of the new variable, i.e., 
+<span class="v">mystuff</span>.  Unfortunately this can sometimes be very confusing.  For 
+instance, consider a code fragment like this:</p> 
+ 
+<pre class="code">(<a href="ACL2____B_A2.html">b*</a> ((fn         (get-function ...))
+     ((ret args) (extend-args initial-args ...)))
+  (make-answer :fn       fn
+               :args     args.extensions
+               :size     args.size
+               :warnings args.warnings))</pre> 
+ 
+<p>The problem here is that <span class="v">args</span> is a symbol in the <a href="ACL2_____A2ACL2-EXPORTS_A2.html">*ACL2-exports*</a> 
+list.  So, if you submit the above code in a typical package, <span class="v">foo</span>, where 
+you have imported the symbols from <span class="v">*acl2-exports*</span>, then <span class="v">args</span> is in 
+the <span class="v">acl2</span> package, but symbols like <span class="v">args.extensions</span>, which are 
+presumably not imported, will instead be in the <span class="v">foo</span> package.</p> 
+ 
+<p>To avoid this confusion, we scan the form for a symbol with the right name, 
+regardless of its package.  This scan is done before macros are expanded, so it 
+may not work with macros that generate names like <span class="v">args.extensions</span>.</p>
+</body>
+</html>

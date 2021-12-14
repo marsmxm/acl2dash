@@ -1,0 +1,321 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Fgl-handling-if-then-elses</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=FGL____FGL-HANDLING-IF-THEN-ELSES">Click for Fgl-handling-if-then-elses in the Full Manual</a></h3>
+
+<p>Discussion of how if-then-else objects are dealt with in FGL.</p> 
+ 
+<h3>Why If-Then-Elses Are A Problem</h3> 
+<p>One of the most powerful and advantageous things about FGL is that it can 
+avoid case splits in proofs by encoding the case splits into Boolean functions 
+that are later handled by fast solvers.  For example, if a function might 
+return either 3 or 5, then instead of considering the two cases separately we 
+can encode both cases into a symbolic integer value.  But for some case splits 
+the cases aren't so easily merged into a single symbolic value, except by 
+directly encoding the case split.  For example, if we have <span class="v">((a . b) . c)</span> 
+in one case but <span class="v">(d . (e . f))</span> in the other case, it isn't clear how best 
+to represent that.</p> 
+ 
+<p>Such cases can cause dilemmas and problems for FGL's symbolic 
+interpretation.  For example, suppose we have the following rewrite rules:</p> 
+<pre class="code">(foo (bar x) y) = (baz x y)
+(foo (zar x) y) = (fuz x y)</pre> 
+ 
+<p>But suppose that when we encounter a call of <span class="v">foo</span>, we have <span class="v">(<a href="COMMON-LISP____IF.html">if</a> c (bar
+3) (zar 5))</span> as the first argument.  What do we do?  We could always split 
+into cases for all the IFs in all the arguments of a function we're processing, 
+but this could easily get stuck in exponential case splits.  But otherwise, we 
+might miss rewrites that the user might expect to happen.  The user could fix 
+this case by adding the following rewrite rule:</p> 
+<pre class="code">(foo (<a href="COMMON-LISP____IF.html">if</a> c a b) y) = (<a href="COMMON-LISP____IF.html">if</a> c (foo a y) (foo b y))</pre> 
+<p>But this means the user needs to know all of the places this might happen 
+and make a rewrite rule for each of them, and by that time it might be just as 
+catastrophic for performance.</p> 
+ 
+<h3>Disallowing If-Then-Elses</h3> 
+ 
+<p>Because of the dilemma above, the default approach in FGL is to cause an 
+error whenever we are unable to merge the two branches of an if-then-else into 
+a single symbolic form automatically.  When this happens, the FGL clause processor will 
+produce an error saying that an if-then-else failed to merge and to look at the 
+debug object.  This behavior can be disabled as follows:</p> 
+<pre class="code">(<a href="ACL2____ASSIGN.html">assign</a> :fgl-make-ites t)</pre> 
+ 
+<p>It is also possible to use rewrite rules to allow if-then-else objects to be 
+created in certain cases; we discuss how this is used to handle a couple of 
+common cases in the next section.  The FGL interpreter includes support for 
+making <span class="v">ifs</span> transparent to certain functions, so that rewrite rules for 
+that purpose needn't proliferate.  But often the best option is to encode data 
+so that you don't need to represent it using if-then-elses; some examples of 
+how to do that follow.</p> 
+ 
+<h3>Merge Rules</h3> 
+ 
+<p>FGL uses a function <span class="v">gl-object-basic-merge</span> to merge certain combinations 
+of objects: it can merge two symbolic or concrete integers into a symbolic 
+integer, or merge two symbolic or concrete Boolean values into a symbolic 
+Boolean.  It also comes with some merging rules that allow a couple of common 
+idioms: the use of <span class="v">nil</span> as a "bottom" element for various types, and the 
+use of symbols as enum types.</p> 
+ 
+<p>To force the creation of an if-then-else, overriding the setting of 
+<span class="v">:fgl-make-ites</span>, use the function <span class="v">if!</span> instead of <span class="v">if</span> in the 
+right-hand side.  For example, one of the rules that allows the use of <span class="v">nil</span> 
+as bottom follows:</p> 
+ 
+<pre class="code">(def-gl-branch-merge if-with-if-with-nil-nil
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____IF.html">if</a> test (<a href="COMMON-LISP____IF.html">if</a> test2 then nil) nil)
+         (<a href="FGL____IF_12.html">if!</a> (<a href="COMMON-LISP____AND.html">and</a> test test2) then nil)))</pre> 
+ 
+<p>This will ensure that a <span class="v">:g-ite</span> object will be created without checking 
+whether <span class="v">then</span> can be merged with <span class="v">nil</span> (presumably this was already 
+tried since <span class="v">(<a href="COMMON-LISP____IF.html">if</a> test2 then nil)</span> was matched in the left-hand side.</p> 
+ 
+<h3>Making Functions Transparent to If-Then-Elses</h3> 
+ 
+<p>The FGL interpreter can be told to distribute calls of a given function over 
+if-then-else objects that might appear in their arguments as follows:</p> 
+ 
+<pre class="code">(<a href="FGL____ENABLE-SPLIT-IFS.html">enable-split-ifs</a> foo)</pre> 
+ 
+<p>This is similar to creating a rewrite rule matching an <span class="v">if</span> in each 
+argument of <span class="v">foo</span> and distributing the call of <span class="v">foo</span> into it, as 
+follows:</p> 
+ 
+<pre class="code">(def-gl-rewrite foo-of-if-1
+   (<a href="COMMON-LISP____EQUAL.html">equal</a> (foo (<a href="COMMON-LISP____IF.html">if</a> test a1 a2) b)
+          (<a href="COMMON-LISP____IF.html">if</a> test
+              (foo a1 b)
+            (foo a2 b))))
+(def-gl-rewrite foo-of-if-2
+   (<a href="COMMON-LISP____EQUAL.html">equal</a> (foo a (<a href="COMMON-LISP____IF.html">if</a> test b1 b2))
+          (<a href="COMMON-LISP____IF.html">if</a> test
+              (foo a b1)
+            (foo a b2))))</pre> 
+ 
+<p>(Enabling if splitting for a function enables it for all the arguments; if 
+this isn't desired, then providing rewrite rules like the ones above is a 
+reasonable alternative.)</p> 
+ 
+<p>Generally speaking, it is likely to be advantageous to enable splitting ifs 
+on a couple of kinds of functions:</p> 
+ 
+<ul> 
+ 
+<li>Functions that are handled in FGL via rewrite rules wherein their 
+arguments are other function calls, such as datatype accessors and predicates.</li> 
+ 
+<li>Primitives, especially if they always return an integer or always return a 
+Boolean, since these then eliminate the if-then-else once their branches are 
+merged.</li> 
+ 
+</ul> 
+ 
+<p>Conversely, it is likely not advantageous to enable splitting ifs on 
+functions that are handled by expanding a definition-style rule where the 
+arguments to the function on the LHS are just variables.</p> 
+ 
+ 
+<h3>Encoding Data to Avoid If-Then-Elses</h3> 
+ 
+<p>Here are some general ideas for encoding data so as to avoid if-then-elses. 
+After that, we provide some examples to give a flavor for how this works.</p> 
+ 
+<ul> 
+ 
+<li>Think about the types of the data you'll be dealing with and how best to 
+encode them symbolically.</li> 
+ 
+<li>Wrap any if-then-elses inside function definitions and turn off expansion 
+of those function definitions (see below).</li> 
+ 
+<li>Set up branch merge rules to merge these functions with other data of the 
+same type.</li> 
+ 
+<li>Set up rewrite rules to deal with accesses to those functions, likely 
+including checks for equality.</li> 
+ 
+</ul> 
+ 
+<h4>Example 1: Enumeration Type</h4> 
+ 
+<p>(Note: the built-in support for symbols as enum types makes the following 
+example largely unnecessary, but still illustrative.)</p> 
+ 
+<pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> vector-kind (x)
+  (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____LOGHEAD.html">loghead</a> 2 x) 0) :big)
+        ((<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____LOGTAIL.html">logtail</a> 2 x) 0) :little)
+        (t                       :neither)))
+
+;; Want to prove:
+(fgl::fgl-thm
+  :hyp (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 4 x)
+  :concl
+  (<a href="COMMON-LISP____LET_A2.html">let*</a> ((kind (vector-kind x)))
+     (<a href="COMMON-LISP____CASE.html">case</a> kind
+       (:big (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____LOGBITP.html">logbitp</a> 0 x)))
+       (:little (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____LOGBITP.html">logbitp</a> 0 x) (<a href="COMMON-LISP____LOGBITP.html">logbitp</a> 1 x)) (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____LOGBITP.html">logbitp</a> 2 x))))
+       (:neither (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____LOGBITP.html">logbitp</a> 2 x) (<a href="COMMON-LISP____LOGBITP.html">logbitp</a> 3 x))))))
+
+;; But when we try this we get a merge error -- (<a href="ACL2_____04.html">@</a> :fgl-interp-error-debug-obj) shows
+;; (14 :LITTLE :NEITHER) and (<a href="ACL2_____04.html">@</a> :fgl-interp-error-debug-stack) shows we were
+;; applying the definition of VECTOR-KIND.
+
+;; Vector-kind produces a symbol that is one of (:big :little :neither) -- an enumeration type.
+;; We can encode that in a few different ways -- as a number or as a priority-encoding.
+(<a href="COMMON-LISP____DEFUN.html">defun</a> vector-kind-encoding (littlep bigp)
+  (<a href="COMMON-LISP____COND.html">cond</a> (littlep :little)
+        (bigp :big)
+        (t :neither)))
+
+;; Turn off this function's definition! Keep the if-then-else inside it hidden.
+(<a href="FGL____DISABLE-DEFINITION.html">fgl::disable-definition</a> vector-kind-encoding)
+(<a href="ACL2____TABLE.html">table</a> fgl::fgl-fn-modes 'vector-kind-encoding
+       (fgl::make-fgl-function-mode :dont-concrete-exec t))
+
+;; Now rephrase vector-kind in terms of vector-kind-encoding:
+(<a href="FGL____DEF-FGL-REWRITE.html">fgl::def-fgl-rewrite</a> vector-kind-to-encoding2
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> (vector-kind x)
+         (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____LOGHEAD.html">loghead</a> 2 x) 0) (vector-kind-encoding nil t))
+               ((<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____LOGTAIL.html">logtail</a> 2 x) 0) (vector-kind-encoding t nil))
+               (t                       (vector-kind-encoding nil nil)))))
+
+;; At minimum we need a rule for checking equality of a vector-kind-encoding.
+;; Note: EQUAL will unify both ways, so no need to worry about the order of the
+;; arguments!
+(<a href="FGL____DEF-FGL-REWRITE.html">fgl::def-fgl-rewrite</a> equal-of-vector-kind-encoding
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (vector-kind-encoding littlep bigp) x)
+         (<a href="COMMON-LISP____COND.html">cond</a> (littlep (<a href="COMMON-LISP____EQUAL.html">equal</a> x :little))
+               (bigp    (<a href="COMMON-LISP____EQUAL.html">equal</a> x :big))
+               (t       (<a href="COMMON-LISP____EQUAL.html">equal</a> x :neither)))))
+
+;; Now the fgl-thm above will go through.
+
+;; Often we might also need a rule for merging if-then-elses where the encoding
+;; is one branch. But we can only merge if the other branch is also one of the
+;; symbols in the enumeration, so we need to test for that.
+(<a href="COMMON-LISP____DEFUN.html">defun</a> vector-kind-p (x)
+  (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> x :big) (<a href="COMMON-LISP____EQUAL.html">equal</a> x :little) (<a href="COMMON-LISP____EQUAL.html">equal</a> x :neither)))
+
+(<a href="FGL____DISABLE-DEFINITION.html">fgl::disable-definition</a> vector-kind-p)
+
+(<a href="FGL____DEF-FGL-REWRITE.html">fgl::def-fgl-rewrite</a> vector-kind-p-of-vector-kind-encoding
+  (vector-kind-p (vector-kind-encoding littlep bigp)))
+
+(<a href="FGL____DEF-FGL-BRANCH-MERGE.html">fgl::def-fgl-branch-merge</a> if-with-vector-kind-encoding
+  (<a href="ACL2____IMPLIES.html">implies</a> (vector-kind-p else)
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____IF.html">if</a> test (vector-kind-encoding littlep bigp) else)
+                  (vector-kind-encoding (<a href="COMMON-LISP____IF.html">if</a> test littlep (<a href="COMMON-LISP____EQUAL.html">equal</a> else :little))
+                                        (<a href="COMMON-LISP____IF.html">if</a> test bigp (<a href="COMMON-LISP____EQUAL.html">equal</a> else :big))))))
+
+;; Alternatively, we could instead turn off expansion of (vector-kind x) and
+;; write rules directly on that:
+:ubt! vector-kind-encoding
+
+(<a href="FGL____DISABLE-DEFINITION.html">fgl::disable-definition</a> vector-kind)
+
+(<a href="FGL____DEF-FGL-REWRITE.html">fgl::def-fgl-rewrite</a> equal-of-vector-kind
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> y (vector-kind x))
+         (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____LOGHEAD.html">loghead</a> 2 x) 0) (<a href="COMMON-LISP____EQUAL.html">equal</a> y :big))
+               ((<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____LOGTAIL.html">logtail</a> 2 x) 0) (<a href="COMMON-LISP____EQUAL.html">equal</a> y :little))
+               (t (<a href="COMMON-LISP____EQUAL.html">equal</a> y :neither)))))
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> vector-kind-p (x)
+  (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> x :big) (<a href="COMMON-LISP____EQUAL.html">equal</a> x :little) (<a href="COMMON-LISP____EQUAL.html">equal</a> x :neither)))
+
+(<a href="FGL____DISABLE-DEFINITION.html">fgl::disable-definition</a> vector-kind-p)
+
+(<a href="FGL____DEF-FGL-REWRITE.html">fgl::def-fgl-rewrite</a> vector-kind-p-of-vector-kind
+  (vector-kind-p (vector-kind x)))
+
+(<a href="FGL____DEF-FGL-BRANCH-MERGE.html">fgl::def-fgl-branch-merge</a> if-then-else-of-vector-kind
+  (<a href="ACL2____IMPLIES.html">implies</a> (vector-kind-p else)
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____IF.html">if</a> test (vector-kind x) else)
+                  (vector-kind (<a href="COMMON-LISP____IF.html">if</a> test x
+                                 (<a href="COMMON-LISP____CASE.html">case</a> else
+                                   (:big 4)
+                                   (:little 2)
+                                   (otherwise 6)))))))</pre> 
+ 
+<h4>Example 2: Member-Equal</h4> 
+ 
+<p>Member-equal is often used to just test whether or not an object is a member 
+of a list.  But it returns much more information than that -- it returns the 
+tail of the list beginning with that object.  Because that extra information is 
+inconvenient to represent in FGL, we represent it instead in a way that 
+prevents us from needing to reason about this extra information.</p> 
+ 
+<pre class="code">;; This function is just IF, but we'll turn off its definition.
+(<a href="COMMON-LISP____DEFUN.html">defun</a> fgl-hidden-if (test then else)
+  (<a href="COMMON-LISP____IF.html">if</a> test then else))
+
+(<a href="FGL____DISABLE-DEFINITION.html">fgl::disable-definition</a> fgl-hidden-if)
+
+;; This function represents a value that is likely to be just treated as
+;; Boolean, but may not actually be T when it is non-NIL.  The TRUE input
+;; determines its truth value and VAL determines its actual form when non-NIL.
+;; We use this function when we think we won't need the actual value of val,
+;; just its truth value.
+(<a href="COMMON-LISP____DEFUN.html">defun</a> maybe-value (true val)
+  (<a href="COMMON-LISP____AND.html">and</a> true
+       (<a href="COMMON-LISP____OR.html">or</a> val t)))
+
+(<a href="FGL____DISABLE-DEFINITION.html">fgl::disable-definition</a> maybe-value)
+
+;; Under IFF, maybe-value is just its truth value.
+(<a href="FGL____DEF-FGL-REWRITE.html">def-fgl-rewrite</a> maybe-value-under-iff
+  (<a href="ACL2____IFF.html">iff</a> (maybe-value true val)
+       true))
+
+;; To merge a maybe-value with some other object, merge with the test under an
+;; IFF context and then merge the value using fgl-hidden-if.
+(<a href="FGL____DEF-FGL-BRANCH-MERGE.html">def-fgl-branch-merge</a> maybe-value-merge
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____IF.html">if</a> test (maybe-value true val) else)
+         (maybe-value (<a href="COMMON-LISP____IF.html">if</a> test true (<a href="COMMON-LISP____AND.html">and</a> else t)) (fgl-hidden-if test val else))))
+
+;; We probably shouldn't need to compare maybe-value with equal, but this might
+;; succeed if we end up needing to.
+(<a href="FGL____DEF-FGL-REWRITE.html">def-fgl-rewrite</a> equal-of-maybe-value
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (maybe-value true val) x)
+         (<a href="COMMON-LISP____IF.html">if</a> true
+             (<a href="COMMON-LISP____IF.html">if</a> val
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> x val)
+               (<a href="COMMON-LISP____EQUAL.html">equal</a> x t))
+           (<a href="COMMON-LISP____NOT.html">not</a> x))))
+ 
+         
+;; We'll represent member-equal using maybe-value.  Memberp-equal gives its
+;; truth value:
+(<a href="COMMON-LISP____DEFUN.html">defun</a> memberp-equal (x lst)
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ATOM.html">atom</a> lst)
+      nil
+    (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> x (<a href="COMMON-LISP____CAR.html">car</a> lst))
+        (memberp-equal x (<a href="COMMON-LISP____CDR.html">cdr</a> lst)))))
+
+;; We introduce a version of member-equal about which we won't prove any rules,
+;; so as to hide it away in the value of the maybe-value:
+(<a href="COMMON-LISP____DEFUN.html">defun</a> hide-member-equal (x lst)
+  (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> x lst))
+
+;; Turn off both member-equal and hide-member-equal...
+(<a href="FGL____DISABLE-DEFINITION.html">fgl::disable-definition</a> member-equal)
+(<a href="FGL____DISABLE-DEFINITION.html">fgl::disable-definition</a> hide-member-equal)
+
+(<a href="ACL2____DEFTHM.html">defthm</a> memberp-equal-iff-member-equal
+  (<a href="ACL2____IFF.html">iff</a> (memberp-equal x lst) (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> x lst)))
+
+;; Now when we see member-equal, we'll hide its full value away using
+;; hide-member-equal and expose its Boolean value (memberp-equal) through
+;; maybe-value.
+(<a href="FGL____DEF-FGL-REWRITE.html">def-fgl-rewrite</a> member-equal-to-maybe-value
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> x lst)
+         (maybe-value (memberp-equal x lst) (hide-member-equal x lst))))</pre> 
+ 
+
+</body>
+</html>

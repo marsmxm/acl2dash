@@ -1,0 +1,95 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Check-vars-not-free</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____CHECK-VARS-NOT-FREE">Click for Check-vars-not-free in the Full Manual</a></h3>
+
+<p>Avoid variable capture in macro calls</p><p><span class="v">Check-vars-not-free</span> is a macro that is useful for avoiding 
+ capture of variables in macro calls.  We explain using a running example, 
+ after which we give a precise explanation (at the end of this documentation 
+ topic).  These definitions are rather contrived but are designed to illustrate 
+ how <span class="v">check-vars-not-free</span> can be useful.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> has-length (x n)
+  `(<a href="COMMON-LISP____LET.html">let</a> ((k (<a href="ACL2____LEN.html">len</a> ,x)))
+     (<a href="COMMON-LISP____EQUAL.html">equal</a> k ,n)))
+(<a href="COMMON-LISP____DEFUN.html">defun</a> f1 (<a href="ACL2____U.html">u</a> v)
+  (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____NATP.html">natp</a> v)
+       (has-length u (<a href="COMMON-LISP_____A2.html">*</a> 2 v))))
+(<a href="COMMON-LISP____DEFUN.html">defun</a> f2 (lst k)
+  (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____NATP.html">natp</a> k)
+       (has-length lst (<a href="COMMON-LISP_____A2.html">*</a> 2 k))))</pre> 
+ 
+ <p>One might expect <span class="v">f1</span> and <span class="v">f2</span> to be the same function, since the 
+ only change seems to be from the choices of formal parameters.  However, 
+ consider these evaluations.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(f1 '(a b c d e f) 3)
+T
+ACL2 !&gt;(f2 '(a b c d e f) 3)
+NIL
+ACL2 !&gt;</pre> 
+ 
+ <p>The problem becomes clear if we expand the macro call in the body of 
+ <span class="v">f2</span>.</p> 
+ 
+ <pre class="code">ACL2 !&gt;:trans1 (has-length lst (<a href="COMMON-LISP_____A2.html">*</a> 2 k))
+ (<a href="COMMON-LISP____LET.html">LET</a> ((K (<a href="ACL2____LEN.html">LEN</a> LST))) (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> K (<a href="COMMON-LISP_____A2.html">*</a> 2 K)))
+ACL2 !&gt;</pre> 
+ 
+ <p>We see that when expanding the call of the macro <span class="v">has-length</span> in the 
+ body of <span class="v">f2</span>, the substitution of <span class="v">(<a href="COMMON-LISP_____A2.html">*</a> 2 k)</span> for <span class="v">,n</span> causes <span class="v">k</span> to 
+ be``captured'' by the binding of <span class="v">k</span> to <span class="v">(<a href="ACL2____LEN.html">len</a> lst)</span>.</p> 
+ 
+ <p>The macro <span class="v">check-vars-not-free</span> is designed to enforce that no such 
+ capture takes place.  An improved definition of <span class="v">has-length</span> is as 
+ follows, since it insists that the variable <span class="v">k</span> must not appear in the term 
+ that replaces <span class="v">,n</span>.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> has-length (x n)
+  `(<a href="COMMON-LISP____LET.html">let</a> ((k (<a href="ACL2____LEN.html">len</a> ,x)))
+     (<a href="COMMON-LISP____EQUAL.html">equal</a> k (<a href="ACL2____CHECK-VARS-NOT-FREE.html">check-vars-not-free</a> (k) ,n))))</pre> 
+ 
+ <p>Now, the attempt to define <span class="v">f2</span> as above causes an error.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="COMMON-LISP____DEFUN.html">defun</a> f2 (lst k)
+   (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____NATP.html">natp</a> k)
+        (has-length lst (<a href="COMMON-LISP_____A2.html">*</a> 2 k))))
+
+
+ACL2 Error in ( DEFUN F2 ...):  CHECK-VARS-NOT-FREE failed:
+It is forbidden to use K in (<a href="ACL2____BINARY-_A2.html">BINARY-*</a> '2 K).  Note:  this error occurred
+in the context (<a href="ACL2____CHECK-VARS-NOT-FREE.html">CHECK-VARS-NOT-FREE</a> (K) (<a href="COMMON-LISP_____A2.html">*</a> 2 K)).
+
+
+Summary
+Form:  ( DEFUN F2 ...)
+Rules: NIL
+Time:  0.00 seconds (prove: 0.00, print: 0.00, other: 0.00)
+
+ACL2 Error in ( DEFUN F2 ...):  See :DOC failure.
+
+******** FAILED ********
+ACL2 !&gt;</pre> 
+ 
+ <p>The error message shows that the check performed by 
+ <span class="v">check-vars-not-free</span> has failed, because the variable <span class="v">k</span> occurs in the 
+ expression <span class="v">(<a href="COMMON-LISP_____A2.html">*</a> 2 k)</span>.  More precisely, what is checked is that <span class="v">k</span> does 
+ not occur in the translation to a <a href="ACL2____TERM.html">term</a> of the expression <span class="v">(<a href="COMMON-LISP_____A2.html">*</a> 2 k)</span>, 
+ namely, <span class="v">(<a href="ACL2____BINARY-_A2.html">binary-*</a> '2 k)</span>.</p> 
+ 
+ <p>The general form of a call of <span class="v">check-vars-not-free</span> is</p> 
+ 
+ <pre class="code">(<a href="ACL2____CHECK-VARS-NOT-FREE.html">check-vars-not-free</a> (var_1 ... var_n) expr)</pre> 
+ 
+ <p>where <span class="v">var_1</span>, ..., <span class="v">var_n</span> are variables and <span class="v">expr</span> is an 
+ expression.  This call is equivalent to <span class="v">expr</span> — indeed, there is no 
+ effect on the code generated when using this call in place of <span class="v">expr</span> 
+ — but ACL2 requires that the indicated variables do not occur free in 
+ the translation of <span class="v">expr</span> to a term.</p>
+</body>
+</html>

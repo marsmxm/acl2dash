@@ -1,0 +1,213 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Stobj-table</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____STOBJ-TABLE">Click for Stobj-table in the Full Manual</a></h3>
+
+<p>A <a href="ACL2____STOBJ.html">stobj</a> field mapping stobj names to stobjs</p><p>WARNING: Stobj-table fields of <a href="ACL2____STOBJ.html">stobj</a>s should be considered 
+ experimental at this point!  This warning will probably be removed soon, and 
+ when it is, stobj-table fields may be considered not to be experimental any 
+ longer.</p> 
+ 
+ <p>For examples of <span class="v">stobj-let</span> usage for stobj-tables, see 
+ <span class="v">books/system/tests/stobj-table-tests-input.lsp</span>.</p> 
+ 
+ <p>See <a href="ACL2____STOBJ.html">stobj</a> for basic background on stobjs, and see <a href="ACL2____DEFSTOBJ.html">defstobj</a> 
+ for detailed documentation on the syntax and semantics of stobjs, including 
+ fields specified with <span class="v">:type (<a href="ACL2____STOBJ-TABLE.html">stobj-table</a>)</span> or <span class="v">:type (<a href="ACL2____STOBJ-TABLE.html">stobj-table</a>
+ SIZE)</span> for some natural number, <span class="v">SIZE</span>.  We call such fields ``stobj-table 
+ fields''; this documentation topic explains them, and it assumes familiarity 
+ with stobj fields of stobjs as documented in <a href="ACL2____NESTED-STOBJS.html">nested-stobjs</a> — 
+ especially, the use of <span class="tt"><a href="ACL2____STOBJ-LET.html">stobj-let</a></span> to read and write such fields.  Note 
+ that the documentation for <a href="ACL2____DEFSTOBJ.html">defstobj</a> shows the default names for 
+ accessors and updaters; for a stobj-table field, <span class="v">TBL</span>, these are 
+ <span class="v">TBL-GET</span> and <span class="v">TBL-PUT</span>, respectively.</p> 
+ 
+ <p>A stobj-table field may be viewed as an association list mapping stobj 
+ names to corresponding stobjs, so that each stobj name maps to a stobj that 
+ satisfies the recognizer for that stobj name.  This requirement is not 
+ enforced in the logic (i.e., in recognizer functions).  But it is essentially 
+ maintained in raw Lisp as an invariant, except that for efficiency, a 
+ stobj-table field is implemented as a hash-table (again, mapping stobj names 
+ to corresponding stobjs).  Below we give more details and explain how 
+ <span class="v">stobj-let</span> may be used to access and update stobjs that are in such a 
+ table.</p> 
+ 
+ <p>The general forms for stobj-table fields of stobjs are as shown below.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFSTOBJ.html">defstobj</a> NAME
+  (TBL1 :type (<a href="ACL2____STOBJ-TABLE.html">stobj-table</a>))      ; stobj field of default size
+  ...
+  (TBL2 :type (<a href="ACL2____STOBJ-TABLE.html">stobj-table</a> SIZE)) ; stobj field of desired size SIZE
+  ...)</pre> 
+ 
+ <p>That is, a stobj-table field is a field whose type is of the form 
+ <span class="v">(<a href="ACL2____STOBJ-TABLE.html">stobj-table</a>)</span> or <span class="v">(<a href="ACL2____STOBJ-TABLE.html">stobj-table</a> SIZE)</span>.  The syntax is thus much like 
+ the syntax for hash-table fields of stobjs, except that there is no test 
+ specified for a stobj-table (it is actually <span class="tt"><a href="COMMON-LISP____EQ.html">eq</a></span> in raw Lisp).</p> 
+ 
+ <p>As noted above, a stobj-table is conceptually an alist that associates 
+ stobj names with corresponding stobjs.  We say ``conceptually'' because in 
+ fact, the recognizer for any stobj-table field is <span class="v">t</span>: there is no 
+ requirement that it is actually an alist.  It is accessed logically with 
+ <span class="tt"><a href="ACL2____HONS-ASSOC-EQUAL.html">hons-assoc-equal</a></span>, which is a variant of <span class="tt"><a href="COMMON-LISP____ASSOC.html">assoc</a></span> that treats an 
+ arbitrary object as an alist: only pairs are considered when looking up a key, 
+ and the final cdr is ignored.  A default value is returned when there is no 
+ pair with the given key.  A stobj-table field is thus very much like a 
+ hash-table field.  The key difference (pun somewhat intended) is that each key 
+ of a stobj-table is the name of a stobj (other than <span class="v">state</span>, i.e., it is a 
+ user-defined stobj name), and the corresponding value is a stobj satisfying 
+ the recognizer for that name.</p> 
+ 
+ <p>A common case is that a stobj-table field is the unique field of its parent 
+ stobj.  In that case we may think of the entire stobj as a stobj-table, and 
+ that is actually consistent with the implementation: in raw Lisp, if a 
+ stobj-table field is the sole field of its parent stobj, then that stobj-table 
+ field is actually the entire stobj; there is not the usual indirection in raw 
+ Lisp, where a stobj is a vector of fields and the field is accessed as an 
+ entry in that vector.  (Logically, however, a stobj is always a list of its 
+ fields, even if there is only one field.)</p> 
+ 
+ <p>Reads and writes of a stobj-table field are much like reads and writes when 
+ the field is an array of stobjs.  In both cases, one uses <span class="tt"><a href="ACL2____STOBJ-LET.html">stobj-let</a></span> to 
+ access and possibly update the desired individual stobj or stobjs.  The syntax 
+ thus looks as follows, where <span class="v">ST</span> is a stobj name and <span class="v">PARENT</span> is the 
+ name of a stobj that has a stobj-table accessor with name <span class="v">TBL-GET</span>.  Note 
+ that the first argument of the accessor must be the quotation of the name of 
+ the bound stobj (thus below, <span class="v">'ST</span> is the quotation of <span class="v">ST</span>) and the 
+ third argument must be a call of that stobj's creator function.</p> 
+ 
+ <pre class="code">(<a href="ACL2____STOBJ-LET.html">stobj-let</a> (...                                 ; bindings
+            (ST (TBL-GET 'ST PARENT (CREATE-ST)))
+            ...
+            )
+           (...)                                ; producer variables
+           (...)                                ; producer
+           ...                                  ; consumer
+           )</pre> 
+ 
+ <p>The <span class="v">TBL-GET</span> call above always returns an object that satisfies the 
+ recognizer for the stobj, <span class="v">ST</span>.  However, that is a fact about evaluation; 
+ it is not provable in the logic.  Fortunately, <a href="ACL2____GUARD.html">guard</a> verification 
+ typically adds hypotheses to this effect when necessary.</p> 
+ 
+ <p><b>Remark</b>.  This remark on the implementation may be skipped, but it 
+ may provide some intuition.  When a stobj name is not bound in the underlying 
+ hash-table, then the default value (in the example above, <span class="v">(CREATE-ST)</span>) 
+ provides a suitable stobj nonetheless.  And if that stobj name is among the 
+ producer variables of a <span class="v">stobj-let</span> form, it will be bound in the 
+ underlying hash-table when the <span class="v">stobj-let</span> form completes.  End of 
+ remark.</p> 
+ 
+ <p>The remainder of this topic explains the use of stobj-tables by following 
+ the example in <a href="ACL2____COMMUNITY-BOOK.html">community-book</a> <span class="v">std/stobjs/stobj-table.lisp</span>.  The 
+ first form in that book (after the initial <span class="tt"><a href="COMMON-LISP____IN-PACKAGE.html">in-package</a></span> form) is as 
+ follows.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFSTOBJ.html">defstobj</a> stobj-table (tbl :type (<a href="ACL2____STOBJ-TABLE.html">stobj-table</a>)))</pre> 
+ 
+ <p>This specifies a stobj named <span class="v">stobj-table</span> with a unique field, 
+ <span class="v">tbl</span>.  As noted above, this stobj is the same as its field in raw Lisp, so 
+ even though it is the field that is truly a stobj-table, it is not 
+ conceptually problematic to call the entire stobj ``stobj-table''.  This may 
+ be the most common case for a stobj-table (i.e., being a unique field of a 
+ stobj).</p> 
+ 
+ <p>The remaining forms in the book are <a href="ACL2____LOCAL.html">local</a> to the book, intended to 
+ illustrate with simple examples how stobj-tables may be used.  The first one 
+ just introduces a rather trivial stobj.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFSTOBJ.html">defstobj</a> st1 fld1)</pre> 
+ 
+ <p>The next form puts this stobj into the stobj-table after updating its field 
+ with a specified value.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> update-st1-in-tbl (val stobj-table)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs stobj-table))
+  (<a href="ACL2____STOBJ-LET.html">stobj-let</a> ((st1 (tbl-get 'st1 stobj-table (create-st1)))) ; bindings
+             (st1)                                        ; producer variable
+             (update-fld1 val st1)                        ; producer
+             stobj-table                                  ; consumer
+             ))</pre> 
+ 
+ <p>The form after that accesses the value of <span class="v">'st1</span> in the stobj-table and 
+ returns its field's value.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> read-st1-in-tbl1 (<a href="ACL2____STOBJ-TABLE.html">stobj-table</a>)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs stobj-table))
+  (<a href="ACL2____STOBJ-LET.html">stobj-let</a> ((st1 (tbl-get 'st1 stobj-table (create-st1)))) ; bindings
+             (val)                                        ; producer variable
+             (fld1 st1)                                   ; producer
+             val                                          ; consumer
+             ))</pre> 
+ 
+ <p>Next is a check that when a specific value is written for the key <span class="v">'st1</span> 
+ with the update function defined above, the value subsequently read for key 
+ <span class="v">'st1</span> is that written value.  The reason for the <span class="v">mv</span> call is that the 
+ updater returns an updated stobj-table, which therefore must be returned. 
+ However, <span class="tt"><a href="ACL2____ASSERT-EVENT.html">assert-event</a></span> is sufficiently clever to check that the 
+ first (i.e., ordinary) value returned is non-<span class="v">nil</span>.</p> 
+ 
+ <pre class="code">(<a href="ACL2____ASSERT-EVENT.html">assert-event</a>
+ (<a href="COMMON-LISP____LET.html">let</a> ((<a href="ACL2____STOBJ-TABLE.html">stobj-table</a> (update-st1-in-tbl 3 stobj-table)))
+   (<a href="ACL2____MV.html">mv</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (read-st1-in-tbl1 stobj-table)
+              3)
+       stobj-table))
+ :stobjs-out '(nil stobj-table))</pre> 
+ 
+ <p>The computation above is a special case of a standard ``read-over-write'' 
+ property, that after a write, we read the value that was just written.  This 
+ is proved automatically.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> read-over-write-st1-in-tbl
+  (<a href="ACL2____IMPLIES.html">implies</a> (stobj-tablep stobj-table)
+           (<a href="COMMON-LISP____LET.html">let</a> ((<a href="ACL2____STOBJ-TABLE.html">stobj-table</a> (update-st1-in-tbl val stobj-table)))
+             (<a href="COMMON-LISP____EQUAL.html">equal</a> (read-st1-in-tbl1 stobj-table)
+                    val))))</pre> 
+ 
+ <p>The other standard ``read-over-write'' property is that the write for a 
+ given key doesn't affect the value read for a different key.  The following 
+ events, admitted automatically, illustrate that property: here, writing a 
+ value for the key <span class="v">'st1</span> doesn't affect the value read for the key 
+ <span class="v">'st2</span>.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFSTOBJ.html">defstobj</a> st2 fld2)
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> read-st2-in-tbl (<a href="ACL2____STOBJ-TABLE.html">stobj-table</a>)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs stobj-table))
+  (<a href="ACL2____STOBJ-LET.html">stobj-let</a> ((st2 (tbl-get 'st2 stobj-table (create-st2)))) ; bindings
+             (val)                                        ; producer variable
+             (fld2 st2)                                   ; producer
+             val                                          ; consumer
+             ))
+
+(<a href="ACL2____DEFTHM.html">defthm</a> read-over-write-st2-in-tbl
+  (<a href="ACL2____IMPLIES.html">implies</a> (stobj-tablep stobj-table)
+           (<a href="COMMON-LISP____LET.html">let</a> ((stobj-table-2 (update-st1-in-tbl val stobj-table)))
+             (<a href="COMMON-LISP____EQUAL.html">equal</a> (read-st2-in-tbl stobj-table-2)
+                    (read-st2-in-tbl stobj-table)))))</pre> 
+ 
+ <p>Note that all keys in a stobj-table are names of stobjs.  Consider what 
+ heppens when we evaluate the events in the book above, including the local 
+ events, and then undo the <span class="tt"><a href="ACL2____DEFSTOBJ.html">defstobj</a></span> event admitting <span class="v">st1</span>.  It is 
+ clear that undoing has removed the symbol <span class="v">st1</span> as a key in the 
+ stobj-table.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____LD.html">ld</a> "std/stobjs/stobj-table.lisp" :dir :system)
+[[.. output omitted ..]]
+ACL2 !&gt;(tbl-count stobj-table)
+1
+ACL2 !&gt;:ubt st1
+   d       1:x(<a href="ACL2____DEFSTOBJ.html">DEFSTOBJ</a> STOBJ-TABLE (TBL :TYPE #))
+ACL2 !&gt;(tbl-count stobj-table)
+0
+ACL2 !&gt;</pre> 
+ 
+ <p>Finally, we remark that there is nothing special about stobj-table fields 
+ with respect to stobj fields of abstract stobjs.</p>
+</body>
+</html>

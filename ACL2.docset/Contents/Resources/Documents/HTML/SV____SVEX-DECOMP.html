@@ -1,0 +1,115 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Svex-decomp</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=SV____SVEX-DECOMP">Click for Svex-decomp in the Full Manual</a></h3>
+
+<p>Proving that a decomposition is equivalent to some whole.</p><p>Here is an example, from "svex/tutorial/boothpipe.lisp", showing 
+how to use <span class="v">svdecomp-hints</span> to prove a decomposition theorem:</p> 
+ 
+<pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> boothmul-decomp-is-boothmul
+  (<a href="ACL2____IMPLIES.html">implies</a> (boothmul-direct-autohyps)
+           (<a href="ACL2____B_A2.html">b*</a> ( ;; Run the first part of the circuit to get the partial products
+                (in-alist1  (boothmul-step1-autoins))
+                (out-alist1 (<a href="ACL2____SVTV-RUN.html">sv::svtv-run</a> (boothmul-step1) in-alist1))
+
+                ;; Get the results from the output and stick them into an
+                ;; input alist for step2.  Some control signals from the
+                ;; original input alist also are needed.
+                (in-alist2 (boothmul-step2-alist-autoins (<a href="COMMON-LISP____APPEND.html">append</a> out-alist1 in-alist1)))
+
+                ;; Run the second part of the circuit on the results from the
+                ;; first part, summing the partial products.
+                (out-alist2 (<a href="ACL2____SVTV-RUN.html">sv::svtv-run</a> (boothmul-step2) in-alist2))
+
+                ;; Separately, run the original circuit.
+                (orig-in-alist  (boothmul-direct-autoins))
+                (orig-out-alist (<a href="ACL2____SVTV-RUN.html">sv::svtv-run</a> (boothmul-direct) orig-in-alist)))
+
+             (<a href="COMMON-LISP____EQUAL.html">equal</a>
+              ;; The final answer from running the decomposed circuit the second
+              ;; time, after feeding its partial products back into itself.
+              (<a href="COMMON-LISP____CDR.html">cdr</a> (<a href="COMMON-LISP____ASSOC.html">assoc</a> 'o out-alist2))
+
+              ;; The answer from running the original circuit.
+              (<a href="COMMON-LISP____CDR.html">cdr</a> (<a href="COMMON-LISP____ASSOC.html">assoc</a> 'o orig-out-alist)))))
+  :hints((<a href="SV____SVDECOMP-HINTS.html">sv::svdecomp-hints</a> :hyp (boothmul-direct-autohyps)
+                               :g-bindings (boothmul-direct-autobinds))))</pre> 
+ 
+<p>The <span class="v">svdecomp-hints</span> first gives a theory hint that allows ACL2 to 
+efficiently open the <span class="v">svtv-run</span> calls and process the goal into a form on 
+which some special-purpose meta rules can operate.  When this is done it enters 
+a theory containing only those meta rules.  The meta rules find svex 
+decompositions and re-compose them together so that, if all goes well, you're 
+left with the equivalence of two evaluations of svex expressions.  In the best 
+case, those svex expressions are equal, in which case the proof finishes there. 
+However, often there are syntactic differences between the expressions.  Then, 
+we call GL to prove the two evaluations equivalent.  To do this, we need a type 
+hypothesis and symbolic bindings for the variables.  These are provided by the 
+<span class="v">:hyp</span> and <span class="v">:g-bindings</span> argument to <span class="v">svdecomp-hints</span>.</p> 
+ 
+<p>Additional optional arguments:</p> 
+ 
+<ul> 
+<li>
+<span class="v">:enable</span> simply adds a 
+list of rules to the theory used in the first step, before the meta rules are 
+used.  This is useful because the conclusion of the theorem must be in a 
+particular form, described below, for the meta rules to work.  If the statement 
+of the theorem uses special-purpose functions to (say) construct alists or 
+compare outputs, the theory may need to be augmented with rules to rewrite 
+these functions away so that the meta rule can work.</li> 
+ 
+<li>
+<span class="v">:rewrite-limit</span> sets the limit on the number of passes of rewriting to 
+do on the resulting svex expressions.  In some cases it might be useful to set 
+this to 0, to disable rewriting.  Using this keyword argument actually sets the 
+state global variable <span class="v">sv::svdecomp-rewrite-limit</span>, which sets the limit for 
+future calls as well.</li> 
+</ul> 
+ 
+<h5>What can the meta rules handle?</h5> 
+ 
+<p>The core algorithm of the meta rule operates on a call of <span class="v">svex-eval</span>, 
+<span class="v">svexlist-eval</span>, or <span class="v">svex-alist-eval</span> in which some of the values bound 
+to variables in the environment are also calls of <span class="v">svex-eval</span>.  If its 
+operation is successful, it results in an evaluation with an environment that 
+does not bind any calls of <span class="v">svex-eval</span>.  It does this by basically applying 
+the following rule, <span class="v">svex-eval-of-svex-compose</span>, in reverse:</p> 
+<pre class="code">(<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SV____SVEX-EVAL.html">svex-eval</a> (<a href="SV____SVEX-COMPOSE.html">svex-compose</a> x a) env)
+       (<a href="SV____SVEX-EVAL.html">svex-eval</a> x (<a href="COMMON-LISP____APPEND.html">append</a> (<a href="SV____SVEX-ALIST-EVAL.html">svex-alist-eval</a> a env) env)))</pre> 
+ 
+<p>The meta rule supposes that the top-level evaluation is equivalent to the 
+RHS of the above rule for some term <span class="v">env</span> and quoted value <span class="v">a</span>, and tries 
+to determine <span class="v">env</span> and <span class="v">a</span> for which this is the case.  This would be 
+relatively easy if the RHS was in a form that matched the above, but in 
+practice the <span class="v">svex-alist-eval</span> term is represented instead as several 
+explicit cons pairs with <span class="v">svex-eval</span> cdrs, the ordering among the keys is 
+inconsistent, and in some places a subset of <span class="v">env</span> is used in place of the 
+whole thing.</p> 
+ 
+<p>This re-composition is usually best done at the top level, so the meta rules 
+trigger on any of the following:</p> 
+<ul> 
+<li><pre class="code">(<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SV____SVEX-EVAL.html">svex-eval</a> (<a href="COMMON-LISP____QUOTE.html">quote</a> sv1) env1) (<a href="SV____SVEX-EVAL.html">svex-eval</a> (<a href="COMMON-LISP____QUOTE.html">quote</a> sv2) env2))</pre></li> 
+<li><pre class="code">(<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SV____SVEXLIST-EVAL.html">svexlist-eval</a> (<a href="COMMON-LISP____QUOTE.html">quote</a> sv1) env1) (<a href="SV____SVEXLIST-EVAL.html">svexlist-eval</a> (<a href="COMMON-LISP____QUOTE.html">quote</a> sv2) env2))</pre></li> 
+<li><pre class="code">(<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SV____SVEX-ALIST-EVAL.html">svex-alist-eval</a> (<a href="COMMON-LISP____QUOTE.html">quote</a> sv1) env1) (<a href="SV____SVEX-ALIST-EVAL.html">svex-alist-eval</a> (<a href="COMMON-LISP____QUOTE.html">quote</a> sv2) env2))</pre></li> 
+</ul> 
+ 
+<p>The <span class="v">env</span> terms in the above may take the following forms, where 
+<span class="v">env1</span>, <span class="v">env2</span> are recursively matched:</p> 
+<ul> 
+<li><pre class="code">(<a href="COMMON-LISP____QUOTE.html">quote</a> val)</pre></li> 
+<li><pre class="code">(<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____QUOTE.html">quote</a> var) val) env1)</pre></li> 
+<li><pre class="code">(<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____QUOTE.html">quote</a> (var . val)) env1)</pre></li> 
+<li><pre class="code">(<a href="ACL2____BINARY-APPEND.html">binary-append</a> env1 env2)</pre></li> 
+<li><pre class="code">(<a href="SV____SVEX-ALIST-EVAL.html">svex-alist-eval</a> (<a href="COMMON-LISP____QUOTE.html">quote</a> svalist) e)</pre></li> 
+</ul> 
+ 
+
+</body>
+</html>

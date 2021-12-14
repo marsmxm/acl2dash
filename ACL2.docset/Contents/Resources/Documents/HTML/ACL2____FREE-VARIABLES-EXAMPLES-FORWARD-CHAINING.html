@@ -1,0 +1,174 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Free-variables-examples-forward-chaining</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____FREE-VARIABLES-EXAMPLES-FORWARD-CHAINING">Click for Free-variables-examples-forward-chaining in the Full Manual</a></h3>
+
+<p>Examples pertaining to free variables in <a href="ACL2____FORWARD-CHAINING.html">forward-chaining</a> rules</p><p>The following examples illustrate ACL2's handling of free variables 
+ in <a href="ACL2____FORWARD-CHAINING.html">forward-chaining</a> rules, as well as user control over how such free 
+ variables are handled.  See <a href="ACL2____FREE-VARIABLES.html">free-variables</a> for a background 
+ discussion.</p> 
+ 
+ <pre class="code">; First let us introduce a transitive operation, op, and prove a
+; forward-chaining rule stating the transitivity of op.
+
+(<a href="ACL2____ENCAPSULATE.html">encapsulate</a>
+ (((op * *) =&gt; *))
+ (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> op (x y) (<a href="COMMON-LISP_____C3.html">&lt;</a> x y)))
+ (<a href="ACL2____DEFTHM.html">defthm</a> transitivity-of-op
+   (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (op x y) (op y z)) (op x z))
+   :rule-classes :forward-chaining))
+
+; The following theorem is proved by forward chaining, using the above rule.
+
+(<a href="ACL2____THM.html">thm</a>
+ (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (op u v) (op v w) (op v a))
+          (op u w)))
+
+; The proof of the theorem just above succeeds because the term (op u v)
+; triggers the application of forward-chaining rule transitivity-of-op,
+; binding x to u and y to v.  Free variable z of that rule is bound to both w
+; and to a, resulting in the addition of both (op u w) and (op u a) to the
+; context.  However, (op v a) happens to be at the front of the context, so
+; if only one free-variable binding had been allowed, then z would have only
+; been bound to a, not to w, as we now illustrate.
+
+(<a href="ACL2____ADD-MATCH-FREE-OVERRIDE.html">add-match-free-override</a> :once (:forward-chaining transitivity-of-op))
+
+(<a href="ACL2____THM.html">thm</a> ; FAILS!
+ (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (op u v) (op v w) (op v a))
+          (op u w)))
+
+:ubt! 1
+
+; Starting over, this time we prove transitivity-of-op as a :match-free :once
+; forward-chaining rule.  Note that the presence of :match-free eliminates
+; the free-variables warning that we got the first time.
+
+(<a href="ACL2____ENCAPSULATE.html">encapsulate</a>
+ (((op * *) =&gt; *))
+ (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> op (x y) (<a href="COMMON-LISP_____C3.html">&lt;</a> x y)))
+ (<a href="ACL2____DEFTHM.html">defthm</a> transitivity-of-op
+   (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (op x y) (op y z)) (op x z))
+   :rule-classes ((:forward-chaining :match-free :once))))
+
+(<a href="ACL2____THM.html">thm</a> ; FAILS!
+ (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (op u v) (op v w) (op v a))
+          (op u w)))
+
+; Notice that if we swap the order of the last two hypotheses the theorem
+; goes through, because this time (op v w) is first in the context.
+
+(<a href="ACL2____THM.html">thm</a> ; SUCCEEDS!
+ (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (op u v) (op v a) (op v w))
+          (op u w)))
+
+:u
+
+; Now let's try setting the default to :once.
+
+(<a href="ACL2____SET-MATCH-FREE-DEFAULT.html">set-match-free-default</a> :once)
+
+; We still get a free-variables warning when we admit this forward-chaining rule.
+
+(<a href="ACL2____ENCAPSULATE.html">encapsulate</a>
+ (((op * *) =&gt; *))
+ (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> op (x y) (<a href="COMMON-LISP_____C3.html">&lt;</a> x y)))
+ (<a href="ACL2____DEFTHM.html">defthm</a> transitivity-of-op
+   (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (op x y) (op y z)) (op x z))
+   :rule-classes ((:forward-chaining))))
+
+; This theorem fails -- as it should.
+
+(<a href="ACL2____THM.html">thm</a> ; FAILS!
+ (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (op u v) (op v w) (op v a))
+          (op u w)))
+
+; But if we convert this rule (<a href="COMMON-LISP____OR.html">or</a> here, all possible rules) to :all rules,
+; then the proof succeeds.
+
+(<a href="ACL2____ADD-MATCH-FREE-OVERRIDE.html">add-match-free-override</a> :all t)
+
+(<a href="ACL2____THM.html">thm</a> ; SUCCEEDS!
+ (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (op u v) (op v w) (op v a))
+          (op u w)))
+
+; Now let's test a relatively slow :all case (<a href="COMMON-LISP____THE.html">the</a> next thm below).
+
+:ubt! 1
+
+(<a href="ACL2____ENCAPSULATE.html">encapsulate</a>
+ (((op1 *) =&gt; *)
+  ((op3 * * *) =&gt; *))
+ (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> op1 (x) (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORE.html">ignore</a> x)) t))
+ (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> op3 (x0 x1 x2)
+          (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORE.html">ignore</a> x0 x1 x2))
+          t))
+ (<a href="ACL2____DEFTHM.html">defthm</a> op1-op3-property
+   (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (op1 x0) (op1 x1) (op1 x2))
+            (op3 x0 x1 x2))
+   :rule-classes ((:forward-chaining :match-free :all))))
+
+; The following succeeds, but takes a little time (about a second in one run).
+
+(<a href="ACL2____THM.html">thm</a> (<a href="ACL2____IMPLIES.html">implies</a>
+      (<a href="COMMON-LISP____AND.html">and</a> (op1 a0) (op1 a1) (op1 a2) (op1 a3) (op1 a4) (op1 a5)
+           (op1 a6) (op1 a7) (op1 a8) (op1 a9) (op1 a10) (op1 a11)
+           (op1 a12) (op1 a13) (op1 a14) (op1 a15) (op1 a16)
+           (op1 a17) (op1 a18) (op1 a19) (op1 a20))
+      (op3 a5 a6 a0)))
+
+(<a href="ACL2____ADD-MATCH-FREE-OVERRIDE.html">add-match-free-override</a> :once t)
+
+; The same theorem now fails because of the add-match-free-override, but is
+; more than an order of magnitude faster.
+
+(<a href="ACL2____THM.html">thm</a> (<a href="ACL2____IMPLIES.html">implies</a>
+      (<a href="COMMON-LISP____AND.html">and</a> (op1 a0) (op1 a1) (op1 a2) (op1 a3) (op1 a4) (op1 a5)
+           (op1 a6) (op1 a7) (op1 a8) (op1 a9) (op1 a10) (op1 a11)
+           (op1 a12) (op1 a13) (op1 a14) (op1 a15) (op1 a16)
+           (op1 a17) (op1 a18) (op1 a19) (op1 a20))
+      (op3 a5 a6 a0)))
+
+; A slight variant succeeds in a negligible amount of time (still with the
+; :once override above).
+
+(<a href="ACL2____THM.html">thm</a> (<a href="ACL2____IMPLIES.html">implies</a>
+      (<a href="COMMON-LISP____AND.html">and</a> (op1 a0) (op1 a1) (op1 a2) (op1 a3) (op1 a4) (op1 a5)
+           (op1 a6) (op1 a7) (op1 a8) (op1 a9) (op1 a10) (op1 a11)
+           (op1 a12) (op1 a13) (op1 a14) (op1 a15) (op1 a16)
+           (op1 a17) (op1 a18) (op1 a19) (op1 a20))
+      (op3 a5 a20 a20)))
+
+; Reality check: This shouldn't give a free-variables warning, and everything
+; should work great since there are no free variables with this trigger term.
+
+:ubt! 1
+
+(<a href="ACL2____ENCAPSULATE.html">encapsulate</a>
+ (((op1 *) =&gt; *)
+  ((op7 * * * * * * *) =&gt; *))
+ (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> op1 (x)
+          (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORE.html">ignore</a> x))
+          t))
+ (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> op7 (x0 x1 x2 x3 x4 x5 x6)
+          (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORE.html">ignore</a> x0 x1 x2 x3 x4 x5 x6))
+          t))
+ (<a href="ACL2____DEFTHM.html">defthm</a> op1-op7-property
+   (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (op1 x0) (op1 x1) (op1 x2)
+                 (op1 x3) (op1 x4) (op1 x5) (op1 x6))
+            (op7 x0 x1 x2 x3 x4 x5 x6))
+   :rule-classes ((:forward-chaining
+                   :trigger-terms ((op7 x0 x1 x2 x3 x4 x5 x6))))))
+
+; The following then succeeds, and very quickly.
+
+(<a href="ACL2____THM.html">thm</a> (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (op1 a0) (op1 a1) (op1 a2)
+                   (op1 a3) (op1 a4) (op1 a5) (op1 a6))
+              (op7 a4 a6 a5 a6 a6 a6 a6)))</pre>
+</body>
+</html>

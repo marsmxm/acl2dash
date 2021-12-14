@@ -1,0 +1,132 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Template-subst</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____TEMPLATE-SUBST">Click for Template-subst in the Full Manual</a></h3>
+
+<p>Template-subst is a function for manipulating templates that may be 
+used to generate events.</p><p>As an example, suppose that we want to develop a general way to map 
+a function over all of the atoms of a tree.  Also, when the function to be run 
+on the leaves is <a href="ACL2____ACL2-COUNT.html">ACL2-count</a> preserving, we'd like to prove that the tree 
+function is as well.  So we might define the following constant as a template 
+for generating these sorts of functions/proofs:</p> 
+ 
+<pre class="code">(<a href="ACL2____DEFCONST.html">defconst</a> *maptree-template*
+  '((<a href="COMMON-LISP____PROGN.html">progn</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> _treefn_ (x _other-args_)
+             (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ATOM.html">atom</a> x)
+                 (_leaffn_ x _other-args_)
+               (<a href="COMMON-LISP____CONS.html">cons</a> (_treefn_ (<a href="COMMON-LISP____CAR.html">car</a> x) _other-args_)
+                     (_treefn_ (<a href="COMMON-LISP____CDR.html">cdr</a> x) _other-args_))))
+
+           (:@ :preserves-acl2-count
+            (<a href="ACL2____DEFTHM.html">defthm</a> _treefn_-preserves-acl2-count
+              (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____ACL2-COUNT.html">acl2-count</a> (_treefn_ x _other-args_))
+                     (<a href="ACL2____ACL2-COUNT.html">acl2-count</a> x)))))))</pre> 
+ 
+<p>Now, to instantiate this template, we might do:</p> 
+ 
+<pre class="code">(<a href="ACL2____TEMPLATE-SUBST.html">template-subst</a> *maptree-template*
+                :features      '(:preserves-acl2-count)
+                :splice-alist  '((_other-args_ . (n)))
+                :atom-alist    '((_treefn_ . add-to-leaves)
+                                 (_leaffn_ . +))
+                :str-alist     '(("_TREEFN_" . "ADD-TO-LEAVES"))
+                :subsubsts     nil
+                :pkg-sym       'acl2::asdf)</pre> 
+ 
+<h3>Substitution</h3> 
+<p>Filling out the template involves recursively traversing the tree checking 
+for various kinds of substitutions to make, as follows.</p> 
+ 
+<ul> 
+ 
+<li> 
+At each atom in the tree: 
+<ul> 
+<li> We check whether the leaf is bound in atom-alist; if so, we return its 
+    corresponding value.</li> 
+<li> If the leaf is a symbol beginning with <span class="v">%</span>, we remove that character 
+  and re-intern it in its same package.</li> 
+<li> If the leaf is a symbol, we apply str-alist as a substitution to its 
+    symbol-name.  If any substitutions are made, we intern the resulting 
+    string in the package of pkg-sym.</li> 
+</ul>
+</li> 
+ 
+ 
+<li>At each cons node of the tree: 
+<ul> 
+<li> We check whether the car of the tree is a feature conditional, of the form 
+  <pre class="code">(:@ &lt;feature-expr&gt; forms ...)</pre> 
+ 
+  If so, we evaluate the feature expression (see the section on features below) 
+  and if it is satisfied, recursive substitute on the append of the forms onto 
+  the cdr of the tree; otherwise, just recursively substitute the cdr of the 
+  tree and ignore the car.</li> 
+ 
+<li> We check whether the car of the tree is a repetition operator, of the form 
+  <pre class="code">(:@proj &lt;subtemplates-name&gt; subform)</pre> 
+  or 
+  <pre class="code">(:@append &lt;subtemplates-name&gt; . subforms)</pre> 
+ 
+  If so, we first look up the subtemplates-name in the <span class="v">subsubsts</span> field of 
+  our substitution.  The value should be a list of other substitution objects. 
+  These substitutions are each applied to subforms.  For the <span class="v">:@proj</span> case, 
+  the subform is expanded with to each subtemplate and the results are consed 
+  into a list; for the <span class="v">:@append</span> case, all subforms are expanded with each 
+  subtemplate and the results are appended together.  In either case, the 
+  resulting list is appended to the cdr and recursively substituted.</li> 
+ 
+<li> We check whether the car of the tree is bound in splice-alist, and if so 
+    we append its corresponding value to the recursive substitution of the 
+    cdr of the tree.</li> 
+<li> Otherwise, we return the cons of the recursive substitutions into the 
+    car and cdr.</li> 
+</ul>
+</li> 
+ 
+ 
+</ul> 
+ 
+<p>Therefore, in our example we make the following replacements:</p> 
+<ul> 
+<li> the symbol _treefn_ is replaced with add-to-leaves and _leaffn_ is 
+    replaced with +</li> 
+<li> by string substitution, the symbol _treefn_-preserves-acl2-count 
+    is replaced with add-to-leaves-preserves-acl2-count</li> 
+<li> each occurrence of _other-args_ is replaced by splicing in the list (n), 
+    effectively replacing _other-args_ with n.</li> 
+</ul> 
+<p>(Of course, the proof fails since our leaf transformation isn't actually 
+ acl2-count preserving.)</p> 
+ 
+<h3>Feature Processing</h3> 
+<p>When <span class="v">:@</span> occurs as the first element of a list, the second element of 
+that list is treated as a feature expression, much like in the <span class="v">#+</span> reader 
+macro.  A feature expression is:</p> 
+ 
+<ul> 
+<li>A symbol</li> 
+<li><span class="v">(<a href="COMMON-LISP____NOT.html">NOT</a> &lt;subexpression&gt;)</span></li> 
+<li><span class="v">(<a href="COMMON-LISP____AND.html">AND</a> [&lt;subexpression&gt;]*)</span></li> 
+<li><span class="v">(<a href="COMMON-LISP____OR.html">OR</a> [&lt;subexpression&gt;]*])</span></li> 
+</ul> 
+ 
+<p>When templates are expanded using <span class="v">template-subst</span>, each symbol present 
+in the features list becomes true, any not present become false, and the 
+resulting Boolean expression is evaluated.  If the feature expression evaluates 
+to true, the rest of the list (not including the feature expression) is spliced 
+into the template and recursively preprocessed.</p> 
+ 
+<p>In our <span class="v">*maptree-template*</span> example, then, since the feature 
+<span class="v">:preserves-acl2-count</span> is present in our <span class="v">:features</span> argument to 
+<span class="v">template-subst</span>, we paste in the DEFTHM form.  If it was not present, that 
+defthm would disappear.</p> 
+ 
+
+</body>
+</html>

@@ -1,0 +1,345 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Rlp-parse-tree</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ETHEREUM____RLP-PARSE-TREE">Click for Rlp-parse-tree in the Full Manual</a></h3>
+
+<p>Parse the RLP encoding of a tree, 
+          returning any extra bytes for further parsing.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(rlp-parse-tree encoding) → (mv error? tree rest)</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">encoding</span> — <font color="#606060">Guard <span class="v">(<a href="ACL2____BYTE-LISTP.html">byte-listp</a> encoding)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">error?</span> — <font color="#606060">Type <span class="v">(<a href="ETHEREUM____MAYBE-RLP-ERROR-P.html">maybe-rlp-error-p</a> error?)</span>.</font>
+</dd> 
+<dd>
+<span class="tt">tree</span> — <font color="#606060">Type <span class="v">(<a href="ETHEREUM____RLP-TREEP.html">rlp-treep</a> tree)</span>.</font>
+</dd> 
+<dd>
+<span class="tt">rest</span> — <font color="#606060">Type <span class="v">(<a href="ACL2____BYTE-LISTP.html">byte-listp</a> rest)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>This function returns an error result (<span class="v">nil</span> if no error), 
+     the decoded tree, 
+     and the remaining unparsed bytes. 
+     If the error is not <span class="v">nil</span>, 
+     we return an irrelevant tree as second result 
+     and <span class="v">nil</span> as remaining bytes.</p><p>This parser is fairly straightforward, 
+     but there is a slight subtlety missed by some implementations, 
+     including the reference decoding code in [Wiki:RLP]: 
+     in order to recognize only valid encodings 
+     (as formalized by <span class="tt"><a href="ETHEREUM____RLP-TREE-ENCODING-P.html">rlp-tree-encoding-p</a></span>), 
+     a decoder must reject encodings that use ``non-optimal'' lengths. 
+     For instance, the singleton byte array <span class="v">(10)</span> 
+     must be encoded as itself (<span class="tt"><a href="ETHEREUM____RLP-ENCODE-BYTES.html">rlp-encode-bytes</a></span>), 
+     and not as <span class="v">(129 10)</span>. 
+     Note that <span class="tt"><a href="ETHEREUM____RLP-BYTES-ENCODING-P.html">rlp-bytes-encoding-p</a></span> does not hold on <span class="v">(129 10)</span>, 
+     because that sequence of bytes 
+     is not in the image of <span class="tt"><a href="ETHEREUM____RLP-ENCODE-BYTES.html">rlp-encode-bytes</a></span>. 
+     (This example talks about encoded byte arrays, 
+     but leaf trees are encoded in the same way.)</p><p>So our decoding code checks that 
+     (i) the form <span class="v">(129 x)</span> is not used with <span class="v">x</span> below 128, 
+     (ii) a big endian length has no leading zeros, and 
+     (iii) a big endian length is not below 56. 
+     Cases (ii) and (iii) apply to both leaf and branching trees, 
+     while case (i) applies to leaf trees only. 
+     Without these extra checks, the decoder would accept 
+     not only all the valid encodings, 
+     but also some invalid encodings with non-optimal lengths.</p><p>Neither [YP:B] nor [Wiki:RLP] explicitly talk about this, 
+     but the fact that [YP:B] prescribes the encodings in all cases 
+     can be reasonably taken to exclude the encodings with non-optimal lengths. 
+     Furthermore, various GitHub issues for Ethereum implementations 
+     regard the acceptance of encodings with non-optimal lengths as bugs. 
+     Thus, we take the strict interpretation 
+     and regard such encodings as invalid. 
+     (Otherwise, formally, encoding would have to be a relation 
+     instead of a function.)</p><p>The function to parse single trees is mutually recursive with 
+     a function to parse lists of trees. 
+     The latter does not return the remaining bytes: 
+     it is always called with the exact byte sequence 
+     that is supposed to encode the trees of the list, 
+     one tree after the other.</p><p>The termination of these parsing function is proved 
+     via a lexicographic measure. 
+     The first component is the length of the input; 
+     the second component is an ordering on the two parsing functions 
+     where the one for trees is smaller than the one for lists of trees. 
+     This second component is needed because 
+     the function for lists of trees calls the one for trees 
+     on the same input (to parse the first tree in the list), 
+     and so the ordering on the function makes the overall measure smaller. 
+     When the function for trees calls the one for lists of trees, 
+     the input has been reduced in length by at least the first byte, 
+     and so it is immediate to prove that the overall measure decreases. 
+     When the function for lists of trees calls itself recursively, 
+     the input has also decreased, 
+     but this is a property of the function for trees, 
+     which cannot be proved until the function is admitted, 
+     i.e. shown to terminate. 
+     In other words, the termination here depends on functional properties. 
+     Thus, we use <span class="tt"><a href="ACL2____MBT.html">mbt</a></span> to ensure that the length has in fact decreased, 
+     which lets us prove termination. 
+     Then guard verification ensures that that check is always satisfied. 
+     Under the negated <span class="tt"><a href="ACL2____MBT.html">mbt</a></span> condition, we must return some error, 
+     but it does not matter which error, since this case never happens.</p><p>Before verifying guards, 
+     we need to show that <span class="tt"><a href="ETHEREUM____RLP-PARSE-TREE.html">rlp-parse-tree</a></span> 
+     returns fewer remaining bytes than the input bytes when there is no error. 
+     This is done by the linear rules.</p><p>If a sequence of bytes is successfully parsed, 
+     a sequence obtained by adding extra bytes at the end 
+     is also successfully parsed. 
+     The decoded tree is the same. 
+     The remaining bytes are extended with the extra bytes. 
+     This is all expressed by the theorem <span class="v">rlp-parse-tree-extend</span>. 
+     This theorem plays a role in the left inverse proof below.</p><p><span class="tt"><a href="ETHEREUM____RLP-PARSE-TREE.html">rlp-parse-tree</a></span> is left inverse of <span class="tt"><a href="ETHEREUM____RLP-ENCODE-TREE.html">rlp-encode-tree</a></span>, 
+     over the encodable trees. 
+     This implies that <span class="tt"><a href="ETHEREUM____RLP-PARSE-TREE.html">rlp-parse-tree</a></span> accepts 
+     all valid encodings of trees. 
+     This is expressed by the theorem <span class="v">rlp-parse-tree-of-rlp-encode-tree</span>, 
+     which says that if <span class="tt"><a href="ETHEREUM____RLP-ENCODE-TREE.html">rlp-encode-tree</a></span> is successful, 
+     then parsing is successful, 
+     with no remaining bytes, 
+     and returns the starting bytes (modulo fixing). 
+     The proof is by induction on the encoding functions. 
+     It is not particularly difficult. 
+     It needs some <span class="v">:expand</span> hints 
+     for calls that ACL2's heuristics do not expand; 
+     note that there is an <span class="v">:expand</span> hint 
+     for each possible range of the first byte of the encoding, 
+     except for the range below 128.</p><p><span class="tt"><a href="ETHEREUM____RLP-PARSE-TREE.html">rlp-parse-tree</a></span> is right inverse of <span class="tt"><a href="ETHEREUM____RLP-ENCODE-TREE.html">rlp-encode-tree</a></span>, 
+     over the valid tree encodings. 
+     This implies that <span class="tt"><a href="ETHEREUM____RLP-PARSE-TREE.html">rlp-parse-tree</a></span> accepts 
+     only valid encodings of tree: 
+     if it accepted an invalid encoding, 
+     this right inverse theorem would imply that 
+     <span class="tt"><a href="ETHEREUM____RLP-ENCODE-TREE.html">rlp-encode-tree</a></span> would map the result 
+     back to that invalid encoding, 
+     which would therefore be a valid encoding, 
+     contradicting the initial assumption. 
+     This right inverse theorem is <span class="v">rlp-encode-tree-of-rlp-parse-tree</span>, 
+     which says that if decoding is successful, 
+     then encoding is successful 
+     and the resulting encoding, 
+     concatenated with the reamining bytes from the decoding, 
+     is the initial input of the encoding (modulo fixing). 
+     The proof is by induction on the parsing functions. 
+     It is not particularly difficult.</p><p>Without the extra checks for optimal lengths in the parser, 
+     the left inverse theorem would still be provable, 
+     but the right inverse theorem would not.</p><p><b>Function: </b>rlp-parse-tree</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ rlp-parse-tree (encoding)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____BYTE-LISTP.html">byte-listp</a> encoding)))
+ (<a href="ACL2____B_A2.html">b*</a>
+  ((encoding (<a href="ACL2____BYTE-LIST-FIX.html">byte-list-fix</a> encoding))
+   (irrelevant (<a href="ETHEREUM____RLP-TREE-LEAF.html">rlp-tree-leaf</a> nil))
+   ((when (<a href="COMMON-LISP____ENDP.html">endp</a> encoding))
+    (<a href="ACL2____MV.html">mv</a> (<a href="ETHEREUM____RLP-ERROR-NO-BYTES.html">rlp-error-no-bytes</a>)
+        irrelevant nil))
+   ((<a href="COMMON-LISP____CONS.html">cons</a> first encoding) encoding)
+   ((when (<a href="COMMON-LISP_____C3.html">&lt;</a> first 128))
+    (<a href="ACL2____MV.html">mv</a> nil (<a href="ETHEREUM____RLP-TREE-LEAF.html">rlp-tree-leaf</a> (<a href="COMMON-LISP____LIST.html">list</a> first))
+        encoding))
+   ((when (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> first 183))
+    (<a href="ACL2____B_A2.html">b*</a>
+     ((<a href="ACL2____LEN.html">len</a> (<a href="COMMON-LISP____-.html">-</a> first 128))
+      ((when (<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="ACL2____LEN.html">len</a> encoding) len))
+       (<a href="ACL2____MV.html">mv</a>
+        (<a href="ETHEREUM____RLP-ERROR-FEWER-BYTES-THAN-SHORT-LENGTH.html">rlp-error-fewer-bytes-than-short-length</a> (<a href="COMMON-LISP____LIST.html">list</a> first)
+                                                 len (<a href="ACL2____LEN.html">len</a> encoding))
+        irrelevant nil))
+      (<a href="ETHEREUM____BYTES.html">bytes</a> (<a href="ACL2____TAKE.html">take</a> len encoding))
+      ((when (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP_____D3.html">=</a> len 1) (<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="COMMON-LISP____CAR.html">car</a> bytes) 128)))
+       (<a href="ACL2____MV.html">mv</a> (<a href="ETHEREUM____RLP-ERROR-NON-OPTIMAL-SHORT-LENGTH.html">rlp-error-non-optimal-short-length</a>
+                (<a href="COMMON-LISP____LIST.html">list</a> first (<a href="COMMON-LISP____CAR.html">car</a> bytes)))
+           irrelevant nil))
+      (encoding (<a href="COMMON-LISP____NTHCDR.html">nthcdr</a> len encoding)))
+     (<a href="ACL2____MV.html">mv</a> nil (<a href="ETHEREUM____RLP-TREE-LEAF.html">rlp-tree-leaf</a> bytes)
+         encoding)))
+   ((when (<a href="COMMON-LISP_____C3.html">&lt;</a> first 192))
+    (<a href="ACL2____B_A2.html">b*</a>
+     ((lenlen (<a href="COMMON-LISP____-.html">-</a> first 183))
+      ((when (<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="ACL2____LEN.html">len</a> encoding) lenlen))
+       (<a href="ACL2____MV.html">mv</a> (<a href="ETHEREUM____RLP-ERROR-FEWER-BYTES-THAN-LENGTH-OF-LENGTH.html">rlp-error-fewer-bytes-than-length-of-length</a>
+                (<a href="COMMON-LISP____LIST.html">list</a> first)
+                lenlen (<a href="ACL2____LEN.html">len</a> encoding))
+           irrelevant nil))
+      (len-bytes (<a href="ACL2____TAKE.html">take</a> lenlen encoding))
+      ((unless (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____TRIM-BENDIAN_A2.html">trim-bendian*</a> len-bytes)
+                      len-bytes))
+       (<a href="ACL2____MV.html">mv</a> (<a href="ETHEREUM____RLP-ERROR-LEADING-ZEROS-IN-LONG-LENGTH.html">rlp-error-leading-zeros-in-long-length</a>
+                (<a href="COMMON-LISP____CONS.html">cons</a> first len-bytes))
+           irrelevant nil))
+      (encoding (<a href="COMMON-LISP____NTHCDR.html">nthcdr</a> lenlen encoding))
+      (<a href="ACL2____LEN.html">len</a> (<a href="ACL2____BEBYTES_D3_E3NAT.html">bebytes=&gt;nat</a> len-bytes))
+      ((when (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> len 55))
+       (<a href="ACL2____MV.html">mv</a>
+          (<a href="ETHEREUM____RLP-ERROR-NON-OPTIMAL-LONG-LENGTH.html">rlp-error-non-optimal-long-length</a> (<a href="COMMON-LISP____CONS.html">cons</a> first len-bytes))
+          irrelevant nil))
+      ((when (<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="ACL2____LEN.html">len</a> encoding) len))
+       (<a href="ACL2____MV.html">mv</a> (<a href="ETHEREUM____RLP-ERROR-FEWER-BYTES-THAN-LONG-LENGTH.html">rlp-error-fewer-bytes-than-long-length</a>
+                (<a href="COMMON-LISP____CONS.html">cons</a> first len-bytes)
+                len (<a href="ACL2____LEN.html">len</a> encoding))
+           irrelevant nil))
+      (<a href="ETHEREUM____BYTES.html">bytes</a> (<a href="ACL2____TAKE.html">take</a> len encoding))
+      (encoding (<a href="COMMON-LISP____NTHCDR.html">nthcdr</a> len encoding)))
+     (<a href="ACL2____MV.html">mv</a> nil (<a href="ETHEREUM____RLP-TREE-LEAF.html">rlp-tree-leaf</a> bytes)
+         encoding)))
+   ((when (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> first 247))
+    (<a href="ACL2____B_A2.html">b*</a>
+     ((<a href="ACL2____LEN.html">len</a> (<a href="COMMON-LISP____-.html">-</a> first 192))
+      ((when (<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="ACL2____LEN.html">len</a> encoding) len))
+       (<a href="ACL2____MV.html">mv</a>
+        (<a href="ETHEREUM____RLP-ERROR-FEWER-BYTES-THAN-SHORT-LENGTH.html">rlp-error-fewer-bytes-than-short-length</a> (<a href="COMMON-LISP____LIST.html">list</a> first)
+                                                 len (<a href="ACL2____LEN.html">len</a> encoding))
+        irrelevant nil))
+      (subencoding (<a href="ACL2____TAKE.html">take</a> len encoding))
+      (encoding (<a href="COMMON-LISP____NTHCDR.html">nthcdr</a> len encoding))
+      ((<a href="ACL2____MV.html">mv</a> error? subtrees)
+       (<a href="ETHEREUM____RLP-PARSE-TREE-LIST.html">rlp-parse-tree-list</a> subencoding))
+      ((when error?)
+       (<a href="ACL2____MV.html">mv</a> (<a href="ETHEREUM____RLP-ERROR-SUBTREE.html">rlp-error-subtree</a> error?)
+           irrelevant nil)))
+     (<a href="ACL2____MV.html">mv</a> nil (<a href="ETHEREUM____RLP-TREE-BRANCH.html">rlp-tree-branch</a> subtrees)
+         encoding)))
+   (lenlen (<a href="COMMON-LISP____-.html">-</a> first 247))
+   ((when (<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="ACL2____LEN.html">len</a> encoding) lenlen))
+    (<a href="ACL2____MV.html">mv</a> (<a href="ETHEREUM____RLP-ERROR-FEWER-BYTES-THAN-LENGTH-OF-LENGTH.html">rlp-error-fewer-bytes-than-length-of-length</a>
+             (<a href="COMMON-LISP____LIST.html">list</a> first)
+             lenlen (<a href="ACL2____LEN.html">len</a> encoding))
+        irrelevant nil))
+   (len-bytes (<a href="ACL2____TAKE.html">take</a> lenlen encoding))
+   ((unless (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____TRIM-BENDIAN_A2.html">trim-bendian*</a> len-bytes)
+                   len-bytes))
+    (<a href="ACL2____MV.html">mv</a>
+     (<a href="ETHEREUM____RLP-ERROR-LEADING-ZEROS-IN-LONG-LENGTH.html">rlp-error-leading-zeros-in-long-length</a> (<a href="COMMON-LISP____CONS.html">cons</a> first len-bytes))
+     irrelevant nil))
+   (encoding (<a href="COMMON-LISP____NTHCDR.html">nthcdr</a> lenlen encoding))
+   (<a href="ACL2____LEN.html">len</a> (<a href="ACL2____BEBYTES_D3_E3NAT.html">bebytes=&gt;nat</a> len-bytes))
+   ((when (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> len 55))
+    (<a href="ACL2____MV.html">mv</a> (<a href="ETHEREUM____RLP-ERROR-NON-OPTIMAL-LONG-LENGTH.html">rlp-error-non-optimal-long-length</a> (<a href="COMMON-LISP____CONS.html">cons</a> first len-bytes))
+        irrelevant nil))
+   ((when (<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="ACL2____LEN.html">len</a> encoding) len))
+    (<a href="ACL2____MV.html">mv</a>
+      (<a href="ETHEREUM____RLP-ERROR-FEWER-BYTES-THAN-LONG-LENGTH.html">rlp-error-fewer-bytes-than-long-length</a> (<a href="COMMON-LISP____CONS.html">cons</a> first len-bytes)
+                                              len (<a href="ACL2____LEN.html">len</a> encoding))
+      irrelevant nil))
+   (subencoding (<a href="ACL2____TAKE.html">take</a> len encoding))
+   (encoding (<a href="COMMON-LISP____NTHCDR.html">nthcdr</a> len encoding))
+   ((<a href="ACL2____MV.html">mv</a> error? subtrees)
+    (<a href="ETHEREUM____RLP-PARSE-TREE-LIST.html">rlp-parse-tree-list</a> subencoding))
+   ((when error?)
+    (<a href="ACL2____MV.html">mv</a> (<a href="ETHEREUM____RLP-ERROR-SUBTREE.html">rlp-error-subtree</a> error?)
+        irrelevant nil)))
+  (<a href="ACL2____MV.html">mv</a> nil (<a href="ETHEREUM____RLP-TREE-BRANCH.html">rlp-tree-branch</a> subtrees)
+      encoding)))</pre><p><b>Function: </b>rlp-parse-tree-list</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> rlp-parse-tree-list (encoding)
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____BYTE-LISTP.html">byte-listp</a> encoding)))
+       (<a href="ACL2____B_A2.html">b*</a> (((when (<a href="COMMON-LISP____ENDP.html">endp</a> encoding)) (<a href="ACL2____MV.html">mv</a> nil nil))
+            ((<a href="ACL2____MV.html">mv</a> error? tree encoding1)
+             (<a href="ETHEREUM____RLP-PARSE-TREE.html">rlp-parse-tree</a> encoding))
+            ((when error?) (<a href="ACL2____MV.html">mv</a> error? nil))
+            ((unless (<a href="ACL2____MBT.html">mbt</a> (<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="ACL2____LEN.html">len</a> encoding1) (<a href="ACL2____LEN.html">len</a> encoding))))
+             (<a href="ACL2____MV.html">mv</a> (<a href="ETHEREUM____RLP-ERROR-NO-BYTES.html">rlp-error-no-bytes</a>) nil))
+            ((<a href="ACL2____MV.html">mv</a> error? trees)
+             (<a href="ETHEREUM____RLP-PARSE-TREE-LIST.html">rlp-parse-tree-list</a> encoding1))
+            ((when error?) (<a href="ACL2____MV.html">mv</a> error? nil)))
+           (<a href="ACL2____MV.html">mv</a> nil (<a href="COMMON-LISP____CONS.html">cons</a> tree trees))))</pre> 
+ 
+ 
+ 
+<p><b>Theorem: </b>return-type-of-rlp-parse-tree.error?</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> return-type-of-rlp-parse-tree.error?
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?error? ?tree common-lisp::?rest)
+              (<a href="ETHEREUM____RLP-PARSE-TREE.html">rlp-parse-tree</a> encoding)))
+            (<a href="ETHEREUM____MAYBE-RLP-ERROR-P.html">maybe-rlp-error-p</a> error?))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>return-type-of-rlp-parse-tree.tree</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> return-type-of-rlp-parse-tree.tree
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?error? ?tree common-lisp::?rest)
+              (<a href="ETHEREUM____RLP-PARSE-TREE.html">rlp-parse-tree</a> encoding)))
+            (<a href="ETHEREUM____RLP-TREEP.html">rlp-treep</a> tree))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>return-type-of-rlp-parse-tree.rest</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> return-type-of-rlp-parse-tree.rest
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?error? ?tree common-lisp::?rest)
+              (<a href="ETHEREUM____RLP-PARSE-TREE.html">rlp-parse-tree</a> encoding)))
+            (<a href="ACL2____BYTE-LISTP.html">byte-listp</a> rest))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>return-type-of-rlp-parse-tree-list.error?</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> return-type-of-rlp-parse-tree-list.error?
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?error? ?trees)
+              (<a href="ETHEREUM____RLP-PARSE-TREE-LIST.html">rlp-parse-tree-list</a> encoding)))
+            (<a href="ETHEREUM____MAYBE-RLP-ERROR-P.html">maybe-rlp-error-p</a> error?))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>return-type-of-rlp-parse-tree-list.trees</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> return-type-of-rlp-parse-tree-list.trees
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?error? ?trees)
+              (<a href="ETHEREUM____RLP-PARSE-TREE-LIST.html">rlp-parse-tree-list</a> encoding)))
+            (<a href="ETHEREUM____RLP-TREE-LISTP.html">rlp-tree-listp</a> trees))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>len-of-rlp-parse-tree</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> len-of-rlp-parse-tree
+        (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> (<a href="ACL2____LEN.html">len</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 2 (<a href="ETHEREUM____RLP-PARSE-TREE.html">rlp-parse-tree</a> encoding)))
+            (<a href="ACL2____LEN.html">len</a> encoding))
+        :rule-classes :linear)</pre> 
+<p><b>Theorem: </b>len-of-rlp-parse-tree-when-no-error</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> len-of-rlp-parse-tree-when-no-error
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 0 (<a href="ETHEREUM____RLP-PARSE-TREE.html">rlp-parse-tree</a> encoding)))
+                 (<a href="COMMON-LISP_____C3.html">&lt;</a> (<a href="ACL2____LEN.html">len</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 2 (<a href="ETHEREUM____RLP-PARSE-TREE.html">rlp-parse-tree</a> encoding)))
+                    (<a href="ACL2____LEN.html">len</a> encoding))))</pre> 
+<p><b>Theorem: </b>rlp-parse-tree-of-byte-list-fix-encoding</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> rlp-parse-tree-of-byte-list-fix-encoding
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ETHEREUM____RLP-PARSE-TREE.html">rlp-parse-tree</a> (<a href="ACL2____BYTE-LIST-FIX.html">byte-list-fix</a> encoding))
+               (<a href="ETHEREUM____RLP-PARSE-TREE.html">rlp-parse-tree</a> encoding)))</pre> 
+<p><b>Theorem: </b>rlp-parse-tree-byte-list-equiv-congruence-on-encoding</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> rlp-parse-tree-byte-list-equiv-congruence-on-encoding
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____BYTE-LIST-EQUIV.html">byte-list-equiv</a> encoding encoding-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ETHEREUM____RLP-PARSE-TREE.html">rlp-parse-tree</a> encoding)
+                        (<a href="ETHEREUM____RLP-PARSE-TREE.html">rlp-parse-tree</a> encoding-equiv)))
+        :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>rlp-parse-tree-extend</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+   rlp-parse-tree-extend
+   (<a href="ACL2____IMPLIES.html">implies</a>
+        (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 0 (<a href="ETHEREUM____RLP-PARSE-TREE.html">rlp-parse-tree</a> encoding)))
+        (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 0
+                          (<a href="ETHEREUM____RLP-PARSE-TREE.html">rlp-parse-tree</a> (<a href="COMMON-LISP____APPEND.html">append</a> encoding more))))
+             (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 1
+                            (<a href="ETHEREUM____RLP-PARSE-TREE.html">rlp-parse-tree</a> (<a href="COMMON-LISP____APPEND.html">append</a> encoding more)))
+                    (<a href="ACL2____MV-NTH.html">mv-nth</a> 1 (<a href="ETHEREUM____RLP-PARSE-TREE.html">rlp-parse-tree</a> encoding)))
+             (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 2
+                            (<a href="ETHEREUM____RLP-PARSE-TREE.html">rlp-parse-tree</a> (<a href="COMMON-LISP____APPEND.html">append</a> encoding more)))
+                    (<a href="COMMON-LISP____APPEND.html">append</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 2 (<a href="ETHEREUM____RLP-PARSE-TREE.html">rlp-parse-tree</a> encoding))
+                            (<a href="ACL2____BYTE-LIST-FIX.html">byte-list-fix</a> more))))))</pre> 
+<p><b>Theorem: </b>rlp-parse-tree-of-rlp-encode-tree</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> rlp-parse-tree-of-rlp-encode-tree
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> e-error? encoding)
+              (<a href="ETHEREUM____RLP-ENCODE-TREE.html">rlp-encode-tree</a> tree))
+             ((<a href="ACL2____MV.html">mv</a> d-error? tree1 rest)
+              (<a href="ETHEREUM____RLP-PARSE-TREE.html">rlp-parse-tree</a> encoding)))
+            (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____NOT.html">not</a> e-error?)
+                     (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____NOT.html">not</a> d-error?)
+                          (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____CONSP.html">consp</a> rest))
+                          (<a href="COMMON-LISP____EQUAL.html">equal</a> tree1 (<a href="ETHEREUM____RLP-TREE-FIX.html">rlp-tree-fix</a> tree))))))</pre> 
+<p><b>Theorem: </b>rlp-parse-tree-list-of-rlp-encode-tree-list</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     rlp-parse-tree-list-of-rlp-encode-tree-list
+     (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> e-error? encoding)
+           (<a href="ETHEREUM____RLP-ENCODE-TREE-LIST.html">rlp-encode-tree-list</a> trees))
+          ((<a href="ACL2____MV.html">mv</a> d-error? trees1)
+           (<a href="ETHEREUM____RLP-PARSE-TREE-LIST.html">rlp-parse-tree-list</a> encoding)))
+         (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____NOT.html">not</a> e-error?)
+                  (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____NOT.html">not</a> d-error?)
+                       (<a href="COMMON-LISP____EQUAL.html">equal</a> trees1 (<a href="ETHEREUM____RLP-TREE-LIST-FIX.html">rlp-tree-list-fix</a> trees))))))</pre> 
+<p><b>Theorem: </b>rlp-encode-tree-of-rlp-parse-tree</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> rlp-encode-tree-of-rlp-parse-tree
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> d-error? tree rest)
+              (<a href="ETHEREUM____RLP-PARSE-TREE.html">rlp-parse-tree</a> encoding))
+             ((<a href="ACL2____MV.html">mv</a> e-error? encoding1)
+              (<a href="ETHEREUM____RLP-ENCODE-TREE.html">rlp-encode-tree</a> tree)))
+            (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____NOT.html">not</a> d-error?)
+                     (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____NOT.html">not</a> e-error?)
+                          (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____APPEND.html">append</a> encoding1 rest)
+                                 (<a href="ACL2____BYTE-LIST-FIX.html">byte-list-fix</a> encoding))))))</pre> 
+<p><b>Theorem: </b>rlp-encode-tree-list-of-rlp-parse-tree-list</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+    rlp-encode-tree-list-of-rlp-parse-tree-list
+    (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> d-error? trees)
+          (<a href="ETHEREUM____RLP-PARSE-TREE-LIST.html">rlp-parse-tree-list</a> encoding))
+         ((<a href="ACL2____MV.html">mv</a> e-error? encoding1)
+          (<a href="ETHEREUM____RLP-ENCODE-TREE-LIST.html">rlp-encode-tree-list</a> trees)))
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____NOT.html">not</a> d-error?)
+                 (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____NOT.html">not</a> e-error?)
+                      (<a href="COMMON-LISP____EQUAL.html">equal</a> encoding1 (<a href="ACL2____BYTE-LIST-FIX.html">byte-list-fix</a> encoding))))))</pre> 
+
+</body>
+</html>

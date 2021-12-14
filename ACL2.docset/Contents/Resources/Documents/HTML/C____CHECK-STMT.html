@@ -1,0 +1,194 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Check-stmt</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=C____CHECK-STMT">Click for Check-stmt in the Full Manual</a></h3>
+
+<p>Check a statement.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(check-stmt s funtab vartab) → stype</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">s</span> — <font color="#606060">Guard <span class="v">(<a href="C____STMTP.html">stmtp</a> s)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">funtab</span> — <font color="#606060">Guard <span class="v">(<a href="C____FUN-TABLEP.html">fun-tablep</a> funtab)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">vartab</span> — <font color="#606060">Guard <span class="v">(<a href="C____VAR-TABLEP.html">var-tablep</a> vartab)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">stype</span> — <font color="#606060">Type <span class="v">(<a href="C____STMT-TYPE-RESULTP.html">stmt-type-resultp</a> stype)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>For now we only allow 
+     compound statements, 
+     expression statements, 
+     conditional statements, 
+     <span class="v">while</span> statements, and 
+     <span class="v">return</span> statements with expressions.</p><p>These ACL2 functions return a statement type or an error; 
+     see <span class="tt"><a href="C____STMT-TYPE.html">stmt-type</a></span>.</p><p>For a compound statement, 
+     we add a block scope to the variable table 
+     and then we process the list of block items. 
+     There is no need to explicitly remove the scope when exiting the block, 
+     because we only use the extended variable table 
+     to check the items of the block. 
+     Anything that follows the block is checked 
+     with the variable table prior to the extension. 
+     In fact, a compound statement does not update the variable table: 
+     we return the original variable table.</p><p>As expression statements, we only allow 
+     function calls and simple assignments to variables, 
+     where the assigned expression must be a function call or pure. 
+     We only allow function calls with pure arguments 
+     (see <span class="tt"><a href="C____CHECK-EXPR-CALL.html">check-expr-call</a></span>).</p><p>For a conditional statement with both branches, 
+     after ensuring that the test expression has scalar type, 
+     we check the two branches, and take the union of their return types. 
+     We return the initial variable table, unchanged; 
+     any change in the branches is local to the branches.</p><p>We treat a conditional statement with just one branch 
+     as one whose <span class="v">else</span> branch returns nothing.</p><p>For a <span class="v">while</span> statement, 
+     we ensure that the test has a scalar type, 
+     and we check the body. 
+     We put together <span class="v">void</span> and the return types from the body: 
+     the <span class="v">void</span> accounts for the case in which 
+     the body is never executed (i.e. the test is initially false). 
+     We return the initial variable table, unchanged; 
+     any change in the body is local to the body.</p><p>For a <span class="v">return</span> statement, 
+     we require an expression, 
+     and we return the singleton set with the type of the expression. 
+     The type must not be <span class="v">void</span> [C:6.3.2.2].</p><p>For a block item that is a declaration, 
+     we ensure that it is a variable (not a structure type) declaration. 
+     We ensure that the type is not <span class="v">void</span>, 
+     because the type must be complete [C:6.7/7], 
+     and <span class="v">void</span> is incomplete [C:6.2.5/19]. 
+     We also ensure that the initializer has the same type as the variable 
+     (which is more restrictive than [C:6.7.9]), 
+     and we extend and return the variable table with the variable. 
+     We return the singleton set with <span class="v">void</span>, 
+     because a declaration never returns a value 
+     and proceeds with the next block item; 
+     note that we do not return the empty set of return types.</p><p>For a block item that is a statement, we check the statement.</p><p>If a list of block items is empty, we return 
+     the singleton set with <span class="v">void</span> 
+     (because execution then continues after the block) 
+     and the variable table unchanged. 
+     If the list is not empty, we check the first item. 
+     If <span class="v">void</span> is not among the return types, 
+     it means that the rest of the block is dead code: 
+     execution never proceeds past the first block item; 
+     thus, we do not even check the rest of the block 
+     and we return the result of checking the first block item 
+     as the result of checking the whole block. 
+     If <span class="v">void</span> is among the return types of the first block item, 
+     we check the rest of the block, 
+     and we combine (i.e. take the union of) all the return types, 
+     after removing <span class="v">void</span> from the types of the first block item.</p> 
+ 
+ 
+ 
+<p><b>Theorem: </b>return-type-of-check-stmt.stype</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> return-type-of-check-stmt.stype
+        (<a href="ACL2____B_A2.html">b*</a> ((?stype (<a href="C____CHECK-STMT.html">check-stmt</a> s funtab vartab)))
+            (<a href="C____STMT-TYPE-RESULTP.html">stmt-type-resultp</a> stype))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>return-type-of-check-block-item.stype</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> return-type-of-check-block-item.stype
+        (<a href="ACL2____B_A2.html">b*</a> ((?stype (<a href="C____CHECK-BLOCK-ITEM.html">check-block-item</a> item funtab vartab)))
+            (<a href="C____STMT-TYPE-RESULTP.html">stmt-type-resultp</a> stype))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>return-type-of-check-block-item-list.stype</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> return-type-of-check-block-item-list.stype
+        (<a href="ACL2____B_A2.html">b*</a> ((?stype (<a href="C____CHECK-BLOCK-ITEM-LIST.html">check-block-item-list</a> items funtab vartab)))
+            (<a href="C____STMT-TYPE-RESULTP.html">stmt-type-resultp</a> stype))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>check-stmt-of-stmt-fix-s</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> check-stmt-of-stmt-fix-s
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____CHECK-STMT.html">check-stmt</a> (<a href="C____STMT-FIX.html">stmt-fix</a> s) funtab vartab)
+               (<a href="C____CHECK-STMT.html">check-stmt</a> s funtab vartab)))</pre> 
+<p><b>Theorem: </b>check-stmt-of-fun-table-fix-funtab</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> check-stmt-of-fun-table-fix-funtab
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____CHECK-STMT.html">check-stmt</a> s (<a href="C____FUN-TABLE-FIX.html">fun-table-fix</a> funtab)
+                           vartab)
+               (<a href="C____CHECK-STMT.html">check-stmt</a> s funtab vartab)))</pre> 
+<p><b>Theorem: </b>check-stmt-of-var-table-fix-vartab</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> check-stmt-of-var-table-fix-vartab
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____CHECK-STMT.html">check-stmt</a> s funtab (<a href="C____VAR-TABLE-FIX.html">var-table-fix</a> vartab))
+               (<a href="C____CHECK-STMT.html">check-stmt</a> s funtab vartab)))</pre> 
+<p><b>Theorem: </b>check-block-item-of-block-item-fix-item</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> check-block-item-of-block-item-fix-item
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____CHECK-BLOCK-ITEM.html">check-block-item</a> (<a href="C____BLOCK-ITEM-FIX.html">block-item-fix</a> item)
+                                 funtab vartab)
+               (<a href="C____CHECK-BLOCK-ITEM.html">check-block-item</a> item funtab vartab)))</pre> 
+<p><b>Theorem: </b>check-block-item-of-fun-table-fix-funtab</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> check-block-item-of-fun-table-fix-funtab
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____CHECK-BLOCK-ITEM.html">check-block-item</a> item (<a href="C____FUN-TABLE-FIX.html">fun-table-fix</a> funtab)
+                                 vartab)
+               (<a href="C____CHECK-BLOCK-ITEM.html">check-block-item</a> item funtab vartab)))</pre> 
+<p><b>Theorem: </b>check-block-item-of-var-table-fix-vartab</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> check-block-item-of-var-table-fix-vartab
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____CHECK-BLOCK-ITEM.html">check-block-item</a> item funtab (<a href="C____VAR-TABLE-FIX.html">var-table-fix</a> vartab))
+               (<a href="C____CHECK-BLOCK-ITEM.html">check-block-item</a> item funtab vartab)))</pre> 
+<p><b>Theorem: </b>check-block-item-list-of-block-item-list-fix-items</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> check-block-item-list-of-block-item-list-fix-items
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____CHECK-BLOCK-ITEM-LIST.html">check-block-item-list</a> (<a href="C____BLOCK-ITEM-LIST-FIX.html">block-item-list-fix</a> items)
+                                      funtab vartab)
+               (<a href="C____CHECK-BLOCK-ITEM-LIST.html">check-block-item-list</a> items funtab vartab)))</pre> 
+<p><b>Theorem: </b>check-block-item-list-of-fun-table-fix-funtab</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> check-block-item-list-of-fun-table-fix-funtab
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____CHECK-BLOCK-ITEM-LIST.html">check-block-item-list</a> items (<a href="C____FUN-TABLE-FIX.html">fun-table-fix</a> funtab)
+                                      vartab)
+               (<a href="C____CHECK-BLOCK-ITEM-LIST.html">check-block-item-list</a> items funtab vartab)))</pre> 
+<p><b>Theorem: </b>check-block-item-list-of-var-table-fix-vartab</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+  check-block-item-list-of-var-table-fix-vartab
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____CHECK-BLOCK-ITEM-LIST.html">check-block-item-list</a> items funtab (<a href="C____VAR-TABLE-FIX.html">var-table-fix</a> vartab))
+         (<a href="C____CHECK-BLOCK-ITEM-LIST.html">check-block-item-list</a> items funtab vartab)))</pre> 
+<p><b>Theorem: </b>check-stmt-stmt-equiv-congruence-on-s</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> check-stmt-stmt-equiv-congruence-on-s
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="C____STMT-EQUIV.html">stmt-equiv</a> s s-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____CHECK-STMT.html">check-stmt</a> s funtab vartab)
+                        (<a href="C____CHECK-STMT.html">check-stmt</a> s-equiv funtab vartab)))
+        :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>check-stmt-fun-table-equiv-congruence-on-funtab</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> check-stmt-fun-table-equiv-congruence-on-funtab
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="C____FUN-TABLE-EQUIV.html">fun-table-equiv</a> funtab funtab-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____CHECK-STMT.html">check-stmt</a> s funtab vartab)
+                        (<a href="C____CHECK-STMT.html">check-stmt</a> s funtab-equiv vartab)))
+        :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>check-stmt-var-table-equiv-congruence-on-vartab</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> check-stmt-var-table-equiv-congruence-on-vartab
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="C____VAR-TABLE-EQUIV.html">var-table-equiv</a> vartab vartab-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____CHECK-STMT.html">check-stmt</a> s funtab vartab)
+                        (<a href="C____CHECK-STMT.html">check-stmt</a> s funtab vartab-equiv)))
+        :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>check-block-item-block-item-equiv-congruence-on-item</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     check-block-item-block-item-equiv-congruence-on-item
+     (<a href="ACL2____IMPLIES.html">implies</a> (<a href="C____BLOCK-ITEM-EQUIV.html">block-item-equiv</a> item item-equiv)
+              (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____CHECK-BLOCK-ITEM.html">check-block-item</a> item funtab vartab)
+                     (<a href="C____CHECK-BLOCK-ITEM.html">check-block-item</a> item-equiv funtab vartab)))
+     :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>check-block-item-fun-table-equiv-congruence-on-funtab</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     check-block-item-fun-table-equiv-congruence-on-funtab
+     (<a href="ACL2____IMPLIES.html">implies</a> (<a href="C____FUN-TABLE-EQUIV.html">fun-table-equiv</a> funtab funtab-equiv)
+              (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____CHECK-BLOCK-ITEM.html">check-block-item</a> item funtab vartab)
+                     (<a href="C____CHECK-BLOCK-ITEM.html">check-block-item</a> item funtab-equiv vartab)))
+     :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>check-block-item-var-table-equiv-congruence-on-vartab</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     check-block-item-var-table-equiv-congruence-on-vartab
+     (<a href="ACL2____IMPLIES.html">implies</a> (<a href="C____VAR-TABLE-EQUIV.html">var-table-equiv</a> vartab vartab-equiv)
+              (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____CHECK-BLOCK-ITEM.html">check-block-item</a> item funtab vartab)
+                     (<a href="C____CHECK-BLOCK-ITEM.html">check-block-item</a> item funtab vartab-equiv)))
+     :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>check-block-item-list-block-item-list-equiv-congruence-on-items</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ check-block-item-list-block-item-list-equiv-congruence-on-items
+ (<a href="ACL2____IMPLIES.html">implies</a> (<a href="C____BLOCK-ITEM-LIST-EQUIV.html">block-item-list-equiv</a> items items-equiv)
+          (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____CHECK-BLOCK-ITEM-LIST.html">check-block-item-list</a> items funtab vartab)
+                 (<a href="C____CHECK-BLOCK-ITEM-LIST.html">check-block-item-list</a> items-equiv funtab vartab)))
+ :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>check-block-item-list-fun-table-equiv-congruence-on-funtab</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ check-block-item-list-fun-table-equiv-congruence-on-funtab
+ (<a href="ACL2____IMPLIES.html">implies</a> (<a href="C____FUN-TABLE-EQUIV.html">fun-table-equiv</a> funtab funtab-equiv)
+          (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____CHECK-BLOCK-ITEM-LIST.html">check-block-item-list</a> items funtab vartab)
+                 (<a href="C____CHECK-BLOCK-ITEM-LIST.html">check-block-item-list</a> items funtab-equiv vartab)))
+ :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>check-block-item-list-var-table-equiv-congruence-on-vartab</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ check-block-item-list-var-table-equiv-congruence-on-vartab
+ (<a href="ACL2____IMPLIES.html">implies</a> (<a href="C____VAR-TABLE-EQUIV.html">var-table-equiv</a> vartab vartab-equiv)
+          (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____CHECK-BLOCK-ITEM-LIST.html">check-block-item-list</a> items funtab vartab)
+                 (<a href="C____CHECK-BLOCK-ITEM-LIST.html">check-block-item-list</a> items funtab vartab-equiv)))
+ :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>check-stmt-var-table-no-change</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> check-stmt-var-table-no-change
+        (<a href="ACL2____B_A2.html">b*</a> ((result (<a href="C____CHECK-STMT.html">check-stmt</a> s funtab vartab)))
+            (<a href="ACL2____IMPLIES.html">implies</a> (<a href="C____STMT-TYPEP.html">stmt-typep</a> result)
+                     (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____STMT-TYPE-_E3VARIABLES.html">stmt-type-&gt;variables</a> result)
+                            (<a href="C____VAR-TABLE-FIX.html">var-table-fix</a> vartab)))))</pre> 
+
+</body>
+</html>

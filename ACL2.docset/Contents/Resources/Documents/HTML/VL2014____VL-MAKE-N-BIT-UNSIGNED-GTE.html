@@ -1,0 +1,119 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Vl-make-n-bit-unsigned-gte</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL2014____VL-MAKE-N-BIT-UNSIGNED-GTE">Click for Vl-make-n-bit-unsigned-gte in the Full Manual</a></h3>
+
+<p>Generate an unsigned greater-than or equal comparison module.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(vl-make-n-bit-unsigned-gte n) → mods</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">n</span> — <font color="#606060">Guard <span class="v">(<a href="ACL2____POSP.html">posp</a> n)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">mods</span> — A non-empty module list.  The first module in the list 
+                       is the desired module; the other modules are any 
+                       necessary supporting modules.<br>    <font color="#606060">Type <span class="v">(<a href="VL2014____VL-MODULELIST-P.html">vl-modulelist-p</a> mods)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>We generate a gate-based module that is semantically equivalent 
+to:</p> 
+ 
+<pre class="code">module VL_N_BIT_UNSIGNED_GTE (out, a, b) ;
+  output out;
+  input [n-1:0] a;
+  input [n-1:0] b;
+  assign out = a &gt;= b;
+endmodule</pre> 
+ 
+<p>Note that in <a href="VL2014____OPREWRITE.html">oprewrite</a> we canonicalize any <span class="v">&lt;</span>, <span class="v">&lt;=</span>, and 
+<span class="v">&gt;</span> operators into the <span class="v">&gt;=</span> form, so this module actually handles all 
+inequality comparisons.</p> 
+ 
+<p>The basic idea is to compute <span class="v">a + ~b + 1</span> and look at the carry chain. 
+We do this by directly instantiating an adder.  This might be somewhat 
+inefficient since we really don't need to be computing the sum.  On the other 
+hand, there are really not very many comparison operators so we suspect we do 
+not need to be particularly efficient, and hopefully in any AIG or S-Expression 
+based representations the extra work will be automatically thrown away.</p> 
+ 
+<p>Note that the Verilog semantics require that if <span class="v">a</span> or <span class="v">b</span> have any 
+X/Z bits, then the answer should be X.  This is true even when the X occurs in 
+an insignificant place, e.g., <span class="v">1000 &gt; 000x</span> is considered to be X even 
+though no matter what the X digit is, we can see that the mathematical answer 
+ought to be 1.  (This behavior might be intended to give synthesis tools as 
+much freedom as possible when implementing the operation.)</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>vl-make-n-bit-unsigned-gte</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ vl-make-n-bit-unsigned-gte (n)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____POSP.html">posp</a> n)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'vl-make-n-bit-unsigned-gte))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+   ((n (lposfix n))
+    (name (<a href="ACL2____HONS-COPY.html">hons-copy</a> (<a href="STR____CAT.html">cat</a> "VL_" (natstr n)
+                          "_BIT_UNSIGNED_GTE")))
+    ((<a href="ACL2____MV.html">mv</a> out-expr
+         out-port out-portdecl out-vardecl)
+     (<a href="VL2014____VL-PRIMITIVE-MKPORT.html">vl-primitive-mkport</a> "out" :vl-output))
+    ((<a href="ACL2____MV.html">mv</a> a-expr a-port a-portdecl a-vardecl)
+     (<a href="VL2014____VL-OCCFORM-MKPORT.html">vl-occform-mkport</a> "a" :vl-input n))
+    ((<a href="ACL2____MV.html">mv</a> b-expr b-port b-portdecl b-vardecl)
+     (<a href="VL2014____VL-OCCFORM-MKPORT.html">vl-occform-mkport</a> "b" :vl-input n))
+    ((<a href="ACL2____MV.html">mv</a> bnot-expr bnot-vardecl)
+     (<a href="VL2014____VL-OCCFORM-MKWIRE.html">vl-occform-mkwire</a> "bnot" n))
+    ((<a href="ACL2____MV.html">mv</a> sum-expr sum-vardecl)
+     (<a href="VL2014____VL-OCCFORM-MKWIRE.html">vl-occform-mkwire</a> "sum" n))
+    ((<a href="ACL2____MV.html">mv</a> cout-expr cout-vardecl)
+     (<a href="VL2014____VL-PRIMITIVE-MKWIRE.html">vl-primitive-mkwire</a> "cout"))
+    ((<a href="COMMON-LISP____CONS.html">cons</a> bnot-mod bnot-support)
+     (<a href="VL2014____VL-MAKE-N-BIT-NOT.html">vl-make-n-bit-not</a> n))
+    (bnot-inst (<a href="VL2014____VL-SIMPLE-INST.html">vl-simple-inst</a> bnot-mod "mk_bnot" bnot-expr b-expr))
+    ((<a href="COMMON-LISP____CONS.html">cons</a> core-mod core-support)
+     (<a href="VL2014____VL-MAKE-N-BIT-ADDER-CORE.html">vl-make-n-bit-adder-core</a> n))
+    (core-inst (<a href="VL2014____VL-SIMPLE-INST.html">vl-simple-inst</a> core-mod "core" sum-expr cout-expr
+                               a-expr bnot-expr |*sized-1'b1*|))
+    ((<a href="COMMON-LISP____CONS.html">cons</a> xprop-mod xprop-support)
+     (<a href="VL2014____VL-MAKE-N-BIT-X-PROPAGATOR.html">vl-make-n-bit-x-propagator</a> n 1))
+    (xprop-inst (<a href="VL2014____VL-SIMPLE-INST.html">vl-simple-inst</a> xprop-mod "xprop"
+                                out-expr cout-expr a-expr b-expr)))
+   (<a href="COMMON-LISP____LIST_A2.html">list*</a>
+        (<a href="VL2014____MAKE-VL-MODULE.html">make-vl-module</a>
+             :name name
+             :origname name
+             :ports (<a href="COMMON-LISP____LIST.html">list</a> out-port a-port b-port)
+             :portdecls (<a href="COMMON-LISP____LIST.html">list</a> out-portdecl a-portdecl b-portdecl)
+             :vardecls (<a href="COMMON-LISP____LIST.html">list</a> out-vardecl a-vardecl b-vardecl
+                             sum-vardecl cout-vardecl bnot-vardecl)
+             :modinsts (<a href="COMMON-LISP____LIST.html">list</a> bnot-inst core-inst xprop-inst)
+             :minloc *vl-fakeloc*
+             :maxloc *vl-fakeloc*)
+        bnot-mod core-mod xprop-mod
+        (<a href="COMMON-LISP____APPEND.html">append</a> bnot-support
+                core-support xprop-support)))))</pre> 
+<p><b>Theorem: </b>vl-modulelist-p-of-vl-make-n-bit-unsigned-gte</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-modulelist-p-of-vl-make-n-bit-unsigned-gte
+        (<a href="ACL2____B_A2.html">b*</a> ((mods (<a href="VL2014____VL-MAKE-N-BIT-UNSIGNED-GTE.html">vl-make-n-bit-unsigned-gte</a> n)))
+            (<a href="VL2014____VL-MODULELIST-P.html">vl-modulelist-p</a> mods))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>type-of-vl-make-n-bit-unsigned-gte</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> type-of-vl-make-n-bit-unsigned-gte
+        (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____TRUE-LISTP.html">true-listp</a> (<a href="VL2014____VL-MAKE-N-BIT-UNSIGNED-GTE.html">vl-make-n-bit-unsigned-gte</a> n))
+             (<a href="COMMON-LISP____CONSP.html">consp</a> (<a href="VL2014____VL-MAKE-N-BIT-UNSIGNED-GTE.html">vl-make-n-bit-unsigned-gte</a> n)))
+        :rule-classes :type-prescription)</pre> 
+<p><b>Theorem: </b>vl-make-n-bit-unsigned-gte-of-pos-fix-n</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-make-n-bit-unsigned-gte-of-pos-fix-n
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL2014____VL-MAKE-N-BIT-UNSIGNED-GTE.html">vl-make-n-bit-unsigned-gte</a> (<a href="ACL2____POS-FIX.html">pos-fix</a> n))
+               (<a href="VL2014____VL-MAKE-N-BIT-UNSIGNED-GTE.html">vl-make-n-bit-unsigned-gte</a> n)))</pre> 
+<p><b>Theorem: </b>vl-make-n-bit-unsigned-gte-pos-equiv-congruence-on-n</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> vl-make-n-bit-unsigned-gte-pos-equiv-congruence-on-n
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____POS-EQUIV.html">acl2::pos-equiv</a> n n-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="VL2014____VL-MAKE-N-BIT-UNSIGNED-GTE.html">vl-make-n-bit-unsigned-gte</a> n)
+                        (<a href="VL2014____VL-MAKE-N-BIT-UNSIGNED-GTE.html">vl-make-n-bit-unsigned-gte</a> n-equiv)))
+        :rule-classes :congruence)</pre> 
+
+</body>
+</html>

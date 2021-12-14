@@ -1,0 +1,452 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Defaggregate</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=STD____DEFAGGREGATE">Click for Defaggregate in the Full Manual</a></h3>
+
+<p>Introduce a record structure, like a <span class="v">struct</span> in C.</p><h3>Introduction</h3> 
+ 
+<p>Defaggregate introduces a recognizer, constructor, and accessors for a new 
+record-like structure.  It is similar to <span class="v">struct</span> in C or <span class="v">defstruct</span> in 
+Lisp.</p> 
+ 
+<p>Basic example:</p> 
+ 
+<pre class="code">(<a href="STD____DEFAGGREGATE.html">defaggregate</a> employee     ;; structure name
+  (name salary position)   ;; fields
+  :tag :employee           ;; options
+  )</pre> 
+ 
+<p>This example would produce:</p> 
+ 
+<ul> 
+ <li>A recognizer, <span class="v">(employee-p x)</span>,</li> 
+ <li>A constructor, <span class="v">(employee name salary position)</span>,</li> 
+ <li>An accessor for each field, e.g., <span class="v">(employee-&gt;name x)</span>,</li> 
+ <li>An extension of <a href="ACL2____B_A2.html">b*</a> to easily destructure these aggregates,</li> 
+ <li>Macros for making and changing aggregates, 
+   <ul> 
+    <li><span class="v">(make-employee :name ... :salary ...)</span></li> 
+    <li><span class="v">(change-employee x :salary ...)</span></li> 
+   </ul>
+</li> 
+ <li>Basic theorems relating these new functions.</li> 
+</ul> 
+ 
+<p>General form:</p> 
+ 
+<pre class="code">(<a href="STD____DEFAGGREGATE.html">defaggregate</a> name
+  Fields
+  [Option]*              ;; i.e., :keyword value
+  [/// other-events])    ;; optional, starts with the symbol ///</pre> 
+ 
+<p>The <span class="v">name</span> acts like a prefix the function and theorem names we generate 
+will be based on this name.</p> 
+ 
+<p>The <span class="v">Fields</span> describe what fields each instance of the structure will 
+have.  The example above shows only the very simplest syntax, but fields can 
+also have well-formedness requirements, documentation, etc.; see below.</p> 
+ 
+<p>The <span class="v">Option</span>s control various settings on the structure, and many options 
+are described below.  Options can actually come before or after the fields (or 
+both).</p> 
+ 
+<p>The <span class="v">other-events</span> is just a place for arbitrary other events to be put, 
+as in <a href="ACL2____DEFINE.html">define</a>.  This is mainly intended as a book structuring device, to 
+allow you to keep related theorems near your aggregate.</p> 
+ 
+ 
+<h3>Structure Tags</h3> 
+ 
+<p>The <span class="v">:tag</span> of every aggregate must either be:</p> 
+ 
+<ul> 
+ 
+<li>A keyword symbol that typically shares its name with the name of the 
+aggregate, e.g., in the "employee" aggregate the tag is <span class="v">:employee</span>; 
+or</li> 
+ 
+<li>
+<span class="tt">nil</span>, to indicate that you want a <b>tagless</b> aggregate.</li> 
+ 
+</ul> 
+ 
+<p>How are tags used?  Each instance of a tagged aggregate will be a cons tree 
+whose car is the tag.  This requires some overhead—one cons for every 
+instance of the aggregate—but allows us to compare tags to differentiate 
+between different kinds of aggregates.  A tagless aggregate avoids this 
+overhead, but you give up the ability to easily distinguish different kinds of 
+tagless aggregates from one another.</p> 
+ 
+<p>To avoid introducing many theorems about <span class="v">car</span>, we use an alias named 
+<a href="ACL2____TAG.html">tag</a>.  Each tagged <span class="v">defaggregate</span> results in three tag-related 
+theorems:</p> 
+ 
+<ol> 
+<li>Tag of constructor: 
+<pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> tag-of-example
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____TAG.html">tag</a> (example field1 ... fieldN))
+         :example))</pre>
+</li> 
+ 
+<li>Tag when recognized: 
+<pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> tag-when-example-p
+  (<a href="ACL2____IMPLIES.html">implies</a> (example-p x)
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____TAG.html">tag</a> x) :example))
+  :rule-classes ((:rewrite :backchain-limit-lst 0)
+                 (:forward-chaining)))</pre>
+</li> 
+ 
+<li>Not recognized when tag is wrong: 
+<pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> example-p-when-wrong-tag
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____TAG.html">tag</a> x) :example))
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (example-p x)
+                  nil))
+  :rule-classes ((:rewrite :backchain-limit-lst 1)))</pre>
+</li> 
+</ol> 
+ 
+<p>These theorems seem to perform well and settle most questions regarding the 
+disjointness of different kinds of aggregates.  In case the latter rules become 
+expensive, we always add them to the <span class="v">tag-reasoning</span> ruleset, so you can 
+disable this <a href="ACL2____RULESETS.html">ruleset</a> to turn off 
+almost all tag-related reasoning.</p> 
+ 
+ 
+<h3>Syntax of Fields</h3> 
+ 
+<p>To describe the aggregate's fields, you can make use of <a href="STD____EXTENDED-FORMALS.html">extended-formals</a> syntax.  This syntax means that fields can be optional and 
+use keyword/value options.  One can also use this syntax to describe a 
+particular field of an aggregate -- by providing documentation or specifying a 
+predicate that the field must satisfy.  Here is an example:</p> 
+ 
+<pre class="code">(<a href="STD____DEFAGGREGATE.html">defaggregate</a> employee
+
+  ((name   "Should be in Lastname, Firstname format"
+           stringp :rule-classes :type-prescription)
+
+   (salary "Annual salary in dollars, nil for hourly employees"
+           (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____NOT.html">not</a> salary) (<a href="ACL2____NATP.html">natp</a> salary))
+           :rule-classes :type-prescription)
+
+   (rank "Employee rank.  Can be empty."
+         (<a href="ACL2____IMPLIES.html">implies</a> rank (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____CHARACTERP.html">characterp</a> rank)
+                            (<a href="COMMON-LISP____ALPHA-CHAR-P.html">alpha-char-p</a> rank))))
+
+   (<a href="COMMON-LISP____POSITION.html">position</a> (<a href="COMMON-LISP____AND.html">and</a> (position-p position)
+                  (salary-in-range-for-position-p salary position))
+             :default :peon))
+
+  :tag :employee)</pre> 
+ 
+<p>The "guard" for each field plays three roles:</p> 
+<ul> 
+<li>It is a guard on the constructor</li> 
+<li>It is a well-formedness requirement enforced by the recognizer</li> 
+<li>It is a theorem about the return type of the accessor.</li> 
+</ul> 
+ 
+<p>The return-type theorem requires some special attention.  By default, the 
+return-type theorem is an ordinary <a href="ACL2____REWRITE.html">ACL2::rewrite</a> rule.  When this is not 
+appropriate, e.g., for <span class="v">name</span> above, you may wish to use a different 
+<span class="v">:rule-classes</span> option.</p> 
+ 
+<p>The embedded <a href="ACL2____XDOC.html">xdoc</a> documentation gets incorporated into the 
+automatically-created documentation for the aggregate in a sensible way. 
+This is overridden by the <span class="v">:suppress-xdoc t</span> option.</p> 
+ 
+<p>The <span class="v">:default</span> value only affects the Make macro (see below).</p> 
+ 
+<h3>Options</h3> 
+ 
+<h4>Layout</h4> 
+ 
+<p>By default, aggregates are represented with <span class="v">:layout :alist</span>, but you can 
+also choose other layouts.</p> 
+ 
+<p>The <span class="v">:alist</span> format provides the best readability/debuggability but is 
+the worst layout for execution/memory efficiency.  This layout represents 
+instances of your structure using an alist-like format where the name of each 
+field is next to its value.  When printing such an object you can easily see 
+the fields and their values, but creating these objects requires additional 
+consing to put the field names on, etc.</p> 
+ 
+<p>The <span class="v">:tree</span> or <span class="v">:fulltree</span> layouts provides the best efficiency and 
+worst readability.  They pack the fields into a compact tree structure, without 
+their names.  In <span class="v">:tree</span> mode, any <span class="v">(nil . nil)</span> pairs are compressed 
+into just <span class="v">nil</span>.  In <span class="v">:fulltree</span> mode this compression doesn't happen, 
+which might marginally save time if you know your fields will never be in pairs 
+of <span class="v">nil</span>s.  Tree-based structures require minimal consing, and each accessor 
+simply follows some minimal, fixed car/cdr path into the object.  The objects 
+print as horrible blobs of conses that can be hard to inspect.</p> 
+ 
+<p>The <span class="v">:list</span> layout strikes a middle ground, with the fields of the object 
+laid out as a plain list.  Accessing the fields of such a structure may require 
+more <span class="v">cdr</span> operations than for a <span class="v">:tree</span> layout, but at least when you 
+print them it is still pretty easy to tell what the fields are.</p> 
+ 
+ 
+<h4>Honsed Aggregates</h4> 
+ 
+<p>By default, <span class="v">:hons</span> is nil and the constructor for an aggregate will 
+build the object using ordinary conses.  However, when <span class="v">:hons</span> is set to 
+<span class="v">t</span>, we instead always use <a href="ACL2____HONS.html">hons</a> when building these aggregates.</p> 
+ 
+<p>Honsing is only appropriate for some structures.  It is a bit slower than 
+consing, and should typically not be used for aggregates that will be 
+constructed and used in an ephemeral manner.  If you are going to hons your 
+structures, you should probably use a <span class="v">:tree</span> or <span class="v">:fulltree</span> layout.</p> 
+ 
+ 
+<h4>Other Options</h4> 
+ 
+<dl> 
+ 
+<dt>:pred</dt> 
+ 
+<dd>Name of the recognizer for the aggregate -- must be a valid symbol for a 
+new function. Defaults to <span class="v">agg-p</span>, where <span class="v">agg</span> is the name of the 
+aggregate.</dd> 
+ 
+<dt>:mode</dt> 
+ 
+<dd>Mode for the introduced functions -- must be either <span class="v">:program</span> or 
+<span class="v">:logic</span>.  Defaults to the current <a href="ACL2____DEFUN-MODE.html">ACL2::defun-mode</a>.</dd> 
+ 
+<dt>:already-definedp</dt> 
+ 
+<dd>Advanced option that may be useful for mutually-recursive recognizers. 
+This means: generate all ordinary <span class="v">defaggregate</span> functions and theorems 
+<i>except</i> for the recognizer.  For this to work, you have to have already 
+defined a "compatible" recognizer.</dd> 
+ 
+<dt>:parents, :short, :long</dt> 
+ 
+<dd>These options are as in <a href="ACL2____XDOC.html">xdoc</a>.  Whatever you supply for <span class="v">:long</span> 
+will follow some automatically generated documentation that describes the 
+fields of the aggregate.  If you don't want that <a href="ACL2____XDOC.html">xdoc</a>, you can 
+turn it off with the next option.</dd> 
+ 
+<dt>:suppress-xdoc</dt> 
+ 
+<dd>You can use <span class="v">:suppress-xdoc t</span> to prevent <a href="ACL2____XDOC.html">xdoc</a> from being 
+created for this aggregate.  Overrides the automatically generated 
+documentation as well as<span class="v">:parents</span>, <span class="v">:short</span>, and <span class="v">:long</span>.</dd> 
+ 
+<dt>:extra-field-keywords</dt> 
+ 
+<dd>Advanced option for people who are writing extensions of <span class="v">defaggregate</span>. 
+This tells defaggregate to tolerate (and ignore) certain additional keywords in 
+its fields.  The very advanced user can then inspect these fields after 
+submitting the aggregate, and perhaps use them to generate additional 
+events.</dd> 
+ 
+<dt>:verbosep</dt> 
+ 
+<dd>You can use <span class="v">:verbosep t</span> to turn off output hiding.  This option is 
+generally meant for debugging failures in defaggregate.</dd> 
+ 
+<dt>:rest</dt> 
+ 
+<dd>This option is deprecated.  Please use the new <span class="v">///</span> syntax, instead.</dd> 
+ 
+</dl> 
+ 
+ 
+<h3>Dependent Requirements</h3> 
+ 
+<p>The embedded "guard" in each extended formal allows you to naturally 
+express simple requirements, e.g., <span class="v">arity</span> should be a natural and <span class="v">args</span> 
+should be an <span class="v">true-listp</span>.  But what if you need something more like <a href="https://en.wikipedia.org/wiki/Dependent_type" target="_blank"><nobr>dependent types<img src="../Icon_External_Link.png" title="External link to https://en.wikipedia.org/wiki/Dependent_type"></nobr></a>, e.g., 
+say that <span class="v">arity</span> is supposed to always match the length of args?</p> 
+ 
+<p>It's valid to refer to other fields within the guards of an embedded formal, 
+so one way we could write this would be, e.g.,:</p> 
+ 
+<pre class="code">(<a href="STD____DEFAGGREGATE.html">defaggregate</a> mytype
+   ((<a href="ACL2____ARITY.html">arity</a> natp :rule-classes :type-prescription)
+    (<a href="ACL2____ARGS.html">args</a>  (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____TRUE-LISTP.html">true-listp</a> args)
+                (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____LEN.html">len</a> args) arity)))))</pre> 
+ 
+<p>This is perfectly valid, but you may sometimes prefer not to embed these 
+dependent requirements directly in the fields.  For instance, in the example 
+above, the result-type theorem about <span class="v">args</span> becomes two <a href="ACL2____REWRITE.html">ACL2::rewrite</a> 
+rules.  It would probably be better for the <span class="v">true-listp</span> part to be a <a href="ACL2____TYPE-PRESCRIPTION.html">ACL2::type-prescription</a> rule.  But the <span class="v">len</span> requirement doesn't make sense 
+as a <span class="v">:type-prescription</span>.</p> 
+ 
+<p>To work around this, you could use an explicit, compound <span class="v">:rule-classes</span> 
+form with separate <span class="v">:corollary</span> theorems.  This gets very ugly, because you 
+have to write out each corollary in full, e.g.,:</p> 
+ 
+<pre class="code">(<a href="STD____DEFAGGREGATE.html">defaggregate</a> mytype
+  ((<a href="ACL2____ARITY.html">arity</a> natp :rule-classes :type-prescription)
+   (<a href="ACL2____ARGS.html">args</a>  (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____TRUE-LISTP.html">true-listp</a> args)
+               (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____LEN.html">len</a> args) arity))
+          :rule-classes
+          ((:type-prescription :corollary
+                               (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____FORCE.html">force</a> (mytype-p x))
+                                        (<a href="ACL2____TRUE-LISTP.html">true-listp</a> (mytype-&gt;args x))))
+           (:rewrite :corollary
+                     (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____FORCE.html">force</a> (mytype-p x))
+                              (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____LEN.html">len</a> (mytype-&gt;args x))
+                                     (mytype-&gt;arity x))))))))</pre> 
+ 
+<p>So you may instead prefer to use the alternate <span class="v">:require</span> syntax. 
+In this case, we would have:</p> 
+ 
+<pre class="code">(<a href="STD____DEFAGGREGATE.html">defaggregate</a> mytype
+  ((<a href="ACL2____ARITY.html">arity</a> natp :rule-classes :type-prescription)
+   (<a href="ACL2____ARGS.html">args</a>  true-listp :rule-classes :type-prescription))
+  :require
+  ((len-of-mytype-&gt;args (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____LEN.html">len</a> args) arity))))</pre> 
+ 
+<p>This would result in an ordinary <a href="ACL2____TYPE-PRESCRIPTION.html">ACL2::type-prescription</a> return-type 
+theorems for both <span class="v">arity</span> and <span class="v">args</span>, and a separate rewrite rule to deal 
+with the length dependency:</p> 
+ 
+<pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> len-of-mytype-&gt;args
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____FORCE.html">force</a> (mytype-p x))
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____LEN.html">len</a> (mytype-&gt;args x))
+                  (mytype-&gt;arity x))))</pre> 
+ 
+<p>The general form of each <span class="v">:require</span> form is:</p> 
+ 
+<pre class="code">(theorem-name conclusion [:rule-classes ...])</pre> 
+ 
+<p>Where <span class="v">conclusion</span> may mention any of the fields of the aggregate.  Each 
+requirement becomes a guard for the constructor, a well-formedness requirement 
+in the recognizer, and a theorem about the accessors of your structure, exactly 
+like the simple requirements on each field.</p> 
+ 
+ 
+<h3>Make and Change Macros</h3> 
+ 
+<p>Direct use of the constructor is discouraged.  Instead, we introduce two 
+macros with every aggregate.  The <span class="v">make</span> macro constructs a fresh aggregate 
+when given values for its fields:</p> 
+ 
+<pre class="code">(make-example :field1 val1 :field2 val2 ...)
+   --&gt;
+(example val1 val2 ...)</pre> 
+ 
+<p>The <span class="v">change</span> macro is similar, but is given an existing object as a 
+starting point.  It may be thought of as:</p> 
+ 
+<pre class="code">(change-example x :field2 val2)
+   --&gt;
+(make-example :field1 (example-&gt;field1 x)
+              :field2 val2
+              :field3 (example-&gt;field3 x)
+              ...)</pre> 
+ 
+<p>There are some strong advantages to using these macros instead of calling 
+the constructor directly.</p> 
+ 
+<ul> 
+ 
+<li>The person writing the code does not need to remember the order of the 
+fields</li> 
+ 
+<li>The person reading the code can see what values are being given to which 
+fields.</li> 
+ 
+<li>Fields whose value should be <span class="v">nil</span> (or some other <span class="v">:default</span>) may be 
+omitted from the <i>make</i> macro.</li> 
+ 
+<li>Fields whose value should be left alone can be omitted from the 
+<i>change</i> macro.</li> 
+ 
+</ul> 
+ 
+<p>These features make it easier to add new fields to the aggregate later on, 
+or to rearrange fields, etc.</p> 
+ 
+ 
+<h3>Integration with <a href="ACL2____B_A2.html">b*</a>
+</h3> 
+ 
+<p>Defaggregate automatically introduces a pattern binder that integrates into 
+<span class="v">b*</span>.  This provides a concise syntax for destructuring aggregates.  For 
+instance:</p> 
+ 
+<pre class="code">(<a href="ACL2____B_A2.html">b*</a> ((bonus-percent 1/10)
+     ((employee x)  (find-employee name db))
+     (bonus         (<a href="COMMON-LISP_____B2.html">+</a> (<a href="COMMON-LISP_____A2.html">*</a> x.salary bonus-percent)
+                       (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> x.position :sysadmin)
+                           ;; early christmas for me, har har...
+                           (<a href="COMMON-LISP_____A2.html">*</a> x.salary 2)
+                         0))))
+  bonus)</pre> 
+ 
+<p>Can loosely be thought of as:</p> 
+ 
+<pre class="code">(<a href="ACL2____B_A2.html">b*</a> ((bonus-percent 1/10)
+     (temp          (find-employee name db))
+     (x.name        (employee-&gt;name temp))
+     (x.salary      (employee-&gt;salary temp))
+     (x.position    (employee-&gt;position temp))
+     (bonus         (<a href="COMMON-LISP_____B2.html">+</a> (<a href="COMMON-LISP_____A2.html">*</a> x.salary bonus-percent)
+                       (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> x.position :sysadmin)
+                           ;; early christmas for me, har har...
+                           (<a href="COMMON-LISP_____A2.html">*</a> x.salary 2)
+                         0))))
+  bonus)</pre> 
+ 
+<p>For greater efficiency in the resulting code, we avoid binding components 
+which do not appear to be used, e.g., we will not actually bind <span class="v">x.name</span> 
+above.</p> 
+ 
+<p>Detecting whether a variable is needed at macro-expansion time is inherently 
+broken because we can't truly distinguish between function names, macro names, 
+variable names, and so forth.  It is possible to trick the binder into 
+including extra, unneeded variables, or into optimizing away bindings that are 
+necessary.  In such cases, the ACL2 user will be presented with either "unused 
+variable" or "unbound variable" error.  If you can come up with a 
+non-contrived example where this is really a problem, we might consider 
+developing some workaround, perhaps extended syntax that lets you suppress the 
+optimization altogether.</p> 
+ 
+<h5>Extra Binder Names</h5> 
+ 
+<p>You can instruct the <a href="ACL2____B_A2.html">b*</a> binder to understand additional, "derived" 
+fields for certain structures.</p> 
+ 
+<p>Example.  Suppose we are dealing with <span class="v">student</span> structures that have 
+separate <span class="v">firstname</span> and <span class="v">lastname</span> fields.  We might find that we often 
+want to use the student's full name.  We can explain to the <a href="ACL2____B_A2.html">b*</a> binder 
+that we want it to understand the syntax <span class="v">x.fullname</span> by giving the 
+<span class="v">:extra-binder-names</span> argument.</p> 
+ 
+<pre class="code">(<a href="STD____DEFAGGREGATE.html">defaggregate</a> student
+  ((firstname stringp)
+   (lastname  stringp)
+   (grade     natp))
+ :extra-binder-names (fullname))</pre> 
+ 
+<p>When we do this, the <a href="ACL2____B_A2.html">b*</a> binder will look for occurrences of 
+<span class="v">x.fullname</span> and, if any are found, it will bind them to 
+<span class="v">(student-&gt;fullname x)</span>.  For this to be work at all, we have to define this 
+function ourselves, e.g.,:</p> 
+ 
+<pre class="code">(<a href="ACL2____DEFINE.html">define</a> student-&gt;fullname ((x student-p))
+  :returns (fullname stringp :rule-classes :type-prescription)
+  (<a href="STR____CAT.html">str::cat</a> (student-&gt;firstname x)
+            " "
+            (student-&gt;lastname x)))</pre> 
+ 
+<p>Once we do this, we can freely write <span class="v">x.fullname</span> wherever we previously 
+would have had to call <span class="v">(student-&gt;fullname x)</span>.  For instance:</p> 
+ 
+<pre class="code">(<a href="ACL2____B_A2.html">b*</a> ((fred (make-student :firstname "Fredrick"
+                         :lastname "Flintstone"
+                         :grade 7))
+    ((student fred)))
+  (<a href="STR____CAT.html">str::cat</a> "Fred's full name is " fred.fullname "."))</pre> 
+ 
+<p>Nicely produces <span class="v">"Fred's full name is Fredrick Flintstone"</span>.</p>
+</body>
+</html>

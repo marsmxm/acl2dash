@@ -1,0 +1,222 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Atc-gen-loop-stmt</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=C____ATC-GEN-LOOP-STMT">Click for Atc-gen-loop-stmt in the Full Manual</a></h3>
+
+<p>Generate a C loop statement from an ACL2 term.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(atc-gen-loop-stmt term inscope 
+                   fn measure-for-fn measure-formals 
+                   prec-fns proofs ctx state) 
+ 
+  → 
+(mv erp val state)</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">term</span> — <font color="#606060">Guard <span class="v">(<a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a> term)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">inscope</span> — <font color="#606060">Guard <span class="v">(<a href="C____ATC-SYMBOL-TYPE-ALIST-LISTP.html">atc-symbol-type-alist-listp</a> inscope)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">fn</span> — <font color="#606060">Guard <span class="v">(<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> fn)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">measure-for-fn</span> — <font color="#606060">Guard <span class="v">(<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> measure-for-fn)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">measure-formals</span> — <font color="#606060">Guard <span class="v">(<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> measure-formals)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">prec-fns</span> — <font color="#606060">Guard <span class="v">(<a href="C____ATC-SYMBOL-FNINFO-ALISTP.html">atc-symbol-fninfo-alistp</a> prec-fns)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">proofs</span> — <font color="#606060">Guard <span class="v">(<a href="ACL2____BOOLEANP.html">booleanp</a> proofs)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">ctx</span> — <font color="#606060">Guard <span class="v">(<a href="ACL2____CTXP.html">ctxp</a> ctx)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">val</span> — <font color="#606060">Type <span class="v">(tuple (<a href="C____STMT.html">stmt</a> stmtp)
+       (test-term pseudo-termp)
+       (body-term pseudo-termp)
+       (affect symbol-listp)
+       (limit-body pseudo-termp)
+       (limit-all pseudo-termp)
+       val)
+</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>This is called on loop terms (see user documentation).</p><p>The term must be an <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span>. 
+     If the test is an <span class="tt"><a href="ACL2____MBT.html">mbt</a></span> or <span class="tt"><a href="ACL2____MBT_42.html">mbt$</a></span>, 
+     test and `else' branch are ignored, 
+     while the `then' branch is recursively processed. 
+     Otherwise, the test must be an expression term returning a boolean 
+     from which we generate the loop test; 
+     the `then' branch must be a statement term, 
+     from which we generate the loop body; 
+     and the `else' branch must be either a single variable 
+     or an <span class="tt"><a href="ACL2____MV.html">mv</a></span> call on variables, 
+     which must be a subset of the function's formals, 
+     and from those variables we determine 
+     the variables affected by the loop. 
+     The statement term in the `then' branch 
+     must affect the variables found in the `else' branch. 
+     We return 
+     the term that represents the loop test, 
+     the term that represent the loop body 
+     and the variables affected by the loop. 
+     The loop test and body are used to generate more modular theorems.</p><p>Note that we push a new scope before processing the loop body. 
+     This is because the loop body is a block, which opens a new scope in C.</p><p>We return a limit that suffices 
+     to execute <span class="tt"><a href="C____EXEC-STMT-WHILE.html">exec-stmt-while</a></span> on (the test and body of) 
+     the loop statement, as follows. 
+     We need 1 to get to executing the test, 
+     which is pure and so does not contribute to the overall limit. 
+     If the test is true, we need to add the limit to execute the body. 
+     After that, <span class="tt"><a href="C____EXEC-STMT-WHILE.html">exec-stmt-while</a></span> is called recursively, 
+     decrementing the limit: 
+     given that we know that the loop function terminates, 
+     its measure must suffice as the limit. 
+     The loop function decreases the measure by at least 1 (maybe more) 
+     at every recursive call, so the limit does not decrease any faster, 
+     and we will never run out of the limit before the measure runs out. 
+     Thus the measure is an over-approximation for the limit, which is sound. 
+     We also note that the measure refers to the initial call of the function, 
+     while here it would suffice 
+     to take the measure at the first recursive call, 
+     but taking the whole measure is simpler, 
+     and again it is sound to over-appoximate. 
+     Note that we use the measure function for <span class="v">fn</span> 
+     that is generated by ATC, 
+     for the reasons explained in <span class="tt"><a href="C____ATC-GEN-LOOP-MEASURE-FN.html">atc-gen-loop-measure-fn</a></span>. 
+     Besides the <span class="v">limit-all</span> result, 
+     which is the limit for the whole loop, 
+     we also return <span class="v">limit-body</span>, which is just for the loop body; 
+     this is in support for more modular proofs. </p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>atc-gen-loop-stmt</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ atc-gen-loop-stmt
+ (term inscope
+       fn measure-for-fn measure-formals
+       prec-fns proofs ctx state)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (<a href="ACL2____STATE.html">state</a>)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a> term)
+                             (<a href="C____ATC-SYMBOL-TYPE-ALIST-LISTP.html">atc-symbol-type-alist-listp</a> inscope)
+                             (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> fn)
+                             (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> measure-for-fn)
+                             (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> measure-formals)
+                             (<a href="C____ATC-SYMBOL-FNINFO-ALISTP.html">atc-symbol-fninfo-alistp</a> prec-fns)
+                             (<a href="ACL2____BOOLEANP.html">booleanp</a> proofs)
+                             (<a href="ACL2____CTXP.html">ctxp</a> ctx))))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'atc-gen-loop-stmt))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+   (((acl2::fun (irr))
+     (<a href="COMMON-LISP____LIST.html">list</a> (<a href="C____IRR-STMT.html">irr-stmt</a>) nil nil nil nil nil))
+    ((<a href="ACL2____MV.html">mv</a> okp test then else)
+     (<a href="C____FTY-CHECK-IF-CALL.html">fty-check-if-call</a> term))
+    ((unless okp)
+     (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
+      ctx t (irr)
+      "When generating C loop code for the recursive function ~x0, ~
+                   a term ~x1 that is not an IF has been encountered."
+      fn term))
+    ((<a href="ACL2____MV.html">mv</a> mbtp &amp;) (<a href="ACL2____CHECK-MBT-CALL.html">check-mbt-call</a> test))
+    ((when mbtp)
+     (<a href="C____ATC-GEN-LOOP-STMT.html">atc-gen-loop-stmt</a> then inscope
+                        fn measure-for-fn measure-formals
+                        prec-fns proofs ctx state))
+    ((<a href="ACL2____MV.html">mv</a> mbt$p &amp;) (<a href="ACL2____CHECK-MBT_42-CALL.html">check-mbt$-call</a> test))
+    ((when mbt$p)
+     (<a href="C____ATC-GEN-LOOP-STMT.html">atc-gen-loop-stmt</a> then inscope
+                        fn measure-for-fn measure-formals
+                        prec-fns proofs ctx state))
+    ((<a href="ACL2____MV.html">mv</a> erp test-expr state)
+     (<a href="C____ATC-GEN-EXPR-BOOL.html">atc-gen-expr-bool</a> test inscope fn ctx state))
+    ((when erp) (<a href="ACL2____MV.html">mv</a> erp (irr) state))
+    (wrld (<a href="ACL2____W.html">w</a> state))
+    ((unless (<a href="ACL2____PLIST-WORLDP.html">plist-worldp</a> wrld))
+     (<a href="ACL2____PROG2_42.html">prog2$</a>
+      (<a href="ACL2____RAISE.html">raise</a> "Internal error: world does not satisfy PLIST-WORLDP.")
+      (<a href="ACL2____VALUE.html">acl2::value</a> (irr))))
+    (formals (<a href="ACL2____FORMALS_B2.html">formals+</a> fn wrld))
+    ((<a href="ACL2____MV.html">mv</a> okp affect)
+     (<a href="ACL2____B_A2.html">b*</a> (((when (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> else formals))
+           (<a href="ACL2____MV.html">mv</a> t (<a href="COMMON-LISP____LIST.html">list</a> else)))
+          ((<a href="ACL2____MV.html">mv</a> okp terms)
+           (<a href="C____FTY-CHECK-LIST-CALL.html">fty-check-list-call</a> else))
+          ((when (<a href="COMMON-LISP____AND.html">and</a> okp (<a href="ACL2____SUBSETP-EQ.html">subsetp-eq</a> terms formals)))
+           (<a href="ACL2____MV.html">mv</a> t terms)))
+         (<a href="ACL2____MV.html">mv</a> nil nil)))
+    ((unless okp)
+     (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
+      ctx t (irr)
+      "The non-recursive branch ~x0 of the function ~x1 ~
+                   does not have the required form. ~
+                   See the user documentation."
+      else fn))
+    ((<a href="ACL2____MV.html">mv</a> erp
+         (<a href="COMMON-LISP____LIST.html">list</a> body-items body-type body-limit)
+         state)
+     (<a href="C____ATC-GEN-STMT.html">atc-gen-stmt</a> then nil (<a href="COMMON-LISP____CONS.html">cons</a> nil inscope)
+                   t affect fn prec-fns proofs ctx state))
+    ((when erp) (<a href="ACL2____MV.html">mv</a> erp (irr) state))
+    ((unless (<a href="C____TYPE-CASE.html">type-case</a> body-type :void))
+     (<a href="ACL2____RAISE.html">raise</a>
+      "Internal error: ~
+                the loop body ~x0 of ~x1 ~ returns type ~x2."
+      then fn body-type)
+     (<a href="ACL2____VALUE.html">acl2::value</a> (irr)))
+    (body-stmt (<a href="C____MAKE-STMT-COMPOUND.html">make-stmt-compound</a> :items body-items))
+    (<a href="C____STMT.html">stmt</a> (<a href="C____MAKE-STMT-WHILE.html">make-stmt-while</a> :test test-expr
+                           :body body-stmt))
+    ((unless (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> affect))
+     (<a href="ACL2____RAISE.html">raise</a> "Internal error: ~x0 is not a list of symbols."
+            affect)
+     (<a href="ACL2____VALUE.html">acl2::value</a> (irr)))
+    (wrld (<a href="ACL2____W.html">w</a> state))
+    ((unless (<a href="ACL2____PLIST-WORLDP.html">plist-worldp</a> wrld))
+     (<a href="ACL2____RAISE.html">raise</a> "Internal error: malformed world.")
+     (<a href="ACL2____VALUE.html">acl2::value</a> (irr)))
+    (measure-call (<a href="COMMON-LISP____CONS.html">cons</a> measure-for-fn measure-formals))
+    ((unless (<a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a> measure-call))
+     (<a href="ACL2____RAISE.html">raise</a> "Internal error.")
+     (<a href="ACL2____VALUE.html">acl2::value</a> (irr)))
+    (limit
+     (<a href="COMMON-LISP____CONS.html">cons</a>
+       'binary-+
+       (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'quote (<a href="COMMON-LISP____CONS.html">cons</a> '1 'nil))
+             (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'binary-+
+                         (<a href="COMMON-LISP____CONS.html">cons</a> body-limit (<a href="COMMON-LISP____CONS.html">cons</a> measure-call 'nil)))
+                   'nil)))))
+   (<a href="ACL2____VALUE.html">acl2::value</a> (<a href="COMMON-LISP____LIST.html">list</a> stmt
+                      test then affect body-limit limit)))))</pre> 
+<p><b>Theorem: </b>return-type-of-atc-gen-loop-stmt.val</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> return-type-of-atc-gen-loop-stmt.val
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?erp ?val acl2::?state)
+              (<a href="C____ATC-GEN-LOOP-STMT.html">atc-gen-loop-stmt</a> term inscope
+                                 fn measure-for-fn measure-formals
+                                 prec-fns proofs ctx state)))
+            (tuple (<a href="C____STMT.html">stmt</a> stmtp)
+                   (test-term pseudo-termp)
+                   (body-term pseudo-termp)
+                   (affect symbol-listp)
+                   (limit-body pseudo-termp)
+                   (limit-all pseudo-termp)
+                   val))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>cons-true-listp-of-atc-gen-loop-stmt-val</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> cons-true-listp-of-atc-gen-loop-stmt-val
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?erp ?val acl2::?state)
+              (<a href="C____ATC-GEN-LOOP-STMT.html">atc-gen-loop-stmt</a> term inscope
+                                 fn measure-for-fn measure-formals
+                                 prec-fns proofs ctx state)))
+            (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____CONSP.html">consp</a> val) (<a href="ACL2____TRUE-LISTP.html">true-listp</a> val)))
+        :rule-classes :type-prescription)</pre> 
+
+</body>
+</html>

@@ -1,0 +1,246 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Rewrite-quoted-constant</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____REWRITE-QUOTED-CONSTANT">Click for Rewrite-quoted-constant in the Full Manual</a></h3>
+
+<p>Make a rule to rewrite a quoted constant</p><p>See <a href="ACL2____RULE-CLASSES.html">rule-classes</a> for a general discussion of rule classes, 
+ including how they are used to build rules from formulas and a discussion of 
+ the various keywords in a rule class description.</p> 
+ 
+ <p>Note: It is helpful to know some basic facts about the ACL2 rewriter; see 
+ <a href="ACL2____RANDOM-REMARKS-ON-REWRITING.html">random-remarks-on-rewriting</a>.</p> 
+ 
+  <pre class="code">Example Forms:
+(<a href="ACL2____DEFTHM.html">defthm</a> lambda-id
+  (<a href="ACL2____FN-EQUAL.html">fn-equal</a> '(<a href="COMMON-LISP____LAMBDA.html">lambda</a> (x) x) 'identity)
+  :rule-classes :rewrite-quoted-constant)
+
+(<a href="ACL2____DEFTHM.html">defthm</a> set-normalizer
+  (set-equalp (drop-duplicates-and-sort x) x)
+  :rule-classes :rewrite-quoted-constant)
+
+(<a href="ACL2____DEFTHM.html">defthm</a> lambda-id-generalized
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> v)
+           (<a href="ACL2____FN-EQUAL.html">fn-equal</a> (<a href="COMMON-LISP____LIST.html">list</a> 'lambda (<a href="COMMON-LISP____LIST.html">list</a> v) v)
+                     'identity))
+  :rule-classes :rewrite-quoted-constant)</pre> 
+ 
+  <p>To be accepted with rule-class <span class="v">:rewrite-quoted-constant</span> a conjecture 
+  must have one of the following three</p> 
+  <pre class="code">General Forms:
+
+(<a href="ACL2____IMPLIES.html">IMPLIES</a> hyps (equiv 'const1 'const2))        ; [1]
+
+(<a href="ACL2____IMPLIES.html">IMPLIES</a> hyps (equiv (fn var) var))           ; [2]
+
+(<a href="ACL2____IMPLIES.html">IMPLIES</a> hyps (equiv (constructor ...) rhs))  ; [3]</pre> 
+ 
+  <p>where</p> 
+  <ul> 
+ 
+  <li>
+<span class="v">hyps</span> is a term (typically a conjunction) and may include <span class="tt"><a href="ACL2____FORCE.html">force</a></span> and <span class="tt"><a href="ACL2____SYNTAXP.html">syntaxp</a></span> hypotheses with the usual semantics,</li> 
+ 
+  <li>
+<span class="v">equiv</span> is a known <a href="ACL2____EQUIVALENCE.html">equivalence</a> relation and, in the case of 
+  <span class="v">[1]</span> and <span class="v">[2]</span>, <span class="v">equiv</span> is not <span class="v">EQUAL</span>,</li> 
+ 
+  <li>
+<span class="v">var</span>, in form <span class="v">[2]</span>, is a variable symbol, and</li> 
+ 
+  <li> <span class="v">constructor</span>, in form <span class="v">[3]</span>, is an explicit value ``constructor'' 
+  function symbol listed in <span class="v">*one-way-unify1-implicit-fns*</span>.  The list just 
+  mentioned includes <span class="v">cons</span>, which can be used to match non-empty list 
+  constants, <span class="v">coerce</span>, which can match string constants, 
+  <span class="v">intern-in-package-of-symbol</span>, which can match symbol constants, and 
+  <span class="v">binary-+</span> and certain other arithmetic primitives which can match numeric 
+  constants.  See <a href="ACL2____RANDOM-REMARKS-ON-REWRITING.html">random-remarks-on-rewriting</a> for some examples.</li> 
+ 
+  </ul> 
+ 
+  <p>The function, <span class="v">fn</span>, in a form <span class="v">[2]</span> rule is called the 
+  ``normalizer.''  We explain this terminology as we discuss how such rules are 
+  used.</p> 
+ 
+  <p>The <span class="v">:rewrite-quoted-constant</span> rule-class is permitted to specify a 
+  <span class="v">:corollary</span> and/or a <span class="v">:loop-stopper</span>, with the usual syntax and 
+  meaning.  See <span class="v">:</span><span class="tt"><a href="ACL2____RULE-CLASSES.html">rule-classes</a></span>.  Note that for forms <span class="v">[1]</span> and 
+  <span class="v">[2]</span> above a <span class="v">:</span><span class="v">loop-stopper</span> is probably irrelevant as the forms 
+  do not usually contain multiple variable symbols.</p> 
+ 
+  <p>Once a <span class="v">:rewrite-quoted-constant</span> rule is proved and stored, the 
+  rewriter behaves as follows.  When a quoted constant is encountered as the 
+  target term to be rewritten, the rewriter considers each enabled 
+  <span class="v">:rewrite-quoted-constant</span> rule (most-recent first), looking for those 
+  whose <span class="v">equiv</span> refines (see <span class="v">:</span><span class="tt"><a href="ACL2____REFINEMENT.html">refinement</a></span>) the equivalence 
+  relation being maintained by the rewriter for the given occurrence of the 
+  target.  The rewriter tries to apply each such rule in turn (as described 
+  below) and replaces the target by the rewritten result of the first 
+  applicable rule.</p> 
+ 
+  <p>A rule applies if the ``pattern'' (see below) in the conclusion 
+  ``matches'' the quoted constant and the <span class="v">hyps</span> can be relieved in the 
+  usual sense, including the treatment of free variables, pragmatic directives 
+  like <span class="tt"><a href="ACL2____FORCE.html">force</a></span> and <span class="tt"><a href="ACL2____SYNTAXP.html">syntaxp</a></span>, and heuristics such as those 
+  controlled by any <span class="v">:</span><span class="tt"><a href="ACL2____LOOP-STOPPER.html">loop-stopper</a></span> options in the rule-class or 
+  <span class="v">:</span><span class="v">restrict</span> <a href="ACL2____HINTS.html">hints</a>.  If these conditions are met, the quoted 
+  constant is replaced by the ``result.''  But the exact meanings of 
+  ``pattern,'' ``match'' and ``result'', here, are a little different from their 
+  meanings for ordinary <span class="v">:rewrite</span> rules and depend on which of the three 
+  forms is being applied.</p> 
+ 
+  <ul> 
+ 
+  <li>A form <span class="v">[1]</span> rule, whose conclusion is <span class="v">(equiv 'const1 'const2)</span>, 
+  has <span class="v">'const1</span> as its pattern and that pattern matches the target constant 
+  <span class="v">'const</span> only when <span class="v">const1</span> is exactly <span class="v">const</span>.  The result is 
+  <span class="v">'const2</span>.  Note that it is impossible to prove a form <span class="v">[1]</span> rule whose 
+  equivalence is <span class="v">equal</span> unless the two constants are identical, so we 
+  disallow that case.</li> 
+ 
+  <li>A form <span class="v">[2]</span> rule, whose conclusion is <span class="v">(equiv (fn var) var)</span>, is 
+  most easily understood by swapping the roles of left- and right-hand sides of 
+  its conclusion.  Its pattern is the right-hand side, <span class="v">var</span>, and its result 
+  is derived from the left-hand side, <span class="v">(fn var)</span>.  The reason we use the 
+  form shown here is so that the same conjecture might also be used as an 
+  ordinary <span class="v">:rewrite</span> rule without forcing the user to type a 
+  <span class="v">:corollary</span> with the sides swapped.  Since form <span class="v">[2]</span> rules have a 
+  variable as the pattern they will match any quoted constant, <span class="v">'const</span>, by 
+  binding <span class="v">var</span> to <span class="v">'const</span>.  The result is the quoted constant, if any, 
+  obtained by rewriting <span class="v">(fn var)</span> under that binding of <span class="v">var</span>.  If that 
+  rewrite does not result in a constant, no replacement is made, i.e., it is as 
+  though the rule did not match.  Note that it is pointless to prove a form 
+  <span class="v">[2]</span> rule whose equivalence is <span class="v">equal</span> because it would replace a 
+  quoted constant by itself, so we disallow that equivalence. 
+ 
+   <br> 
+   <br> 
+ 
+  Intuitively, <span class="v">fn</span> is a function that normalizes every member of the 
+  <span class="v">equiv</span> equivalence class: given a constant that is a member of the class 
+  it returns its ``normal'' form.  That is why we call <span class="v">fn</span> the 
+  ``normalizer'' for <span class="v">equiv</span>.  However, you do not have to prove anything 
+  like normality or canonicality; you just have to prove that <span class="v">fn</span> returns a 
+  member of the class.  Having several different normalizers is possible but it 
+  is best if only one is enabled at a time. 
+ 
+   <br> 
+   <br> 
+ 
+  When <span class="v">var</span> is bound to a constant, the rewriter will first try to reduce 
+  <span class="v">(fn var)</span> to a constant by simple evaluation.  If that fails, it tries 
+  using lemmas.  If the normalizer or one of its subfunctions is disabled or is 
+  non-executable or has a disabled executable counterpart the attempt to simply 
+  evaluate <span class="v">(fn var)</span> (under the assignment of <span class="v">'const</span> to <span class="v">var</span>) may 
+  fail.  That is why full-blown rewriting of <span class="v">(fn var)</span> is tried instead. 
+  It might happen that evaluation fails but lemmas produce a constant. 
+ 
+   <br> 
+   <br> 
+ 
+  <b>The fact that form <span class="v">[2]</span> rules are used ``backwards,'' with the roles 
+  of the left- and right-hand sides swapped, has some ramifications worth 
+  noting.</b> First, you can also classify the same formula as a <span class="v">:rewrite</span> 
+  rule (but of course as such it won't rewrite quoted constants); as a 
+  <span class="v">:rewrite</span> rule it rewrites instances of <span class="v">(fn var)</span> to the 
+  corresponding instance of <span class="v">var</span>.  Second, when a 
+  <span class="v">:rewrite-quoted-constant</span> rule is added, the new rule is compared to old 
+  rules for subsumption and warning messages are generated; however form 
+  <span class="v">[2]</span> rules are omitted from this subsumption check because their patterns 
+  match every constant (in the equivalence class).  Third, if you inspect a 
+  form <span class="v">[2]</span> rule with <span class="tt"><a href="ACL2____PR.html">pr</a></span>, it reports the actual syntax typed, e.g., 
+  the ``<span class="v">Lhs</span>'' is <span class="v">(fn var)</span> and the ``<span class="v">Rhs</span>'' is <span class="v">var</span>.  But, if 
+  you <span class="v">:</span><span class="tt"><a href="ACL2____MONITOR.html">monitor</a></span> a form <span class="v">[2]</span> rule and then interact with the 
+  resulting <a href="ACL2____BREAK-REWRITE.html">break-rewrite</a> you will see that the <span class="tt"><a href="ACL2____BRR-COMMANDS.html">brr-commands</a></span> 
+  <span class="v">:lhs</span> and <span class="v">:rhs</span> report the swapped results.  That is, in the break, 
+  <span class="v">:lhs</span> will be <span class="v">var</span> and <span class="v">:rhs</span> will be <span class="v">(fn var)</span>.  This is 
+  different from the display by <span class="v">pr</span> because <span class="v">pr</span> reports the actual 
+  syntax but interactive breaks report how the rule is being used.  We think 
+  the interactive user, out of long habit, will type <span class="v">:lhs</span> to see the 
+  pattern being matched and we did not think it wise to add a special command 
+  just to see the pattern in a form <span class="v">[2]</span> rule.  Fourth, if a form <span class="v">[2]</span> 
+  rule is mentioned in the report by <span class="tt"><a href="ACL2____PL.html">pl</a></span> the ``New term'' is reported to 
+  be <span class="v">(fn 'const)</span>, however replacement of <span class="v">'const</span> occurs only if <span class="v">(fn
+  'const)</span> reduces to a quoted constant by rewriting.</li> 
+ 
+  <li>A form <span class="v">[3]</span> rule, whose conclusion is <span class="v">(equiv (constructor ...)
+  rhs)</span>, matches the constant <span class="v">'const</span> provided <span class="v">'const</span> is an instance 
+  of <span class="v">(constructor ...)</span> under some variable substitution <span class="v">s</span>.  We 
+  illustrate cases where quoted constants are instances of ``constructor'' 
+  terms below and in <a href="ACL2____RANDOM-REMARKS-ON-REWRITING.html">random-remarks-on-rewriting</a>.  Note that form 
+  <span class="v">[3]</span> rules allow the equivalence relation to be <span class="v">equal</span>.  Use of 
+  <span class="v">equal</span> here could cause looping rewrites if the <span class="v">rhs</span> reduces to a 
+  constant.  But we allow it because, as noted below, such a rule will also 
+  permit you to rewrite a quoted constant into an equivalent term that is not a 
+  quoted constant.</li> 
+ 
+  </ul> 
+ 
+  <p>It is important to realize that form <span class="v">[1]</span> and form <span class="v">[3]</span> rules only 
+  apply to the top-level of a quoted constant.  We discuss this at length 
+  because it can cause some confusion.  The examples below are drawn from the 
+  community book <span class="v">books/demos/rewrite-quoted-constant-examples</span>.  That book 
+  introduces <span class="v">set-equalp</span> as an equivalence relation and proves various 
+  <span class="v">:rewrite-quoted-constant</span> rules to rearrange the quoted constants 
+  occurring in <span class="v">set-equalp</span> contexts.  Assume all the quoted constants 
+  mentioned below occur in <span class="v">set-equalp</span> contexts.</p> 
+ 
+  <p>The form <span class="v">[1]</span> rule <span class="v">(set-equalp 77 nil)</span> will not cause <span class="v">'(1 2 3
+  . 77)</span> to rewrite to <span class="v">'(1 2 3)</span>.  Because ACL2 applications frequently 
+  involve huge quoted list constants, we believe that making the rewriter 
+  explore them down to the tips would be prohibitively expensive.</p> 
+ 
+  <p>However, form <span class="v">[2]</span> rules, of the general form <span class="v">(<a href="ACL2____IMPLIES.html">implies</a>
+  hyps (equiv (fn var) var))</span>, allow the normalizer to be applied to every 
+  quoted constant occuring in a suitable <span class="v">equiv</span> context.  The normalizer 
+  can then do a root-and-branch exploration of the constant to compute its 
+  replacement.</p> 
+ 
+  <p>For example, the <span class="v">rewrite-quoted-constants-examples</span> book cited above 
+  defines the normalizer <span class="v">(drop-dups-and-sort var)</span> to coerce its argument 
+  to a <span class="tt"><a href="ACL2____TRUE-LISTP.html">true-listp</a></span>, eliminate duplicate elements, and sort the remaining 
+  elements.  It then proves the form <span class="v">[2]</span> rule 
+  <span class="v">(set-equalp (drop-dups-and-sort var) var)</span>.  Now consider how this rule 
+  is used when the rewriter encounters <span class="v">'(3 1 1 2 . 77)</span> in a 
+  <span class="v">set-equalp</span> context.  First, <span class="v">var</span> is bound to <span class="v">'const</span>.  Then, the 
+  rewriter tries to relieve the instantiated hypotheses of the rule, if any. 
+  The example rule here has no hypotheses.  But you can provide some and 
+  perhaps use them to prevent calling the normalizer on this particular 
+  constant.  Since <span class="v">var</span> is bound to the constant <span class="v">'const</span> such 
+  hypotheses can usually just be computed.  Supposing the hypotheses are 
+  relieved, the rewriter then rewrites <span class="v">(drop-dups-and-sort 'const)</span>.  Under 
+  the most common circumstance, this just causes your normalizer function, here 
+  <span class="v">drop-dups-and-sort</span>, to execute on the given constant.  (If you have 
+  verified the guard of the normalizer and <span class="v">'const</span> satisfies the guard, 
+  then the execution is in the underlying raw Common Lisp.)  In the most common 
+  circumstance, the function will return an explicit constant.  If that 
+  returned value is indeed a constant (and different from <span class="v">'const</span>), the 
+  rewriter replaces this occurrence of <span class="v">'const</span> by the returned value. 
+  Otherwise the rule does not apply.</p> 
+ 
+  <p>As noted earlier, form <span class="v">[3]</span> rules are only applied at the top-level of 
+  a quoted constant.  For example, the rule <span class="v">(set-equalp (<a href="COMMON-LISP____CONS.html">cons</a> x y) (my-cons
+  x y))</span> will not cause <span class="v">'(1 2 3)</span> to rewrite to <span class="v">(my-cons 1 (my-cons
+  2 (my-cons 3 nil)))</span> in <span class="v">set-equalp</span> contexts.  Instead, it would produce 
+  <span class="v">(my-cons 1 '(2 3))</span>.</p> 
+ 
+  <p>But since the rewriter will eventually be called on that term, and since 
+  that term contains another top-level quoted constant, namely <span class="v">'(2 3)</span>, you 
+  might expect the rule to eventually be used to replace <span class="v">'(2 3)</span> by 
+  <span class="v">(my-cons 2 '(3))</span>.  Indeed, that is what happens -- if you have proved 
+  that <span class="v">set-equalp</span> is a <a href="ACL2____CONGRUENCE.html">congruence</a> for the second argument of 
+  <span class="v">my-cons</span>, maintaining <span class="v">set-equalp</span>.  However, for technical reasons 
+  explained in comments in the book <span class="v">rewrite-quoted-constant-examples</span>, each 
+  rewrite occurs in a separate simplification step.  So turning <span class="v">'(1 2 3)</span> 
+  into <span class="v">(my-cons 1 (my-cons 2 (my-cons 3 nil)))</span> requires three 
+  simplification steps.  If the rule in question were <span class="v">(set-equalp (<a href="COMMON-LISP____CONS.html">cons</a> x
+  y) (<a href="COMMON-LISP____CONS.html">cons</a> x (<a href="ACL2____DOUBLE-REWRITE.html">double-rewrite</a> y)))</span> it would happen in one simplification step. 
+  See <span class="v">double-rewrite</span> and the examples in the book 
+  <span class="v">rewrite-quoted-constant-examples</span>.</p>
+</body>
+</html>

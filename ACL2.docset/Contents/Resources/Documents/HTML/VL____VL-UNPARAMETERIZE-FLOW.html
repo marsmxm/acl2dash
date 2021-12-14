@@ -1,0 +1,101 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Vl-unparameterize-flow</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=VL____VL-UNPARAMETERIZE-FLOW">Click for Vl-unparameterize-flow in the Full Manual</a></h3>
+
+<p>How the heck does unparameterization/elaboration work?</p><h3>Basic Idea</h3> 
+ 
+<p>Our algorithm processes a list of <i>signatures</i> that specify what 
+modules we want to create with what parameters.</p> 
+ 
+<p>We start from the top-level modules.  Any module that is never instantiated 
+is assumed to be a top-level module, and we'll use its default parameters (if 
+it has parameters).  The initial signature list has the top level modules, 
+associated with their default parameters.</p> 
+ 
+<p>Recursively, to create a module with a set of parameters, we apply <a href="VL____VL-GENBLOB-RESOLVE.html">vl-genblob-resolve</a>, which substitutes the parameter values everywhere they're 
+needed, and then examines the module instances.  For each module instance that 
+has parameters, we add to our list of signatures the needed module, and replace 
+that instance with a parameter-free instance of that module.  (The function 
+that does this on each instance is <a href="VL____VL-UNPARAM-INST.html">vl-unparam-inst</a>.)</p> 
+ 
+<p>When we're done with the current module, we recur on the list of signatures 
+we accumulated; when we're done with those, we've completely unparameterized 
+the module and all of its dependencies.  This is what <a href="VL____VL-UNPARAMETERIZE-MAIN.html">vl-unparameterize-main</a> does.</p> 
+ 
+<h3>Tricky Parts</h3> 
+ 
+<h2>Scoping</h2> 
+ 
+<p>When we unparameterize a module instance like</p> 
+ 
+<pre class="code">module supermod ; 
+  ...
+  foo #(.size(64), .kind(foo_t)) myinst (...) ;
+endmodule</pre> 
+ 
+<p>The actual parameter arguments (64, foo_t) need to be resolved in the scope 
+of supermod.  But then, we are going to create a signature for specializing 
+<span class="v">foo</span> that binds size to 64, kind to foo_t.  What scope are these bindings 
+relative to?  Our answer is: they need to be independent of scope.</p> 
+ 
+<p>To accomplish this, for value parameters (e.g. size) we insist that the each 
+value gets resolved to a literal (e.g., 64, "foo", etc.), and such literals 
+are of course independent of scope.  If we can't resolve a parameter, e.g., you 
+write <span class="v">.size(a+b)</span> and we don't know what a/b are, then we are just going to 
+fail to unparameterize this.</p> 
+ 
+<p>For type parameters the situation is harder.  We can't simply replace a 
+named type like foo_t with its definition (recursively), because various rules 
+in SystemVerilog prohibit that, especially pertaining to signedness.</p> 
+ 
+<blockquote> 
+<p>(Digression: e.g., consider the type foo_t:</p> 
+<pre class="code">typedef logic signed [3:0] [5:0] signedarr_t;
+typedef signedarr_t [7:0] foo_t;</pre> 
+<p>You can't define foo_t without a subsidiary typedef, because there's no way 
+to directly express a multidimensional array of which some inner dimension is 
+signed.)</p> 
+</blockquote> 
+ 
+<p>So what to do?  Our approach is to annotate the named type (see <a href="VL____VL-USERTYPE.html">vl-usertype</a>) with its definition as the <span class="v">res</span> field of the <a href="VL____VL-USERTYPE.html">vl-usertype</a>; any usertypes referenced in the <span class="v">res</span> field also are similarly 
+annotated with their definitions, recursively.  This is similar to expressing 
+it as one monolithically defined type, but we can tell which parts are named, 
+which lets us be faithful to the awkward semantics.  However, the names are 
+basically vestigial -- we don't generally know what scope they're from, so it 
+doesn't make sense to look them up anywhere!</p> 
+ 
+<p>In summary: the actual values for type parameters in our signatures are 
+scope agnostic in the sense that we know we can't trust their names, and in 
+the sense that we don't need their names to know anything about them, because 
+we have these <span class="v">res</span> fields to use instead.</p> 
+ 
+<h2>Sharing Isomorphically Parameterized Modules</h2> 
+ 
+<p>If a module is instantiated twice with the same parameters, we don't want to 
+create two different unparameterized versions of that module.  However, we need 
+to be careful not to share a definition for two modules whose parameters look 
+the same, but are actually different.  E.g., a module with a type parameter may 
+be instantiated twice with two types that have the same name, but refer to 
+different definitions because they occur in different scopes.</p> 
+ 
+<p>To keep track of this, we create a key for each module instantiation.  Two 
+module instantiations should produce the same key only if they are 
+instantiations of the same module, all value parameters resolve to the same 
+values, and all type parameters are the same up to and including the scope in 
+which any usertypes are defined.  To track which scope is which, we use <a href="VL____VL-SCOPESTACK-_E3HASHKEY.html">vl-scopestack-&gt;hashkey</a>, which reduces a scopestack to a hierarchy of 
+names.</p> 
+ 
+<h2>Indirect Parameterization Via Interface Ports</h2> 
+ 
+<p>If an interface is instantiated with a set of parameters and then passed to 
+a module instance, that instance differs from a similar instance that is passed 
+an interface instantiated with different parameters, even if the parameters two 
+the two instances are the same (or there aren't any parameters).</p>
+</body>
+</html>

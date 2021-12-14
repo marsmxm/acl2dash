@@ -1,0 +1,81 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Contextual-rewriting</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____CONTEXTUAL-REWRITING">Click for Contextual-rewriting in the Full Manual</a></h3>
+
+<p>A meta-rule system that lets the ACL2 rewriter pass around contextual 
+information.  Similar to Dave Greve's NARY.  This extends ACL2's notion of 
+congruence-based rewriting.</p>The motivating example:  We have the following two theorems: 
+<pre class="code">(defthm mod-n-first-arg-of-plus-context 
+  (implies (and (rationalp x) 
+                (rationalp y) 
+                (rationalp n) 
+                (not (equal n 0))) 
+           (equal (mod (+ (mod x n) y) n) 
+                  (mod (+ x y) n)))) 
+(defthm mod-n-second-arg-of-plus-context 
+  (implies (and (rationalp x) 
+                (rationalp y) 
+                (rationalp n) 
+                (not (equal n 0))) 
+           (equal (mod (+ x (mod y n)) n) 
+                  (mod (+ x y) n)))) 
+</pre> 
+Basically, if we have addition in a mod N context, then each of the terms of 
+the sum is also in a mod N context.  Now suppose we have: 
+<pre class="code">(defthm foo-bar-under-mod 
+   (equal (mod (foo m n) n) 
+          (mod (bar m n) n))) 
+</pre> 
+This allows us to rewrite (foo m n) to (bar m n) under a mod N context.  But 
+perhaps we want to prove: 
+<pre class="code">(implies (and (rationalp a) 
+              ... 
+              (rationalp n) 
+              (not (equal n 0))) 
+             (equal (mod (+ a b c d (foo m n) e) n) 
+                    (mod (+ a b c d (bar m n) e) n))) 
+</pre> 
+ 
+Logically, the three theorems we have are sufficent to prove this last one. 
+But it's painful because the rewrite rules don't really help us.  What we 
+really want is to be able to say: When rewriting a sum under mod N context, 
+we may rewrite all its terms under a mod N context. 
+ 
+So here's how our meta rule accomplishes that.  We take our two context 
+theorems and tell our meta rule to use them: 
+<pre class="code">(add-context-rule mod (:rewrite mod-n-first-arg-of-plus-context)) 
+(add-context-rule mod (:rewrite mod-n-second-arg-of-plus-context)) 
+</pre> 
+A special thing about each of these rules is that the LHS unifies with the RHS, 
+and there is only one variable in the substitution that isn't bound to itself 
+after this unification.  Namely, in the first rule, <span class="tt">x</span> is bound to 
+<span class="tt">(mod x n)</span>, but <span class="tt">y</span> and <span class="tt">n</span> are bound to themselves. 
+This is the requirement for a context rule.  It is used as follows. 
+ 
+Suppose we've come to the MOD term on the LHS of the theorem above.  Our meta rule 
+operates by trying to apply rewrite rules backwards!  So first, we unify our 
+term, <span class="tt">(mod (+ a b c d (foo m n) e) n)</span>, with the RHS of the first rule, 
+<span class="tt">(mod (+ x y) n)</span>.  This works and we have <span class="tt">x</span> bound to 
+<span class="tt">a</span>, <span class="tt">y</span> bound to <span class="tt">(+ b c d (foo m n) e)</span>, and <span class="tt">n</span> 
+bound to <span class="tt">n</span>.  We then simplify the term corresponding to <span class="tt">x</span> in 
+the LHS under this substitution.  This is just <span class="tt">(mod a n)</span>, which 
+probably doesn't simplify to anything.  So this application fails. 
+ 
+We then try the second rule.  This causes <span class="tt">y</span>, which is bound to 
+<span class="tt">(+ b c d (foo m n) e)</span>, to be rewritten under mod N.  Now, our meta 
+rule fires recursively on this sum, so each element is rewritten under a mod N 
+context.  Specifically, when we get to <span class="tt">(foo m n)</span>, we can apply 
+foo-bar-under-mod. 
+ 
+To do: performance tuning; get it working under equivalences other than equal; 
+add mechanism for disabling certain context-propagation rules; add ttree stuff 
+when it becomes available. 
+
+</body>
+</html>

@@ -1,0 +1,118 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Redefining-programs</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____REDEFINING-PROGRAMS">Click for Redefining-programs in the Full Manual</a></h3>
+
+<p>An explanation of why we restrict redefinitions</p><p>ACL2 does not in general allow the redefinition of functions 
+ because logical inconsistency can result: previously stored theorems can be 
+ rendered invalid if the axioms defining the functions involved are changed. 
+ However, to permit prototyping of both <span class="v">:</span><span class="tt"><a href="ACL2____PROGRAM.html">program</a></span> and <span class="v">:</span><span class="tt"><a href="ACL2____LOGIC.html">logic</a></span> mode systems, ACL2 permits redefinition if the user has accepted 
+ logical responsibility for the consequences by setting <span class="tt"><a href="ACL2____LD-REDEFINITION-ACTION.html">ld-redefinition-action</a></span> to an appropriate non-<span class="v">nil</span> value.  The refusal of 
+ ACL2 to support the unrestricted redefinition of <span class="v">:</span><span class="tt"><a href="ACL2____PROGRAM.html">program</a></span> mode 
+ functions may appear somewhat capricious.  After all, what are the logical 
+ consequences of changing a definition if no axioms are involved?</p> 
+ 
+ <p>Three important points should be made before we discuss redefinition 
+ further.</p> 
+ 
+ <p>The first is that ACL2 does support redefinition (of both <span class="v">:</span><span class="tt"><a href="ACL2____PROGRAM.html">program</a></span> and <span class="v">:</span><span class="tt"><a href="ACL2____LOGIC.html">logic</a></span> functions) when <span class="tt"><a href="ACL2____LD-REDEFINITION-ACTION.html">ld-redefinition-action</a></span> is non-<span class="v">nil</span>.</p> 
+ 
+ <p>The second is that a ``redefinition'' that does not change the mode, 
+ formals, guards, type declarations, stobjs, or body of a function is 
+ considered redundant and is permitted even when <span class="tt"><a href="ACL2____LD-REDEFINITION-ACTION.html">ld-redefinition-action</a></span> 
+ is <span class="v">nil</span>.  We recognize and permit redundant definitions because it is not 
+ uncommon for two distinct <a href="ACL2____BOOKS.html">books</a> to share identical function 
+ definitions.  When determining whether the body of a function is changed by a 
+ proposed redefinition, we actually compare the untranslated versions of the 
+ two bodies.  See <a href="ACL2____TERM.html">term</a>.  For example, redundancy is not recognized if 
+ the old body is <span class="v">(<a href="COMMON-LISP____LIST.html">list</a> a b)</span> and the new body is <span class="v">(<a href="COMMON-LISP____CONS.html">cons</a> a (<a href="COMMON-LISP____CONS.html">cons</a> b
+ nil))</span>.  We use the untranslated bodies because of the difficulty of 
+ translating the new body in the presence of the old syntactic information, 
+ given the possibility that the redefinition might attempt to change the <a href="ACL2____SIGNATURE.html">signature</a> of the function, i.e., the number of formals, the number of 
+ results, or the position of single-threaded objects in either.</p> 
+ 
+ <p>The third important point is that a ``redefinition'' that preserves the 
+ formals, guard, types, stobjs, and body but changes the mode from <span class="v">:</span><span class="tt"><a href="ACL2____PROGRAM.html">program</a></span> to <span class="v">:</span><span class="tt"><a href="ACL2____LOGIC.html">logic</a></span> is permitted even when <span class="tt"><a href="ACL2____LD-REDEFINITION-ACTION.html">ld-redefinition-action</a></span> is <span class="v">nil</span>.  That is what <span class="tt"><a href="ACL2____VERIFY-TERMINATION.html">verify-termination</a></span> 
+ does.</p> 
+ 
+ <p>This note addresses the temptation to allow redefinition of <span class="v">:</span><span class="tt"><a href="ACL2____PROGRAM.html">program</a></span> functions in situations other than the three described above. 
+ Therefore, suppose <span class="tt"><a href="ACL2____LD-REDEFINITION-ACTION.html">ld-redefinition-action</a></span> is <span class="v">nil</span> and consider the 
+ cases.</p> 
+ 
+ <p>Case 1.  Suppose the new definition attempts to change the formals or more 
+ generally the <a href="ACL2____SIGNATURE.html">signature</a> of the function.  Accepting such a redefinition 
+ would render ill-formed other <span class="v">:</span><span class="tt"><a href="ACL2____PROGRAM.html">program</a></span> functions which call the 
+ redefined function.  Subsequent attempts to evaluate those callers could 
+ arbitrarily damage the Common Lisp image.  Thus, redefinition of <span class="v">:</span><span class="tt"><a href="ACL2____PROGRAM.html">program</a></span> functions under these circumstances requires the user's active 
+ approval, as would be sought with <span class="tt"><a href="ACL2____LD-REDEFINITION-ACTION.html">ld-redefinition-action</a></span> <span class="v">'(:query
+ . :overwrite)</span>.</p> 
+ 
+ <p>Case 2.  Suppose the new definition attempts to change the body (even 
+ though it preserves the <a href="ACL2____SIGNATURE.html">signature</a>).  At one time we believed this was 
+ acceptable and ACL2 supported the quiet redefinition of <span class="v">:</span><span class="tt"><a href="ACL2____PROGRAM.html">program</a></span> 
+ mode functions in this circumstance.  However, because such functions can be 
+ used in macros and redundancy checking is based on untranslated bodies, this 
+ turns out to be unsound!  (Aside: Perhaps this is not an issue if the function 
+ takes <span class="tt"><a href="ACL2____STATE.html">state</a></span> or a user-defined <a href="ACL2____STOBJ.html">stobj</a> argument; but we do not 
+ further consider this distinction.)  Such redefinition is therefore now 
+ prohibited.  We illustrate such an unsoundness below.  Let <span class="v">foo-thm1.lisp</span> 
+ be a book with the following contents.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____IN-PACKAGE.html">in-package</a> "ACL2")
+(<a href="COMMON-LISP____DEFUN.html">defun</a> p1 (x) (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :mode :program)) (<a href="COMMON-LISP____LIST.html">list</a> 'if x 't 'nil))
+(<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> p (x) (p1 x))
+(<a href="COMMON-LISP____DEFUN.html">defun</a> foo (x) (p x))
+(<a href="ACL2____DEFTHM.html">defthm</a> foo-thm1 (<a href="ACL2____IFF.html">iff</a> (foo x) x) :rule-classes nil)</pre> 
+ 
+ <p>Note that the macro form <span class="v">(p x)</span> translates to <span class="v">(<a href="COMMON-LISP____IF.html">if</a> x t nil)</span>.  The 
+ <span class="v">:</span><span class="tt"><a href="ACL2____PROGRAM.html">program</a></span> function <span class="v">p1</span> is used to generate this translation. 
+ The function <span class="v">foo</span> is defined so that <span class="v">(foo x)</span> is <span class="v">(p x)</span> and a 
+ theorem about <span class="v">foo</span> is proved, namely, that <span class="v">(foo x)</span> is true iff <span class="v">x</span> 
+ is true.</p> 
+ 
+ <p>Now let <span class="v">foo-thm2.lisp</span> be a book with the following contents.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____IN-PACKAGE.html">in-package</a> "ACL2")
+(<a href="COMMON-LISP____DEFUN.html">defun</a> p1 (x) (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :mode :program)) (<a href="COMMON-LISP____LIST.html">list</a> 'if x 'nil 't))
+(<a href="COMMON-LISP____DEFMACRO.html">defmacro</a> p (x) (p1 x))
+(<a href="COMMON-LISP____DEFUN.html">defun</a> foo (x) (p x))
+(<a href="ACL2____DEFTHM.html">defthm</a> foo-thm2 (<a href="ACL2____IFF.html">iff</a> (foo x) (<a href="COMMON-LISP____NOT.html">not</a> x)) :rule-classes nil)</pre> 
+ 
+ <p>In this book, the <span class="v">:</span><span class="tt"><a href="ACL2____PROGRAM.html">program</a></span> function <span class="v">p1</span> is defined so that 
+ <span class="v">(p x)</span> means just the negation of what it meant in the first book, namely, 
+ <span class="v">(<a href="COMMON-LISP____IF.html">if</a> x nil t)</span>.  The function <span class="v">foo</span> is defined identically — more 
+ precisely, the <i>untranslated</i> body of <span class="v">foo</span> is identical in the two 
+ <a href="ACL2____BOOKS.html">books</a>, but because of the difference between the two versions of the 
+ <span class="v">:</span><span class="tt"><a href="ACL2____PROGRAM.html">program</a></span> function <span class="v">p1</span> the axioms defining the two <span class="v">foo</span>s 
+ are different.  In the second book we prove the theorem that <span class="v">(foo x)</span> is 
+ true iff <span class="v">x</span> is nil.</p> 
+ 
+ <p>Now consider what would happen if the <a href="ACL2____SIGNATURE.html">signature</a>-preserving 
+ redefinition of <span class="v">:</span><span class="tt"><a href="ACL2____PROGRAM.html">program</a></span> functions were permitted and these two 
+ <a href="ACL2____BOOKS.html">books</a> were included.  When the second book is included the redefinition 
+ of <span class="v">p1</span> would be permitted since the <a href="ACL2____SIGNATURE.html">signature</a> is preserved and 
+ <span class="v">p1</span> is just a <span class="v">:</span><span class="tt"><a href="ACL2____PROGRAM.html">program</a></span>.  But then when the redefinition of 
+ <span class="v">foo</span> is processed it would be considered redundant and thus be permitted. 
+ The result would be a logic in which it was possible to prove that <span class="v">(foo
+ x)</span> is equivalent to both <span class="v">x</span> and <span class="v">(<a href="COMMON-LISP____NOT.html">not</a> x)</span>.  In particular, the 
+ following sequence leads to a proof of nil:</p> 
+ 
+ <pre class="code">(<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "foo-thm1")
+(<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "foo-thm2")
+(<a href="ACL2____THM.html">thm</a> nil :hints (("Goal" :use (foo-thm1 foo-thm2))))</pre> 
+ 
+ <p>It might be possible to loosen the restrictions on the redefinition of 
+ <span class="v">:</span><span class="tt"><a href="ACL2____PROGRAM.html">program</a></span> functions by allowing <a href="ACL2____SIGNATURE.html">signature</a>-preserving 
+ redefinition of <span class="v">:</span><span class="tt"><a href="ACL2____PROGRAM.html">program</a></span> functions not involved in macro 
+ definitions.  Alternatively, we could implement definition redundancy checking 
+ based on the translated bodies of functions (though that is quite 
+ problematic).  Barring those two changes, we believe it is necessary simply to 
+ impose the same restrictions on the redefinition of <span class="v">:</span><span class="tt"><a href="ACL2____PROGRAM.html">program</a></span> mode 
+ functions as we do on <span class="v">:</span><span class="tt"><a href="ACL2____LOGIC.html">logic</a></span> mode functions.</p>
+</body>
+</html>

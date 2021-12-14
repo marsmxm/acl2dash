@@ -1,0 +1,112 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Pre-certify-book-commands</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=BUILD____PRE-CERTIFY-BOOK-COMMANDS">Click for Pre-certify-book-commands in the Full Manual</a></h3>
+
+<p>How to add commands to be executed before calling <a href="ACL2____CERTIFY-BOOK.html">certify-book</a>.  You'll need this to use ACL2 features like <a href="ACL2____DEFPKG.html">defpkg</a> and 
+<a href="ACL2____ADD-INCLUDE-BOOK-DIR.html">add-include-book-dir</a>.</p><h3>Background: Pre <a href="ACL2____CERTIFY-BOOK.html">certify-book</a> Commands</h3> 
+ 
+<p>ACL2 commands like <a href="ACL2____DEFPKG.html">defpkg</a> can't be embedded within books.  Instead, 
+when using raw ACL2 to certify books, you typically define the package before 
+issuing the <a href="ACL2____CERTIFY-BOOK.html">certify-book</a> command.  The <a href="ACL2____DEFPKG.html">defpkg</a> command then 
+becomes part of the book's <a href="ACL2____PORTCULLIS.html">ACL2::portcullis</a>.</p> 
+ 
+<p>For example, here is how to successfully certify a book with its own 
+package, using raw ACL2:</p> 
+ 
+<pre class="code">$ cat mybook.lisp
+(<a href="COMMON-LISP____IN-PACKAGE.html">in-package</a> "MY-PACKAGE")
+(<a href="COMMON-LISP____DEFUN.html">defun</a> f (x) (<a href="COMMON-LISP_____B2.html">+</a> x 1))
+
+$ acl2
+ACL2 !&gt; (<a href="ACL2____DEFPKG.html">defpkg</a> "MY-PACKAGE"
+          (<a href="ACL2____UNION-EQ.html">union-eq</a> *acl2-exports*
+                    *common-lisp-symbols-from-main-lisp-package*))
+ACL2 !&gt; (<a href="ACL2____CERTIFY-BOOK.html">certify-book</a> "mybook" ?)</pre> 
+ 
+<p>If this doesn't make sense, please see the documentation for <a href="ACL2____BOOKS.html">books</a>, 
+especially see <a href="ACL2____BOOK-EXAMPLE.html">ACL2::book-example</a> which explains something like the 
+above in far greater detail.</p> 
+ 
+ 
+<h3>Individual <span class="v">.acl2</span> Files</h3> 
+ 
+<p>For <span class="v">cert.pl</span> to certify books with packages, it needs to be able to find 
+these extra <span class="v">defpkg</span> commands that can't go directly into the book.</p> 
+ 
+<p>If you are using only packages from existing libraries, these should be 
+dealt with automatically by the build system, which loads the portcullis 
+ (<span class="v">.port</span> file) of each included book before certifying a book.  (To defeat 
+this mechanism, add a comment containing "no_port" at the end of the line of 
+each include-book whose portculli you don't want.) However, if you are defining 
+a new package, you need to know how to put it in your book's portcullis.</p> 
+ 
+<p>The most basic way to tell <span class="v">cert.pl</span> how to certify a file like 
+<span class="v">mybook.lisp</span> is to put the <span class="v">defpkg</span> form into a corresponding file, 
+named <span class="v">mybook.acl2</span>:</p> 
+ 
+<pre class="code">$ cat mybook.acl2
+(<a href="COMMON-LISP____IN-PACKAGE.html">in-package</a> "ACL2")
+(<a href="ACL2____DEFPKG.html">defpkg</a> "MY-PACKAGE"
+  (<a href="ACL2____UNION-EQ.html">union-eq</a> *acl2-exports*
+            *common-lisp-symbols-from-main-lisp-package*))
+;; no certify-book command, unlike in legacy files for Makefile-generic</pre> 
+ 
+<p>At this point, we can simply run:</p> 
+ 
+<pre class="code">$ cert.pl mybook
+ACL2 executable is ...
+System books directory is ...
+Making .../mybook.cert on 24-Oct-2013 09:25:03
+Successfully built .../my-book.cert
+-rw-rw-r-- 1 jared logic 513 Oct 24 09:25 mybook.cert</pre> 
+ 
+<p>If you inspect the resulting <span class="v">mybook.cert.out</span> output log, you'll see 
+that these instructions that were picked up from the <span class="v">.acl2</span> file:</p> 
+ 
+<pre class="code">$ cat mybook.cert.out
+-*- Mode: auto-revert -*-
+...
+; instructions from .acl2 file mybook.acl2:
+(<a href="COMMON-LISP____IN-PACKAGE.html">in-package</a> "ACL2")
+(<a href="ACL2____DEFPKG.html">defpkg</a> "MY-PACKAGE"
+  (<a href="ACL2____UNION-EQ.html">union-eq</a> *acl2-exports*
+            *common-lisp-symbols-from-main-lisp-package*))
+...</pre> 
+ 
+<p>Furthermore, if you inspect <span class="v">mybook.cert</span>, you'll see that defpkg form 
+replicated in the portcullis section of the certificate.  In fact, all the 
+books that include your book (transitively) or that also load the same package 
+will also replicate this form in their portculli.  This can be a problem 
+because including multiple books depending on this package requires checking 
+many times that this defpkg form is redundant, which can actually add up to a 
+significant performance problem.  We suggest using the discipline described in 
+<a href="ACL2____WORKING-WITH-PACKAGES.html">ACL2::working-with-packages</a> instead.</p> 
+ 
+<h3>Directory-Wide <span class="v">cert.acl2</span> Files</h3> 
+ 
+<p>It's very common for all of the books in a directory to want to use the same 
+packages.  Instead of setting up a corresponding <span class="v">.acl2</span> file for every 
+single book, it is often much more convenient to use a special, directory-wide 
+<span class="v">.acl2</span> file, called <span class="v">cert.acl2</span>.</p> 
+ 
+<p>Here is how <span class="v">cert.pl</span> chooses the <span class="v">.acl2</span> file to use when you ask 
+it to certify <span class="v">foo.lisp</span>:</p> 
+ 
+<ol> 
+<li>First, if a file named <span class="v">foo.acl2</span> exists, then it will be used.</li> 
+<li>Else, if a file named <span class="v">cert.acl2</span> exists, then it will be used.</li> 
+<li>Otherwise, no <span class="v">.acl2</span> files will be used; no pre <a href="ACL2____CERTIFY-BOOK.html">certify-book</a> 
+    commands will be given.</li> 
+</ol> 
+ 
+<p>In the typical case, then, where you have a whole directory of books that 
+are all supposed to be in some package, you just need a single <span class="v">cert.acl2</span> 
+file that gets that <a href="ACL2____DEFPKG.html">defpkg</a> form loaded.</p>
+</body>
+</html>

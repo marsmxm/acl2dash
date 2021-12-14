@@ -1,0 +1,145 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>X86isa-state-history</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=X86ISA____X86ISA-STATE-HISTORY">Click for X86isa-state-history in the Full Manual</a></h3>
+
+<p>A short history of the definition of the x86 state</p><h4>Old definition of the <span class="v">x86isa</span> state</h4> 
+ 
+ <p>Before <span class="tt"><a href="BIGMEM____BIGMEM.html">bigmem::bigmem</a></span> and <span class="tt"><a href="RSTOBJ2____DEFRSTOBJ.html">rstobj2::defrstobj</a></span> 
+ were used to define the x86 state, the x86 state's definition was 
+ rather tedious.  (For future reference, the following git revision 
+ has that old definition: 
+ <span class="v">dea40263247bd930077205526934bc596686bfb0</span>).</p> 
+ 
+ <p>This current file <span class="v">state.lisp</span> replaces the following old 
+ files, all of which are deleted now.</p> 
+ <ul> 
+  <li> <span class="v">concrete-state.lisp</span> </li> 
+  <li> <span class="v">concrete-memory.lisp</span> </li> 
+  <li> <span class="v">abstract-state.lisp</span> </li> 
+  <li> <span class="v">state-field-thms.lisp</span> </li> 
+ </ul> 
+ 
+ <p>The old x86isa memory model was based on the FMCAD'2012 paper "A 
+ Formal Model of a Large Memory that Supports Efficient Execution". 
+ The following comment from the old file <span class="v">concrete-state.lisp</span> 
+ describes it briefly:</p> 
+ 
+      <pre class="code">.... 
+;; For our ACL2 model, we define a paging-like mechanism to 
+;; model the complete x86 52-bit address space.  The memory is 
+;; laid out in a flat array, to be viewed as back-to-back 
+;; "pseudo-pages" each of size 2^27 bytes (128MB).  The address 
+;; of a byte is split into two pieces: a 25-bit pseudo-page 
+;; address and a 27-bit offset within a page.  The mem-table 
+;; data structure is of size *mem-table-size* = 2^25 -- thus, 
+;; indices are 25 bits -- and it maps these indices to 25-bit 
+;; pseudo-page addresses.  However, the mem-table values are 
+;; actually 26-bit values: the least significant bit is 
+;; initially 1, but is 0 when the entry is valid, in which case 
+;; the most significant 25 bits represent a pseudo-page address. 
+;; The offset of a byte address is a 27-bit wide address, which 
+;; when added to (ash pseudo-page-address 27), gives the "real" 
+;; address of a byte stored in mem-array.  Mem-array-next-addr 
+;; keeps track of the 25-bit index of the pseudo-page to be 
+;; allocated next. 
+ 
+;; Here is an example of how this works.  Suppose we have the 
+;; following, where again, the least significant bit of 0 
+;; indicates a valid entry, and where {i, 1'bx} denotes 
+;; concatenation of the bit-vector i with the single bit x. 
+ 
+;;   mem-table[#x0654321] = {0, 1'b0} 
+;;   mem-table[#x16789ab] = {1, 1'b0} 
+;;   mem-table[#x0111111] = {2, 1'b0} 
+ 
+;; All additional values in mem-table are the initial value of 
+;; 1, which means "page is not present". 
+ 
+;; Then mem-array starts as follows. 
+ 
+;;  2^27 bytes corresponding to byte addresses with top 25 bits = #x0654321 
+;;  2^27 bytes corresponding to byte addresses with top 25 bits = #x16789ab 
+;;  2^27 bytes corresponding to byte addresses with top 25 bits = #x0111111 
+ 
+(mem-table :type (array (unsigned-byte #.*mem-table-size-bits+1*) 
+                        ;; *mem-table-size-bits* of pseudo-page 
+                        ;; address, followed by 1 extra bit 
+                        ;; (LSB) to indicate the 
+                        ;; absence/presence of pseudo-pages 
+                        (#.*mem-table-size*)) 
+           :initially 1 
+           :resizable nil) 
+ 
+(mem-array :type (array (unsigned-byte 8) 
+                        (#.*initial-mem-array-length*)) 
+           :initially 0 
+           :resizable t) 
+ 
+(mem-array-next-addr :type (integer 0 #.*mem-table-size*) 
+                     :initially 0) 
+ 
+... 
+</pre> 
+ 
+ <p>The proof of correctness of this memory model was pretty 
+  involved (see the old file <span class="v">concrete-memory.lisp</span>).  Then there 
+  was the overhead of introducing an abstract stobj to logically view 
+  this memory as a record (see old file <span class="v">abstract-stobj.lisp</span>).</p> 
+ 
+  <p>All of this was finished before nested stobjs were supported in 
+ ACL2, so there was not much incentive to simplify the memory model or 
+ the state definition.</p> 
+ 
+ <h5>Non-interference Properties</h5> 
+ 
+ <p>We used a neat trick for all the accessors and updaters of 
+ the <span class="v">x86isa</span> state's field that is worth mentioning here. Say 
+ <span class="v">RGFI*</span> is the name of the corresponding exported accessor from 
+ defabsstobj; during execution, <span class="v">RGFI*</span> calls are really 
+ <span class="v">RGF$CI</span> calls, the concrete accessor from the corresponding 
+ concrete stobj.</p> 
+ 
+ <pre class="code"> Signature: (RGFI* index x86) </pre> 
+ 
+ <p>We also defined a universal accessor function <span class="v">XR</span>, meant to be 
+ used only for reasoning:</p> 
+ 
+ <pre class="code"> Signature: (XR fld-name index x86) </pre> 
+ 
+ <p><span class="v">XR</span> case-split on <span class="v">fld-name</span> and called the appropriate 
+ accessor function (e.g., if fld-name was <span class="v">:RGF</span>, <span class="v">XR</span> called 
+ <span class="v">RGFI*</span>, and so on).  We defined a similar universal updater 
+ function <span class="v">XW</span>.  We then proved read-over-write/write-over-write, 
+ etc. lemmas about just <span class="v">XR</span> and <span class="v">XW</span>, thereby getting these 
+ properties for all fields of the x86 state. This way, we avoid a 
+ blow-up in the number of such lemmas as the number of fields in the 
+ state increase.</p> 
+ 
+ <p>We then defined another function, <span class="v">RGFI</span> (inlined), with the 
+  same signature as <span class="v">RGFI*</span>, whose body was an <span class="v">MBE</span> like 
+  so:</p> 
+ 
+ <pre class="code">(RGFI index x86) := 
+ (mbe :logic (XR :RGF index x86) 
+      :exec (RGFI* index x86)) 
+</pre> 
+ 
+ <p>We then used <span class="v">RGFI</span> as the canonical accessor function for the 
+ <span class="v">RGF</span> field --- we never used <span class="v">RGFI*</span> or <span class="v">XR</span> in our 
+ definitions from this point on, though <span class="v">XR</span> was often used in 
+ definitions where we didn't care about the execution speed (e.g., 
+ non-executable functions used only for reasoning).  We kept <span class="v">RGFI</span> 
+ enabled and <span class="v">XR</span> disabled.</p> 
+ 
+ <p>The consequence of this was that whenever an <span class="v">RGFI</span> call was 
+ encountered during reasoning, it quickly opened up to <span class="v">XR</span> (about 
+ which we have all those nice theorems).  During execution, <span class="v">RGFI</span> 
+ was simply the efficient concrete accessor <span class="v">RGF$CI</span>.</p>
+</body>
+</html>

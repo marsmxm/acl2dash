@@ -1,0 +1,186 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>4v-ite</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____4V-ITE">Click for 4v-ite in the Full Manual</a></h3>
+
+<p>Less-conservative four-valued semantics for a multiplexor (mux).</p><p>We have two possible semantics for modeling muxes:</p> 
+ 
+<ul> 
+ <li>
+<span class="tt">(4v-ite c a b)</span> is a less-conservative semantics, whereas</li> 
+ <li>
+<span class="tt">(4v-ite* c a b)</span> is a more-conservative version.</li> 
+</ul> 
+ 
+<p>In both versions, C is the selector, and A/B are data inputs.  The mux we 
+are modeling would typically be drawn as:</p> 
+ 
+<pre class="code">       A     B
+       |     |
+    ___|_____|___
+    \           /
+C ---\         /
+      \_______/
+          |
+          |
+         Out</pre> 
+ 
+ 
+<h3>Semantics</h3> 
+ 
+<p>Both versions agree exactly in most cases:</p> 
+ 
+<ul> 
+ 
+<li>When all of these inputs are Boolean, we simply return A or B depending on 
+the value of C.</li> 
+ 
+<li>When C is Boolean but the selected value is X or Z, we do not know what the 
+mux will produce so we return X; see <a href="ACL2____4V-UNFLOAT.html">4v-unfloat</a> for an explanation of 
+the Z case.</li> 
+ 
+<li>When C is X or Z, it is sometimes clear that we must output X.  For 
+instance, suppose A = T while B = F.  Then, since we do not know which value 
+will be selected, we can only say that the output is X.</li> 
+ 
+</ul> 
+ 
+<p>The trickiest case, and the one where <span class="v">4v-ite</span> and <span class="v">4v-ite*</span> differ, 
+is when:</p> 
+ 
+<ul> 
+ <li>C is X or Z, and</li> 
+ <li>A and B share some Boolean value.</li> 
+</ul> 
+ 
+<p>In this case,</p> 
+ 
+<ul> 
+ 
+<li>
+<span class="v">4v-ite*</span> (more conservatively) produces an X, whereas</li> 
+ 
+<li>
+<span class="v">4v-ite</span> (less conservatively) produces the value shared by A and 
+B.</li> 
+ 
+</ul> 
+ 
+ 
+<h3>Comparison</h3> 
+ 
+<p>It might be that the <span class="v">4v-ite</span> behavior is necessary when analyzing some 
+circuits.  But we do not think this should be the case very frequently, and we 
+think you really should probably not design circuits this way.</p> 
+ 
+<p>But unless there is some special reason that <span class="v">4v-ite</span> is needed, we think 
+<span class="v">4v-ite*</span> is usually the better way to go.  There are two reasons for 
+this:</p> 
+ 
+ 
+<h5>1. Modeling considerations</h5> 
+ 
+<p>Some mux implementations, specifically those based on pass transistors, may 
+not produce a good value on their output when the select is undriven.  The 
+<span class="v">4v-ite</span> semantics are <b>totally wrong</b> for such muxes.</p> 
+ 
+<p>The <span class="v">4v-ite*</span> semantics are safer, but do not entirely address the 
+problem because, when the select is undriven, such circuits can have "backward 
+flow" where their output drives the input.  We have no way to model this.</p> 
+ 
+<p>Of course, gate-based mux implementations do not have this problem.  If a 
+mux is implemented along the lines of <span class="v">(C &amp; A) | (~C &amp; B)</span>, then any Boolean 
+value of C will give us the shared answer as <span class="v">4v-ite</span> produces, so either 
+implementation is probably okay.</p> 
+ 
+<p>BOZO what about if C is Z?  Are the less-conservative semantics okay in this 
+case, even for a gate-based mux?  This could be iffy.</p> 
+ 
+ 
+<h5>2. Symbolic simulation performance.</h5> 
+ 
+<p>The <span class="v">4v-ite*</span> semantics may permit faster symbolic simulations.  In 
+particular, suppose we are interested in analyzing a small part of a large 
+circuit, and we have set many signals we think are irrelevant to X. 
+Furthermore, suppose one of these Xed out signals is C, i.e., it is being used 
+as the select for some mux.</p> 
+ 
+<p>With a <span class="v">4v-ite</span> mux, the resulting expression for the output wire will be 
+some function that involves checking whether the expressions for A and B have 
+the same value.  This resulting expression will contain the expressions for A 
+and B, so if these input expressions are large, the resulting expression will 
+be large.</p> 
+ 
+<p>But with a <span class="v">4v-ite*</span> mux, regardless of the expressions on A and B the 
+result is simply the constant function X.</p> 
+ 
+<p>In other words, <span class="v">4v-ite*</span> based muxes have a very nice property: if the 
+select is X, the output expression is just X and all of the presumably 
+irrelevant logic driving the mux is discarded, whereas <span class="v">4v-ite</span> muxes don't 
+get to carry out this kind of optimization.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>4v-ite</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+    4v-ite (c a b)
+    (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t))
+    (<a href="ACL2____MBE.html">mbe</a> :logic (<a href="ACL2____4VCASES.html">4vcases</a> c (t (<a href="ACL2____4V-UNFLOAT.html">4v-unfloat</a> a))
+                         (f (<a href="ACL2____4V-UNFLOAT.html">4v-unfloat</a> b))
+                         (&amp; (<a href="ACL2____4VCASES.html">4vcases</a> (<a href="ACL2____4V-IFF.html">4v-iff</a> a b) (t a) (&amp; (4vx)))))
+         :exec (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____EQ.html">eq</a> c (4vt))
+                      (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____EQ.html">eq</a> a (4vt)) (<a href="COMMON-LISP____EQ.html">eq</a> a (4vf)))
+                          a (4vx)))
+                     ((<a href="COMMON-LISP____EQ.html">eq</a> c (4vf))
+                      (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____EQ.html">eq</a> b (4vt)) (<a href="COMMON-LISP____EQ.html">eq</a> b (4vf)))
+                          b (4vx)))
+                     (t (<a href="ACL2____4VCASES.html">4vcases</a> (<a href="ACL2____4V-IFF.html">4v-iff</a> a b)
+                                 (t a)
+                                 (&amp; (4vx)))))))</pre> 
+<p><b>Function: </b>4v-ite*</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> 4v-ite* (c a b)
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t))
+       (<a href="ACL2____MBE.html">mbe</a> :logic (<a href="ACL2____4VCASES.html">4vcases</a> c (t (<a href="ACL2____4V-UNFLOAT.html">4v-unfloat</a> a))
+                            (f (<a href="ACL2____4V-UNFLOAT.html">4v-unfloat</a> b))
+                            (&amp; (4vx)))
+            :exec (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____EQ.html">eq</a> c (4vt))
+                         (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____EQ.html">eq</a> a (4vt)) (<a href="COMMON-LISP____EQ.html">eq</a> a (4vf)))
+                             a (4vx)))
+                        ((<a href="COMMON-LISP____EQ.html">eq</a> c (4vf))
+                         (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____EQ.html">eq</a> b (4vt)) (<a href="COMMON-LISP____EQ.html">eq</a> b (4vf)))
+                             b (4vx)))
+                        (t (4vx)))))</pre> 
+<p><b>Theorem: </b>4v-equiv-implies-equal-4v-ite-3</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> 4v-equiv-implies-equal-4v-ite-3
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____4V-EQUIV.html">4v-equiv</a> b b-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____4V-ITE.html">4v-ite</a> c a b)
+                        (<a href="ACL2____4V-ITE.html">4v-ite</a> c a b-equiv)))
+        :rule-classes (:congruence))</pre> 
+<p><b>Theorem: </b>4v-equiv-implies-equal-4v-ite-2</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> 4v-equiv-implies-equal-4v-ite-2
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____4V-EQUIV.html">4v-equiv</a> a a-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____4V-ITE.html">4v-ite</a> c a b)
+                        (<a href="ACL2____4V-ITE.html">4v-ite</a> c a-equiv b)))
+        :rule-classes (:congruence))</pre> 
+<p><b>Theorem: </b>4v-equiv-implies-equal-4v-ite-1</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> 4v-equiv-implies-equal-4v-ite-1
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____4V-EQUIV.html">4v-equiv</a> c c-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____4V-ITE.html">4v-ite</a> c a b)
+                        (<a href="ACL2____4V-ITE.html">4v-ite</a> c-equiv a b)))
+        :rule-classes (:congruence))</pre> 
+<p><b>Theorem: </b>4v-equiv-implies-equal-4v-ite*-3</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> 4v-equiv-implies-equal-4v-ite*-3
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____4V-EQUIV.html">4v-equiv</a> b b-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____4V-ITE_A2.html">4v-ite*</a> c a b)
+                        (<a href="ACL2____4V-ITE_A2.html">4v-ite*</a> c a b-equiv)))
+        :rule-classes (:congruence))</pre> 
+<p><b>Theorem: </b>4v-equiv-implies-equal-4v-ite*-2</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> 4v-equiv-implies-equal-4v-ite*-2
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____4V-EQUIV.html">4v-equiv</a> a a-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____4V-ITE_A2.html">4v-ite*</a> c a b)
+                        (<a href="ACL2____4V-ITE_A2.html">4v-ite*</a> c a-equiv b)))
+        :rule-classes (:congruence))</pre> 
+<p><b>Theorem: </b>4v-equiv-implies-equal-4v-ite*-1</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> 4v-equiv-implies-equal-4v-ite*-1
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____4V-EQUIV.html">4v-equiv</a> c c-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____4V-ITE_A2.html">4v-ite*</a> c a b)
+                        (<a href="ACL2____4V-ITE_A2.html">4v-ite*</a> c-equiv a b)))
+        :rule-classes (:congruence))</pre> 
+
+</body>
+</html>

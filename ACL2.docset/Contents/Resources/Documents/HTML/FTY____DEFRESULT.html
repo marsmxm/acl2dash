@@ -1,0 +1,128 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Defresult</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=FTY____DEFRESULT">Click for Defresult in the Full Manual</a></h3>
+
+<p>Introduce a fixtype for good and error results.</p><h3>Introduction</h3><p>This is an experimental tool for now.</p><p>It is common for functions to return error results in certain cases. 
+      Otherwise, the function returns a good (i.e. non-error) result.</p><p>In ACL2, an approach is to have the function return multiple results: 
+      an error result (<span class="v">nil</span> if there is no error), 
+      and a good result that is irrelevant if the error result is non-<span class="v">nil</span>; 
+      for instance, this is the idiom of <a href="ACL2____ERROR-TRIPLE.html">error triples</a>. Another approach is to have the function return 
+      either an error result or a good result, 
+      which requires error and good results to be disjoint.</p><p>The two approaches have relative advantages and disadvantages. 
+      An advantage of the first approach is that 
+      disjointness of error and good results is not required 
+      and that each result has always the same type. 
+      However, a disadvantage is that 
+      even though the good result is irrelevant 
+      when the error result is non-<span class="v">nil</span>, 
+      some good result must be nonetheless returned, 
+      which might be accidentally used as nothing could prevent that. 
+      The second approach avoids this issue, 
+      because if there is an error result then there is no good result at all; 
+      the downside is that the result may have two different types. 
+      Since disjunctions are awkward in rewrite rules, 
+      it is beneficial to always introduce a type for 
+      the union of good and error results, 
+      and use that as the return type of the function. 
+      But then one needs rules to handle the inherent disjunction.</p><p>When calling functions that may return error results 
+      (whether the first or second approach above is used), 
+      it is common to check whether the returned result is an error one, 
+      and in that case also return an error, 
+      otherwise continuing the computation if the return result is a good one. 
+      When using the error triple idiom, 
+      ACL2 provides <span class="tt"><a href="ACL2____ER-LET_A2.html">er-let*</a></span> to handle this pattern, 
+      which propagates the error triples unchanged; 
+      <span class="tt"><a href="ACL2____B_A2.html">b*</a></span> provides the <a href="ACL2____PATBIND-ER.html"><span class="v">er</span> binder</a>, which expands into <span class="tt"><a href="ACL2____ER-LET_A2.html">er-let*</a></span>. 
+      As an aside, note that, when verifying return type theorems, 
+      using <span class="tt"><a href="ACL2____ER-LET_A2.html">er-let*</a></span> works when the (irrelevant) good result 
+      returned by a callee with an error result 
+      also belongs to the type of the good results returned by the caller; 
+      otherwise, one must explicitly check for the error 
+      and return an appropriate triple, 
+      or perhaps use a more complex macro or binder.</p><p>The <span class="v">defresult</span> macro provides support for the second approach above. 
+      Given a fixtype of good results, 
+      it introduces a fixtype of good and error results, 
+      where the fixtype of error results is <span class="tt"><a href="FTY____RESULTERR.html">resulterr</a></span>, 
+      which is provided along with <span class="v">defresult</span>. 
+      This macro also generates rules 
+      to reason about the disjunction of good and error results. 
+      Along with <span class="v">defresult</span>, 
+      a <span class="tt"><a href="ACL2____B_A2.html">b*</a></span> binder <span class="tt"><a href="FTY____PATBIND-OK.html">patbind-ok</a></span> is provided 
+      to support the check-and-propagate-error pattern described above.</p><p>The <span class="tt"><a href="FTY____PATBIND-OK.html">patbind-ok</a></span> binder assumes that 
+      <span class="v">__function__</span> is bound to the enclosing function name. 
+      This happens automatically when using <span class="tt"><a href="ACL2____DEFINE.html">define</a></span>. 
+      As explained in <span class="tt"><a href="FTY____PATBIND-OK.html">patbind-ok</a></span>, 
+      as errors are propagated from callee to caller, 
+      the name of the callee is added to 
+      a call stack trace in the error result.</p><p>The fixtype of good and error results introduced by <span class="v">defresult</span> 
+      is similar to an instance of Rust's polymorphic type <span class="v">Result</span>. 
+      However, while the Rust type is parameterized over 
+      both the good and error result types, 
+      in <span class="v">defresult</span> errors always have the same type. 
+      Nonetheless, <span class="tt"><a href="FTY____RESULTERR.html">resulterr</a></span> is defined to 
+      allow any ACL2 value to be contained in an error result, 
+      so the lack of parameterization over the type of errors 
+      does not limit expressivity.</p><h3>General Form</h3><pre class="code">(<a href="FTY____DEFRESULT.html">defresult</a> type
+           :ok ...
+           :pred ...
+           :fix ...
+           :equiv ...
+           :parents ...
+           :short ...
+           :long ...
+           :prepwork ...
+  )</pre><h3>Inputs</h3><p><span class="v">:type</span></p><blockquote><p>A symbol that specifies the name of the new fixtype.</p></blockquote><p><span class="v">:ok</span></p><blockquote><p>A symbol that specifies the fixtype of the good results. 
+       Let <span class="v">ok</span> be the recognizer of this fixtype.</p></blockquote><p><span class="v">:pred</span></p><blockquote><p>A symbol that specifies the name of the fixtype's recognizer. 
+       If this is <span class="v">nil</span> (the default), 
+       the name of the recognizer is <span class="v">type</span> followed by <span class="v">-p</span>.</p></blockquote><p><span class="v">:fix</span></p><blockquote><p>A symbol that specifies the name of the fixtype's fixer. 
+       If this is <span class="v">nil</span> (the default), 
+       the name of the fixer is <span class="v">type</span> followed by <span class="v">-fix</span>.</p></blockquote><p><span class="v">:equiv</span></p><blockquote><p>A symbol that specifies the name of the fixtype's equivalence. 
+       If this is <span class="v">nil</span> (the default), 
+       the name of the equivalence is <span class="v">type</span> followed by <span class="v">-equiv</span>.</p></blockquote><p><span class="v">:parents</span><br><span class="v">:short</span><br><span class="v">:long</span></p><blockquote><p>These, if present, are added to 
+       the XDOC topic generated for the fixtype.</p></blockquote><p><span class="v">:prepwork</span></p><blockquote><p>A list of preparatory event forms. 
+       See the `Generated Events' section.</p></blockquote><h3>Applicability Conditions</h3><p>In order for <span class="v">defresult</span> to apply, 
+        in addition to the requirements on the inputs 
+        stated in the `Inputs' section, the following <a href="ACL2____EVENT-MACRO-APPLICABILITY-CONDITIONS.html">applicability conditions</a> must be proved. 
+         The proofs are attempted when <span class="v">defresult</span> is called, 
+        using the hints optionally supplied as the <span class="v">:hints</span> input 
+        described in the `Inputs' section.</p><p>The fixtype specified by <span class="v">:ok</span> 
+      must be disjoint from <span class="tt"><a href="FTY____RESULTERR.html">resulterr</a></span>. 
+      Currently this is not quite explicated 
+      as an applicability condition as in other event macros, 
+      but the macro will fail if the disjointness cannot be proved.</p><h3>Generated Events</h3><p><span class="v">type</span></p><blockquote><p>The fixtype of good and error results.</p></blockquote><p><span class="v">pred</span></p><blockquote><p>The recognizer for the fixtype <span class="v">type</span>.</p></blockquote><p><span class="v">fix</span></p><blockquote><p>The fixer for the fixtype <span class="v">type</span>.</p></blockquote><p><span class="v">equiv</span></p><blockquote><p>The equivalence for the fixtype <span class="v">type</span>.</p></blockquote><p><span class="v">pred-when-ok</span></p><blockquote>
+<p>A theorem asserting that 
+       a value in the fixtype specified by <span class="v">:ok</span> 
+       is also in the fixtype <span class="v">type</span>:</p>
+<pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (ok x)
+         (pred x))</pre>
+</blockquote><p><span class="v">pred-when-resulterrp</span></p><blockquote>
+<p>A theorem asserting that 
+       a value in the fixtype <span class="tt"><a href="FTY____RESULTERRP.html">resulterrp</a></span> 
+       is also in the fixtype <span class="v">type</span>:</p>
+<pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="FTY____RESULTERRP.html">resulterrp</a> x)
+         (pred x))</pre>
+</blockquote><p><span class="v">ok-when-pred-and-not-error</span></p><blockquote>
+<p>A theorem asserting that 
+       a value in the fixtype <span class="v">type</span> 
+       that is not in the fixtype <span class="v">resulterr</span> 
+       is in the fixtype specified by <span class="v">:ok</span>:</p>
+<pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (pred x)
+              (<a href="COMMON-LISP____NOT.html">not</a> (<a href="FTY____RESULTERRP.html">resulterrp</a> x)))
+         (ok x))</pre>
+<p>This theorem is disabled by default, 
+       because it backchains from <span class="v">ok</span> to <span class="v">pred</span>, 
+       where the former may be used without any reference to the latter.</p>
+</blockquote><p>The above events are preceded by 
+      the events specified in <span class="v">:prepwork</span>, if any.</p><p>Currently the fixtype <span class="v">type</span> and the first two theorems above 
+      are generated via <span class="tt"><a href="FTY____DEFFLATSUM.html">defflatsum</a></span>, 
+      but this may change in the future. 
+      Users should not rely on the generation of <span class="tt"><a href="FTY____DEFFLATSUM.html">defflatsum</a></span>, 
+      but just on the generation of the items described above.</p>
+</body>
+</html>

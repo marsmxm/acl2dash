@@ -1,0 +1,158 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Computed-hints</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____COMPUTED-HINTS">Click for Computed-hints in the Full Manual</a></h3>
+
+<p>Computing advice to the theorem proving process</p><pre class="code">General Form of :hints:
+(hint1 hint2 ... hintk)</pre> 
+ 
+ <p>Each element, hinti, must be either a common hint or a computed hint.</p> 
+ 
+ <p>A common hint is of the form</p> 
+ 
+ <pre class="code">(<a href="ACL2____GOAL-SPEC.html">goal-spec</a> :key1 val1 ... :keyn valn)</pre> 
+ 
+ <p>where <span class="v">goal-spec</span> is as specified in <a href="ACL2____GOAL-SPEC.html">goal-spec</a> and each 
+ <span class="v">:keyi</span> and <span class="v">vali</span> is as specified in <a href="ACL2____HINTS.html">hints</a>.  Among the ``common 
+ hints'' we include both the primitive hints and user-defined custom keyword 
+ hints (see <a href="ACL2____CUSTOM-KEYWORD-HINTS.html">custom-keyword-hints</a>).</p> 
+ 
+ <p>A computed hint may be a function symbol, <span class="v">fn</span>, of three, four or seven 
+ arguments.  Otherwise, a computed hint is a term with the following 
+ properties:</p> 
+ 
+ <p>(a) the only free variables allowed in the term are <span class="v">ID</span>, <span class="v">CLAUSE</span>, 
+ <span class="v">WORLD</span>, <span class="v">STABLE-UNDER-SIMPLIFICATIONP</span>, <span class="v">HIST</span>, <span class="v">PSPV</span>, <span class="v">CTX</span>, 
+ and <span class="tt"><a href="ACL2____STATE.html">state</a></span>;</p> 
+ 
+ <p>(b) the output signature of the term is either <span class="v">(<a href="ACL2____MV.html">MV</a> * * STATE)</span>, which 
+ is to be treated as an error triple (see below), or is <span class="v">*</span>, denoting a 
+ single non-<a href="ACL2____STOBJ.html">stobj</a> value; and</p> 
+ 
+ <p>(c) in the former case of (b) above, the term is single-threaded in <span class="tt"><a href="ACL2____STATE.html">state</a></span>.</p> 
+ 
+ <p>If a computed hint is a function symbol <span class="v">fn</span>, whose arity n is therefore 
+ three, four, or seven, then it is treated as the term resulting from applying 
+ that <span class="v">fn</span> to the first n variables shown in (a) above.  Notice that it must 
+ then return a single non-<a href="ACL2____STOBJ.html">stobj</a> value, not an error triple, since 
+ <span class="v">state</span> is not one of the first seven variables shown in (a).</p> 
+ 
+ <p>Note: Error triples are an ACL2 idiom for implementing ``errors''; see 
+ <a href="ACL2____ERROR-TRIPLE.html">error-triple</a>.  If a computation returns <span class="v">(<a href="ACL2____MV.html">mv</a> erp val state)</span> in a 
+ context in which ACL2 is respecting the error triple convention (see <a href="ACL2____LD-ERROR-TRIPLES.html">ld-error-triples</a> and see <a href="ACL2____LD-ERROR-ACTION.html">ld-error-action</a>), then an error is deemed to 
+ have occurred if <span class="v">erp</span> is non-<span class="v">nil</span>.  The computation is expected to 
+ have printed an appropriate error message to <span class="tt"><a href="ACL2____STATE.html">state</a></span> and further 
+ computation is aborted.  On the other hand, if a computation returns an error 
+ triple in which <span class="v">erp</span> is nil, then ``value'' of the computation is taken to 
+ be the second component, <span class="v">val</span>, of the triple (along with the possibly 
+ modified <span class="tt"><a href="ACL2____STATE.html">state</a></span>), and computation continues.  For more information 
+ about programming with error triples, see <a href="ACL2____PROGRAMMING-WITH-STATE.html">programming-with-state</a>.</p> 
+ 
+ <p>The function symbol cases are treated as abbreviations of the term <span class="v">(fn
+ ID CLAUSE WORLD)</span>, <span class="v">(fn ID CLAUSE WORLD STABLE-UNDER-SIMPLIFICATIONP)</span>, or 
+ <span class="v">(fn ID CLAUSE WORLD STABLE-UNDER-SIMPLIFICATIONP HIST PSPV CTX)</span> as 
+ appropriate for the arity of <span class="v">fn</span>.  (Note that this tells you which 
+ argument of <span class="v">fn</span> is which.)  Moreover, in these cases the value returned 
+ must be a single ordinary (non-<a href="ACL2____STOBJ.html">stobj</a>) value, not an error triple.  In 
+ the discussion below we assume all computed hints are of the term form. 
+ Indeed, we almost assume all computed hints are of the 3 and 4 argument forms. 
+ We only comment briefly on the 7 argument form in <a href="ACL2____USING-COMPUTED-HINTS-8.html">using-computed-hints-8</a>.</p> 
+ 
+ <p>The semantics of a computed hint term is as follows.  On every subgoal, the 
+ term is evaluated in an environment in which the variables mentioned in (a) 
+ above are bound to context-sensitive values explained below.  Either the 
+ computed hint signals an error, in which the proof attempt aborts, or else it 
+ returns a value, <span class="v">val</span> and a new state, <span class="tt"><a href="ACL2____STATE.html">state</a></span>.  Any changes to 
+ those parts of <span class="tt"><a href="ACL2____STATE.html">state</a></span> that affect logical soundness are undone; more 
+ specifically, the values of symbols (sometimes called ``state global 
+ variables'') in the list <span class="v">*protected-system-state-globals*</span> in the global 
+ table of the state (see <a href="ACL2____STATE.html">state</a>) are restored when changed during 
+ evaluation.  The value, <span class="v">val</span>, of a non-erroneous computed hint calculation 
+ is either <span class="v">nil</span>, which means the computed hint did not apply to the subgoal 
+ in question, or it is an alternating list of <span class="v">:keyi vali</span> pairs as 
+ specified in <a href="ACL2____HINTS.html">hints</a>.  With one exception, those new hints are applied to 
+ the given subgoal as though the user had typed them explicitly.</p> 
+ 
+ <p>The exception is that the first keyword in the returned <span class="v">val</span> is allowed 
+ to be <span class="v">:COMPUTED-HINT-REPLACEMENT</span>.  Its value should be <span class="v">nil</span>, <span class="v">t</span>, 
+ or a list of terms.  If this keyword is not present, the default value of 
+ <span class="v">nil</span> is provided.  We explain <span class="v">:COMPUTED-HINT-REPLACEMENT</span> below.</p> 
+ 
+ <p>The evaluation of a hint term is done with guard checking turned off (see 
+ <a href="ACL2____SET-GUARD-CHECKING.html">set-guard-checking</a>); e.g., the form <span class="v">(<a href="COMMON-LISP____CAR.html">car</a> 23)</span> in a computed hint 
+ returns <span class="v">nil</span> as per the axioms.</p> 
+ 
+ <p>When a non-<span class="v">nil</span> value is returned, the keyword/value pairs (other than 
+ the optional <span class="v">:COMPUTED-HINT-REPLACEMENT</span>) are used as the hint for the 
+ subgoal in question.  Thus, your job as the programmer of computed hints is 
+ either to cause an error, typically by invoking <span class="tt"><a href="ACL2____ER.html">er</a></span>, or to return a 
+ non-erroneous value triple whose value is the list of keys and values you 
+ would have typed had you supplied a common hint for the subgoal. (In 
+ particular, any theory expressions in it are evaluated with respect to the 
+ global current-theory, not whatever theory is active at the subgoal in 
+ question.)  If the generated list of keywords and values is illegal, an error 
+ will be signaled and the proof attempt will be aborted.</p> 
+ 
+ <p>The purpose of the <span class="v">:COMPUTED-HINT-REPLACEMENT</span> keyword and its value, 
+ <span class="v">chr</span>, is to change the list of hints.  If <span class="v">chr</span> is <span class="v">nil</span>, then the 
+ computed hint which was applied is removed from the list of hints that is 
+ passed down to the children of the subgoal in question.  This is the default. 
+ If <span class="v">chr</span> is <span class="v">t</span>, then the computed hint is left in the list of hints. 
+ This means that the same computed hint may act on the children of the subgoal. 
+ Otherwise, <span class="v">chr</span> must be a list of terms, each of which is treated as a 
+ computed hint.  The computed hint which was applied is deleted from the list 
+ of hints and the computed hints in <span class="v">chr</span> are added to the list of hints 
+ passed to the children of the subgoal.  The ability to generate new computed 
+ hints and pass them down allows strange and wonderful behavior.  Notice that 
+ certain hints, for example <span class="v">:in-theory</span> and <span class="v">:expand</span> hints, which 
+ appear in the computed hint will continue to take effect even when <span class="v">chr</span> is 
+ <span class="v">nil</span>.  This might give one the false impression that a removed computed 
+ hint still hangs around.  See <a href="ACL2____HINTS-AND-THE-WATERFALL.html">hints-and-the-waterfall</a> for a more 
+ detailed discussion about how <span class="v">:in-theory</span> and other hints are handled in 
+ the waterfall.</p> 
+ 
+ <p>For these purposes, the goals produced by induction and the top-level goals 
+ of forcing rounds are not considered children; all original hints are 
+ available to them.</p> 
+ 
+ <p>Only the first hint applicable to a goal, as specified in the user-supplied 
+ list of <span class="v">:hints</span> followed by the <span class="tt"><a href="ACL2____DEFAULT-HINTS-TABLE.html">default-hints-table</a></span>, will be 
+ applied to that goal.  (For an advanced exception, see <a href="ACL2____OVERRIDE-HINTS.html">override-hints</a>.)</p> 
+ 
+ <p>It remains only to describe the bindings of the free variables.</p> 
+ 
+ <p>Suppose the theorem prover is working on some clause, clause, named by some 
+ <span class="tt"><a href="ACL2____GOAL-SPEC.html">goal-spec</a></span>, e.g., "Subgoal *1/2'''" in some logical world, world. 
+ Corresponding to the printed <span class="v">goal-spec</span> is an internal data structure 
+ called a ``clause identifier'' id.  See <a href="ACL2____CLAUSE-IDENTIFIER.html">clause-identifier</a>.</p> 
+ 
+ <p>In the case of a common hint, the hint applies if the goal-spec of the hint 
+ is the same as the goal-spec of the clause in question.</p> 
+ 
+ <p>In the case of a computed hint, the variable <span class="v">ID</span> is bound to the clause 
+ id, the variable <span class="v">CLAUSE</span> is bound to the (translated form of the) clause, 
+ and the variable <span class="v">WORLD</span> is bound to the current ACL2 world.  The variable 
+ <span class="v">STABLE-UNDER-SIMPLIFICATIONP</span> is bound to <span class="v">t</span> or <span class="v">nil</span>.  It is bound 
+ to <span class="v">t</span> only if the clause is known to be stable under simplification.  That 
+ is, the simplifier has been applied to the clause and did not change it.  Such 
+ a clause is sometimes known as a ``simplification checkpoint.''  It is 
+ frequently useful to inject hints (e.g., to enable a rule or provide a 
+ <span class="v">:use</span> hint) only when the goal in question has stabilized.  If a hint is 
+ provided, the processing of the clause starts over with simplification.</p> 
+ 
+ <p>As for <span class="v">CTX</span> and <span class="tt"><a href="ACL2____STATE.html">state</a></span>, they are provided so that you can pass 
+ them to the <span class="tt"><a href="ACL2____ER.html">er</a></span> macro to print error messages.  We recommend not 
+ writing computed hints that otherwise change <span class="tt"><a href="ACL2____STATE.html">state</a></span>!</p> 
+ 
+ <p>The remaining variables, <span class="v">HIST</span> and <span class="v">PSPV</span> are not documented yet. 
+ Only users familiar with the internals of ACL2 are likely to need them or 
+ understand their values.</p> 
+ 
+ <p>For some instruction about how to use computed hints, see <a href="ACL2____USING-COMPUTED-HINTS.html">using-computed-hints</a>.</p>
+</body>
+</html>

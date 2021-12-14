@@ -1,0 +1,181 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Deffixtype</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=FTY____DEFFIXTYPE">Click for Deffixtype in the Full Manual</a></h3>
+
+<p>Define a new type for use with the <a href="ACL2____FTY-DISCIPLINE.html">fty-discipline</a>.</p><p>In its most basic form, <span class="v">deffixtype</span> just associates a new type 
+name with the corresponding predicate, fixing function, and equivalence 
+relation.  It stores this association in a <a href="ACL2____TABLE.html">table</a>, <span class="v">fty::fixtypes</span>. 
+The type then becomes ``known'' to other <a href="ACL2____FTY.html">fty</a> macros such as <a href="FTY____DEFFIXEQUIV.html">deffixequiv</a>, <a href="FTY____DEFPROD.html">defprod</a>, and so on.</p> 
+ 
+ 
+<h4>Basic Example</h4> 
+ 
+<p>You could use the following to define the <font color="#900090">nat</font> 
+type with the recognizer <a href="ACL2____NATP.html">natp</a>, the fixing function <a href="ACL2____NFIX.html">nfix</a>, the 
+equivalence relation <a href="ACL2____NAT-EQUIV.html">nat-equiv</a>, and <a href="ACL2____NATP.html">natp</a> as the preferred <a href="ACL2____XDOC.html">xdoc</a> topic when linking to this type.</p> 
+ 
+<pre class="code">(<a href="FTY____DEFFIXTYPE.html">fty::deffixtype</a> nat
+  :pred  natp
+  :fix   nfix
+  :equiv nat-equiv
+  :topic natp)</pre> 
+ 
+<p>For this to be sensible, the recognizer, fixing function, and equivalence 
+relation should satisfy the constraints described in <a href="ACL2____FTY-DISCIPLINE.html">fty-discipline</a>, and 
+the equivalence relation must have already be admitted by <a href="ACL2____DEFEQUIV.html">defequiv</a>.</p> 
+ 
+<p>In practice, you shouldn't really need to introduce <span class="v">deffixtype</span> forms 
+for basic ACL2 types like <a href="ACL2____NATP.html">natp</a> by yourself.  Instead, see the <a href="FTY____BASETYPES.html">basetypes</a> book.</p> 
+ 
+ 
+<h4>More Typical Example</h4> 
+ 
+<p>Very often, the equivalence relation for a new type is ``induced'' by the 
+fixing function in a completely standard way.  Once you have introduced your 
+recognizer and fixing function, you can just have <span class="v">deffixtype</span> introduce the 
+equivalence relation for you.  For example:</p> 
+ 
+<pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> foop (x)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t))
+  (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x)
+       (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____CAR.html">car</a> x) 'foo)))
+
+(<a href="ACL2____DEFUN-INLINE.html">defun-inline</a> foo-fix (x)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (foop x)))
+  (<a href="ACL2____MBE.html">mbe</a> :logic (<a href="COMMON-LISP____IF.html">if</a> (foop x) x '(foo . nil))
+       :exec x))
+
+(<a href="FTY____DEFFIXTYPE.html">deffixtype</a> foo
+  :pred   foop
+  :fix    foo-fix
+  :equiv  foo-equiv
+  :define t         ;; define foo-equiv for me
+  :forward t        ;; prove some useful theorems about foo-equiv
+  )</pre> 
+ 
+<p>Besides registering the <font color="#900090">foo</font> type with FTY, this 
+will introduce <span class="v">foo-equiv</span> essentially as if you had written:</p> 
+ 
+<pre class="code">(<a href="ACL2____DEFUN-INLINE.html">defun-inline</a> foo-equiv (x y)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (foop x)
+                              (foop y))))
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> (foo-fix x) (foo-fix y)))</pre> 
+ 
+<p>It will then prove <span class="v">foo-equiv</span> is an equivalence relation and prove some 
+minor boilerplate theorems.</p> 
+ 
+ 
+<h4>General Form</h4> 
+ 
+<pre class="code">(<a href="FTY____DEFFIXTYPE.html">deffixtype</a> widget       ;; name of the new type for fty
+  :pred  widget-p
+  :fix   widget-fix
+  :equiv widget-equiv
+
+  ;; optional arguments           ;; default
+  :executablep bool               ;; t
+  :define      bool               ;; nil
+  :inline      bool               ;; t
+  :equal       {eq,eql,equal,...} ;; equal
+  :forward     bool               ;; nil
+  :hints       (("Goal"...))    ;; nil
+  :verbosep    bool               ;; nil
+  :topic       symbol
+  )</pre> 
+ 
+<h4>Optional arguments</h4> 
+ 
+ 
+<h5>:verbosep</h5> 
+ 
+<p><span class="v">:verbosep</span> can be set to T to avoid suppressing theorem prover output 
+during the resulting forms.  This can be useful if the macro causes an error 
+and you need to debug it.</p> 
+ 
+ 
+<h5>:define</h5> 
+ 
+<p><span class="v">:define</span> is NIL by default; if set to T, then the equivalence relation 
+is assumed not to exist yet, and is defined as equality of fix, with 
+appropriate rules to rewrite the fix away under the equivalence and to 
+propagate the congruence into the fix.</p> 
+ 
+ 
+<h5>:forward</h5> 
+ 
+<p>Only matters when <span class="v">define</span> is T.  When <span class="v">:forward</span> is T, four 
+additional lemmas will be proved about the new equivalence relation and stored 
+as <a href="ACL2____FORWARD-CHAINING.html">ACL2::forward-chaining</a> rules.  In particular, the following will all 
+forward-chain to <span class="v">(widget-equiv x y)</span>:</p> 
+ 
+<ul> 
+ <li><span class="v">(<a href="COMMON-LISP____EQUAL.html">equal</a> (widget-fix x) y)</span></li> 
+ <li><span class="v">(<a href="COMMON-LISP____EQUAL.html">equal</a> x (widget-fix y))</span></li> 
+ <li>
+<span class="v">(widget-equiv (widget-fix x) y)</span>, and</li> 
+ <li><span class="v">(widget-equiv x (widget-fix y))</span></li> 
+</ul> 
+ 
+ 
+<h5>:hints</h5> 
+ 
+<p>Only matters when <span class="v">define</span> is NIL.  This allows you to give <a href="ACL2____HINTS.html">hints</a> for the theorem that shows the new equivalence relation holds 
+between <span class="v">x</span> and <span class="v">y</span> exactly when <span class="v">(<a href="COMMON-LISP____EQUAL.html">equal</a> (widget-fix x) (widget-fix
+y))</span>.</p> 
+ 
+<p>(When <span class="v">define</span> is T we don't need to prove this, because it's exactly the 
+definition of the equivalence relation we introduce.)</p> 
+ 
+ 
+<h5>:inline</h5> 
+ 
+<p>Minor efficiency option, only matters when <span class="v">:define</span> is T.  When 
+<span class="v">:inline</span> is T (which is the default), the new equivalence relation's 
+function will be introduced using <a href="ACL2____DEFUN-INLINE.html">defun-inline</a> instead of <a href="COMMON-LISP____DEFUN.html">defun</a>.</p> 
+ 
+ 
+<h5>:equal</h5> 
+ 
+<p>Minor efficiency option, only matters when <span class="v">define</span> is T.  By default, 
+the new equivalence relation will compute the <span class="v">equal</span> of the fixes.  In some 
+cases, your type may be so restrictive that a more efficient equality check 
+like <a href="COMMON-LISP____EQ.html">eq</a> or <a href="COMMON-LISP____EQL.html">eql</a> can be used instead.  For instance, if you are 
+defining character equivalence, you might use <span class="v">:equal eql</span> so that your new 
+equivalence relation will compute the <span class="v">eql</span> of the fixes instead of the 
+<span class="v">equal</span> of the fixes.</p> 
+ 
+ 
+<h5>:executablep</h5> 
+ 
+<p><span class="v">:executablep</span> should be set to NIL if either the fixing function or 
+predicate are <a href="ACL2____NON-EXECUTABLE.html">ACL2::non-executable</a> or especially expensive.  This mainly 
+affects, in <span class="v">deffixequiv</span> and <span class="v">deffixequiv-mutual</span>, whether a theorem is 
+introduced that normalizes constants by applying the fixing function to 
+them.</p> 
+ 
+ 
+<h5>:topic</h5> 
+ 
+<p>Set up a preferred <a href="ACL2____XDOC.html">xdoc</a> documentation topic name for this type. 
+When other documentation topics want to refer to this type, they should link to 
+the preferred <span class="v">:topic</span>.  This may be useful when your type is embedded 
+within some larger <a href="FTY____DEFPROD.html">defprod</a> or similar.</p> 
+ 
+<p>Usually you don't need to provide a <span class="v">:topic</span> explicitly.  The <span class="v">:topic</span> 
+will default to the name of the new type name being defined, e.g., <span class="v">widget</span>. 
+We usually use the type name as the ``main'' topic.  For instance, <span class="v">widget</span> 
+would typically be the parent topic for <span class="v">widget-p</span>, <span class="v">widget-fix</span>, 
+<span class="v">widget-equiv</span>, and related functions.  This convention is followed 
+throughout the <a href="FTY____DEFTYPES.html">deftypes</a> family of macros.</p> 
+ 
+<p>However, this convention is sometimes inappropriate, especially for built-in 
+ACL2 types such as <a href="ACL2____NATP.html">natp</a> and <a href="ACL2____BOOLEANP.html">booleanp</a>.  In these cases, we'd 
+prefer to link to existing documentation such as the recognizers.</p>
+</body>
+</html>

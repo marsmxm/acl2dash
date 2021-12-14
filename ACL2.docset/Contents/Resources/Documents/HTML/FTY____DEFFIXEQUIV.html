@@ -1,0 +1,144 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Deffixequiv</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=FTY____DEFFIXEQUIV">Click for Deffixequiv in the Full Manual</a></h3>
+
+<p>A macro for automatically proving boilerplate theorems that show a 
+function has the appropriate <a href="ACL2____CONGRUENCE.html">congruence</a>s for its typed arguments.</p><p>The <span class="v">deffixequiv</span> macro can be used to automate certain tedious 
+theorems that arise when following the <a href="ACL2____FTY-DISCIPLINE.html">fty-discipline</a>.  In particular, 
+it is intended to help achieve condition 4:</p> 
+ 
+<blockquote><i>Every function that takes an argument of the <font color="#900090">foo</font> type should have an equality <a href="ACL2____CONGRUENCE.html">congruence</a> with 
+<span class="v">foo-equiv</span> on that argument.</i></blockquote> 
+ 
+ 
+<h3>Example</h3> 
+ 
+<p>As an example, consider the following trivial function, introduced 
+with <a href="ACL2____DEFINE.html">define</a>.</p> 
+ 
+<pre class="code">(<a href="ACL2____DEFINE.html">define</a> multiply-and-add ((a natp)
+                          (b natp)
+                          (c natp))
+  :returns (ans natp :rule-classes :type-prescription)
+  (<a href="COMMON-LISP____LET.html">let</a> ((a (<a href="ACL2____LNFIX.html">lnfix</a> a))
+        (b (<a href="ACL2____LNFIX.html">lnfix</a> b))
+        (c (<a href="ACL2____LNFIX.html">lnfix</a> c)))
+    (<a href="COMMON-LISP_____B2.html">+</a> (<a href="COMMON-LISP_____A2.html">*</a> a b)
+       c)))</pre> 
+ 
+<p>Given this definition, the following <span class="v">deffixequiv</span> form will 
+automatically prove <a href="ACL2____NAT-EQUIV.html">nat-equiv</a> congruences and certain related rules for 
+each of the three arguments of <span class="v">multiply-and-add</span>:</p> 
+ 
+<pre class="code">(<a href="FTY____DEFFIXEQUIV.html">fty::deffixequiv</a> multiply-and-add)</pre> 
+ 
+ 
+<p>This example is especially concise and automatic because <span class="v">deffixequiv</span> 
+has a special integration with <a href="ACL2____DEFINE.html">define</a>: it ``knows'' how to:</p> 
+ 
+<ul> 
+<li>look up the <a href="STD____EXTENDED-FORMALS.html">std::extended-formals</a> from the definition,</li> 
+<li>notice that these arguments are <a href="ACL2____NATP.html">natp</a>s,</li> 
+<li>look up the corresponding fixing function and equivalence relation 
+    (assuming the <a href="FTY____BASETYPES.html">basetypes</a> book has been loaded), and then</li> 
+<li>generate and prove the correct theorems.</li> 
+</ul> 
+ 
+<p>It is possible, but less automatic, to use <span class="v">deffixequiv</span> on functions 
+that have not been introduced with <span class="v">define</span>; see the <i>Advanced Form</i> 
+below.</p> 
+ 
+<p>It is also possible, and even <b>more automatic</b>, to instruct <a href="ACL2____DEFINE.html">define</a> to automatically attempt a <a href="FTY____DEFFIXEQUIV.html">deffixequiv</a> on its own: see 
+<a href="FTY____FIXEQUIV-HOOK.html">fixequiv-hook</a>.</p> 
+ 
+ 
+<h3>Theorems Generated</h3> 
+ 
+<p>In most cases, three theorems are generated for each argument.  Continuing 
+the <span class="v">multiply-and-add</span> example, here are the theorems that will be generated 
+for the <span class="v">c</span> argument:</p> 
+ 
+<pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> multiply-and-add-of-nfix-c
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> (multiply-and-add a b (<a href="ACL2____NFIX.html">nfix</a> c))
+         (multiply-and-add a b c)))
+
+(<a href="ACL2____DEFTHM.html">defthm</a> multiply-and-add-of-nfix-c-normalize-const
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____SYNTAXP.html">syntaxp</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____QUOTEP.html">quotep</a> c)
+                         (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____NATP.html">natp</a> (<a href="COMMON-LISP____CADR.html">cadr</a> c)))))
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (multiply-and-add a b c)
+                  (multiply-and-add a b (<a href="ACL2____NFIX.html">nfix</a> c)))))
+
+(<a href="ACL2____DEFTHM.html">defthm</a> multiply-and-add-nat-equiv-congruence-on-c
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____NAT-EQUIV.html">nat-equiv</a> c c-equiv)
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (multiply-and-add a b c)
+                  (multiply-and-add a b c-equiv)))
+  :rule-classes :congruence)</pre> 
+ 
+<p>In rare cases, certain types may have a predicate and/or fixing function 
+that is either expensive to execute or even <a href="ACL2____NON-EXECUTABLE.html">ACL2::non-executable</a>.  In 
+this case, the second theorem, which normalizes constant values by fixing them 
+to the correct type, will not work well.</p> 
+ 
+<p>The recommended way to suppress this theorem is to add <span class="v">:executablep nil</span> 
+to the <a href="FTY____DEFFIXTYPE.html">deffixtype</a> form.  It is also possible to skip the 
+<span class="v">normalize-const</span> theorem on an individual argument-basis (see below for 
+details), but this is usually going to be much more tedious: you will typically 
+have many functions that operate on your type, and you probably don't want to 
+have to suppress this theorem for each argument of each function!</p> 
+ 
+ 
+ 
+<h3>General Forms</h3> 
+ 
+<p>In the general case, there are two ways to invoke <span class="v">deffixequiv</span>.</p> 
+ 
+<h4>Basic Form — :omit</h4> 
+ 
+<pre class="code">(<a href="FTY____DEFFIXEQUIV.html">deffixequiv</a> function-name
+  :omit (a b)     ;; optional
+  :hints (...)    ;; applied to all arguments
+  )</pre> 
+ 
+<p>This form only works for functions introduced with <a href="ACL2____DEFINE.html">define</a>.  It tries 
+to prove the theorems described above for each argument that has a known type, 
+unless the argument is explicitly listed in <span class="v">:omit</span>.</p> 
+ 
+ 
+<h4>Advanced Form — :args</h4> 
+ 
+<pre class="code">(<a href="FTY____DEFFIXEQUIV.html">deffixequiv</a> function-name
+  :args (a                 ;; derive type from DEFINE
+         (b :hints (...))  ;; derive type from DEFINE, custom hints
+         (c natp ...))     ;; explicitly use type NATP
+  :hints (...))            ;; hints for all arguments</pre> 
+ 
+<p>This form provides finer-grained control over exactly what will be proven. 
+In this form, the <span class="v">:args</span> say which formals to generate theorems about, and 
+no theorems will be generated about any formals that are omitted from 
+<span class="v">:args</span>.  The <span class="v">:args</span> also allow you to manually control what type the 
+argument will be assumed to have, specify hints, and so forth.</p> 
+ 
+<p>This form can work even on functions that are not introduced with <a href="ACL2____DEFINE.html">define</a> <b>if</b> a type is given explicitly for each argument.  On the other 
+hand, if the function is introduced with <span class="v">define</span>, then you can either infer 
+the type of the argument (e.g., <span class="v">a</span> above) or manually override it (e.g., 
+<span class="v">c</span> above).</p> 
+ 
+<p>As a special consideration, you can also skip the <span class="v">normalize-const</span> 
+theorem for a certain argument like this:</p> 
+ 
+<pre class="code">(<a href="FTY____DEFFIXEQUIV.html">deffixequiv</a> foo
+  :args ((c nat :skip-const-thm t)))</pre> 
+ 
+<h3>Support for Mutual Recursion</h3> 
+ 
+<p>The <span class="v">deffixequiv</span> form typically cannot be used successfully for mutually 
+recursive functions, e.g., those created with <a href="ACL2____DEFINES.html">defines</a>.  Instead, see 
+<a href="FTY____DEFFIXEQUIV-MUTUAL.html">deffixequiv-mutual</a>.</p>
+</body>
+</html>

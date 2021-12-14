@@ -1,0 +1,132 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Override-hints</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____OVERRIDE-HINTS">Click for Override-hints in the Full Manual</a></h3>
+
+<p>A list of hints given priority in every proof attempt</p><p>This is an advanced feature, originally implemented to help system 
+ designers to create ``modes'' that control the way hints are supplied to the 
+ theorem prover.  Please see <a href="ACL2____DEFAULT-HINTS.html">default-hints</a> for the much more usual way 
+ to install hints that may be applied by default.</p> 
+ 
+ <pre class="code">Examples:
+ACL2 !&gt;(<a href="ACL2____OVERRIDE-HINTS.html">override-hints</a> (<a href="ACL2____W.html">w</a> state))
+((computed-hint-1 clause keyword-alist processor)
+ (computed-hint-2 clause keyword-alist stable-under-simplificationp))</pre> 
+ 
+ <p><span class="v">Override-hints</span> returns a list of computed hints (see <a href="ACL2____COMPUTED-HINTS.html">computed-hints</a>) which, unlike other computed hints, may mention the variable 
+ <span class="v">KEYWORD-ALIST</span>.</p> 
+ 
+ <p>Before reading further, please see <a href="ACL2____HINTS-AND-THE-WATERFALL.html">hints-and-the-waterfall</a> to review 
+ the basics of how <a href="ACL2____HINTS.html">hints</a> are applied during a proof.  In particular, we 
+ assume familiarity with the notion of selecting a hint to be applied to the 
+ current goal.  If there are override-hints, that hint selection is tentative, 
+ because if it reduced to <span class="v">nil</span> after the application of override-hints, 
+ then that hint will be skipped and the attempt will continue for selecting an 
+ applicable hint.  (Craft your override-hints so that <span class="v">:no-op t</span> is returned 
+ in such cases instead of <span class="v">nil</span>, if you don't want the hint to be skipped.) 
+ But we must explain what is meant by ``the application of override-hints'', 
+ and we do that now.</p> 
+ 
+ <p>Suppose that there are override-hints when a hint is selected for the 
+ current goal.  That selected hint is a keyword-alist, which is an alternating 
+ list of hint keywords and their values, whose source is either an explicit 
+ hint <span class="v">(goal-name :key1 val1 ... :keyn valn)</span> where the <span class="v">:keyi</span> are 
+ allowed to be custom hint keywords (which are expanded away; see <a href="ACL2____CUSTOM-KEYWORD-HINTS.html">custom-keyword-hints</a>), or else is the non-<span class="v">nil</span> keyword-alist produced by 
+ evaluating a computed hint.  Then the override-hints are applied to that 
+ keyword-alist as follows, one at a time, in order of their occurrence in the 
+ list of override-hints (as determined by the use of <span class="tt"><a href="ACL2____SET-OVERRIDE-HINTS.html">set-override-hints</a></span> 
+ and <span class="tt"><a href="ACL2____ADD-OVERRIDE-HINTS.html">add-override-hints</a></span>).  The first override-hint is evaluated, in the 
+ usual manner of evaluating computed hints but with the variable 
+ <span class="v">KEYWORD-ALIST</span> bound to the above keyword-alist.  That evaluation produces 
+ a result that should also be a keyword-alist, or else an error occurs.  Any 
+ custom keyword hints are then eliminated from that keyword-alist.  The 
+ resulting keyword-alist must not contain the <span class="v">:ERROR</span> hint keyword and must 
+ not start with the <span class="v">:COMPUTED-HINT-REPLACEMENT</span> keyword; otherwise an error 
+ occurs.  With <span class="v">KEYWORD-ALIST</span> bound to this result, the second 
+ override-hint is similarly evaluated.  This process continues, and the 
+ keyword-alist returned by the final override-hint is the one used when 
+ processing the goal at hand.  Except: If that keyword-alist is <span class="v">nil</span>, then 
+ the next hint among the pending hints is tentatively selected and the process 
+ repeats, applying each override hint to that new tentative selection.  Of 
+ course we might obtain <span class="v">nil</span> again, in which case we tentatively select the 
+ next pending hint; and so on.</p> 
+ 
+ <p>If finally no hint is selected for the current goal, then 
+ <span class="v">KEYWORD-ALIST</span> is bound to <span class="v">nil</span> and the override-hints are applied as 
+ described above.  But note that this final step is skipped if hint selection 
+ is being performed because <span class="v">stable-under-simplificationp</span> has just become 
+ true, rather than at the top of the waterfall.  (Otherwise the override-hints 
+ could easily keep firing uselessly yet putting us back at the top of the 
+ waterfall, with no change to the given goal, resulting in an infinite 
+ loop.)</p> 
+ 
+ <p>As mentioned above, the <span class="v">:COMPUTED-HINT-REPLACEMENT</span> keyword is illegal 
+ for the value of an override-hint.  But a selected hint may be a computed hint 
+ that evaluates to a keyword-alist beginning with prefix 
+ <span class="v">:COMPUTED-HINT-REPLACEMENT val</span>.  What value does ACL2 return for such a 
+ computed hint in the presence of override-hints?  First, this prefix is 
+ stripped off before passing the resulting keyword-alist to the override-hints 
+ as described above.  If the result of applying override-hints to that 
+ keyword-alist is not <span class="v">nil</span>, then the prefix is put back on the front of 
+ that resulting keyword-alist after doing internal processing of the hint, 
+ including expansion of any custom keyword hints.  Otherwise, the application 
+ of override-hints to the computed hint is <span class="v">nil</span>, so this hint is not 
+ selected after all.</p> 
+ 
+ <p><b>WARNING</b>: Unlike ordinary computed hints, a value of <span class="v">nil</span> for an 
+ override-hint is not ignored.  That is: When an ordinary computed hint 
+ evaluates to <span class="v">nil</span>, it is deemed not to apply, and the next available hint 
+ is consulted.  But when an override-hint is evaluated, the result is always 
+ supplied for the next binding of the variable <span class="v">KEYWORD-ALIST</span>, even if that 
+ result is <span class="v">nil</span>.  If you want an override-hint to be a no-op, return as the 
+ expression the variable <span class="v">KEYWORD-ALIST</span> rather than an expression that 
+ evaluates to <span class="v">nil</span>.</p> 
+ 
+ <p>This feature can be used in order to implement a form of additive hints. 
+ Suppose for example that you want a hint that turns off generalization.  A 
+ simple but inadequate solution is:</p> 
+ 
+ <pre class="code">(<a href="ACL2____ADD-DEFAULT-HINTS.html">add-default-hints</a> '((<a href="COMMON-LISP____QUOTE.html">quote</a> (:do-not '(<a href="ACL2____GENERALIZE.html">generalize</a>)))))</pre> 
+ 
+ <p>The problem is that if there is any explicit hint supplied for a given 
+ goal, then it will be the one selected, and the above will be ignored.  But 
+ suppose that the explicit hint supplied is of the form <span class="v">("Subgoal x.y"
+ :do-not '(fertilize))</span>.  What we would really want in this case is to 
+ generate the hint for the indicated subgoal that binds <span class="v">:do-not</span> to a list 
+ indicating that both fertilization _and_ generalization are disabled for that 
+ goal.  A solution is to merge, for example as follows.  (The use of <span class="tt"><a href="ACL2____PROG2_42.html">prog2$</a></span> and <span class="tt"><a href="ACL2____CW.html">cw</a></span> is of course optional, included here to provide debug 
+ printing.)</p> 
+ 
+ <pre class="code">(<a href="ACL2____ADD-OVERRIDE-HINTS.html">add-override-hints</a>
+ '((<a href="COMMON-LISP____LET_A2.html">let*</a> ((tmp (<a href="ACL2____ASSOC-KEYWORD.html">assoc-keyword</a> :do-not KEYWORD-ALIST))
+          (new-keyword-alist
+           (<a href="COMMON-LISP____COND.html">cond</a> (tmp (<a href="COMMON-LISP____LIST_A2.html">list*</a> :do-not
+                             `(<a href="COMMON-LISP____CONS.html">cons</a> 'generalize ,(<a href="COMMON-LISP____CADR.html">cadr</a> tmp))
+                             (remove-keyword :do-not KEYWORD-ALIST)))
+                 (t (<a href="COMMON-LISP____LIST_A2.html">list*</a> :do-not ''(<a href="ACL2____GENERALIZE.html">generalize</a>) KEYWORD-ALIST)))))
+     (<a href="ACL2____PROG2_42.html">prog2$</a> (<a href="ACL2____CW.html">cw</a> "New: ~x0~|" new-keyword-alist)
+             new-keyword-alist))))</pre> 
+ 
+ <p>REMARKS</p> 
+ 
+ <p>(1) The utilities <span class="tt"><a href="ACL2____ADD-OVERRIDE-HINTS.html">add-override-hints</a></span>, <span class="tt"><a href="ACL2____ADD-OVERRIDE-HINTS_12.html">add-override-hints!</a></span>, 
+ <span class="tt"><a href="ACL2____SET-OVERRIDE-HINTS.html">set-override-hints</a></span>, <span class="tt"><a href="ACL2____SET-OVERRIDE-HINTS_12.html">set-override-hints!</a></span>, <span class="tt"><a href="ACL2____REMOVE-OVERRIDE-HINTS.html">remove-override-hints</a></span>, and <span class="tt"><a href="ACL2____REMOVE-OVERRIDE-HINTS_12.html">remove-override-hints!</a></span> are also available, 
+ in complete analogy to their default-hints versions.</p> 
+ 
+ <p>(2) The community book <span class="v">hints/basic-tests.lisp</span> illustrates the use of 
+ override-hints and illuminates a number of corner cases; search in that file 
+ for ``Test override-hints.''</p> 
+ 
+ <p>(3) The community book <span class="v">hints/merge-hint.lisp</span> provides support for 
+ merging hints that might be useful for writers of override-hint expressions 
+ (see the examples at the end of that file).</p> 
+ 
+ <p>(4) Override-hints are used in the processing of <span class="v">:BACKTRACK</span> hints (see 
+ <a href="ACL2____HINTS.html">hints</a>).</p>
+</body>
+</html>

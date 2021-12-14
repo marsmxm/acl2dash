@@ -1,0 +1,222 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Meta-implicit-hypothesis</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____META-IMPLICIT-HYPOTHESIS">Click for Meta-implicit-hypothesis in the Full Manual</a></h3>
+
+<p>A potentially more efficient way of coding a hypothesis metafunction</p><p>We assume familiarity with <a href="ACL2____META.html">meta</a> rules.  In this topic, we 
+ discuss a relatively advanced capability of meta reasoning in ACL2 that can 
+ increase its efficiency.</p> 
+ 
+ <h3>Introduction</h3> 
+ 
+ <p>In brief: if a metafunction application to a term, <span class="v">u</span>, evaluates to a 
+ result of the form <span class="v">(<a href="COMMON-LISP____IF.html">if</a> TEST NEW-TERM u)</span>, then <span class="v">TEST</span> is treated as an 
+ ``implicit hypothesis,'' which must rewrite to true in order for the meta rule 
+ to simplify the input term.  We now explain in more detail.</p> 
+ 
+ <p>Recall the general form of a meta rule:</p> 
+ 
+ <pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a> x)        ; this hyp is optional
+              (<a href="ACL2____ALISTP.html">alistp</a> a)              ; this hyp is optional
+              (ev (hyp-fn x ...) a)   ; this hyp is optional
+              ; meta-extract hyps may also be included (see below)
+              )
+         (equiv (ev x a)
+                (ev (fn x ...) a)))</pre> 
+ 
+ <p>When this rule is to be applied to a term, <span class="v">x</span>, then <span class="v">(hyp-fn x ...)</span> 
+ is evaluated to produce a term, which must rewrite to true in order to 
+ evaluate the call <span class="v">(fn x ...)</span>, which is then rewritten to a replacement 
+ for <span class="v">x</span>.  But it may be that these calls of <span class="v">hyp-fn</span> and <span class="v">fn</span> share a 
+ sub-computation.  ACL2 provides the ``implicit hypothesis'' mechanism in order 
+ to share such a sub-computation.  The next section illustrates how this 
+ mechanism works. The final section provides a precise specification of 
+ implicit hypotheses and how they are used in metareasoning.</p> 
+ 
+ <h3>Example</h3> 
+ 
+ <p>The following example is trivial but illustrates the sort of situation for 
+ which implicit hypotheses can be useful.  First let us introduce a function 
+ and an evaluator (see <a href="ACL2____DEFEVALUATOR.html">defevaluator</a>).</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> foo (x y)
+  (<a href="COMMON-LISP_____B2.html">+</a> x y))
+
+(<a href="ACL2____DEFEVALUATOR.html">defevaluator</a> evl evl-list
+  ((<a href="COMMON-LISP____IF.html">if</a> x y z)
+   (foo x y)
+   (<a href="ACL2____BINARY-_B2.html">binary-+</a> x y)
+   (<a href="ACL2____UNARY--.html">unary--</a> x)
+   (<a href="ACL2____ACL2-NUMBERP.html">acl2-numberp</a> x)
+   (<a href="COMMON-LISP____NOT.html">not</a> x)))</pre> 
+ 
+ <p>Let us write a meta function and associated hypothesis metafunction that 
+ apply a common function, <span class="v">meta-helper</span>, to a term, <span class="v">term</span>, to return one 
+ of two multiple values: <span class="v">(<a href="ACL2____MV.html">mv</a> nil term)</span> in the case that there is no 
+ simplification; else <span class="v">(<a href="ACL2____MV.html">mv</a> hyp new-term)</span>, where the following is a 
+ theorem: `(implies ,hyp (equal ,term ,new-term)).  Of course, the following 
+ definition introduces a function whose calls can be evaluated very quickly; 
+ but for purposes of this example, let us pretend that calls of 
+ <span class="v">meta-helper</span> take a great deal of time to evaluate.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> meta-helper (<a href="ACL2____TERM.html">term</a>) ; PRETEND that his function is expensive to compute!
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a> term)))
+  (<a href="ACL2____CASE-MATCH.html">case-match</a> term
+    (('foo x ('foo y ('unary-- x)))
+     (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORE.html">ignore</a> x))
+     (<a href="ACL2____MV.html">mv</a> `(<a href="ACL2____ACL2-NUMBERP.html">acl2-numberp</a> ,y)
+         y))
+    (&amp; (<a href="ACL2____MV.html">mv</a> nil term))))</pre> 
+ 
+ <p>We can now define our meta function and hypothesis metafunction and prove 
+ a meta rule based on them.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> meta-fn (<a href="ACL2____TERM.html">term</a>)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a> term)))
+  (<a href="ACL2____MV-LET.html">mv-let</a> (hyp new-term)
+          (meta-helper term)
+          (<a href="COMMON-LISP____IF.html">if</a> hyp new-term term)))
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> meta-hyp-fn (<a href="ACL2____TERM.html">term</a>)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a> term)))
+  (<a href="ACL2____MV-LET.html">mv-let</a> (hyp new-term)
+          (meta-helper term)
+          (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORE.html">ignore</a> new-term))
+          (<a href="COMMON-LISP____OR.html">or</a> hyp ''nil)))
+
+(<a href="ACL2____DEFTHM.html">defthm</a> meta-fn-correct
+  (<a href="ACL2____IMPLIES.html">implies</a> (evl (meta-hyp-fn x) a)
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (evl x a)
+                  (evl (meta-fn x) a)))
+  :rule-classes ((:meta :trigger-fns (foo))))</pre> 
+ 
+ <p>In order to see this meta rule in action, let us disable <span class="v">foo</span> and try a 
+ little test.</p> 
+ 
+ <pre class="code">(<a href="ACL2____IN-THEORY.html">in-theory</a> (<a href="ACL2____DISABLE.html">disable</a> foo))
+
+(<a href="ACL2____DEFTHM.html">defthm</a> meta-fn-correct-test
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____ACL2-NUMBERP.html">acl2-numberp</a> b)
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (foo a (foo b (<a href="COMMON-LISP____-.html">-</a> a)))
+                  b)))</pre> 
+ 
+ <p>Happily, the test succeeds, with the <a href="ACL2____SUMMARY.html">summary</a> showing that our meta 
+ rule, <span class="v">meta-fn-correct</span>, was indeed used in the proof.  But if we first 
+ submit the form <span class="v">(<a href="ACL2____TRACE_42.html">trace$</a> meta-fn meta-hyp-fn meta-helper)</span>, we will see 
+ that <span class="v">meta-helper</span> is called twice on the term <span class="v">(FOO A (FOO B (<a href="ACL2____UNARY--.html">UNARY--</a>
+ A)))</span>: once on behalf of <span class="v">meta-fn</span> and once on behalf of <span class="v">meta-hyp-fn</span>. 
+ This would be unfortunate if <span class="v">meta-helper</span> were expensive to compute.</p> 
+ 
+ <p>So let us back up and try a different approach, which illustrates the idea 
+ of using an ``implicit hypothesis'' in order to avoid recomputation.  This 
+ time, we avoid defining a hypothesis metafunction, but instead we define 
+ <span class="v">meta-fn</span> to return a term of the form <span class="v">(<a href="COMMON-LISP____IF.html">if</a> TEST NEW-TERM term)</span>.  Here, 
+ <span class="v">TEST</span> is <span class="v">`(<a href="ACL2____ACL2-NUMBERP.html">acl2-numberp</a> ,y)</span>; we call this an ``implicit 
+ hypothesis.''</p> 
+ 
+ <pre class="code">:ubt! meta-fn
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> meta-fn (<a href="ACL2____TERM.html">term</a>)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a> term)))
+  (<a href="ACL2____MV-LET.html">mv-let</a> (hyp new-term)
+          (meta-helper term)
+          (<a href="COMMON-LISP____IF.html">if</a> hyp ; the interesting case
+              `(<a href="COMMON-LISP____IF.html">if</a> ,hyp ,new-term ,term)
+            term)))</pre> 
+ 
+ <p>There is nothing remarkable in the proof of the corresponding meta 
+ rule.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> meta-fn-correct
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> (evl x a)
+         (evl (meta-fn x) a))
+  :rule-classes ((:meta :trigger-fns (foo))))</pre> 
+ 
+ <p>Let us test our new implementation.  If we first evaluate the form 
+ <span class="v">(<a href="ACL2____TRACE_42.html">trace$</a> meta-fn meta-helper)</span>, we will see that this time, 
+ <span class="v">meta-helper</span> is called only once on the term <span class="v">(FOO A (FOO B (<a href="ACL2____UNARY--.html">UNARY--</a>
+ A)))</span>.</p> 
+ 
+ <pre class="code">(<a href="ACL2____IN-THEORY.html">in-theory</a> (<a href="ACL2____DISABLE.html">disable</a> foo))
+
+(<a href="ACL2____DEFTHM.html">defthm</a> meta-fn-correct-test
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____ACL2-NUMBERP.html">acl2-numberp</a> b)
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (foo a (foo b (<a href="COMMON-LISP____-.html">-</a> a)))
+                  b)))</pre> 
+ 
+ <p>Note that the following proof attempt fails but does not loop.  Naively, 
+ one might expect it to loop, since the false branch of the <span class="v">IF</span> term 
+ returned by <span class="v">meta-fn</span> has the original (input) term as its false branch. 
+ However, ACL2 notices the special form <span class="v">(<a href="COMMON-LISP____IF.html">if</a> TEST NEW-TERM term)</span> of the 
+ term returned by calling <span class="v">meta-fn</span>, and treats this result as though 
+ <span class="v">TEST</span> is the term returned by a hypothesis metafunction and <span class="v">NEW-TERM</span> 
+ is the term returned by the metafunction.</p> 
+ 
+ <pre class="code">(<a href="ACL2____THM.html">thm</a> ; FAILS but does not loop!
+ (<a href="COMMON-LISP____EQUAL.html">equal</a> (foo a (foo b (<a href="COMMON-LISP____-.html">-</a> a)))
+        b))</pre> 
+ 
+ <p>Suppose that instead we had defined <span class="v">meta-fn</span> as follows, that is, with 
+ the `then' and `else' branches swapped.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> meta-fn (<a href="ACL2____TERM.html">term</a>)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a> term)))
+  (<a href="ACL2____MV-LET.html">mv-let</a> (hyp new-term)
+          (meta-helper term)
+          (<a href="COMMON-LISP____IF.html">if</a> hyp ; the interesting case ;
+              `(<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____NOT.html">not</a> ,hyp) ,term ,new-term)
+            term)))</pre> 
+ 
+ <p>Then the events above go through as before, up to the <span class="tt"><a href="ACL2____THM.html">thm</a></span> form. 
+ But that form loops, because the generated <span class="v">IF</span> term no longer has the 
+ special form <span class="v">(<a href="COMMON-LISP____IF.html">if</a> TEST NEW-TERM term)</span>.  In the (likely rare) case that 
+ really wishes to allow an unresolved case split for which one branch is the 
+ original term, this swapping of branches is available to defeat the 
+ recognition of an implicit hypothesis.</p> 
+ 
+ <h3>Precise specification</h3> 
+ 
+ <p>Consider a meta rule:</p> 
+ 
+ <pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a> x)        ; this hyp is optional
+              (<a href="ACL2____ALISTP.html">alistp</a> a)              ; this hyp is optional
+              (ev (hyp-fn x ...) a)   ; this hyp is optional
+              ; meta-extract hyps may also be included (see below)
+              )
+         (equiv (ev x a)
+                (ev (fn x ...) a)))</pre> 
+ 
+ <p>Recall that when this rule is applied to a term, <span class="v">term</span>, then a list of 
+ hypotheses is initially generated as follows, where each generated hypothesis 
+ must be rewritten to a non-<span class="v">nil</span> value in order for the rule to fire.</p> 
+ 
+ <ol> 
+ 
+ <li>If there is a hypothesis metafunction, <span class="v">hyp-fn</span>, then let <span class="v">hyps</span> be 
+ the list of hypothesis terms returned by the call of <span class="v">hyp-fn</span> on <span class="v">term</span>. 
+ More precisely, the term returned by the call of <span class="v">hyp-fn</span> is flattened into 
+ a list of ``hypothesis terms,'' so that for example the (translated) 
+ conjunction <span class="v">(<a href="COMMON-LISP____IF.html">if</a> a (<a href="COMMON-LISP____IF.html">if</a> b c 'nil) 'nil)</span> generates the list <span class="v">(a b c)</span> of 
+ hypothesis terms.</li> 
+ 
+ <li>Otherwise, let <span class="v">hyps</span> be <span class="v">nil</span>.</li> 
+ 
+ </ol> 
+ 
+ <p>When this rule is applied by calling <span class="v">fn</span> on a term, <span class="v">term</span>, we say 
+ that a term, <span class="v">test</span>, is an ``implicit hypothesis'' if the value returned by 
+ that call of <span class="v">fn</span> is a term of the form <span class="v">(<a href="COMMON-LISP____IF.html">if</a> test new-term term)</span>: that 
+ is, <span class="v">test</span> is the test of the resulting <span class="v">if</span> term and the input term is 
+ the false branch of that <span class="v">if</span> term.  In this case, ACL2 recognizes 
+ <span class="v">test</span> as an implicit hypothesis, which triggers two changes made in how 
+ this meta rule is applied.  First, <span class="v">hyps</span> is extended by the flattened list 
+ of hypotheses generated from <span class="v">test</span>.  Second, instead of applying 
+ <span class="v">hyp-fn</span> to the original term, <span class="v">term</span>, <span class="v">hyp-fn</span> is applied to 
+ <span class="v">new-term</span>.</p>
+</body>
+</html>

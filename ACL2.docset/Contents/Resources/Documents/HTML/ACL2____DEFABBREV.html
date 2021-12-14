@@ -1,0 +1,87 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Defabbrev</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____DEFABBREV">Click for Defabbrev in the Full Manual</a></h3>
+
+<p>A convenient form of macro definition for simple expansions</p><pre class="code">Examples:
+(<a href="ACL2____DEFABBREV.html">defabbrev</a> snoc (x y) (<a href="COMMON-LISP____APPEND.html">append</a> y (<a href="COMMON-LISP____LIST.html">list</a> x)))
+(<a href="ACL2____DEFABBREV.html">defabbrev</a> sq (x) (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____TYPE.html">type</a> (signed-byte 8) x)) (<a href="COMMON-LISP_____A2.html">*</a> x x))
+
+General Form:
+(<a href="ACL2____DEFABBREV.html">defabbrev</a> name (v1 ... vn) doc-string decl1 ... declk body)</pre> 
+ 
+ <p>where <span class="v">name</span> is a new function symbol, the <span class="v">vi</span> are distinct variable 
+ symbols, and <span class="v">body</span> is a term.  The <span class="v">decli</span>, if supplied, should be 
+ legal <span class="v">declare</span> forms; see <a href="COMMON-LISP____DECLARE.html">declare</a>.  <span class="v">Doc-string</span>, if 
+ non-<span class="v">nil</span>, is an optional string that can provide documentation but is 
+ essentially ignored by ACL2.</p> 
+ 
+ <p>Roughly speaking, the <span class="v">defabbrev</span> event is akin to defining <span class="v">f</span> so 
+ that <span class="v">(f v1 ... vn) = body</span>.  But rather than do this by adding a new 
+ axiom, <span class="v">defabbrev</span> defines <span class="v">f</span> to be a macro so that <span class="v">(f a1 ... an)</span> 
+ expands to <span class="v">body</span>, with the ``formals,'' <span class="v">vi</span>, replaced by the 
+ ``actuals,'' <span class="v">ai</span>.</p> 
+ 
+ <p>For example, if <span class="v">snoc</span> is defined as shown in the first example above, 
+ then <span class="v">(snoc (<a href="COMMON-LISP_____B2.html">+</a> i j) temp)</span> is just an abbreviation for</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____APPEND.html">append</a> temp (<a href="COMMON-LISP____LIST.html">list</a> (<a href="COMMON-LISP_____B2.html">+</a> i j))).</pre> 
+ 
+ <p>In order to generate efficiently executable Lisp code, the macro that 
+ <span class="v">defabbrev</span> introduces uses a <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span> to bind the ``formals'' to the 
+ ``actuals.''  Consider the second example above.  Logically speaking, <span class="v">(sq
+ (ack i j))</span> is an abbreviation for <span class="v">(<a href="COMMON-LISP_____A2.html">*</a> (ack i j) (ack i j))</span>.  But in fact 
+ the macro for <span class="v">sq</span> introduced by <span class="v">defabbrev</span> actually arranges for 
+ <span class="v">(sq (ack i j))</span> to expand to:</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____LET.html">let</a> ((x (ack i j)))
+  (<a href="COMMON-LISP_____A2.html">*</a> x x))</pre> 
+ 
+ <p>which executes more efficiently than <span class="v">(<a href="COMMON-LISP_____A2.html">*</a> (ack i j) (ack i j))</span>.</p> 
+ 
+ <p>In the theorem prover, the <span class="v">let</span> above expands to</p> 
+ 
+ <pre class="code">((<a href="COMMON-LISP____LAMBDA.html">lambda</a> (x) (<a href="COMMON-LISP_____A2.html">*</a> x x)) (ack i j))</pre> 
+ 
+ <p>and thence to <span class="v">(<a href="COMMON-LISP_____A2.html">*</a> (ack i j) (ack i j))</span>.</p> 
+ 
+ <p>It is important to note that the term in <span class="v">body</span> should not contain a 
+ call of <span class="v">name</span> — i.e., <span class="v">defabbrev</span> should not be used in place of 
+ <span class="v">defun</span> when the function is recursive.  ACL2 will not complain when the 
+ <span class="v">defabbrev</span> form is processed, but instead ACL2 will more than likely go 
+ into an infinite loop during macroexpansion of any form that has a call of 
+ <span class="v">name</span>.</p> 
+ 
+ <p>It is also important to note that the parameters of any call of a macro 
+ defined by defabbrev will, as is the case for the parameters of a function 
+ call, be evaluated before the body is evaluated, since this is the evaluation 
+ order of <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span>.  This may lead to some errors or unexpected 
+ inefficiencies during evaluation if the body contains any conditionally 
+ evaluated forms like <span class="v">cond</span>, <span class="v">case</span>, or <span class="v">if</span>.  Consider the following 
+ example.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFABBREV.html">defabbrev</a> foo (x y)
+  (<a href="COMMON-LISP____IF.html">if</a> (test x) (bar y) nil))</pre> 
+ 
+ <p>Notice a typical one-step expansion of a call of <span class="v">foo</span> (see <a href="ACL2____TRANS1.html">trans1</a>):</p> 
+ 
+ <pre class="code">ACL2 !&gt;:trans1 (foo expr1 expr2)
+ (<a href="COMMON-LISP____LET.html">LET</a> ((X EXPR1) (Y EXPR2))
+      (<a href="COMMON-LISP____IF.html">IF</a> (TEST X) (BAR Y) NIL))
+ACL2 !&gt;</pre> 
+ 
+ <p>Now imagine that <span class="v">expr2</span> is a complicated expression whose evaluation is 
+ intended only when the predicate <span class="v">test</span> holds of <span class="v">expr1</span>.  The expansion 
+ above suggests that <span class="v">expr2</span> will always be evaluated by the call <span class="v">(foo
+ expr1 expr2)</span>, which may be inefficient (since perhaps we only need that 
+ value when <span class="v">test</span> is true of <span class="v">expr1</span>).  The evaluation of <span class="v">expr2</span> may 
+ even cause an error, for example in <span class="v">:</span><span class="tt"><a href="ACL2____PROGRAM.html">program</a></span> mode if the 
+ expression <span class="v">expr2</span> has been constructed in a manner that could cause a 
+ guard violation unless <span class="v">test</span> holds of <span class="v">expr1</span>.</p>
+</body>
+</html>

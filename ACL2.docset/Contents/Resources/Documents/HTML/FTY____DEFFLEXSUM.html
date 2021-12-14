@@ -1,0 +1,219 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Defflexsum</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=FTY____DEFFLEXSUM">Click for Defflexsum in the Full Manual</a></h3>
+
+<p>Define a (possibly recursive) sum of products type.</p> 
+<h3>Caveat</h3> 
+ 
+<p><span class="v">Defflexsum</span> is not very user-friendly or automatic; it is easy to create 
+instances that fail in incomprehensible ways.  It is used as a backend to 
+define the <a href="FTY____DEFTAGSUM.html">deftagsum</a> and <a href="FTY____DEFPROD.html">defprod</a> type generators, which are easier to 
+use.</p> 
+ 
+<h4>Example</h4> 
+ 
+<p>This is essentially the same as the example in <a href="FTY____DEFTAGSUM.html">deftagsum</a>.  Logically, 
+the way these types work are very similar; only the representation is 
+different.</p> 
+<pre class="code">(<a href="FTY____DEFFLEXSUM.html">defflexsum</a> arithterm
+  (:num :cond (<a href="COMMON-LISP____ATOM.html">atom</a> x)
+        :fields ((val :type integerp :acc-body x))
+        :ctor-body val)
+  (:plus
+   :cond (<a href="COMMON-LISP____EQ.html">eq</a> (<a href="COMMON-LISP____CAR.html">car</a> x) '+)
+   :shape (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____TRUE-LISTP.html">true-listp</a> x) (<a href="COMMON-LISP____EQL.html">eql</a> (<a href="ACL2____LEN.html">len</a> x) 3))
+   :fields ((left :type arithterm :acc-body (<a href="COMMON-LISP____CADR.html">cadr</a> x))
+            (right :type arithterm :acc-body (<a href="COMMON-LISP____CADDR.html">caddr</a> x)))
+   :ctor-body (<a href="COMMON-LISP____LIST.html">list</a> '+ left right))
+  (:minus
+   :shape (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQ.html">eq</a> (<a href="COMMON-LISP____CAR.html">car</a> x) '-)
+               (<a href="ACL2____TRUE-LISTP.html">true-listp</a> x)
+               (<a href="COMMON-LISP____EQL.html">eql</a> (<a href="ACL2____LEN.html">len</a> x) 2))
+   :fields ((arg :type arithterm :acc-body (<a href="COMMON-LISP____CADR.html">cadr</a> x)))
+   :ctor-body (<a href="COMMON-LISP____LIST.html">list</a> '- arg)))
+
+(<a href="ACL2____DEFINE.html">define</a> arithterm-eval ((x arithterm-p))
+  :returns (xval integerp :rule-classes :type-prescription)
+  :measure (arithterm-count x)
+  (<a href="COMMON-LISP____CASE.html">case</a> (arithterm-kind x)
+    (:num (arithterm-num-&gt;val x))
+    (:plus (<a href="COMMON-LISP_____B2.html">+</a> (arithterm-eval (arithterm-plus-&gt;left x))
+              (arithterm-eval (arithterm-plus-&gt;right x))))
+    (t (<a href="COMMON-LISP____-.html">-</a> (arithterm-eval (arithterm-minus-&gt;arg x)))))
+  ///
+  (<a href="FTY____DEFFIXEQUIV.html">deffixequiv</a> arithterm-eval))
+
+(<a href="ACL2____DEFINE.html">define</a> arithterm-double ((x arithterm-p))
+  :verify-guards nil ;; requires return type theorem first
+  :returns (xx arithterm-p)
+  :measure (arithterm-count x)
+  (arithterm-case x
+    :num (arithterm-num (<a href="COMMON-LISP_____A2.html">*</a> 2 x.val))
+    :plus (arithterm-plus (arithterm-double x.left)
+                          (arithterm-double x.right))
+    :minus (arithterm-minus (arithterm-double x.arg)))
+  ///
+  (<a href="ACL2____VERIFY-GUARDS.html">verify-guards</a> arithterm-double)
+
+  (<a href="FTY____DEFFIXEQUIV.html">deffixequiv</a> arithterm-double)
+
+  (<a href="ACL2____LOCAL.html">local</a> (<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "arithmetic/top-with-meta" :dir :system))
+
+  (<a href="ACL2____DEFTHM.html">defthm</a> arithterm-double-correct
+    (<a href="COMMON-LISP____EQUAL.html">equal</a> (arithterm-eval (arithterm-double x))
+           (<a href="COMMON-LISP_____A2.html">*</a> 2 (arithterm-eval x)))
+    :hints(("Goal" :in-theory (<a href="ACL2____ENABLE.html">enable</a> arithterm-eval)))))</pre> 
+ 
+<p>Note: when the constructors are actually defined, <span class="v">mbe</span> is used to allow 
+the function to logically apply fixing functions to its arguments without a 
+performance penalty when running with guards checked.</p> 
+ 
+<h3>More on the above Caveat</h3> 
+ 
+<p><span class="v">defflexsum</span> is less automatic than most other type-defining utilities. 
+It requires certain information to be provided by the user that must then be 
+proved to be self-consistent.  For example, the <span class="v">:ctor-body</span> argument in a 
+product spec determines how that product is constructed, and the <span class="v">:acc-body</span> 
+argument to a product field spec determines how that field is accessed.  These 
+could easily be inconsistent, or the <span class="v">:ctor-body</span> could produce an object 
+that is not recognized as that product.  If either of these is the case, some 
+proof within the <span class="v">defflexsum</span> event will fail and it will be up to the user 
+to figure out what that proof was and why it failed.</p> 
+ 
+ 
+<h3>Syntax and Options</h3> 
+ 
+<h4>
+<span class="v">Defflexsum</span> top-level arguments</h4> 
+ 
+<p><span class="v">Defflexsum</span> takes the following keyword arguments, in addition to a list 
+of products, which are described further below.</p> 
+ 
+<ul> 
+ 
+<li>
+<span class="v">:pred</span>, <span class="v">:fix</span>, <span class="v">:equiv</span>, <span class="v">:kind</span>, <span class="v">:case</span>, and <span class="v">:count</span> 
+override the default names for the various generated functions (and case 
+macro).  If any of these is not provided, a default name is used instead.  If 
+<span class="v">:kind nil</span> is provided, then no <span class="v">-kind</span> function is generated and 
+instead the products are distinguished by their bare <span class="v">:cond</span> fields.  If 
+<span class="v">:count nil</span> is provided, then no count function is defined for this 
+type.</li> 
+ 
+<li>
+<span class="v">:xvar</span> sets the variable name used to represent the SUM object.  By 
+default, we look for a symbol whose name is "X" that occurs in the product 
+declarations.</li> 
+ 
+<li>
+<span class="v">:measure</span> provides the measure for the predicate, fixing function, and 
+count function.  It defaults to <span class="v">(<a href="ACL2____ACL2-COUNT.html">acl2-count</a> x)</span>, which is usually 
+appropriate for stand-alone products, but sometimes a special measure must be 
+used, especially when <span class="v">defflexsum</span> is used inside a mutually-recursive 
+<span class="v">deftypes</span> form.</li> 
+ 
+<li>
+<span class="v">:prepwork</span> is a list of events to be submitted at the beginning of the 
+process; usually these are local lemmas needed for the various proofs.</li> 
+ 
+<li>
+<span class="v">:parents</span>, <span class="v">:short</span>, and <span class="v">:long</span> provide xdoc for the type</li> 
+ 
+<li>
+<span class="v">:inline</span>: sets default for inlining of products and determines whether 
+the kind and fixing functions are inlined.  This may be <span class="v">:all</span> or a subset 
+of <span class="v">(:kind :fix :acc :xtor)</span>, defaulting to <span class="v">(:kind :fix :acc)</span>.</li> 
+ 
+</ul> 
+ 
+<h4>Products</h4> 
+ 
+<p>Each product starts with a keyword naming its kind; this is the symbol that 
+the SUM kind function returns on an object of that product type.  The rest of 
+the form is a list of keyword arguments:</p> 
+ 
+<ul> 
+ 
+<li>
+<span class="v">:cond</span> describes how to tell whether an object is of this product type. 
+To determine the kind of a SUM object, the SUM kind function checks each of 
+the product conditions in turn, returning the name of the first matching 
+condition.  So the condition for a given product assumes the negations of the 
+conditions of the previous listed products.  The <span class="v">:cond</span> field defaults to 
+<span class="v">t</span>, so typically it can be left off the last product type.</li> 
+ 
+<li>
+<span class="v">:shape</span> adds well-formedness requirements for a product.  One purpose 
+these may serve is to make well-formed objects canonical: it must be a theorem 
+that the fixing function applied to a well-formed object is the same object. 
+So if a product is (e.g.) a tuple represented as a list, and the constructor 
+creates it as a true-list, then there should be a requirement that the object 
+be a true-list of the appropriate length; otherwise, an object that had a 
+non-nil final cdr would be recognized as well-formed, but fix to a different 
+value.</li> 
+ 
+<li>
+<span class="v">:fields</span> list the fields of the product; these are described further 
+below.</li> 
+ 
+<li>
+<span class="v">:ctor-body</span> describes how to make a product object from the fields. 
+This must be consistent with the field accessor bodies (described below) and 
+with the <span class="v">:cond</span> and <span class="v">:shape</span> fields of this product and the previous 
+ones (i.e., it can't produce something that could be mistaken for one of the 
+previous products listed).  The actual constructor function will have fixing 
+functions added; these should not be present in the <span class="v">:ctor-body</span> 
+argument.</li> 
+ 
+<li>
+<span class="v">:type-name</span> overrides the type-name, which by default is 
+<span class="v">[SUMNAME]-[KIND]</span>, e.g. <span class="v">arithterm-plus</span> from the example above.  This 
+is used as a base for generating the field accessor names.</li> 
+ 
+<li>
+<span class="v">:ctor-name</span> overrides the name of the product constructor function, 
+which by default is the type-name.</li> 
+ 
+<li>
+<span class="v">:inline</span>, determining whether the constructor and accessors are inlined 
+or not.  This may be <span class="v">:all</span> or a subset of <span class="v">(:xtor :acc)</span>.  Defaults to 
+<span class="v">(:acc)</span> if not overridden.</li> 
+ 
+<li>
+<span class="v">:require</span> adds a dependent type requirement; see the section on this 
+feature in <a href="FTY____DEFPROD.html">defprod</a>.</li> 
+ 
+</ul> 
+ 
+<h4>Product Fields</h4> 
+ 
+<p>Each product field is a name followed by a keyword list, in which the 
+following keywords are allowed:</p> 
+<ul> 
+<li>
+<span class="v">:acc-body</span> must be present: a term showing how to fetch the field from 
+the object.</li> 
+<li>
+<span class="v">:acc-name</span> overrides the accessor name</li> 
+<li>
+<span class="v">:type</span>, the type (fixtype name or predicate) of the field; may be empty 
+for an untyped field</li> 
+<li>
+<span class="v">:default</span>, the default value of the field in the constructor macro</li> 
+<li>
+<span class="v">:doc</span> will eventually generate xdoc, but is currently ignored</li> 
+<li>
+<span class="v">:rule-classes</span>, the rule classes for the return type of the accessor 
+function.  This is <span class="v">:rewrite</span> by default; you may wish to change it to 
+<span class="v">:type-prescription</span> when the type is something basic like 
+<span class="v">integerp</span>.</li> 
+</ul> 
+
+</body>
+</html>

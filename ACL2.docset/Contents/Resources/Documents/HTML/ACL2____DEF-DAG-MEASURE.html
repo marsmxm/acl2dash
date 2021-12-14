@@ -1,0 +1,111 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Def-dag-measure</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____DEF-DAG-MEASURE">Click for Def-dag-measure in the Full Manual</a></h3>
+
+<p>Generic framework that allows simple traversals of DAGs.</p><p>Suppose we have a representation of some finite DAG, but it is 
+encoded in such a way that it isn't obvious that it's acyclic.  E.g., perhaps 
+our representation is an alist mapping each node to its list of successors.  We 
+then want to do some traversal of the graph.  The challenge is to prove that our traversal function terminates.</p> 
+ 
+<p>One typical way to do this is to record the nodes we've already traversed to 
+ensure that we don't re-traverse them; then, an appropriate measure for 
+termination is the count of nodes that we haven't yet traversed.  Writing 
+functions in this style is doable, but passing around the record of nodes we've 
+already seen complicates reasoning about the function.</p> 
+ 
+<p>This framework helps to streamline a different approach.  In this approach, we define 
+<ul> 
+<li>a relatively fast, executable function that checks whether all paths from the current node through the graph are loop-free</li> 
+<li>a measure function that takes a node in the graph, where if node A is loop-free and has successor node B, then measure(B) &lt; measure(A).</li> 
+</ul> 
+This combination allows traversal functions to be written in this style:</p> 
+<pre class="code">(<a href="ACL2____MUTUAL-RECURSION.html">mutual-recursion</a>
+  (<a href="COMMON-LISP____DEFUN.html">defun</a> traverse-node (node graph)
+    (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (loopfree-p node graph)
+                    :measure (node-measure node graph)))
+    (<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2____MBT.html">mbt</a> (loopfree-p node graph))
+       (do-something node (traverse-list (successors node graph) graph))
+     (fail)))
+  (<a href="COMMON-LISP____DEFUN.html">defun</a> traverse-list (nodelist graph)
+    (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (loopfreelist-p nodelist graph)
+                    :measure (node-list-measure list graph)))
+    (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ATOM.html">atom</a> nodelist)
+        (end-val)
+      (combine (traverse-node (<a href="COMMON-LISP____CAR.html">car</a> nodelist) graph)
+               (traverse-list (<a href="COMMON-LISP____CDR.html">cdr</a> nodelist) graph)))))</pre> 
+ 
+<p>The framework is generic as to how the successors of a node are determined; 
+e.g., they could be stored in an alist and extracted with assoc, or generated 
+by some arbitrary function.  It expects the successor function to produce a 
+list of nodes.  If the successors are not conveniently encoded as a list of 
+nodes, you might still be able to work with this framework with some extra 
+proof work.  Another way in which the framework is not completely generic is 
+that it uses an underlying traversal function that stores seen nodes in a fast 
+alist.  If this isn't the right encoding for your problem, you may again need 
+to do some extra proofs to use this framework.</p> 
+ 
+<p>The following example shows how to use the macro <span class="v">def-dag-measure</span> 
+provided by this book:</p> 
+<pre class="code">(<a href="ACL2____DEF-DAG-MEASURE.html">def-dag-measure</a> algraph
+  :graph-formals (graph)
+  :successors-expr (<a href="COMMON-LISP____CDR.html">cdr</a> (<a href="ACL2____ASSOC-EQ.html">assoc-eq</a> x graph))
+  :nodes-expr (<a href="ACL2____STRIP-CARS.html">strip-cars</a> graph)
+  :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____ALISTP.html">alistp</a> graph) (symbol-list-listp (<a href="ACL2____STRIP-CDRS.html">strip-cdrs</a> graph)))
+  :node-guard (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> x)
+  :node-list-guard (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> x))</pre> 
+ 
+<p>In the above example:</p> 
+<ul> 
+<li>
+<span class="v">algraph</span> is the base name that will be used for the functions 
+produced</li> 
+<li>The <span class="v">:graph-formals</span> are a list of extra arguments required in 
+each function that operates on a graph.</li> 
+<li>
+<span class="v">:successors-expr</span> and <span class="v">:nodes-expr</span> describe the representation of the 
+graph: <span class="v">:successors-expr</span> is an expression that, given graph node <span class="v">x</span>, 
+returns the list of successors of <span class="v">x</span>, and <span class="v">:nodes-expr</span> is an expression 
+that produces the full list of nodes of the graph.</li> 
+<li>
+<span class="v">:guard</span>, <span class="v">:node-guard</span>, and <span class="v">:node-list-guard</span> specify guards for 
+the functions.</li> 
+</ul> 
+ 
+<p>This produces the following functions:</p> 
+<ul> 
+<li>
+<span class="v">(algraph-loopfree-p x graph)</span> and <span class="v">(algraph-loopfreelist-p x graph)</span> return <span class="v">t</span> if the portion of the graph reachable from (node, resp. node list) <span class="v">x</span> is acyclic.  These are guard-verified fast (?) executable functions that do a linear time and space traversal of the graph.  Theorems are provided showing that if a node is loop free, then its successors are loop free.</li> 
+<li>
+<span class="v">(algraph-measure x graph)</span> and <span class="v">(algraph-list-measure x graph)</span> are measure functions that can be used as the <span class="v">node-measure</span> and <span class="v">node-list-measure</span> in mutual recursions such as <span class="v">traverse</span> above.</li> 
+</ul> 
+ 
+<p>An example of how to use these functions to admit a simple node-count function is also provided by the macro, and reproduced here:</p> 
+<pre class="code">(<a href="ACL2____MUTUAL-RECURSION.html">mutual-recursion</a>
+ (<a href="COMMON-LISP____DEFUN.html">defun</a> algraph-count (x graph)
+   (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :measure (algraph-measure x graph)
+                   :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____ALISTP.html">alistp</a> graph)
+                               (symbol-list-listp (<a href="ACL2____STRIP-CDRS.html">strip-cdrs</a> graph))
+                               (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> x)
+                               (algraph-loopfree-p x graph))))
+   (<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2____MBT.html">mbt</a> (algraph-loopfree-p x graph))
+       (<a href="COMMON-LISP_____B2.html">+</a> 1 (algraph-count-list (<a href="COMMON-LISP____CDR.html">cdr</a> (<a href="ACL2____ASSOC-EQ.html">assoc-eq</a> x graph)) graph))
+     0))
+ (<a href="COMMON-LISP____DEFUN.html">defun</a> algraph-count-list (x graph)
+   (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :measure (algraph-list-measure x graph)
+                   :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____ALISTP.html">alistp</a> graph)
+                               (symbol-list-listp (<a href="ACL2____STRIP-CDRS.html">strip-cdrs</a> graph))
+                               (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> x)
+                               (algraph-loopfreelist-p x graph))))
+   (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ATOM.html">atom</a> x)
+       0
+     (<a href="COMMON-LISP_____B2.html">+</a> (algraph-count (<a href="COMMON-LISP____CAR.html">car</a> x) graph)
+        (algraph-count-list (<a href="COMMON-LISP____CDR.html">cdr</a> x) graph)))))</pre> 
+
+</body>
+</html>

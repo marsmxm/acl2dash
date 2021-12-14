@@ -1,0 +1,187 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>4v-onehot-sexpr-list-prime</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____4V-ONEHOT-SEXPR-LIST-PRIME">Click for 4v-onehot-sexpr-list-prime in the Full Manual</a></h3>
+
+<p>Efficiently reduce a list of sexprs under the assumption that some 
+variables are one-hot.</p><p>Logically, this function does nothing more than compute <a href="ACL2____4V-ONEHOT-SEXPR-PRIME.html">4v-onehot-sexpr-prime</a> for each sexpr in a list.</p> 
+ 
+<p>With <a href="ACL2____MBE.html">mbe</a> we do something tricky for better performance.  The real 
+function we execute is basically a wide version of <a href="ACL2____4V-ONEHOT-SEXPR-PRIME.html">4v-onehot-sexpr-prime</a>'s auxilliary function.</p> 
+ 
+<p>What is this performance hack all about?  Our main goal in onehot rewriting 
+is to simplify the update functions of modules that have one-hot inputs.  In 
+this context, we have some particular set of variables that we think are 
+one-hot, say <span class="v">A1...An</span>, and a whole list of (related) update functions, 
+represented as the s-expressions <span class="v">S1...Sk</span>.</p> 
+ 
+<p>We want to apply our onehot rewrite on on each of these expressions. The 
+simplest thing to do would be to call <a href="ACL2____4V-ONEHOT-RW-SEXPR.html">4v-onehot-rw-sexpr</a> on each 
+expression and just cons together the results, as in the logical definition. 
+But if we do this, then we are likely going to miss out on many opportunities 
+to reuse memoized results.</p> 
+ 
+<p>Why?  The problem is that each sexpr needs to be restrict/rewritten with a 
+number of alists.  Recall that we effectively replace each sexpr with:</p> 
+ 
+<pre class="code">(ITE* A1 SEXPR|_{A1=T,A2=NIL,A3=NIL,...AN=NIL)
+ (ITE* A2 SEXPR|_{A1=NIL,A2=T,A3=NIL,...AN=NIL}
+  ...
+   (ITE* AN SEXPR|_{A1=NIL,A2=NIL,A3=NIL,...,AN=T} (X)) ...))</pre> 
+ 
+<p>But these alists only depend on the variables <span class="v">Ai</span>, not on the sexprs 
+<span class="v">Si</span>.  For better performance, we want to use the same alist to rewrite all 
+of the sexprs at once, since there is presumably a lot of sharing between the 
+update functions.  It turns out this optimization is not too bad to 
+implement.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>4v-onehot-sexpr-list-prime-exec</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ 4v-onehot-sexpr-list-prime-exec
+ (vars false-bindings sexprs)
+ "Returns SEXPRS'"
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t))
+ (<a href="ACL2____B_A2.html">b*</a> (((when (<a href="COMMON-LISP____ATOM.html">atom</a> vars))
+       (<a href="ACL2____FAST-ALIST-FREE.html">fast-alist-free</a> false-bindings)
+       (<a href="ACL2____REPLICATE.html">replicate</a> (<a href="ACL2____LEN.html">len</a> sexprs) (<a href="ACL2____4VS-X.html">4vs-x</a>)))
+      (var (<a href="COMMON-LISP____CAR.html">car</a> vars))
+      (bindings (<a href="ACL2____HONS-ACONS.html">hons-acons</a> var (<a href="ACL2____4VS-T.html">4vs-t</a>) false-bindings))
+      (sexprs/bindings
+           (4v-sexpr-restrict-with-rw-list sexprs bindings))
+      (<a href="COMMON-LISP____-.html">-</a> (<a href="ACL2____CLEAR-MEMOIZE-TABLE.html">clear-memoize-table</a> '4v-sexpr-restrict-with-rw))
+      (false-bindings (<a href="ACL2____HONS-ACONS.html">hons-acons</a> var (<a href="ACL2____4VS-F.html">4vs-f</a>) bindings)))
+     (<a href="ACL2____4VS-ITE_A2-LIST-DUMB.html">4vs-ite*-list-dumb</a>
+          (<a href="COMMON-LISP____CAR.html">car</a> vars)
+          sexprs/bindings
+          (4v-onehot-sexpr-list-prime-exec (<a href="COMMON-LISP____CDR.html">cdr</a> vars)
+                                           false-bindings sexprs))))</pre> 
+<p><b>Theorem: </b>alist-equiv-implies-equal-4v-onehot-sexpr-list-prime-exec-2</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ alist-equiv-implies-equal-4v-onehot-sexpr-list-prime-exec-2
+ (<a href="ACL2____IMPLIES.html">implies</a>
+   (<a href="ACL2____ALIST-EQUIV.html">alist-equiv</a> false-bindings false-bindings-equiv)
+   (<a href="COMMON-LISP____EQUAL.html">equal</a>
+        (4v-onehot-sexpr-list-prime-exec vars false-bindings sexprs)
+        (4v-onehot-sexpr-list-prime-exec
+             vars false-bindings-equiv sexprs)))
+ :rule-classes (:congruence))</pre> 
+<p><b>Theorem: </b>len-of-4v-onehot-sexpr-list-prime-exec</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ len-of-4v-onehot-sexpr-list-prime-exec
+ (<a href="COMMON-LISP____EQUAL.html">equal</a>
+  (<a href="ACL2____LEN.html">len</a> (4v-onehot-sexpr-list-prime-exec vars false-bindings sexprs))
+  (<a href="ACL2____LEN.html">len</a> sexprs)))</pre> 
+<p><b>Function: </b>4v-onehot-sexpr-list-prime-aux</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ 4v-onehot-sexpr-list-prime-aux
+ (vars false-bindings sexprs)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t))
+ (<a href="ACL2____MBE.html">mbe</a>
+  :logic
+  (<a href="COMMON-LISP____IF.html">if</a>
+   (<a href="COMMON-LISP____ATOM.html">atom</a> sexprs)
+   nil
+   (<a href="COMMON-LISP____CONS.html">cons</a>
+        (4v-onehot-sexpr-prime-aux vars false-bindings (<a href="COMMON-LISP____CAR.html">car</a> sexprs))
+        (4v-onehot-sexpr-list-prime-aux
+             vars false-bindings (<a href="COMMON-LISP____CDR.html">cdr</a> sexprs))))
+  :exec
+  (4v-onehot-sexpr-list-prime-exec vars false-bindings sexprs)))</pre> 
+<p><b>Theorem: </b>4v-onehot-sexpr-list-prime-exec-removal</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+  4v-onehot-sexpr-list-prime-exec-removal
+  (<a href="COMMON-LISP____EQUAL.html">equal</a>
+       (4v-onehot-sexpr-list-prime-exec vars false-bindings sexprs)
+       (4v-onehot-sexpr-list-prime-aux vars false-bindings sexprs)))</pre> 
+<p><b>Function: </b>4v-onehot-sexpr-list-prime</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ 4v-onehot-sexpr-list-prime (vars sexprs)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____ATOM-LISTP.html">atom-listp</a> vars)
+                             (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> nil vars)))))
+ (<a href="ACL2____MBE.html">mbe</a>
+   :logic (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ATOM.html">atom</a> sexprs)
+              nil
+              (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="ACL2____4V-ONEHOT-SEXPR-PRIME.html">4v-onehot-sexpr-prime</a> vars (<a href="COMMON-LISP____CAR.html">car</a> sexprs))
+                    (<a href="ACL2____4V-ONEHOT-SEXPR-LIST-PRIME.html">4v-onehot-sexpr-list-prime</a> vars (<a href="COMMON-LISP____CDR.html">cdr</a> sexprs))))
+   :exec (4v-onehot-sexpr-list-prime-aux
+              vars
+              (<a href="ACL2____MAKE-FAST-ALIST.html">make-fast-alist</a> (4v-onehot-false-bindings vars))
+              sexprs)))</pre> 
+<p><b>Theorem: </b>4v-onehot-sexpr-list-prime-of-take</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     4v-onehot-sexpr-list-prime-of-take
+     (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> (<a href="ACL2____NFIX.html">nfix</a> n) (<a href="ACL2____LEN.html">len</a> x))
+              (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____4V-ONEHOT-SEXPR-LIST-PRIME.html">4v-onehot-sexpr-list-prime</a> vars (<a href="ACL2____TAKE.html">take</a> n x))
+                     (<a href="ACL2____TAKE.html">take</a> n (<a href="ACL2____4V-ONEHOT-SEXPR-LIST-PRIME.html">4v-onehot-sexpr-list-prime</a> vars x))))
+     :rule-classes ((:rewrite)))</pre> 
+<p><b>Theorem: </b>set-equiv-congruence-over-4v-onehot-sexpr-list-prime</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> set-equiv-congruence-over-4v-onehot-sexpr-list-prime
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____SET-EQUIV.html">set-equiv</a> x y)
+                 (<a href="ACL2____SET-EQUIV.html">set-equiv</a> (<a href="ACL2____4V-ONEHOT-SEXPR-LIST-PRIME.html">4v-onehot-sexpr-list-prime</a> vars x)
+                            (<a href="ACL2____4V-ONEHOT-SEXPR-LIST-PRIME.html">4v-onehot-sexpr-list-prime</a> vars y)))
+        :rule-classes ((:congruence)))</pre> 
+<p><b>Theorem: </b>subsetp-of-4v-onehot-sexpr-list-prime-when-subsetp</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> subsetp-of-4v-onehot-sexpr-list-prime-when-subsetp
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____SUBSETP.html">subsetp</a> x y)
+                 (<a href="COMMON-LISP____SUBSETP.html">subsetp</a> (<a href="ACL2____4V-ONEHOT-SEXPR-LIST-PRIME.html">4v-onehot-sexpr-list-prime</a> vars x)
+                          (<a href="ACL2____4V-ONEHOT-SEXPR-LIST-PRIME.html">4v-onehot-sexpr-list-prime</a> vars y)))
+        :rule-classes ((:rewrite)))</pre> 
+<p><b>Theorem: </b>member-of-4v-onehot-sexpr-prime-in-4v-onehot-sexpr-list-prime</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     member-of-4v-onehot-sexpr-prime-in-4v-onehot-sexpr-list-prime
+     (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____MEMBER.html">member</a> k x)
+              (<a href="COMMON-LISP____MEMBER.html">member</a> (<a href="ACL2____4V-ONEHOT-SEXPR-PRIME.html">4v-onehot-sexpr-prime</a> vars k)
+                      (<a href="ACL2____4V-ONEHOT-SEXPR-LIST-PRIME.html">4v-onehot-sexpr-list-prime</a> vars x)))
+     :rule-classes ((:rewrite)))</pre> 
+<p><b>Theorem: </b>4v-onehot-sexpr-list-prime-of-rev</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> 4v-onehot-sexpr-list-prime-of-rev
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____4V-ONEHOT-SEXPR-LIST-PRIME.html">4v-onehot-sexpr-list-prime</a> vars (<a href="ACL2____REV.html">rev</a> x))
+               (<a href="ACL2____REV.html">rev</a> (<a href="ACL2____4V-ONEHOT-SEXPR-LIST-PRIME.html">4v-onehot-sexpr-list-prime</a> vars x)))
+        :rule-classes ((:rewrite)))</pre> 
+<p><b>Theorem: </b>4v-onehot-sexpr-list-prime-of-list-fix</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> 4v-onehot-sexpr-list-prime-of-list-fix
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____4V-ONEHOT-SEXPR-LIST-PRIME.html">4v-onehot-sexpr-list-prime</a> vars (<a href="ACL2____LIST-FIX.html">list-fix</a> x))
+               (<a href="ACL2____4V-ONEHOT-SEXPR-LIST-PRIME.html">4v-onehot-sexpr-list-prime</a> vars x))
+        :rule-classes ((:rewrite)))</pre> 
+<p><b>Theorem: </b>4v-onehot-sexpr-list-prime-of-append</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> 4v-onehot-sexpr-list-prime-of-append
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____4V-ONEHOT-SEXPR-LIST-PRIME.html">4v-onehot-sexpr-list-prime</a> vars (<a href="COMMON-LISP____APPEND.html">append</a> a b))
+               (<a href="COMMON-LISP____APPEND.html">append</a> (<a href="ACL2____4V-ONEHOT-SEXPR-LIST-PRIME.html">4v-onehot-sexpr-list-prime</a> vars a)
+                       (<a href="ACL2____4V-ONEHOT-SEXPR-LIST-PRIME.html">4v-onehot-sexpr-list-prime</a> vars b)))
+        :rule-classes ((:rewrite)))</pre> 
+<p><b>Theorem: </b>cdr-of-4v-onehot-sexpr-list-prime</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> cdr-of-4v-onehot-sexpr-list-prime
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____CDR.html">cdr</a> (<a href="ACL2____4V-ONEHOT-SEXPR-LIST-PRIME.html">4v-onehot-sexpr-list-prime</a> vars x))
+               (<a href="ACL2____4V-ONEHOT-SEXPR-LIST-PRIME.html">4v-onehot-sexpr-list-prime</a> vars (<a href="COMMON-LISP____CDR.html">cdr</a> x)))
+        :rule-classes ((:rewrite)))</pre> 
+<p><b>Theorem: </b>car-of-4v-onehot-sexpr-list-prime</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> car-of-4v-onehot-sexpr-list-prime
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____CAR.html">car</a> (<a href="ACL2____4V-ONEHOT-SEXPR-LIST-PRIME.html">4v-onehot-sexpr-list-prime</a> vars x))
+               (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x)
+                    (<a href="ACL2____4V-ONEHOT-SEXPR-PRIME.html">4v-onehot-sexpr-prime</a> vars (<a href="COMMON-LISP____CAR.html">car</a> x))))
+        :rule-classes ((:rewrite)))</pre> 
+<p><b>Theorem: </b>4v-onehot-sexpr-list-prime-under-iff</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> 4v-onehot-sexpr-list-prime-under-iff
+        (<a href="ACL2____IFF.html">iff</a> (<a href="ACL2____4V-ONEHOT-SEXPR-LIST-PRIME.html">4v-onehot-sexpr-list-prime</a> vars x)
+             (<a href="COMMON-LISP____CONSP.html">consp</a> x))
+        :rule-classes ((:rewrite)))</pre> 
+<p><b>Theorem: </b>consp-of-4v-onehot-sexpr-list-prime</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> consp-of-4v-onehot-sexpr-list-prime
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____CONSP.html">consp</a> (<a href="ACL2____4V-ONEHOT-SEXPR-LIST-PRIME.html">4v-onehot-sexpr-list-prime</a> vars x))
+               (<a href="COMMON-LISP____CONSP.html">consp</a> x))
+        :rule-classes ((:rewrite)))</pre> 
+<p><b>Theorem: </b>len-of-4v-onehot-sexpr-list-prime</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> len-of-4v-onehot-sexpr-list-prime
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____LEN.html">len</a> (<a href="ACL2____4V-ONEHOT-SEXPR-LIST-PRIME.html">4v-onehot-sexpr-list-prime</a> vars x))
+               (<a href="ACL2____LEN.html">len</a> x))
+        :rule-classes ((:rewrite)))</pre> 
+<p><b>Theorem: </b>true-listp-of-4v-onehot-sexpr-list-prime</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> true-listp-of-4v-onehot-sexpr-list-prime
+        (<a href="ACL2____TRUE-LISTP.html">true-listp</a> (<a href="ACL2____4V-ONEHOT-SEXPR-LIST-PRIME.html">4v-onehot-sexpr-list-prime</a> vars x))
+        :rule-classes :type-prescription)</pre> 
+<p><b>Theorem: </b>4v-onehot-sexpr-list-prime-when-not-consp</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> 4v-onehot-sexpr-list-prime-when-not-consp
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x))
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____4V-ONEHOT-SEXPR-LIST-PRIME.html">4v-onehot-sexpr-list-prime</a> vars x)
+                        nil))
+        :rule-classes ((:rewrite)))</pre> 
+<p><b>Theorem: </b>4v-onehot-sexpr-list-prime-of-cons</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> 4v-onehot-sexpr-list-prime-of-cons
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____4V-ONEHOT-SEXPR-LIST-PRIME.html">4v-onehot-sexpr-list-prime</a> vars (<a href="COMMON-LISP____CONS.html">cons</a> a b))
+               (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="ACL2____4V-ONEHOT-SEXPR-PRIME.html">4v-onehot-sexpr-prime</a> vars a)
+                     (<a href="ACL2____4V-ONEHOT-SEXPR-LIST-PRIME.html">4v-onehot-sexpr-list-prime</a> vars b)))
+        :rule-classes ((:rewrite)))</pre> 
+<p><b>Theorem: </b>4v-sexpr-vars-list-of-4v-onehot-sexpr-list-prime</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ 4v-sexpr-vars-list-of-4v-onehot-sexpr-list-prime
+ (<a href="ACL2____IMPLIES.html">implies</a>
+  (<a href="ACL2____ATOM-LISTP.html">atom-listp</a> vars)
+  (<a href="ACL2____SUBSETP-EQUAL.html">subsetp-equal</a>
+       (<a href="ACL2____4V-SEXPR-VARS-LIST.html">4v-sexpr-vars-list</a> (<a href="ACL2____4V-ONEHOT-SEXPR-LIST-PRIME.html">4v-onehot-sexpr-list-prime</a> vars sexprs))
+       (<a href="COMMON-LISP____APPEND.html">append</a> vars (<a href="ACL2____4V-SEXPR-VARS-LIST.html">4v-sexpr-vars-list</a> sexprs)))))</pre> 
+
+</body>
+</html>

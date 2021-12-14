@@ -1,0 +1,134 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Q-and</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____Q-AND">Click for Q-and in the Full Manual</a></h3>
+
+<p><span class="tt">(q-and &amp;rest args)</span> constructs a UBDD representing the conjunction of its 
+arguments.</p><p>In the logic,</p> 
+ 
+<pre class="code">(<a href="ACL2____Q-AND.html">Q-AND</a>)        = T
+(<a href="ACL2____Q-AND.html">Q-AND</a> X)      = X
+(<a href="ACL2____Q-AND.html">Q-AND</a> X Y)   = (Q-BINARY-AND X Y)
+(<a href="ACL2____Q-AND.html">Q-AND</a> X Y Z) = (Q-BINARY-AND X (Q-BINARY-AND Y Z))
+... etc ...</pre> 
+ 
+<p>But as a special optimization, in the execution, when there is more than one 
+argument, we can sometimes "short-circuit" the computation and avoid 
+evaluating some arguments.  In particular, we classify the arguments as cheap 
+or expensive using <a href="ACL2____CHEAP-AND-EXPENSIVE-ARGUMENTS.html">cheap-and-expensive-arguments</a>.  We then arrange 
+things so that the cheap arguments are considered first.  If any cheap argument 
+is <span class="v">nil</span>, we can stop before any expensive arguments even need to be 
+computed.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>q-binary-and</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> q-binary-and (x y)
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t))
+       (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____ATOM.html">atom</a> x)
+              (<a href="COMMON-LISP____IF.html">if</a> x (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ATOM.html">atom</a> y) (<a href="COMMON-LISP____IF.html">if</a> y t nil) y) nil))
+             ((<a href="COMMON-LISP____ATOM.html">atom</a> y) (<a href="COMMON-LISP____IF.html">if</a> y x nil))
+             ((<a href="ACL2____HONS-EQUAL.html">hons-equal</a> x y) x)
+             (t (<a href="ACL2____QCONS.html">qcons</a> (q-binary-and (<a href="COMMON-LISP____CAR.html">car</a> x) (<a href="COMMON-LISP____CAR.html">car</a> y))
+                       (q-binary-and (<a href="COMMON-LISP____CDR.html">cdr</a> x) (<a href="COMMON-LISP____CDR.html">cdr</a> y))))))</pre> 
+<p><b>Function: </b>q-and-macro-logic-part</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+     q-and-macro-logic-part (<a href="ACL2____ARGS.html">args</a>)
+     (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____ATOM.html">atom</a> args) t)
+           ((<a href="COMMON-LISP____ATOM.html">atom</a> (<a href="COMMON-LISP____CDR.html">cdr</a> args)) (<a href="COMMON-LISP____CAR.html">car</a> args))
+           (t (<a href="COMMON-LISP____CONS.html">cons</a> 'q-binary-and
+                    (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CAR.html">car</a> args)
+                          (<a href="COMMON-LISP____CONS.html">cons</a> (q-and-macro-logic-part (<a href="COMMON-LISP____CDR.html">cdr</a> args))
+                                'nil))))))</pre> 
+<p><b>Function: </b>q-and-macro-exec-part</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ q-and-macro-exec-part (<a href="ACL2____ARGS.html">args</a>)
+ (<a href="COMMON-LISP____COND.html">cond</a>
+  ((<a href="COMMON-LISP____ATOM.html">atom</a> args) t)
+  ((<a href="COMMON-LISP____ATOM.html">atom</a> (<a href="COMMON-LISP____CDR.html">cdr</a> args)) (<a href="COMMON-LISP____CAR.html">car</a> args))
+  (t
+   (<a href="COMMON-LISP____CONS.html">cons</a>
+    'let
+    (<a href="COMMON-LISP____CONS.html">cons</a>
+     (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'q-and-x-do-not-use-elsewhere
+                 (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CAR.html">car</a> args) 'nil))
+           'nil)
+     (<a href="COMMON-LISP____CONS.html">cons</a>
+      (<a href="COMMON-LISP____CONS.html">cons</a>
+       'and
+       (<a href="COMMON-LISP____CONS.html">cons</a>
+        'q-and-x-do-not-use-elsewhere
+        (<a href="COMMON-LISP____CONS.html">cons</a>
+         (<a href="COMMON-LISP____CONS.html">cons</a>
+          'prog2$
+          (<a href="COMMON-LISP____CONS.html">cons</a>
+           (<a href="COMMON-LISP____CONS.html">cons</a> 'last-chance-wash-memory 'nil)
+           (<a href="COMMON-LISP____CONS.html">cons</a>
+                (<a href="COMMON-LISP____CONS.html">cons</a> 'q-binary-and
+                      (<a href="COMMON-LISP____CONS.html">cons</a> 'q-and-x-do-not-use-elsewhere
+                            (<a href="COMMON-LISP____CONS.html">cons</a> (q-and-macro-exec-part (<a href="COMMON-LISP____CDR.html">cdr</a> args))
+                                  'nil)))
+                'nil)))
+         'nil)))
+      'nil))))))</pre> 
+<p><b>Function: </b>q-and-macro-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ q-and-macro-fn (<a href="ACL2____ARGS.html">args</a>)
+ (<a href="COMMON-LISP____COND.html">cond</a>
+  ((<a href="COMMON-LISP____ATOM.html">atom</a> args) t)
+  ((<a href="COMMON-LISP____ATOM.html">atom</a> (<a href="COMMON-LISP____CDR.html">cdr</a> args)) (<a href="COMMON-LISP____CAR.html">car</a> args))
+  (t
+   (<a href="ACL2____MV-LET.html">mv-let</a>
+    (cheap expensive)
+    (<a href="ACL2____CHEAP-AND-EXPENSIVE-ARGUMENTS.html">cheap-and-expensive-arguments</a> args)
+    (<a href="COMMON-LISP____IF.html">if</a>
+     (<a href="COMMON-LISP____NOT.html">not</a> expensive)
+     (q-and-macro-logic-part cheap)
+     (<a href="COMMON-LISP____LET.html">let</a>
+      ((reordered-args (<a href="COMMON-LISP____APPEND.html">append</a> cheap expensive)))
+      (<a href="COMMON-LISP____CONS.html">cons</a>
+       'mbe
+       (<a href="COMMON-LISP____CONS.html">cons</a>
+            ':logic
+            (<a href="COMMON-LISP____CONS.html">cons</a> (q-and-macro-logic-part reordered-args)
+                  (<a href="COMMON-LISP____CONS.html">cons</a> ':exec
+                        (<a href="COMMON-LISP____CONS.html">cons</a> (q-and-macro-exec-part reordered-args)
+                              'nil)))))))))))</pre> 
+<p><b>Theorem: </b>ubddp-of-q-and</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> ubddp-of-q-and
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____FORCE.html">force</a> (<a href="ACL2____UBDDP.html">ubddp</a> x))
+                      (<a href="ACL2____FORCE.html">force</a> (<a href="ACL2____UBDDP.html">ubddp</a> y)))
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____UBDDP.html">ubddp</a> (<a href="ACL2____Q-AND.html">q-and</a> x y)) t)))</pre> 
+<p><b>Theorem: </b>eval-bdd-of-q-and</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> eval-bdd-of-q-and
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____EVAL-BDD.html">eval-bdd</a> (<a href="ACL2____Q-AND.html">q-and</a> x y) values)
+               (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____EVAL-BDD.html">eval-bdd</a> x values)
+                    (<a href="ACL2____EVAL-BDD.html">eval-bdd</a> y values))))</pre> 
+<p><b>Theorem: </b>canonicalize-q-and</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> canonicalize-q-and
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____FORCE.html">force</a> (<a href="ACL2____UBDDP.html">ubddp</a> x))
+                      (<a href="ACL2____FORCE.html">force</a> (<a href="ACL2____UBDDP.html">ubddp</a> y)))
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____Q-AND.html">q-and</a> x y) (<a href="ACL2____Q-ITE.html">q-ite</a> x y nil))))</pre> 
+<p><b>Theorem: </b>q-and-of-nil</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> q-and-of-nil
+        (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____Q-AND.html">q-and</a> nil x) nil)
+             (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____Q-AND.html">q-and</a> x nil) nil)))</pre> 
+<p><b>Theorem: </b>q-and-of-t-slow</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> q-and-of-t-slow
+        (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____Q-AND.html">q-and</a> t x)
+                    (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x) x (<a href="COMMON-LISP____IF.html">if</a> x t nil)))
+             (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____Q-AND.html">q-and</a> x t)
+                    (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x) x (<a href="COMMON-LISP____IF.html">if</a> x t nil)))))</pre> 
+<p><b>Theorem: </b>q-and-of-t-aggressive</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> q-and-of-t-aggressive
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____FORCE.html">force</a> (<a href="ACL2____UBDDP.html">ubddp</a> x))
+                 (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____Q-AND.html">q-and</a> t x) x)
+                      (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____Q-AND.html">q-and</a> x t) x))))</pre> 
+<p><b>Theorem: </b>q-and-symmetric</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> q-and-symmetric
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____Q-AND.html">q-and</a> x y) (<a href="ACL2____Q-AND.html">q-and</a> y x)))</pre> 
+<p><b>Function: </b>q-binary-and-memoize-condition</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> q-binary-and-memoize-condition (x y)
+       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> x y)
+                (<a href="ACL2____XARGS.html">xargs</a> :guard 't))
+       (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x) (<a href="COMMON-LISP____CONSP.html">consp</a> y)))</pre> 
+<p><b>Theorem: </b>q-and-of-self-slow</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> q-and-of-self-slow
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____Q-AND.html">q-and</a> x x)
+               (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____CONSP.html">consp</a> x) x (<a href="COMMON-LISP____IF.html">if</a> x t nil))))</pre> 
+<p><b>Theorem: </b>q-and-of-self-aggressive</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> q-and-of-self-aggressive
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____FORCE.html">force</a> (<a href="ACL2____UBDDP.html">ubddp</a> x))
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____Q-AND.html">q-and</a> x x) x)))</pre> 
+
+</body>
+</html>

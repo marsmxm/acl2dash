@@ -1,0 +1,252 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Ld</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____LD">Click for Ld in the Full Manual</a></h3>
+
+<p>The ACL2 read-eval-print loop, file loader, and <a href="ACL2____COMMAND.html">command</a> processor</p><pre class="code">Examples: 
+(LD "foo.lisp")              ; read and evaluate each form in file 
+                             ; "foo.lisp", in order 
+(LD "foo.lisp" :ld-pre-eval-print t) 
+                             ; as above, but print each form to standard 
+                             ; character output just before it is evaluated 
+ 
+General Form: 
+(LD standard-oi                  ; open obj in channel, stringp file name 
+                                 ; to open and close, or list of forms 
+                                 ; Optional keyword arguments: 
+    :dir                ...      ; directory spec if standard-oi is a string 
+    :standard-co        ...      ; open char out or file to open and close 
+    :proofs-co          ...      ; open char out or file to open and close 
+    :current-package    ...      ; known package name 
+    :ld-skip-proofsp    ...      ; nil, 'include-book, or t 
+                                 ;   (see <a href="ACL2____LD-SKIP-PROOFSP.html">ld-skip-proofsp</a>) 
+    :ld-redefinition-action ...  ; nil or '(:a . :b) 
+    :ld-prompt          ...      ; nil, t, or some prompt printer fn 
+    :ld-missing-input-ok ...     ; nil, t, :warn, or warning message 
+    :ld-pre-eval-filter ...      ; :all, :query, or some new name 
+    :ld-pre-eval-print  ...      ; nil, t, or :never 
+    :ld-post-eval-print ...      ; nil, t, or :command-conventions 
+    :ld-evisc-tuple     ...      ; nil or '(alist nil nil level length) 
+    :ld-error-triples   ...      ; nil or t 
+    :ld-error-action    ...      ; :return!, :return, :continue, :error, 
+                                 ;   or (:exit N) 
+    :ld-query-control-alist ...  ; alist supplying default responses 
+    :ld-verbose         ...)     ; nil or t 
+    :ld-user-stobjs-modified-warning ...) ; nil, t, or :same 
+ 
+</pre> 
+ 
+ <p><span class="v">Ld</span> is the top-level ACL2 read-eval-print loop.  (When you call <span class="tt"><a href="ACL2____LP.html">lp</a></span>, a little initialization is done in raw Common Lisp and then <span class="v">ld</span> is 
+ called.)  <span class="v">Ld</span> is also a general-purpose ACL2 file loader and a <a href="ACL2____COMMAND.html">command</a> interpreter.  <span class="v">Ld</span> is actually a macro that expands to a function 
+ call involving <span class="tt"><a href="ACL2____STATE.html">state</a></span>.  <span class="v">Ld</span> returns an ``error triple'' <span class="v">(<a href="ACL2____MV.html">mv</a> erp
+ val state)</span> as explained below.  (For much more on error triples, see <a href="ACL2____PROGRAMMING-WITH-STATE.html">programming-with-state</a>.)</p> 
+ 
+ <p>See <a href="ACL2____REBUILD.html">rebuild</a> for a variant of <span class="v">ld</span> that skips proofs.  See <a href="ACL2____OUTPUT-TO-FILE.html">output-to-file</a> for examples showing how to redirect output to a file.</p> 
+ 
+ <p>The arguments to <span class="v">ld</span>, except for <span class="v">:dir</span>, all happen to be global 
+ variables in <span class="tt"><a href="ACL2____STATE.html">state</a></span> (see <a href="ACL2____STATE.html">state</a> and see <a href="ACL2____PROGRAMMING-WITH-STATE.html">programming-with-state</a>).  For example, <span class="v">'</span><span class="tt"><a href="ACL2____CURRENT-PACKAGE.html">current-package</a></span> and 
+ <span class="v">'</span><span class="tt"><a href="ACL2____LD-VERBOSE.html">ld-verbose</a></span> are global variables, which may be accessed via <span class="v">(<a href="ACL2_____04.html">@</a>
+ current-package)</span> and <span class="v">(<a href="ACL2_____04.html">@</a> ld-verbose)</span>.  When <span class="v">ld</span> is called, it 
+ ``binds'' these variables.  By ``binds'' we actually mean the variables are 
+ globally set but restored to their old values on exit.  Because <span class="v">ld</span> 
+ provides the illusion of <a href="ACL2____STATE.html">state</a> global variables being bound, they are 
+ called ``<span class="v">ld</span> specials'' (after the Lisp convention of calling a variable 
+ ``special'' if it is referenced freely after having been bound).</p> 
+ 
+ <p>Note that all arguments but the first are passed via keyword.  Any variable 
+ not explicitly given a value in a call retains its pre-call value, with the 
+ exception of <span class="v">:</span><span class="tt"><a href="ACL2____LD-ERROR-ACTION.html">ld-error-action</a></span>, which generally defaults to 
+ <span class="v">:return!</span> if not explicitly specified.</p> 
+ 
+ <p>Just as an example to drive the point home: If <span class="tt"><a href="ACL2____CURRENT-PACKAGE.html">current-package</a></span> is 
+ <span class="v">"ACL2"</span> and you typed</p> 
+ 
+ <pre class="code">(<a href="ACL2____LD.html">ld</a> *standard-oi* :current-package "MY-PKG")</pre> 
+ 
+ <p>you would find yourself in (an inner) read-eval-print loop in which the 
+ <a href="ACL2____CURRENT-PACKAGE.html">current-package</a> was <span class="v">"MY-PKG"</span>.  You could operate there as long 
+ as you wished, changing the current package at will.  But when you typed 
+ <span class="v">:</span><span class="tt"><a href="ACL2____Q.html">q</a></span> you would return to the outer read-eval-print loop where the 
+ current package would still be <span class="v">"ACL2"</span>.</p> 
+ 
+ <p>Roughly speaking, <span class="v">ld</span> repeatedly reads a form from <span class="tt"><a href="ACL2____STANDARD-OI.html">standard-oi</a></span>, 
+ evaluates it, and prints its result to <span class="tt"><a href="ACL2____STANDARD-CO.html">standard-co</a></span>.  It does this 
+ until the form is <span class="v">:</span><span class="tt"><a href="ACL2____Q.html">q</a></span> or evaluates to an error triple whose value 
+ component is <span class="v">:</span><span class="tt"><a href="ACL2____Q.html">q</a></span>, or until the input channel or list is emptied. 
+ However, <span class="v">ld</span> has many bells and whistles controlled by the <span class="v">ld</span> 
+ specials.  Each such special is documented individually.  For example, see the 
+ documentation for <span class="tt"><a href="ACL2____STANDARD-OI.html">standard-oi</a></span>, <span class="tt"><a href="ACL2____CURRENT-PACKAGE.html">current-package</a></span>, <span class="tt"><a href="ACL2____LD-PRE-EVAL-PRINT.html">ld-pre-eval-print</a></span>, etc.</p> 
+ 
+ <p>A more precise description of <span class="v">ld</span> is as follows.  In the description 
+ below we use the <span class="v">ld</span> specials as variables, e.g., we say ``a form is read 
+ from <span class="tt"><a href="ACL2____STANDARD-OI.html">standard-oi</a></span>.''  By this usage we refer to the current value of 
+ the named <a href="ACL2____STATE.html">state</a> global variable, e.g., we mean ``a form is read from 
+ the current value of <span class="v">'</span><span class="tt"><a href="ACL2____STANDARD-OI.html">standard-oi</a></span>.'' This technicality has an 
+ important implication: If while interacting with <span class="v">ld</span> you change the value 
+ of one of the <span class="v">ld</span> specials, e.g., <span class="v">'</span><span class="tt"><a href="ACL2____STANDARD-OI.html">standard-oi</a></span>, you will 
+ change the behavior of <span class="v">ld</span>, e.g., subsequent input will be taken from the 
+ new value.</p> 
+ 
+ <p>Three <span class="v">ld</span> specials are treated as channels: <span class="tt"><a href="ACL2____STANDARD-OI.html">standard-oi</a></span> is 
+ treated as an object input channel and is the source of forms evaluated by 
+ <span class="v">ld</span>; <span class="tt"><a href="ACL2____STANDARD-CO.html">standard-co</a></span> and <span class="tt"><a href="ACL2____PROOFS-CO.html">proofs-co</a></span> are treated as character 
+ output channels and various flavors of output are printed to them.  However, 
+ the supplied values of these specials need not actually be channels; several 
+ special cases are recognized.</p> 
+ 
+ <p>If the supplied value of one of these is in fact an open channel of the 
+ appropriate type, that channel is used and is not closed by <span class="v">ld</span>.  If the 
+ supplied value of one of these specials is a string, the string is treated as 
+ a file name in (essentially) Unix syntax (see <a href="COMMON-LISP____PATHNAME.html">pathname</a>) and a channel 
+ of the appropriate type is opened to/from that file.  Any channel opened by 
+ <span class="v">ld</span> during the binding of the <span class="v">ld</span> specials is automatically closed by 
+ <span class="v">ld</span> upon termination.  If <span class="tt"><a href="ACL2____STANDARD-CO.html">standard-co</a></span> and <span class="tt"><a href="ACL2____PROOFS-CO.html">proofs-co</a></span> are 
+ strings that represent the same file, only one channel to that file is opened 
+ and is used for both.</p> 
+ 
+ <p>As a special convenience, when <span class="tt"><a href="ACL2____STANDARD-OI.html">standard-oi</a></span> is a string and the 
+ <span class="v">:dir</span> argument is provided and not <span class="v">nil</span>, we look up <span class="v">:dir</span> in the 
+ table of directories maintained by <span class="tt"><a href="ACL2____ADD-INCLUDE-BOOK-DIR.html">add-include-book-dir</a></span>, and prepend 
+ this directory to <span class="tt"><a href="ACL2____STANDARD-OI.html">standard-oi</a></span> to create the filename.  Note that 
+ <span class="v">standard-oi</span> must be a string that is a relative pathname, not an absolute 
+ pathname.  For example, one can write <span class="v">(<a href="ACL2____LD.html">ld</a>
+ "arithmetic/top-with-meta.lisp" :dir :system)</span> to <span class="v">ld</span> that particular 
+ <a href="ACL2____COMMUNITY-BOOKS.html">community-books</a> library.  (Of course, for certified <a href="ACL2____BOOKS.html">books</a> you 
+ should almost always use <span class="tt"><a href="ACL2____INCLUDE-BOOK.html">include-book</a></span> instead of <span class="v">ld</span>.)  If 
+ <span class="v">:dir</span> is not specified, then a relative pathname is resolved using the 
+ connected book directory; see <a href="ACL2____CBD.html">cbd</a>.  If you want to load a list of 
+ forms, then consider prepending a call of <span class="tt"><a href="ACL2____SET-CBD.html">set-cbd</a></span> to that list rather 
+ than using <span class="v">:dir</span>, which is not supported when <span class="v">standard-oi</span> is a 
+ list.</p> 
+ 
+ <p>Several other alternatives are allowed for <span class="tt"><a href="ACL2____STANDARD-OI.html">standard-oi</a></span>.  If <span class="tt"><a href="ACL2____STANDARD-OI.html">standard-oi</a></span> is a true list then it is taken as the list of forms to be 
+ processed.  If <span class="tt"><a href="ACL2____STANDARD-OI.html">standard-oi</a></span> is a list ending in an open channel, then 
+ <span class="v">ld</span> processes the forms in the list and then reads and processes the forms 
+ from the channel.  Analogously, if <span class="tt"><a href="ACL2____STANDARD-OI.html">standard-oi</a></span> is a list ending a 
+ string, an object input channel from the named file is opened and <span class="v">ld</span> 
+ processes the forms in the list followed by the forms in the file.  That 
+ channel is closed upon termination of <span class="v">ld</span>.</p> 
+ 
+ <p>In the cases that a string is to be converted to an object input channel 
+ — that is, when <span class="tt"><a href="ACL2____STANDARD-OI.html">standard-oi</a></span> is a string or is a list ending in a 
+ string — an error occurs by default if the conversion fails, presumably 
+ because the file named by the string does not exist.  However, if keyword 
+ argument <span class="v">:ld-missing-input-ok</span> is <span class="v">t</span>, then <span class="v">ld</span> immediately returns 
+ without error in this case, but without reading or executing any forms, as 
+ though <span class="v">standard-oi</span> is <span class="v">nil</span> and keyword arguments <span class="v">:ld-verbose</span> and 
+ <span class="v">:ld-prompt</span> both have value <span class="v">nil</span>.  The other legal values for 
+ <span class="v">:ld-missing-input-ok</span> are <span class="v">nil</span>, which gives the default behavior, and 
+ <span class="v">:warn</span>, which behaves the same as <span class="v">t</span> except that a warning is printed, 
+ which contains the same information as would be printed for the default error 
+ described above.</p> 
+ 
+ <p>The remaining <span class="v">ld</span> specials are handled more simply and generally have 
+ to be bound to one of a finite number of tokens described in the <span class="v">:</span><span class="tt"><a href="ACL2____DOC.html">doc</a></span> entries for each <span class="v">ld</span> special.  Should any <span class="v">ld</span> special be supplied 
+ an inappropriate value, an error message is printed.</p> 
+ 
+ <p>Next, if <span class="tt"><a href="ACL2____LD-VERBOSE.html">ld-verbose</a></span> is <span class="v">t</span>, <span class="v">ld</span> prints the message ``ACL2 
+ loading name'' where <span class="v">name</span> names the file or channel from which forms are 
+ being read.  At the conclusion of <span class="v">ld</span>, it will print ``Finished loading 
+ name'' if <span class="tt"><a href="ACL2____LD-VERBOSE.html">ld-verbose</a></span> is <span class="v">t</span>.</p> 
+ 
+ <p>One may generally omit <span class="v">ld-user-stobjs-modified-warning</span> except when 
+ calling <span class="v">ld</span> in the body of a definition.  In that case this keyword 
+ argument is required, and the value <span class="v">t</span> is recommended.  With that value, a 
+ warning will generally be printed if a user-defined <a href="ACL2____STOBJ.html">stobj</a> is modified 
+ by the call of <span class="v">ld</span>; value <span class="v">nil</span> avoids such warnings, and value 
+ <span class="v">:same</span> causes the value to be inherited from the existing value (generally 
+ from a superior call of <span class="v">ld</span>).  A discussion of these warnings is highly 
+ recommended reading before you give a value other than <span class="v">t</span>; see <a href="ACL2____USER-STOBJS-MODIFIED-WARNINGS.html">user-stobjs-modified-warnings</a>.</p> 
+ 
+ <p>Finally, <span class="v">ld</span> repeatedly executes the ACL2 read-eval-print step, which 
+ may be described as follows.  A <a href="ACL2____PROMPT.html">prompt</a> is printed to <span class="tt"><a href="ACL2____STANDARD-CO.html">standard-co</a></span> if <span class="tt"><a href="ACL2____LD-PROMPT.html">ld-prompt</a></span> is non-<span class="v">nil</span>.  The format of the <a href="ACL2____PROMPT.html">prompt</a> is determined by <span class="tt"><a href="ACL2____LD-PROMPT.html">ld-prompt</a></span>.  If it is <span class="v">t</span>, the default ACL2 
+ <a href="ACL2____PROMPT.html">prompt</a> is used.  If it is any other non-<span class="v">nil</span> value then it is 
+ treated as an ACL2 function that will print the desired <a href="ACL2____PROMPT.html">prompt</a>.  See 
+ <a href="ACL2____LD-PROMPT.html">ld-prompt</a>.  In the exceptional case where <span class="v">ld</span>'s input is coming 
+ from the terminal <span class="v">(<a href="ACL2_____A2STANDARD-OI_A2.html">*standard-oi*</a>)</span> but its output is going to a different 
+ sink (i.e., <span class="tt"><a href="ACL2____STANDARD-CO.html">standard-co</a></span> is not <span class="tt"><a href="ACL2_____A2STANDARD-CO_A2.html">*standard-co*</a></span>), we also print 
+ the <a href="ACL2____PROMPT.html">prompt</a> to the terminal.</p> 
+ 
+ <p><span class="v">Ld</span> then reads a form from <span class="tt"><a href="ACL2____STANDARD-OI.html">standard-oi</a></span>.  If the object read is 
+ a keyword, <span class="v">ld</span> constructs a ``keyword command form'' by possibly reading 
+ several more objects.  See <a href="ACL2____KEYWORD-COMMANDS.html">keyword-commands</a>.  This construction process 
+ is sensitive to the value of <span class="tt"><a href="ACL2____LD-KEYWORD-ALIASES.html">ld-keyword-aliases</a></span>.  See <a href="ACL2____LD-KEYWORD-ALIASES.html">ld-keyword-aliases</a>.  Otherwise, the object read is treated as the command 
+ form.</p> 
+ 
+ <p><span class="v">Ld</span> next decides whether to evaluate or skip this form, depending on 
+ <span class="tt"><a href="ACL2____LD-PRE-EVAL-FILTER.html">ld-pre-eval-filter</a></span>.  Initially, the filter must be either <span class="v">:all</span>, 
+ <span class="v">:query</span>, or a new name.  If it is <span class="v">:all</span>, it means all forms are 
+ evaluated.  If it is <span class="v">:query</span>, it means each form that is read is displayed 
+ and the user is queried.  Otherwise, the filter is a name and each form that 
+ is read is evaluated as long as the name remains new, but if the name is ever 
+ introduced then no more forms are read and <span class="v">ld</span> terminates.  See <a href="ACL2____LD-PRE-EVAL-FILTER.html">ld-pre-eval-filter</a>.</p> 
+ 
+ <p>If the form is to be evaluated, then <span class="v">ld</span> first prints the form to 
+ <span class="tt"><a href="ACL2____STANDARD-CO.html">standard-co</a></span>, if <span class="tt"><a href="ACL2____LD-PRE-EVAL-PRINT.html">ld-pre-eval-print</a></span> is <span class="v">t</span>.  With this 
+ feature, <span class="v">ld</span> can process an input file or form list and construct a script 
+ of the session that appears as though each form was typed in.  See <a href="ACL2____LD-PRE-EVAL-PRINT.html">ld-pre-eval-print</a>.</p> 
+ 
+ <p><span class="v">Ld</span> then evaluates the form, with <span class="tt"><a href="ACL2____STATE.html">state</a></span> bound to the current 
+ <a href="ACL2____STATE.html">state</a>.  The result is some list of (multiple) values.  If a <a href="ACL2____STATE.html">state</a> is among the values, then <span class="v">ld</span> uses that <a href="ACL2____STATE.html">state</a> as the 
+ subsequent current <a href="ACL2____STATE.html">state</a>.</p> 
+ 
+ <p>Depending on <span class="tt"><a href="ACL2____LD-ERROR-TRIPLES.html">ld-error-triples</a></span>, <span class="v">ld</span> may interpret the result as 
+ an ``error.''  See <a href="ACL2____LD-ERROR-TRIPLES.html">ld-error-triples</a>.  We first discuss <span class="v">ld</span>'s 
+ behavior if no error signal is detected (either because none was sent or 
+ because <span class="v">ld</span> is ignoring them because <span class="tt"><a href="ACL2____LD-ERROR-TRIPLES.html">ld-error-triples</a></span> is 
+ <span class="v">nil</span>).</p> 
+ 
+ <p>In the case of a non-erroneous result, <span class="v">ld</span> does two things: First, if 
+ the logical <a href="ACL2____WORLD.html">world</a> in the now current <a href="ACL2____STATE.html">state</a> is different than the 
+ <a href="ACL2____WORLD.html">world</a> before execution of the form, <span class="v">ld</span> adds to the <a href="ACL2____WORLD.html">world</a> a 
+ ``<a href="ACL2____COMMAND.html">command</a> landmark'' containing the form evaluated.  See <a href="ACL2____COMMAND-DESCRIPTOR.html">command-descriptor</a>.  Second, <span class="v">ld</span> prints the result to <span class="tt"><a href="ACL2____STANDARD-CO.html">standard-co</a></span>, but only if <span class="tt"><a href="ACL2____LD-POST-EVAL-PRINT.html">ld-post-eval-print</a></span> is not <span class="v">nil</span>.  The 
+ result is printed as a list of (multiple) values unless <span class="tt"><a href="ACL2____LD-POST-EVAL-PRINT.html">ld-post-eval-print</a></span> is <span class="v">:command-conventions</span>, <span class="tt"><a href="ACL2____LD-ERROR-TRIPLES.html">ld-error-triples</a></span> is 
+ <span class="v">t</span>, and the result is an <a href="ACL2____ERROR-TRIPLE.html">error-triple</a>, i.e., of the form <span class="v">(<a href="ACL2____MV.html">mv</a> * *
+ state)</span>.  In that case, only the non-erroneous ``value'' component of the 
+ result is printed.  See <a href="ACL2____LD-POST-EVAL-PRINT.html">ld-post-eval-print</a>.</p> 
+ 
+ <p>Whenever <span class="v">ld</span> prints anything (whether the input form, a query, or some 
+ results) it ``eviscerates'' it if <span class="v">ld-evisc-tuple</span> is non-<span class="v">nil</span>. 
+ Essentially, evisceration is a generalization of Common Lisp's use of 
+ <span class="v">*print-level*</span> and <span class="v">*print-length*</span> to hide large substructures.  See 
+ <a href="ACL2____EVISC-TUPLE.html">evisc-tuple</a> and also see <a href="ACL2____SET-IPRINT.html">set-iprint</a>.</p> 
+ 
+ <p>We now return to the case of a form whose evaluation signals an error.  In 
+ this case, <span class="v">ld</span> first restores the ACL2 logical <a href="ACL2____WORLD.html">world</a> to what it was 
+ just before the erroneous form was evaluated.  Thus, a form that partially 
+ changes the <a href="ACL2____WORLD.html">world</a> (i.e., begins to store properties) and then signals 
+ an error, has no effect on the <a href="ACL2____WORLD.html">world</a>.  You may see this happen on <a href="ACL2____COMMAND.html">command</a>s that execute several <a href="ACL2____EVENTS.html">events</a> (e.g., an <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span> or 
+ a <span class="tt"><a href="COMMON-LISP____PROGN.html">progn</a></span> of several <span class="tt"><a href="ACL2____DEFUNS.html">defuns</a></span>): even though the output makes it 
+ appear that the initial <a href="ACL2____EVENTS.html">events</a> were executed, if an error is signaled 
+ by a later event the entire block of <a href="ACL2____EVENTS.html">events</a> is discarded.</p> 
+ 
+ <p>After rolling back, <span class="v">ld</span> takes an action determined by <span class="tt"><a href="ACL2____LD-ERROR-ACTION.html">ld-error-action</a></span>.  If the action is <span class="v">:continue</span>, <span class="v">ld</span> merely iterates 
+ the read-eval-print step.  Note that nothing suggestive of the value of the 
+ ``erroneous'' form is printed.  If the action is <span class="v">:return</span>, <span class="v">ld</span> 
+ terminates normally; similarly if the action is <span class="v">:return!</span>, but a special 
+ value is returned that can cause superior <span class="v">ld</span> commands to terminate; see 
+ <a href="ACL2____LD-ERROR-ACTION.html">ld-error-action</a> for details.  If the action is <span class="v">:error</span>, <span class="v">ld</span> 
+ terminates signaling an error to its caller.  If its caller is in fact 
+ another instance of <span class="v">ld</span> and that instance is watching out for error 
+ signals, the entire <a href="ACL2____WORLD.html">world</a> created by the inner <span class="v">ld</span> will be 
+ discarded by the outer <span class="v">ld</span> if the inner <span class="v">ld</span> terminates with an 
+ error.  Note that if the action is <span class="v">(:exit N)</span>, then there is no rolling 
+ back, because ACL2 quits immediately with exit status <span class="v">N</span>.</p> 
+ 
+ <p><span class="v">Ld</span> returns an error triple, <span class="v">(<a href="ACL2____MV.html">mv</a> erp val state)</span>.  <span class="v">Erp</span> is 
+ <span class="v">t</span> or <span class="v">nil</span> indicating whether an error is being signaled.  If no 
+ error is signaled, <span class="v">val</span> is the ``reason'' <span class="v">ld</span> terminated and is one 
+ of <span class="v">:exit</span> (meaning <span class="v">:</span><span class="tt"><a href="ACL2____Q.html">q</a></span> was read), <span class="v">:eof</span> (meaning the input 
+ source was exhausted), <span class="v">:error</span> (meaning an error occurred but has been 
+ suppressed), <span class="v">:filter</span> (meaning the <span class="tt"><a href="ACL2____LD-PRE-EVAL-FILTER.html">ld-pre-eval-filter</a></span> terminated 
+ <span class="v">ld</span>), or a cons pair whose first component is the symbol <span class="v">:STOP-LD</span>, 
+ which typically indicates that an error occurred while the value of variable 
+ <span class="v">'</span><span class="tt"><a href="ACL2____LD-ERROR-ACTION.html">ld-error-action</a></span> was <span class="v">:RETURN!</span>.  See <a href="ACL2____LD-ERROR-ACTION.html">ld-error-action</a> 
+ for details of this last case.</p>
+</body>
+</html>

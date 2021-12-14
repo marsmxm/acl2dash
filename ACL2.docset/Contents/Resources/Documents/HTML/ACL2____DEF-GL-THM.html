@@ -1,0 +1,145 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Def-gl-thm</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____DEF-GL-THM">Click for Def-gl-thm in the Full Manual</a></h3>
+
+<p>Prove a theorem using GL symbolic simulation.</p><p>Usage:</p> 
+ 
+<pre class="code">(<a href="ACL2____DEF-GL-THM.html">def-gl-thm</a> &lt;theorem-name&gt;
+  :hyp &lt;hypothesis term&gt;
+  :concl &lt;conclusion term&gt;
+  :g-bindings &lt;shape spec binding alist&gt;
+
+  :rule-classes &lt;rule classes expression&gt;
+
+  :hyp-clk &lt;number&gt; :concl-clk &lt;number&gt;
+  :clause-proc &lt;clause processor name&gt;
+
+  :n-counterexamples &lt;number&gt;
+  :abort-indeterminate &lt;t or nil&gt;
+
+  ;; Hints for coverage goals:
+  :cov-theory-add &lt;theory expression&gt;
+  :do-not-expand &lt;list of functions&gt;
+  :cov-hints &lt;computed hints&gt;
+  :cov-hints-position &lt;:replace, :before, or :after&gt;
+
+  :test-side-goals &lt;t or nil&gt;)</pre> 
+ 
+<p>This form submits a <a href="ACL2____DEFTHM.html">defthm</a> event for the theorem</p> 
+ 
+<pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> &lt;hyp&gt; &lt;concl&gt;)</pre> 
+ 
+<p>and the specified rule-classes, and gives a hint to attempt to prove it by 
+symbolic execution using a GL clause processor.</p> 
+ 
+<p>Out of the list of keyword arguments recognized by this macro, three are 
+necessary: <span class="v">:hyp</span>, <span class="v">:concl</span>, and <span class="v">:g-bindings</span>.  As noted, the theorem 
+to be proved takes the form <span class="v">(<a href="ACL2____IMPLIES.html">implies</a> &lt;hyp&gt; &lt;concl&gt;)</span>.  The <span class="v">hyp</span> is also 
+used in proving coverage, explained below.</p> 
+ 
+<p>The <span class="v">:g-bindings</span> must be a term evaluating to an alist formatted as 
+follows:</p> 
+ 
+<pre class="code">((&lt;var-name1&gt;  &lt;shape-spec1&gt;)
+ (&lt;var-name2&gt;  &lt;shape-spec2&gt;)
+ ...)</pre> 
+ 
+<p>The shape specs must be well-formed as described in <a href="GL____SHAPE-SPECS.html">shape-specs</a>; 
+notably, they must not reuse BDD variable numbers or unconstrained variable 
+names.  Note also that this is not a dotted alist; the shape spec is the <a href="COMMON-LISP____CADR.html">cadr</a>, not the <a href="COMMON-LISP____CDR.html">cdr</a>, of each entry.  If any variables mentioned in the 
+theorem are not bound in this alist, they will be given an unconstrained 
+variable binding.</p> 
+ 
+<p>The symbolic objects used as the inputs to the symbolic simulation are 
+obtained by translating each shape spec into a symbolic object.  The hyp is 
+symbolically executed on these symbolic inputs.  Parametrizing the symbolic 
+objects by the resulting predicate object yields (absent any <span class="v">G-APPLY</span> or 
+<span class="v">G-VAR</span> objects) symbolic objects with coverage restricted to only inputs 
+satisfying the hyp.</p> 
+ 
+<p>Here is a simple example theorem:</p> 
+ 
+<pre class="code">(<a href="ACL2____DEF-GL-THM.html">def-gl-thm</a> commutativity-of-+-up-to-16
+   :hyp (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____NATP.html">natp</a> a) (<a href="ACL2____NATP.html">natp</a> b)
+             (<a href="COMMON-LISP_____C3.html">&lt;</a> a 16) (<a href="COMMON-LISP_____C3.html">&lt;</a> b 16))
+   :concl (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP_____B2.html">+</a> a b) (<a href="COMMON-LISP_____B2.html">+</a> b a))
+   :g-bindings '((a (:g-number (0 2 4 6 8)))
+                 (b (:g-number (1 3 5 7 9)))))</pre> 
+ 
+<p>This theorem binds its free variables <span class="v">a</span> and <span class="v">b</span> to symbolic numbers 
+of five bits.  Note that integers are two's-complement, so to represent natural 
+numbers one needs one more bit than in the unsigned representation.  Therefore, 
+these shape specs cover negative numbers down to -16 as well as naturals less 
+than 16.  However, parametrization by the hypotheses will yield symbolic 
+objects that only cover the specified range.</p> 
+ 
+<p>The coverage obligation for a theorem will be a goal like this:</p> 
+ 
+<pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> &lt;hyp&gt;
+         (shape-spec-obj-in-range
+          (<a href="COMMON-LISP____LIST.html">list</a> &lt;shape-spec1&gt; &lt;shape-spec2&gt; ...)
+          (<a href="COMMON-LISP____LIST.html">list</a> &lt;var-name1&gt; &lt;var-name2&gt; ...)))</pre> 
+ 
+<p> In the example above:</p> 
+ 
+<pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____NATP.html">natp</a> a) (<a href="ACL2____NATP.html">natp</a> b)
+              (<a href="COMMON-LISP_____C3.html">&lt;</a> a 16) (<a href="COMMON-LISP_____C3.html">&lt;</a> b 16))
+         (shape-spec-obj-in-range
+          '((:g-number (0 2 4 6 8)) (:g-number (1 3 5 7 9)))
+          (<a href="COMMON-LISP____LIST.html">list</a> a b)))</pre> 
+ 
+<p>It is often convenient to work out the coverage theorem before running the 
+symbolic simulation, since the symbolic simulation may take a very long time 
+even when successful.  The keyword argument <span class="v">:test-side-goals</span> may be given 
+a value of <span class="v">T</span> in order to attempt the coverage proof on its own; if 
+successful, no theorem will be stored by ACL2, but one can then be fairly sure 
+that the coverage proof will go through in the real theorem.</p> 
+ 
+<p>Several hints are given by default for proving coverage; see <a href="GL____SHAPE-SPECS.html">shape-specs</a> for details.  The keyword arguments <span class="v">:cov-theory-add</span>, 
+<span class="v">:do-not-expand</span>, <span class="v">:cov-hints</span>, and <span class="v">:cov-hints-position</span> affect the 
+coverage proof.</p> 
+ 
+<p>When proof by symbolic simulation fails, the clause processor will print 
+randomized counterexamples.  The keyword argument <span class="v">:n-counterexamples</span> 
+determines how many it prints.  The default is 3.  (For SAT-based proofs, 
+likely only one counterexample is available, so it may print the same 
+counterexample each time.)</p> 
+ 
+<p>By default, the clause processor will execute conclusion on the 
+counterexamples that it finds; this is useful for printing debugging 
+information.  However, sometimes the conclusion is not executable; in that 
+case, you may turn off execution of counterexamples using <span class="v">:exec-ctrex
+nil</span>.</p> 
+ 
+<p>A symbolic simulation may result in a symbolic object that can't be 
+syntactically determined to be non-nil; for example, the result may contain a 
+<span class="v">:G-APPLY</span> object.  In these situations, the proof attempt will abort, and 
+an example will be shown of inputs for which the symbolic result's value could 
+not be determined.  To debug this type of problem, see <a href="GL____FALSE-COUNTEREXAMPLES.html">false-counterexamples</a>.</p> 
+ 
+<p>The symbolic interpreter and all symbolic counterpart functions take a clock 
+argument to ensure termination.  The starting clocks for the symbolic 
+executions of the hyp (for parametrization) and the conclusion may be set using 
+the keyword arguments <span class="v">:hyp-clk</span> and <span class="v">:concl-clk</span>; the defaults are both 
+1000000.</p> 
+ 
+<p>The keyword argument <span class="v">:clause-proc</span> can be used to select the clause 
+processor to be used; see <a href="ACL2____DEF-GL-CLAUSE-PROCESSOR.html">def-gl-clause-processor</a>.  By default, the 
+latest clause processor introduced is used.  If no <span class="v">:clause-proc</span> keyword 
+argument is given, then this macro expands to a <a href="ACL2____MAKE-EVENT.html">make-event</a>, which in 
+turn expands to the <a href="ACL2____DEFTHM.html">defthm</a> event; otherwise, this expands directly to 
+the <a href="ACL2____DEFTHM.html">defthm</a>.</p> 
+ 
+<p>The keyword argument <span class="v">:rule-classes</span> can be used to select the 
+rule-classes for the theorem produced, as in <a href="ACL2____DEFTHM.html">defthm</a>; the default is 
+<span class="v">:rewrite</span>.</p> 
+ 
+
+</body>
+</html>

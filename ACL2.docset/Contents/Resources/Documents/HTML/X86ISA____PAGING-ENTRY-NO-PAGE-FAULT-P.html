@@ -1,0 +1,433 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Paging-entry-no-page-fault-p</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=X86ISA____PAGING-ENTRY-NO-PAGE-FAULT-P">Click for Paging-entry-no-page-fault-p in the Full Manual</a></h3>
+
+<p>Determining access rights and detecting page faults</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(paging-entry-no-page-fault-p 
+     structure-type lin-addr 
+     entry u/s-acc r/w-acc x/d-acc wp 
+     smep smap ac nxe r-w-x cpl x86 &amp;optional 
+     (supervisor-mode-access-type '0)) 
+ 
+  → 
+(mv flg val x86)</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">structure-type</span> — <span class="v">0</span>: Page Table; 
+                    <span class="v">1</span>: Page Directory; 
+                    <span class="v">2</span>: Page Directory Pointer Table; 
+                    <span class="v">3</span>: PML4 Table.</dd> 
+  <dd>
+<span class="tt">u/s-acc</span> — <span class="v">logand</span> of <span class="v">user-supervisor</span> field of all superior paging entries.</dd> 
+  <dd>
+<span class="tt">r/w-acc</span> — <span class="v">logand</span> of <span class="v">read-write</span> field of all superior paging entries.</dd> 
+  <dd>
+<span class="tt">x/d-acc</span> — <span class="v">logand</span> of <span class="v">execute-disable</span> field of all superior paging entries.</dd> 
+  <dd>
+<span class="tt">smep</span> — Supervisor Mode Execution Prevention.</dd> 
+  <dd>
+<span class="tt">smap</span> — Supervisor Mode Access Prevention.</dd> 
+  <dd>
+<span class="tt">ac</span> — <span class="v">AC</span> field from <span class="v">RFLAGS</span>.</dd> 
+  <dd>
+<span class="tt">supervisor-mode-access-type</span> — <span class="v">0</span>: Explicit; <span class="v">1</span>: Implicit.</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">x86</span> — <font color="#606060">Type <span class="v">(x86p x86)</span>, given <span class="v">(x86p x86)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>Source for determining the access rights: Section 4.6 in 
+   the Intel Manuals, Vol. 3A.</p> 
+ 
+<p>It is important to differentiate between:</p> 
+ 
+<ol> 
+<li>a supervisor-mode and a user-mode access</li> 
+<li>an implicit and an explicit supervisor-mode access</li> 
+<li>a supervisor-mode and a user-mode address</li> 
+</ol> 
+ 
+<p>These concepts are defined below.</p> 
+ 
+<ul> 
+ 
+<li>Every access to a linear address is either a <b>supervisor-mode 
+access</b> or a <b>user-mode access</b>. For all instruction fetches 
+and most data accesses, accesses made while CPL <span class="v">&lt;</span> 3 are 
+<b>supervisor-mode accesses</b>, while accesses made while CPL = 3 are 
+<b>user-mode accesses</b>.</li> 
+ 
+<li>Some operations implicitly access system data structures with 
+linear addresses; the resulting accesses to those data structures are 
+supervisor-mode accesses regardless of CPL. Examples of such accesses 
+include the following: accesses to the global descriptor table (GDT) 
+or local descriptor table (LDT) to load a segment descriptor; 
+accesses to the interrupt descriptor table (IDT) when delivering an 
+interrupt or exception; and accesses to the task-state segment (TSS) 
+as part of a task switch or change of CPL. All these accesses are 
+called <b>implicit supervisor-mode accesses</b> regardless of 
+CPL. Other accesses made while CPL <span class="v">&lt;</span> 3 are called <b>explicit 
+supervisor-mode accesses</b>.</li> 
+ 
+<li>If the U/S flag (bit 2) is 0 in at least one of the 
+paging-structure entries, the address is a <b>supervisor-mode 
+address</b>. Otherwise, the address is a <b>user-mode 
+address</b>.</li> 
+ 
+<p><i>TO-DO:</i> For now, we are treating all supervisor-mode accesses 
+as explicit. We need to detect and then account for implicit 
+accesses.</p> 
+ 
+</ul> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>paging-entry-no-page-fault-p-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ paging-entry-no-page-fault-p-fn
+ (structure-type lin-addr entry u/s-acc r/w-acc
+                 x/d-acc wp smep smap ac nxe r-w-x
+                 cpl x86 supervisor-mode-access-type)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (x86)))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____TYPE.html">type</a> (unsigned-byte 2) structure-type)
+          (<a href="COMMON-LISP____TYPE.html">type</a> (signed-byte 48) lin-addr)
+          (<a href="COMMON-LISP____TYPE.html">type</a> (unsigned-byte 64) entry)
+          (<a href="COMMON-LISP____TYPE.html">type</a> (unsigned-byte 1) u/s-acc)
+          (<a href="COMMON-LISP____TYPE.html">type</a> (unsigned-byte 1) r/w-acc)
+          (<a href="COMMON-LISP____TYPE.html">type</a> (unsigned-byte 1) x/d-acc)
+          (<a href="COMMON-LISP____TYPE.html">type</a> (unsigned-byte 1) wp)
+          (<a href="COMMON-LISP____TYPE.html">type</a> (unsigned-byte 1) smep)
+          (<a href="COMMON-LISP____TYPE.html">type</a> (unsigned-byte 1) smap)
+          (<a href="COMMON-LISP____TYPE.html">type</a> (unsigned-byte 1) ac)
+          (<a href="COMMON-LISP____TYPE.html">type</a> (unsigned-byte 1) nxe)
+          (<a href="COMMON-LISP____TYPE.html">type</a> (<a href="COMMON-LISP____MEMBER.html">member</a> :r :w :x) r-w-x)
+          (<a href="COMMON-LISP____TYPE.html">type</a> (unsigned-byte 2) cpl)
+          (<a href="COMMON-LISP____TYPE.html">type</a> (unsigned-byte 1)
+                supervisor-mode-access-type))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____NOT.html">not</a> (<a href="X86ISA____APP-VIEW.html">app-view</a> x86))))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'paging-entry-no-page-fault-p))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+   ((entry (<a href="ACL2____MBE.html">mbe</a> :logic (<a href="ACL2____LOGHEAD.html">loghead</a> 64 entry)
+                :exec entry))
+    (<a href="X86ISA____PAGE-PRESENT.html">page-present</a> (<a href="ACL2____MBE.html">mbe</a> :logic (<a href="X86ISA____PAGE-PRESENT.html">page-present</a> entry)
+                       :exec (<a href="X86ISA____IA32E-PAGE-TABLESBITS-_E3P.html">ia32e-page-tablesbits-&gt;p</a> entry)))
+    ((when (<a href="COMMON-LISP____EQUAL.html">equal</a> page-present 0))
+     (<a href="COMMON-LISP____LET.html">let</a>
+      ((err-no
+           (<a href="X86ISA____PAGE-FAULT-ERR-NO.html">page-fault-err-no</a> page-present r-w-x cpl 0 smep 1 nxe)))
+      (<a href="X86ISA____PAGE-FAULT-EXCEPTION.html">page-fault-exception</a> lin-addr err-no x86)))
+    (read-write (<a href="ACL2____MBE.html">mbe</a> :logic (<a href="X86ISA____PAGE-READ-WRITE.html">page-read-write</a> entry)
+                     :exec (<a href="X86ISA____IA32E-PAGE-TABLESBITS-_E3R_F2W.html">ia32e-page-tablesbits-&gt;r/w</a> entry)))
+    (r/w-all (<a href="COMMON-LISP____THE.html">the</a> (unsigned-byte 1)
+                  (<a href="COMMON-LISP____LOGAND.html">logand</a> read-write r/w-acc)))
+    (user-supervisor (<a href="ACL2____MBE.html">mbe</a> :logic (<a href="X86ISA____PAGE-USER-SUPERVISOR.html">page-user-supervisor</a> entry)
+                          :exec (<a href="X86ISA____IA32E-PAGE-TABLESBITS-_E3U_F2S.html">ia32e-page-tablesbits-&gt;u/s</a> entry)))
+    (u/s-all (<a href="COMMON-LISP____THE.html">the</a> (unsigned-byte 1)
+                  (<a href="COMMON-LISP____LOGAND.html">logand</a> user-supervisor u/s-acc)))
+    (execute-disable (<a href="ACL2____MBE.html">mbe</a> :logic (<a href="X86ISA____PAGE-EXECUTE-DISABLE.html">page-execute-disable</a> entry)
+                          :exec (<a href="X86ISA____IA32E-PAGE-TABLESBITS-_E3XD.html">ia32e-page-tablesbits-&gt;xd</a> entry)))
+    (x/d-all (<a href="COMMON-LISP____THE.html">the</a> (unsigned-byte 1)
+                  (<a href="COMMON-LISP____LOGAND.html">logand</a> execute-disable x/d-acc)))
+    (<a href="X86ISA____PAGE-SIZE.html">page-size</a> (<a href="ACL2____MBE.html">mbe</a> :logic (<a href="X86ISA____PAGE-SIZE.html">page-size</a> entry)
+                    :exec (<a href="X86ISA____IA32E-PAGE-TABLESBITS-_E3PS.html">ia32e-page-tablesbits-&gt;ps</a> entry)))
+    (rsvd
+     (<a href="ACL2____MBE.html">mbe</a>
+      :logic
+      (<a href="COMMON-LISP____IF.html">if</a>
+       (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> structure-type 3)
+                (<a href="COMMON-LISP____EQUAL.html">equal</a> page-size 1))
+           (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> structure-type 0))
+                (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> structure-type 3))
+                (<a href="COMMON-LISP____EQUAL.html">equal</a> page-size 1)
+                (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> structure-type 1)
+                    (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____PART-SELECT.html">part-select</a> entry :low 13 :high 20)
+                                0))
+                    (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____PART-SELECT.html">part-select</a> entry :low 13 :high 29)
+                                0))))
+           (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> nxe 0)
+                (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> execute-disable 0))))
+       1 0)
+      :exec
+      (<a href="COMMON-LISP____IF.html">if</a>
+       (<a href="COMMON-LISP____OR.html">or</a>
+        (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> structure-type 3)
+             (<a href="COMMON-LISP____EQUAL.html">equal</a> page-size 1))
+        (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> structure-type 0))
+             (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> structure-type 3))
+             (<a href="COMMON-LISP____EQUAL.html">equal</a> page-size 1)
+             (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> structure-type 1)
+                 (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____THE.html">the</a> (unsigned-byte 8)
+                                  (<a href="COMMON-LISP____LOGAND.html">logand</a> 255
+                                          (<a href="COMMON-LISP____THE.html">the</a> (unsigned-byte 51)
+                                               (<a href="COMMON-LISP____ASH.html">ash</a> entry (<a href="COMMON-LISP____-.html">-</a> 13)))))
+                             0))
+                 (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____THE.html">the</a> (unsigned-byte 17)
+                                  (<a href="COMMON-LISP____LOGAND.html">logand</a> 131071
+                                          (<a href="COMMON-LISP____THE.html">the</a> (unsigned-byte 51)
+                                               (<a href="COMMON-LISP____ASH.html">ash</a> entry (<a href="COMMON-LISP____-.html">-</a> 13)))))
+                             0))))
+        (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> nxe 0)
+             (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="X86ISA____IA32E-PAGE-TABLESBITS-_E3XD.html">ia32e-page-tablesbits-&gt;xd</a> entry)
+                         0))))
+       1 0)))
+    ((when (<a href="COMMON-LISP____EQUAL.html">equal</a> rsvd 1))
+     (<a href="COMMON-LISP____LET.html">let</a> ((err-no (<a href="X86ISA____PAGE-FAULT-ERR-NO.html">page-fault-err-no</a> page-present
+                                      r-w-x cpl rsvd smep 1 nxe)))
+          (<a href="X86ISA____PAGE-FAULT-EXCEPTION.html">page-fault-exception</a> lin-addr err-no x86)))
+    ((when
+      (<a href="COMMON-LISP____OR.html">or</a>
+       (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> r-w-x :r)
+            (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP_____C3.html">&lt;</a> cpl 3)
+                (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> u/s-all 0)
+                    nil
+                    (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> smap 0)
+                        nil
+                        (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> supervisor-mode-access-type 1)
+                            (<a href="COMMON-LISP____EQUAL.html">equal</a> ac 0))))
+                (<a href="COMMON-LISP____EQUAL.html">equal</a> u/s-all 0)))
+       (<a href="COMMON-LISP____AND.html">and</a>
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> r-w-x :w)
+        (<a href="COMMON-LISP____IF.html">if</a>
+          (<a href="COMMON-LISP_____C3.html">&lt;</a> cpl 3)
+          (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> u/s-all 0)
+              (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> wp 1) (<a href="COMMON-LISP____EQUAL.html">equal</a> r/w-all 0))
+              (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> wp 0)
+                  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> smap 0)
+                      nil
+                      (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> supervisor-mode-access-type 1)
+                          (<a href="COMMON-LISP____EQUAL.html">equal</a> ac 0)))
+                  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> smap 0)
+                      (<a href="COMMON-LISP____EQUAL.html">equal</a> r/w-all 0)
+                      (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> supervisor-mode-access-type 0)
+                               (<a href="COMMON-LISP____EQUAL.html">equal</a> ac 1))
+                          (<a href="COMMON-LISP____EQUAL.html">equal</a> r/w-all 0)
+                          t))))
+          (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> u/s-all 0)
+              (<a href="COMMON-LISP____EQUAL.html">equal</a> r/w-all 0))))
+       (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> r-w-x :x)
+            (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP_____C3.html">&lt;</a> cpl 3)
+                (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> u/s-all 0)
+                    (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> nxe 0) nil (<a href="COMMON-LISP____EQUAL.html">equal</a> x/d-all 1))
+                    (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> smep 0)
+                        (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> nxe 0) nil (<a href="COMMON-LISP____EQUAL.html">equal</a> x/d-all 1))
+                        t))
+                (<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> u/s-all 0)
+                    (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> nxe 1)
+                         (<a href="COMMON-LISP____EQUAL.html">equal</a> x/d-all 1)))))))
+     (<a href="COMMON-LISP____LET.html">let</a> ((err-no (<a href="X86ISA____PAGE-FAULT-ERR-NO.html">page-fault-err-no</a> page-present
+                                      r-w-x cpl rsvd smep 1 nxe)))
+          (<a href="X86ISA____PAGE-FAULT-EXCEPTION.html">page-fault-exception</a> lin-addr err-no x86))))
+   (<a href="ACL2____MV.html">mv</a> nil 0 x86))))</pre> 
+<p><b>Theorem: </b>x86p-of-paging-entry-no-page-fault-p.x86</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> x86p-of-paging-entry-no-page-fault-p.x86
+        (<a href="ACL2____IMPLIES.html">implies</a> (x86p x86)
+                 (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?flg ?val ?x86)
+                       (paging-entry-no-page-fault-p-fn
+                            structure-type
+                            lin-addr entry u/s-acc r/w-acc
+                            x/d-acc wp smep smap ac nxe r-w-x
+                            cpl x86 supervisor-mode-access-type)))
+                     (x86p x86)))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>mv-nth-1-paging-entry-no-page-fault-p-value</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> mv-nth-1-paging-entry-no-page-fault-p-value
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 1
+                       (<a href="X86ISA____PAGING-ENTRY-NO-PAGE-FAULT-P.html">paging-entry-no-page-fault-p</a>
+                            structure-type lin-addr
+                            entry u/s-acc r/w-acc x/d-acc wp
+                            smep smap ac nxe r-w-x cpl x86 ignored))
+               0))</pre> 
+<p><b>Theorem: </b>xr-paging-entry-no-page-fault-p</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+  xr-paging-entry-no-page-fault-p
+  (<a href="ACL2____IMPLIES.html">implies</a>
+       (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> fld :fault))
+       (<a href="COMMON-LISP____EQUAL.html">equal</a> (xr fld index
+                  (<a href="ACL2____MV-NTH.html">mv-nth</a> 2
+                          (<a href="X86ISA____PAGING-ENTRY-NO-PAGE-FAULT-P.html">paging-entry-no-page-fault-p</a>
+                               structure-type lin-addr
+                               entry u/s-acc r/w-acc x/d-acc wp smep
+                               smap ac nxe r-w-x cpl x86 ignored)))
+              (xr fld index x86))))</pre> 
+<p><b>Theorem: </b>paging-entry-no-page-fault-p-xw-values</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ paging-entry-no-page-fault-p-xw-values
+ (<a href="ACL2____IMPLIES.html">implies</a>
+    (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> fld :fault))
+    (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 0
+                        (<a href="X86ISA____PAGING-ENTRY-NO-PAGE-FAULT-P.html">paging-entry-no-page-fault-p</a>
+                             structure-type lin-addr entry
+                             u/s-acc r/w-acc x/d-acc wp smep smap ac
+                             nxe r-w-x cpl (xw fld index value x86)
+                             ignored))
+                (<a href="ACL2____MV-NTH.html">mv-nth</a> 0
+                        (<a href="X86ISA____PAGING-ENTRY-NO-PAGE-FAULT-P.html">paging-entry-no-page-fault-p</a>
+                             structure-type lin-addr
+                             entry u/s-acc r/w-acc x/d-acc wp smep
+                             smap ac nxe r-w-x cpl x86 ignored)))
+         (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 1
+                        (<a href="X86ISA____PAGING-ENTRY-NO-PAGE-FAULT-P.html">paging-entry-no-page-fault-p</a>
+                             structure-type lin-addr entry
+                             u/s-acc r/w-acc x/d-acc wp smep smap ac
+                             nxe r-w-x cpl (xw fld index value x86)
+                             ignored))
+                (<a href="ACL2____MV-NTH.html">mv-nth</a> 1
+                        (<a href="X86ISA____PAGING-ENTRY-NO-PAGE-FAULT-P.html">paging-entry-no-page-fault-p</a>
+                             structure-type lin-addr
+                             entry u/s-acc r/w-acc x/d-acc wp smep
+                             smap ac nxe r-w-x cpl x86 ignored))))))</pre> 
+<p><b>Theorem: </b>paging-entry-no-page-fault-p-xw-state</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ paging-entry-no-page-fault-p-xw-state
+ (<a href="ACL2____IMPLIES.html">implies</a>
+     (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> fld :fault))
+     (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 2
+                    (<a href="X86ISA____PAGING-ENTRY-NO-PAGE-FAULT-P.html">paging-entry-no-page-fault-p</a>
+                         structure-type lin-addr entry
+                         u/s-acc r/w-acc x/d-acc wp smep smap ac
+                         nxe r-w-x cpl (xw fld index value x86)
+                         ignored))
+            (xw fld index value
+                (<a href="ACL2____MV-NTH.html">mv-nth</a> 2
+                        (<a href="X86ISA____PAGING-ENTRY-NO-PAGE-FAULT-P.html">paging-entry-no-page-fault-p</a>
+                             structure-type lin-addr
+                             entry u/s-acc r/w-acc x/d-acc wp smep
+                             smap ac nxe r-w-x cpl x86 ignored))))))</pre> 
+<p><b>Theorem: </b>mv-nth-2-paging-entry-no-page-fault-p-does-not-modify-x86-if-no-fault</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ mv-nth-2-paging-entry-no-page-fault-p-does-not-modify-x86-if-no-fault
+ (<a href="ACL2____IMPLIES.html">implies</a>
+      (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 0
+                   (<a href="X86ISA____PAGING-ENTRY-NO-PAGE-FAULT-P.html">paging-entry-no-page-fault-p</a>
+                        structure-type lin-addr
+                        entry u/s-acc r/w-acc x/d-acc wp smep
+                        smap ac nxe r-w-x cpl x86 ignored)))
+      (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 2
+                     (<a href="X86ISA____PAGING-ENTRY-NO-PAGE-FAULT-P.html">paging-entry-no-page-fault-p</a>
+                          structure-type lin-addr
+                          entry u/s-acc r/w-acc x/d-acc wp
+                          smep smap ac nxe r-w-x cpl x86 ignored))
+             x86)))</pre> 
+<p><b>Function: </b>find-similar-paging-entries-from-page-present-equality-aux</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ find-similar-paging-entries-from-page-present-equality-aux
+ (index entry-var calls)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____NATP.html">natp</a> index)))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__
+       'find-similar-paging-entries-from-page-present-equality-aux))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ATOM.html">atom</a> calls)
+      nil
+      (<a href="ACL2____B_A2.html">b*</a> ((one-call (<a href="COMMON-LISP____CAR.html">car</a> calls))
+           ((unless (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____TRUE-LISTP.html">true-listp</a> one-call)
+                         (<a href="ACL2____TRUE-LISTP.html">true-listp</a> (<a href="COMMON-LISP____NTH.html">nth</a> index one-call))
+                         (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____LEN.html">len</a> (<a href="COMMON-LISP____NTH.html">nth</a> index one-call)) 2)))
+            nil))
+          (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____LIST.html">list</a> (<a href="COMMON-LISP____CONS.html">cons</a> entry-var (<a href="COMMON-LISP____NTH.html">nth</a> 1 (<a href="COMMON-LISP____NTH.html">nth</a> index one-call))))
+                (<a href="X86ISA____FIND-SIMILAR-PAGING-ENTRIES-FROM-PAGE-PRESENT-EQUALITY-AUX.html">find-similar-paging-entries-from-page-present-equality-aux</a>
+                     index entry-var (<a href="COMMON-LISP____CDR.html">cdr</a> calls)))))))</pre> 
+<p><b>Function: </b>find-similar-paging-entries-from-page-present-equality</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ find-similar-paging-entries-from-page-present-equality
+ (bound-entry-val entry-var mfc state)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (<a href="ACL2____STATE.html">state</a>))
+          (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> state))
+ (<a href="ACL2____B_A2.html">b*</a>
+  (((<a href="ACL2____MV.html">mv</a> index calls)
+    (<a href="ACL2____MV.html">mv</a> 2
+        (acl2::find-matches-list
+             (<a href="COMMON-LISP____CONS.html">cons</a> 'equal
+                   (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'page-present
+                               (<a href="COMMON-LISP____CONS.html">cons</a> bound-entry-val 'nil))
+                         (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'page-present (<a href="COMMON-LISP____CONS.html">cons</a> 'e 'nil))
+                               'nil)))
+             (<a href="ACL2____MFC-CLAUSE.html">mfc-clause</a> mfc)
+             nil)))
+   ((<a href="ACL2____MV.html">mv</a> index calls)
+    (<a href="COMMON-LISP____IF.html">if</a>
+       (<a href="COMMON-LISP____NOT.html">not</a> calls)
+       (<a href="ACL2____MV.html">mv</a> 1
+           (acl2::find-matches-list
+                (<a href="COMMON-LISP____CONS.html">cons</a> 'equal
+                      (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'page-present (<a href="COMMON-LISP____CONS.html">cons</a> 'e 'nil))
+                            (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'page-present
+                                        (<a href="COMMON-LISP____CONS.html">cons</a> bound-entry-val 'nil))
+                                  'nil)))
+                (<a href="ACL2____MFC-CLAUSE.html">mfc-clause</a> mfc)
+                nil))
+       (<a href="ACL2____MV.html">mv</a> index calls)))
+   ((when (<a href="COMMON-LISP____NOT.html">not</a> calls)) nil))
+  (<a href="X86ISA____FIND-SIMILAR-PAGING-ENTRIES-FROM-PAGE-PRESENT-EQUALITY-AUX.html">find-similar-paging-entries-from-page-present-equality-aux</a>
+       index entry-var calls)))</pre> 
+<p><b>Theorem: </b>mv-nth-0-paging-entry-no-page-fault-p-and-similar-entries</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+   mv-nth-0-paging-entry-no-page-fault-p-and-similar-entries
+   (<a href="ACL2____IMPLIES.html">implies</a>
+        (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____BIND-FREE.html">bind-free</a> (find-similar-paging-entries-from-page-present-equality
+                             entry-1 'entry-2
+                             mfc state)
+                        (entry-2))
+             (<a href="ACL2____SYNTAXP.html">syntaxp</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQ.html">eq</a> entry-1 entry-2)))
+             (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="X86ISA____PAGE-PRESENT.html">page-present</a> entry-1)
+                    (<a href="X86ISA____PAGE-PRESENT.html">page-present</a> entry-2))
+             (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="X86ISA____PAGE-READ-WRITE.html">page-read-write</a> entry-1)
+                    (<a href="X86ISA____PAGE-READ-WRITE.html">page-read-write</a> entry-2))
+             (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="X86ISA____PAGE-USER-SUPERVISOR.html">page-user-supervisor</a> entry-1)
+                    (<a href="X86ISA____PAGE-USER-SUPERVISOR.html">page-user-supervisor</a> entry-2))
+             (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="X86ISA____PAGE-EXECUTE-DISABLE.html">page-execute-disable</a> entry-1)
+                    (<a href="X86ISA____PAGE-EXECUTE-DISABLE.html">page-execute-disable</a> entry-2))
+             (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="X86ISA____PAGE-SIZE.html">page-size</a> entry-1)
+                    (<a href="X86ISA____PAGE-SIZE.html">page-size</a> entry-2))
+             (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> structure-type 1)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____PART-SELECT.html">part-select</a> entry-1 :low 13 :high 20)
+                        (<a href="ACL2____PART-SELECT.html">part-select</a> entry-2 :low 13 :high 20))
+                 (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> structure-type 2)
+                     (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____PART-SELECT.html">part-select</a> entry-1 :low 13 :high 29)
+                            (<a href="ACL2____PART-SELECT.html">part-select</a> entry-2 :low 13 :high 29))
+                     t))
+             (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 2 structure-type)
+             (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 64 entry-1)
+             (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 64 entry-2))
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 0
+                       (<a href="X86ISA____PAGING-ENTRY-NO-PAGE-FAULT-P.html">paging-entry-no-page-fault-p</a>
+                            structure-type lin-addr
+                            entry-1 u/s-acc r/w-acc x/d-acc wp
+                            smep smap ac nxe r-w-x cpl x86 ignored))
+               (<a href="ACL2____MV-NTH.html">mv-nth</a> 0
+                       (<a href="X86ISA____PAGING-ENTRY-NO-PAGE-FAULT-P.html">paging-entry-no-page-fault-p</a>
+                            structure-type lin-addr
+                            entry-2 u/s-acc r/w-acc x/d-acc wp smep
+                            smap ac nxe r-w-x cpl x86 ignored)))))</pre> 
+<p><b>Theorem: </b>mv-nth-0-paging-entry-no-page-fault-p-is-independent-of-lin-addr</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+  mv-nth-0-paging-entry-no-page-fault-p-is-independent-of-lin-addr
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 0
+                        (<a href="X86ISA____PAGING-ENTRY-NO-PAGE-FAULT-P.html">paging-entry-no-page-fault-p</a>
+                             structure-type
+                             lin-addr entry u/s-acc r/w-acc
+                             x/d-acc wp smep smap ac nxe r-w-x
+                             cpl x86 supervisor-mode-access-type)))
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 0
+                          (<a href="X86ISA____PAGING-ENTRY-NO-PAGE-FAULT-P.html">paging-entry-no-page-fault-p</a>
+                               structure-type (<a href="COMMON-LISP_____B2.html">+</a> n lin-addr)
+                               entry u/s-acc r/w-acc
+                               x/d-acc wp smep smap ac nxe r-w-x
+                               cpl x86 supervisor-mode-access-type))
+                  nil)))</pre> 
+<p><b>Theorem: </b>64-bit-modep-of-paging-entry-no-page-fault-p</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ 64-bit-modep-of-paging-entry-no-page-fault-p
+ (<a href="COMMON-LISP____EQUAL.html">equal</a>
+   (<a href="X86ISA____64-BIT-MODEP.html">64-bit-modep</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 2
+                         (<a href="X86ISA____PAGING-ENTRY-NO-PAGE-FAULT-P.html">paging-entry-no-page-fault-p</a>
+                              structure-type
+                              lin-addr entry u/s-acc r/w-acc x/d-acc
+                              wp smep smap ac nxe r-w-x cpl x86)))
+   (<a href="X86ISA____64-BIT-MODEP.html">64-bit-modep</a> x86)))</pre> 
+<p><b>Theorem: </b>x86-operation-mode-of-paging-entry-no-page-fault-p</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     x86-operation-mode-of-paging-entry-no-page-fault-p
+     (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="X86ISA____X86-OPERATION-MODE.html">x86-operation-mode</a>
+                 (<a href="ACL2____MV-NTH.html">mv-nth</a> 2
+                         (<a href="X86ISA____PAGING-ENTRY-NO-PAGE-FAULT-P.html">paging-entry-no-page-fault-p</a>
+                              structure-type
+                              lin-addr entry u/s-acc r/w-acc x/d-acc
+                              wp smep smap ac nxe r-w-x cpl x86)))
+            (<a href="X86ISA____X86-OPERATION-MODE.html">x86-operation-mode</a> x86)))</pre> 
+
+</body>
+</html>

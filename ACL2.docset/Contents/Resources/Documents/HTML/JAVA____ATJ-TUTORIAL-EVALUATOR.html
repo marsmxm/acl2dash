@@ -1,0 +1,101 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Atj-tutorial-evaluator</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=JAVA____ATJ-TUTORIAL-EVALUATOR">Click for Atj-tutorial-evaluator in the Full Manual</a></h3>
+
+<p>ATJ tutorial: ACL2 Evaluator Written in Java.</p><p>For the <a href="JAVA____ATJ-TUTORIAL-DEEP.html">deep embedding approach</a>, <a href="JAVA____ATJ-TUTORIAL-AIJ.html">AIJ</a> provides an ACL2 evaluator written in Java. 
+    For ease of exposition and understanding, 
+    we first describe 
+    (key aspects of) the initial implementation of the evaluator 
+    (as it was in earlier versions of AIJ), 
+    and then we describe how the current implementation 
+    is obtained by optimizing the initial one. 
+    This tutorial page may be skipped at first reading.</p><h5>Java Methods</h5><p>The evaluator is realized via 
+    the implementing methods of the abstract methods 
+    <span class="v">Acl2Term.eval(Acl2Value[])</span> and <span class="v">Acl2Function.apply(Acl2Value[])</span>; 
+    The implementing methods are 
+    in subclasses of <span class="v">Acl2Term</span> and <span class="v">Acl2Function</span>. 
+    Recall that all these classes provide <a href="JAVA____ATJ-TUTORIAL-ACL2-TERMS.html">the Java representation of ACL2 terms</a>.</p><h5>Initial Implementation</h5><p>In early versions of AIJ, 
+    the <span class="v">eval</span> methods in <span class="v">Acl2Term</span> and subclasses 
+    took a <span class="v">java.lang.Map&lt;Acl2Symbol, Acl2Value&gt;</span> as argument, 
+    instead of an <span class="v">Acl2Value[]</span> as in the current version of AIJ. 
+    Such a map was a binding of variables (i.e. symbols) to values, 
+    with respect to which quoted constants, variables, and function calls 
+    were evaluated:</p><ul>
+<li>Evaluating a quoted constant returned its value, 
+     independently from the binding of variables to values.</li>
+<li>Evaluating a variable returned the value associated to the variable, 
+     which was looked up in the binding.</li>
+<li>Evaluating a function call caused 
+     first the recursive evaluation of all the arguments of the call, 
+     and then the application of the function to the resulting values. 
+     (See below.)</li>
+</ul><p>The <span class="v">apply</span> methods in <span class="v">Acl2Function</span> and subclasses 
+    take an <span class="v">Acl2Value[]</span> argument in all versions of AIJ. 
+    The array is the sequence of values to apply the function to. 
+    Function application proceeded as follows in early versions of AIJ:</p><ul>
+<li>Applying a lambda expression returned the result of 
+     recursively evaluating the body of the lambda expression 
+     with a binding of the parameters of the lambda expressions 
+     to the argument values. 
+     (Recall that lambda expressions are always closed 
+     in ACL2 <a href="ACL2____TERM.html">translated terms</a>, 
+     so each lambda expression body is evaluated in a new binding.)</li>
+<li>Applying a <a href="JAVA____ATJ-TUTORIAL-NATIVE-FUNCTIONS.html">natively implemented function</a> returned the result of executing the native Java implementation 
+     on the argument values.</li>
+<li>Applying a function with an ACL2 definition returned the result of 
+     recursively evaluating the body of the function 
+     with a binding of the parameters of the function 
+     to the argument values.</li>
+</ul><p>This simple and typical evaluation algorithm worked, 
+    but the evaluation of each variable involved a map lookup. 
+    The use of hash maps made this lookup essentially constant-time, 
+    but still a relatively large constant.</p><h5>Current Implementation</h5><p>The current version of AIJ uses 
+    a more optimized approach for variable lookup, 
+    described below.</p><p>Each <span class="v">Acl2Variable</span> instance includes 
+    a numeric index, in a private field. 
+    The index is initially -1 (when the object is created), 
+    which means that it is not set yet. 
+    When AIJ's public API is used to provide a function definition 
+    (which is added to the <a href="JAVA____ATJ-TUTORIAL-ACL2-ENVIRONMENT.html">Java representation of the ACL2 environment</a>), AIJ sets all the indices in the <span class="v">Acl2Variable</span>s 
+    that occur in the definiens of the function. 
+    The setting of indices starts with the parameters of the function: 
+    the 0-based position of each parameter in the parameter list 
+    is the value to which all the occurrences of that variable are set 
+    in the body of the function; 
+    however, when a lambda expression is encountered, 
+    the variables in its body are given indices 
+    based on the parameters of the lambda expression, 
+    ignoring the outer indices 
+    (recall that lambda expressions are always closed 
+    in ACL2 <a href="ACL2____TERM.html">translated terms</a>). 
+    In assigning these indices, 
+    AIJ ensures that the definiens of the function is well-formed, 
+    e.g. that the body does not include free variables that are not parameters. 
+    Because the same ACL2 variable 
+    may have different indices in different contexts, 
+    the <span class="v">Acl2Term</span> instances passed to AIJ to define functions 
+    must not share any <span class="v">Acl2Variable</span> instances; 
+    AIJ throws an exception if, during the index setting recursion, 
+    it encounters an <span class="v">Acl2Variable</span> whose index is already set.</p><p>Given these variable indices, a binding of variables to values 
+    can be represented as a map from indices (i.e. natural numbers) to values 
+    instead of a map from symbols to values. 
+    But a map from indices to values can be represented as an array, 
+    and that is why the <span class="v">eval</span> methods of <span class="v">Acl2Term</span> and subclasses 
+    take an <span class="v">Acl2Value[]</span> as argument: 
+    that argument is still a binding of variables to values, 
+    but the variables are represented by indices. 
+    An array access is much faster than a hash map access.</p><p>The evaluation algorithm on terms is still the one described above, 
+    except that the bindings are represented as arrays instead of maps. 
+    The evaluation of terms is mutually recursive with 
+    the application of functions to values. 
+    This ACL2 evaluation is in the logic: 
+    guards are completely ignored, 
+    and in fact not even currently represented in AIJ.</p><h5>More Information</h5><p>See the AIJ code and Javadoc for more details on the ACL2 evaluator.</p><div class="box"></div><p><b>Previous:</b> <a href="JAVA____ATJ-TUTORIAL-NATIVE-FUNCTIONS.html">Native Java Implementations of ACL2 Functions</a></p><p><b>Next:</b> <a href="JAVA____ATJ-TUTORIAL-CUSTOMIZATION.html">Customization Options for Generated Code</a></p>
+</body>
+</html>

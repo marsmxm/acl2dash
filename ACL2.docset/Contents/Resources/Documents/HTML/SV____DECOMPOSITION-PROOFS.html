@@ -1,0 +1,236 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Decomposition-proofs</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=SV____DECOMPOSITION-PROOFS">Click for Decomposition-proofs in the Full Manual</a></h3>
+
+<p>Proof by decomposing and re-composing a hardware model</p> 
+ 
+<p>Part of the <a href="SV____SV-TUTORIAL.html">sv-tutorial</a>. Previous section: <a href="SV____PROOFS-WITH-STVS.html">proofs-with-stvs</a>.</p> 
+ 
+ 
+<p>Certain kinds of hardware models aren't amenable to direct verification by 
+bit-blasting because the function computed is too hard for SAT solvers/BDD 
+packages.  Multipliers, most significantly, fall into this category -- 
+expressing a multiplier function as BDDs always results in exponential memory 
+usage, and they are notoriously difficult for SAT solvers to handle as well.  A 
+standard trick for verifying a multiplier is to split the design into two or 
+more parts, specifying separately how each of the parts should behave; prove 
+ (by bit-blasting or automatic methods) that each of the parts matches its 
+specification, and prove (by traditional theorem-proving methods) that the 
+composition of the spec functions is equivalent to the spec for the whole 
+module.</p> 
+ 
+<p>The file "boothpipe.lisp" where this documentation topic is defined 
+contains an example to show how to do this with SVEX.  In this topic we will 
+discuss a few critical parts of the process, but for a more complete picture 
+see that file and the comments in it.</p> 
+ 
+<h4>STV Setup for Decomposition</h4> 
+ 
+<p>In the boothpipe example, the intermediate signals to split the pipeline on 
+are the partial products <span class="v">pp0</span>...<span class="v">pp7</span>.  We'll have one STV that says how 
+to run the whole module, and about which we'll prove the final theorem -- we'll 
+call this the Direct model.  We'll additionally define one STV that extracts 
+the partial products given the circuit inputs -- Part 1 -- and one STV that 
+takes the partial products as inputs and gets the outputs -- Part 2.</p> 
+ 
+<p><a href="SV____BOOTHPIPE-DIRECT.html">Direct</a>:</p> 
+<pre class="code">(<a href="SV____DEFSVTV_42.html">defsvtv$</a> boothpipe-direct
+          :design *boothpipe*
+          :labels '(c0 c1 c1 c2 c2 c3 c3)
+          :inputs '(("en" en)
+                    ("clk" 0 ~)
+                    ("a" a _)
+                    ("b" b _))
+          :outputs '(("o" _ _ _ _ _ _ o))
+          :parents (<a href="SV____DECOMPOSITION-PROOFS.html">decomposition-proofs</a>))</pre> 
+<p><a href="SV____BOOTHPIPE-STEP1.html">Part 1</a>:</p> 
+<pre class="code">(<a href="SV____DEFSVTV_42.html">defsvtv$</a> boothpipe-step1
+          :design *boothpipe*
+          :inputs '(("en" en)
+                    ("clk" 0 ~)
+                    ("a" a _)
+                    ("b" b _))
+          :internals '(("minusb" _ _ minusb)
+                       ("pp01_c2[35:18]" _ _ _ _ pp0)
+                       ("pp01_c2[17:0]" _ _ _ _ pp1)
+                       ("pp23_c2[35:18]" _ _ _ _ pp2)
+                       ("pp23_c2[17:0]" _ _ _ _ pp3)
+                       ("pp45_c2[35:18]" _ _ _ _ pp4)
+                       ("pp45_c2[17:0]" _ _ _ _ pp5)
+                       ("pp67_c2[35:18]" _ _ _ _ pp6)
+                       ("pp67_c2[17:0]" _ _ _ _ pp7))
+          :parents (<a href="SV____DECOMPOSITION-PROOFS.html">decomposition-proofs</a>))</pre> 
+<p><a href="SV____BOOTHPIPE-STEP2.html">Part 2</a>:</p> 
+<pre class="code">(<a href="SV____DEFSVTV_42.html">defsvtv$</a> boothpipe-step2
+          :design *boothpipe*
+          :inputs '(("en" en)
+                    ("clk" 0 ~)
+                    ("a" a _)
+                    ("b" b _))
+          :overrides '(("pp01_c2[35:18]" _ _ _ _ pp0 _)
+                       ("pp01_c2[17:0]" _ _ _ _ pp1 _)
+                       ("pp23_c2[35:18]" _ _ _ _ pp2 _)
+                       ("pp23_c2[17:0]" _ _ _ _ pp3 _)
+                       ("pp45_c2[35:18]" _ _ _ _ pp4 _)
+                       ("pp45_c2[17:0]" _ _ _ _ pp5 _)
+                       ("pp67_c2[35:18]" _ _ _ _ pp6 _)
+                       ("pp67_c2[17:0]" _ _ _ _ pp7 _))
+          :outputs '(("o" _ _ _ _ _ _ o))
+          :parents (<a href="SV____DECOMPOSITION-PROOFS.html">decomposition-proofs</a>))</pre> 
+ 
+<h4>Composing the Proof</h4> 
+ 
+<p>The basic steps for completing the top-level proof we want are as 
+follows:</p> 
+ 
+<ol> 
+<li>Prove that Part 1 meets its spec.</li> 
+<li>Prove that Part 2 meets its spec.</li> 
+<li>Prove that the composition of the Part 1 and Part 2 hardware models are 
+equivalent to the Direct model.</li> 
+<li>Prove that the composition of the spec for Part 1 and the spec for Part 2 
+equals the top-level spec.</li> 
+<li>Put steps 1 through 4 together to prove that the Direct model meets the 
+top-level spec.</li> 
+</ol> 
+ 
+<p>Steps 1 and 2 can be done via bit-blasting proofs as discussed in the 
+previous section of the tutorial (<a href="SV____PROOFS-WITH-STVS.html">proofs-with-stvs</a>).  Steps 4 and 5 are 
+done using traditional theorem proving.  So here we'll focus on Step 3, for 
+which the svex package provides some automation.</p> 
+ 
+<h4>Hardware Recomposition Proof Automation</h4> 
+ 
+<p>The hardware recomposition proof for the boothpipe example is shown 
+below:</p> 
+ 
+<pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ boothpipe-decomp-is-boothpipe
+ (<a href="ACL2____B_A2.html">b*</a>
+   ((out-alist1 (<a href="ACL2____SVTV-RUN.html">svtv-run</a> (<a href="SV____BOOTHPIPE-STEP1.html">boothpipe-step1</a>) in-alist))
+    (in-alist2
+         (boothpipe-step2-env-autoins (<a href="COMMON-LISP____APPEND.html">append</a> out-alist1 in-alist)))
+    (out-alist2 (<a href="ACL2____SVTV-RUN.html">svtv-run</a> (<a href="SV____BOOTHPIPE-STEP2.html">boothpipe-step2</a>) in-alist2))
+    (orig-in-alist in-alist)
+    (orig-out-alist (<a href="ACL2____SVTV-RUN.html">svtv-run</a> (<a href="SV____BOOTHPIPE-DIRECT.html">boothpipe-direct</a>)
+                              orig-in-alist)))
+   (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SV____SVEX-ENV-LOOKUP.html">svex-env-lookup</a> 'o out-alist2)
+          (<a href="SV____SVEX-ENV-LOOKUP.html">svex-env-lookup</a> 'o orig-out-alist)))
+ :hints ((svtv-decomp-hints)))</pre> 
+ 
+<p>In this theorem, we show that running Step 1 followed by Step 2 results in 
+the same result as running the whole model (Direct).  The steps followed by the 
+<span class="v">b*</span> form work as follows: First we run Step 1 on an arbitrary input alist 
+<span class="v">in-alist</span> to get <span class="v">out-alist1</span>.  To create the input to Step 2, we need 
+some output signals from Step 1 along with some input signals that are common 
+to both steps (namely <span class="v">en</span>), so we append <span class="v">out-alist1</span> and <span class="v">in-alist</span> 
+and extract <span class="v">in-alist2</span> from that union, then run Step 2 to get 
+<span class="v">out-alist2</span>.  Finally, we run the Direct model on the original input alist 
+and compare its output to that of <span class="v">out-alist2</span>.</p> 
+ 
+<p>We used to suggest a computed hint <span class="v">svdecomp-hints</span> as the best method 
+for doing these decomposition proofs.  We describe that below (see "Older 
+Method").  But this method requires equivalence checking between SVEX 
+expressions, which sometimes is very fast but occasionally can be prohibitive 
+for large designs.  The current suggested proof method is as follows.</p> 
+ 
+<p>When using the "new" SVTV package (i.e. <a href="SV____DEFSVTV_42.html">defsvtv$</a> rather than <a href="ACL2____DEFSVTV.html">defsvtv</a>), it can be shown that the pipeline function (<span class="v">svtv-&gt;outexprs</span>) is 
+an unrolling of a finite state machine under a particular set of inputs. This 
+can be proved by the <a href="SV____DEF-PIPELINE-THM.html">def-pipeline-thm</a> event:</p> 
+ 
+<pre class="code">(<a href="SV____DEF-PIPELINE-THM.html">def-pipeline-thm</a> boothpipe-direct)</pre> 
+<pre class="code">(<a href="SV____DEF-PIPELINE-THM.html">def-pipeline-thm</a> boothpipe-step1
+                  :cycle-name boothpipe-direct-cycle)</pre> 
+<pre class="code">(<a href="SV____DEF-PIPELINE-THM.html">def-pipeline-thm</a> boothpipe-step2
+                  :cycle-name boothpipe-direct-cycle)</pre> 
+ 
+<p>These three theorems express the <span class="v">svtv-&gt;outexprs</span> of the three SVTVs in 
+terms of the same FSM, <span class="v">boothpipe-direct-cycle</span>.</p> 
+ 
+<p>To prove the recomposition theorem, we then want to show that the specific 
+sequence of steps of that cycle is consistent between the combined runs of 
+steps 1 and 2 and the direct run.  Once unrolled into a sequence of nested 
+evaluations of the next-state function of the cycle, the only discrepancy comes 
+from the cycle where the step 2 run overrides the partial products with the 
+results from the step 1 run. That is, the composed run has a call like this:</p> 
+ 
+<pre class="code">(<a href="SV____SVEX-ALIST-EVAL.html">svex-alist-eval</a>
+ (<a href="SV____BASE-FSM-_E3NEXTSTATE.html">base-fsm-&gt;nextstate</a> (boothpipe-direct-cycle))
+ (<a href="COMMON-LISP____APPEND.html">append</a>
+  (<a href="SV____SVEX-ALIST-EVAL.html">svex-alist-eval</a>
+   (<a href="SV____BASE-FSM-_E3NEXTSTATE.html">base-fsm-&gt;nextstate</a> (boothpipe-direct-cycle))
+   ...)
+  (<a href="COMMON-LISP____LIST_A2.html">list*</a> (<a href="COMMON-LISP____CONS.html">cons</a> "en" (<a href="SV____4VEC-CONCAT.html">4vec-concat</a> 1 (<a href="SV____SVEX-ENV-LOOKUP.html">svex-env-lookup</a> 'en in-alist) '(0 . -1)))
+         '("clk" 0 . -2)
+         (<a href="COMMON-LISP____CONS.html">cons</a> '(:var "pp01_c2" . -6)
+                ...
+                (<a href="SV____SVEX-EVAL.html">svex-eval</a>
+                 (<a href="SV____SVEX-LOOKUP.html">svex-lookup</a> "pp01_c2" (<a href="SV____BASE-FSM-_E3VALUES.html">base-fsm-&gt;values</a> (boothpipe-direct-cycle)))
+                 ...) ...)
+         ...
+         '((:var "pp01_c2" . -7) . (#xFFFFFFFFF . -1))
+         ...)))</pre> 
+<p>Whereas the direct run instead has a step like this:</p> 
+<pre class="code">(<a href="SV____SVEX-ALIST-EVAL.html">svex-alist-eval</a>
+ (<a href="SV____BASE-FSM-_E3NEXTSTATE.html">base-fsm-&gt;nextstate</a> (boothpipe-direct-cycle))
+ (<a href="COMMON-LISP____APPEND.html">append</a>
+  (<a href="SV____SVEX-ALIST-EVAL.html">svex-alist-eval</a>
+   (<a href="SV____BASE-FSM-_E3NEXTSTATE.html">base-fsm-&gt;nextstate</a> (boothpipe-direct-cycle))
+   ...)
+  (<a href="COMMON-LISP____LIST_A2.html">list*</a> (<a href="COMMON-LISP____CONS.html">cons</a> "en" (<a href="SV____4VEC-CONCAT.html">4vec-concat</a> 1 (<a href="SV____SVEX-ENV-LOOKUP.html">svex-env-lookup</a> 'en in-alist) '(0 . -1)))
+         '("clk" 0 . -2))))</pre> 
+ 
+<p>The composition has several override value variables such as 
+<span class="v">(:var "pp01_c2" . -6)</span> and override test variables such as 
+<span class="v">(:var "pp01_c2" . -7)</span> bound (the -6 and -7 are just bitwise encodings of 
+several switches pertaining to the variable, including whether it is an 
+override value or override test variable).  The bindings for these variables 
+are taken from the step 1 run. What we need to show is that overriding this 
+variable with its value from the step 1 run does not change the result of the 
+evaluation.  We can show this with a syntactic check using the function 
+<span class="v">svexlist-check-overridetriples</span>, as shown by the theorem 
+<span class="v">remove-override-vars-when-svexlist-check-overridetriples</span>.  This theorem 
+says that if we have a set of triples <span class="v">(test-var value-var value-expr)</span> and 
+the test variable and value variable only occur in the form <span class="v">(bit!? test-var
+value-var value-expr)</span> in the expressions to be evaluated, then all of the 
+triples' test and value variables may be removed from the environment without 
+affecting the evaluation of the expressions, if the environment binds each 
+<span class="v">value-var</span> to the result of evaluating the <span class="v">value-expr</span>.  This is 
+exactly the criterion satisfied by these compositions.  We use a variation on 
+this theorem, 
+<span class="v">svtv-decomp-remove-override-vars-from-svex-alist-eval-when-svexlist-check-overridetriples</span>, 
+which detects when an evaluation environment binds some override test variables 
+and uses them to create a list of triples suitable for 
+<span class="v">svexlist-check-overridetriples</span>.  However, in order to create the 
+appropriate list of triples we need to declare ahead of time what FSM we are 
+taking the values from, which we do as follows:</p> 
+ <pre class="code">(set-svtv-decomp-main-fsm boothpipe-direct-cycle)</pre> 
+ 
+<p>The proof of <span class="v">boothpipe-decomp-is-boothpipe</span> and similar theorems are 
+automated with a computed hint <span class="v">(svtv-decomp-hints)</span>.  This computed hint 
+macro takes two arguments <span class="v">:enables</span> and <span class="v">:disables</span>, each a list of rules 
+that should be enabled/disabled in the first simplification phase of the 
+proof.</p> 
+ 
+ 
+<h4>Older Method for Recomposition Proof Automation</h4> 
+ 
+<p>The computed hint <span class="v">svdecomp-hints</span> used to prove this theorem is 
+documented in <a href="SV____SVEX-DECOMP.html">svex-decomp</a>.  In most cases, it suffices to give the hint 
+form the two keyword arguments provided: <span class="v">:hyp</span> and <span class="v">:bindings</span>, which 
+usually should be the autohyps and autobindings for the whole (Direct) model. 
+Also, it is generally best to be in SAT mode rather than BDD mode for this type 
+of proof; good performance of this proof relies on the fact that it is 
+comparing two very similar formulas -- this is very helpful for SAT, but 
+doesn't matter for BDDs, which will just build the (expensive) representations 
+for both entire formulas and compare them.</p> 
+ 
+
+</body>
+</html>
