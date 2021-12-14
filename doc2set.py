@@ -4,8 +4,8 @@ from boltons.fileutils import iter_find_files
 from bs4 import BeautifulSoup
 
 RES_PATH = 'ACL2.docset/Contents/Resources'
-# conn = sqlite3.connect(RES_PATH + '/docSet.dsidx')
-conn = sqlite3.connect('docSet.dsidx')
+conn = sqlite3.connect(RES_PATH + '/docSet.dsidx')
+# conn = sqlite3.connect('docSet.dsidx')
 cur = conn.cursor()
 
 try: 

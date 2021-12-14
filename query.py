@@ -1,8 +1,8 @@
 import sqlite3
 
-connection = sqlite3.connect("docSet.dsidx")
+connection = sqlite3.connect("ACL2.docset/Contents/Resources/docSet.dsidx")
 
 cursor = connection.cursor()
 rows = cursor.execute(
-    "SELECT * FROM searchIndex").fetchall()
+    "SELECT * FROM searchIndex WHERE name='Defun' LIMIT 10").fetchall()
 print(rows)
