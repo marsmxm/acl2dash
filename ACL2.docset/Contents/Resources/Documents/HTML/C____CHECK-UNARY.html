@@ -10,89 +10,143 @@
 
 <p>Check the application of a unary operator to an expression.</p><div class="box"><dl> 
   <dt>Signature</dt>
-<dt><pre class="code">(check-unary op arg-expr arg-type) → type</pre></dt>  <dt>Arguments</dt>  <dd>
+<dt><pre class="code">(check-unary op arg-expr arg-etype) → etype</pre></dt>  <dt>Arguments</dt>  <dd>
 <span class="tt">op</span> — <font color="#606060">Guard <span class="v">(<a href="C____UNOPP.html">unopp</a> op)</span>.</font>
 </dd> 
   <dd>
 <span class="tt">arg-expr</span> — <font color="#606060">Guard <span class="v">(<a href="C____EXPRP.html">exprp</a> arg-expr)</span>.</font>
 </dd> 
   <dd>
-<span class="tt">arg-type</span> — <font color="#606060">Guard <span class="v">(<a href="C____TYPEP.html">typep</a> arg-type)</span>.</font>
+<span class="tt">arg-etype</span> — <font color="#606060">Guard <span class="v">(<a href="C____EXPR-TYPEP.html">expr-typep</a> arg-etype)</span>.</font>
 </dd> 
 <dt>Returns</dt>
 <dd>
-<span class="tt">type</span> — <font color="#606060">Type <span class="v">(<a href="C____TYPE-RESULTP.html">type-resultp</a> type)</span>.</font>
+<span class="tt">etype</span> — <font color="#606060">Type <span class="v">(<a href="C____EXPR-TYPE-RESULTP.html">expr-type-resultp</a> etype)</span>.</font>
 </dd> 
  
 </dl></div> 
-<p>We check <span class="v">arg-type</span> against <span class="v">op</span>; 
+<p>We check <span class="v">arg-etype</span> against <span class="v">op</span>; 
      <span class="v">arg-expr</span> is used just for errors. 
-     We return the type of the unary expression.</p><p>For unary plus and minus, 
+     We return the type of the unary expression.</p><p>The operand of the address operator must be an lvalue [C:6.5.3.2/1]. 
+     The text in [C:6.5.3.2/1] talks about lvalues 
+     but singles out postfix <span class="v">[]</span> expressions and unary <span class="v">*</span> expressions, 
+     even though those are just special cases of lvalues; 
+     perhaps this has to do with the restriction about 
+     the bit-field and the <span class="v">register</span>, 
+     but since none of these are covered in our current C model, 
+     we can just say that, for us, the argument of <span class="v">&amp;</span> must be an lvalue. 
+     This is why this ACL2 function takes an expression type, not just a type, 
+     for the argument: 
+     it is so that we can check the <span class="v">&amp;</span> operator; 
+     checking the other operators only involves the type. 
+     If the type of the argument is <span class="v">T</span>, 
+     the type of the result is pointer to <span class="v">T</span> 
+     [C:6.5.3.2/3]; 
+     the expression is not an lvalue.</p><p>The operand of the indirection operator must be a pointer [C:6.5.3.2/2]. 
+     The result has the referenced type, 
+     and the expression is an lvalue 
+     [C:6.5.3.2/4]. 
+     We return an expression type, not a type, 
+     so that we can represent the fact that 
+     an indirection expression is an lvalue. 
+     All the other unary expressions are not lvalues.</p><p>For unary plus and minus, 
      the operand must be arithmetic, 
      and the result has the promoted type.</p><p>For bitwise negation, 
      the operand must be integer, 
      and the result has the promoted type.</p><p>For logical negation, 
      the operand must be scalar 
-     and the result is <span class="v">int</span> -- 0 or 1.</p> 
+     and the result is <span class="v">int</span> -- 0 or 1.</p><p>For all operators except <span class="v">&amp;</span>, the argument is subjected to 
+     lvalue conversion [C:6.3.2.1/2] 
+     and array-to-pointer conversion [C:6.3.2.1/3]. 
+     In our static semantics, lvalue conversion just amounts to 
+     ignoring the <span class="v">lvalue</span> flag of the expression type.</p> 
  
 <h3>Definitions and Theorems</h3><p><b>Function: </b>check-unary</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
- check-unary (op arg-expr arg-type)
+ check-unary (op arg-expr arg-etype)
  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="C____UNOPP.html">unopp</a> op)
                              (<a href="C____EXPRP.html">exprp</a> arg-expr)
-                             (<a href="C____TYPEP.html">typep</a> arg-type))))
+                             (<a href="C____EXPR-TYPEP.html">expr-typep</a> arg-etype))))
  (<a href="COMMON-LISP____LET.html">let</a>
-   ((__function__ 'check-unary))
-   (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
-   (<a href="COMMON-LISP____CASE.html">case</a> (<a href="C____UNOP-KIND.html">unop-kind</a> op)
-         ((:plus :minus)
-          (<a href="COMMON-LISP____IF.html">if</a> (<a href="C____TYPE-ARITHMETICP.html">type-arithmeticp</a> arg-type)
-              (<a href="C____PROMOTE-TYPE.html">promote-type</a> arg-type)
-              (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :unary-mistype (<a href="C____UNOP-FIX.html">unop-fix</a> op)
-                           (<a href="C____EXPR-FIX.html">expr-fix</a> arg-expr)
-                           :required :arithmetic
-                           :supplied (<a href="C____TYPE-FIX.html">type-fix</a> arg-type)))))
-         (:bitnot (<a href="COMMON-LISP____IF.html">if</a> (<a href="C____TYPE-INTEGERP.html">type-integerp</a> arg-type)
-                      (<a href="C____PROMOTE-TYPE.html">promote-type</a> arg-type)
-                      (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :unary-mistype (<a href="C____UNOP-FIX.html">unop-fix</a> op)
-                                   (<a href="C____EXPR-FIX.html">expr-fix</a> arg-expr)
-                                   :required :integer
-                                   :supplied (<a href="C____TYPE-FIX.html">type-fix</a> arg-type)))))
-         (:lognot (<a href="COMMON-LISP____IF.html">if</a> (<a href="C____TYPE-SCALARP.html">type-scalarp</a> arg-type)
-                      (<a href="C____TYPE-SINT.html">type-sint</a>)
-                      (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :unary-mistype (<a href="C____UNOP-FIX.html">unop-fix</a> op)
-                                   (<a href="C____EXPR-FIX.html">expr-fix</a> arg-expr)
-                                   :required :scalar
-                                   :supplied (<a href="C____TYPE-FIX.html">type-fix</a> arg-type)))))
-         (t (<a href="C____ERROR.html">error</a> (<a href="ACL2____IMPOSSIBLE.html">impossible</a>))))))</pre> 
-<p><b>Theorem: </b>type-resultp-of-check-unary</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> type-resultp-of-check-unary
-        (<a href="ACL2____B_A2.html">b*</a> ((<a href="C____TYPE.html">type</a> (<a href="C____CHECK-UNARY.html">check-unary</a> op arg-expr arg-type)))
-            (<a href="C____TYPE-RESULTP.html">type-resultp</a> type))
+  ((__function__ 'check-unary))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="COMMON-LISP____CASE.html">case</a>
+   (<a href="C____UNOP-KIND.html">unop-kind</a> op)
+   (:address
+        (<a href="COMMON-LISP____IF.html">if</a> (<a href="C____EXPR-TYPE-_E3LVALUE.html">expr-type-&gt;lvalue</a> arg-etype)
+            (<a href="C____MAKE-EXPR-TYPE.html">make-expr-type</a>
+                 :type (<a href="C____TYPE-POINTER.html">type-pointer</a> (<a href="C____EXPR-TYPE-_E3TYPE.html">expr-type-&gt;type</a> arg-etype))
+                 :lvalue nil)
+            (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :unary-mistype (<a href="C____UNOP-FIX.html">unop-fix</a> op)
+                         (<a href="C____EXPR-FIX.html">expr-fix</a> arg-expr)
+                         :required :lvalue
+                         :supplied (<a href="C____EXPR-TYPE-FIX.html">expr-type-fix</a> arg-etype)))))
+   (:indir (<a href="ACL2____B_A2.html">b*</a> ((arg-type (<a href="C____EXPR-TYPE-_E3TYPE.html">expr-type-&gt;type</a> arg-etype))
+                (arg-type (<a href="C____APCONVERT-TYPE.html">apconvert-type</a> arg-type)))
+               (<a href="COMMON-LISP____IF.html">if</a> (<a href="C____TYPE-CASE.html">type-case</a> arg-type :pointer)
+                   (<a href="C____MAKE-EXPR-TYPE.html">make-expr-type</a> :type (<a href="C____TYPE-POINTER-_E3TO.html">type-pointer-&gt;to</a> arg-type)
+                                   :lvalue nil)
+                   (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :unary-mistype (<a href="C____UNOP-FIX.html">unop-fix</a> op)
+                                (<a href="C____EXPR-FIX.html">expr-fix</a> arg-expr)
+                                :required :pointer
+                                :supplied arg-type)))))
+   ((:plus :minus)
+    (<a href="ACL2____B_A2.html">b*</a> ((arg-type (<a href="C____EXPR-TYPE-_E3TYPE.html">expr-type-&gt;type</a> arg-etype))
+         (arg-type (<a href="C____APCONVERT-TYPE.html">apconvert-type</a> arg-type)))
+        (<a href="COMMON-LISP____IF.html">if</a> (<a href="C____TYPE-ARITHMETICP.html">type-arithmeticp</a> arg-type)
+            (<a href="C____MAKE-EXPR-TYPE.html">make-expr-type</a> :type (<a href="C____PROMOTE-TYPE.html">promote-type</a> arg-type)
+                            :lvalue nil)
+            (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :unary-mistype (<a href="C____UNOP-FIX.html">unop-fix</a> op)
+                         (<a href="C____EXPR-FIX.html">expr-fix</a> arg-expr)
+                         :required :arithmetic
+                         :supplied (<a href="C____TYPE-FIX.html">type-fix</a> arg-type))))))
+   (:bitnot (<a href="ACL2____B_A2.html">b*</a> ((arg-type (<a href="C____EXPR-TYPE-_E3TYPE.html">expr-type-&gt;type</a> arg-etype))
+                 (arg-type (<a href="C____APCONVERT-TYPE.html">apconvert-type</a> arg-type)))
+                (<a href="COMMON-LISP____IF.html">if</a> (<a href="C____TYPE-INTEGERP.html">type-integerp</a> arg-type)
+                    (<a href="C____MAKE-EXPR-TYPE.html">make-expr-type</a> :type (<a href="C____PROMOTE-TYPE.html">promote-type</a> arg-type)
+                                    :lvalue nil)
+                    (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :unary-mistype (<a href="C____UNOP-FIX.html">unop-fix</a> op)
+                                 (<a href="C____EXPR-FIX.html">expr-fix</a> arg-expr)
+                                 :required :integer
+                                 :supplied (<a href="C____TYPE-FIX.html">type-fix</a> arg-type))))))
+   (:lognot (<a href="ACL2____B_A2.html">b*</a> ((arg-type (<a href="C____EXPR-TYPE-_E3TYPE.html">expr-type-&gt;type</a> arg-etype))
+                 (arg-type (<a href="C____APCONVERT-TYPE.html">apconvert-type</a> arg-type)))
+                (<a href="COMMON-LISP____IF.html">if</a> (<a href="C____TYPE-SCALARP.html">type-scalarp</a> arg-type)
+                    (<a href="C____MAKE-EXPR-TYPE.html">make-expr-type</a> :type (<a href="C____TYPE-SINT.html">type-sint</a>)
+                                    :lvalue nil)
+                    (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :unary-mistype (<a href="C____UNOP-FIX.html">unop-fix</a> op)
+                                 (<a href="C____EXPR-FIX.html">expr-fix</a> arg-expr)
+                                 :required :scalar
+                                 :supplied (<a href="C____TYPE-FIX.html">type-fix</a> arg-type))))))
+   (t (<a href="C____ERROR.html">error</a> (<a href="ACL2____IMPOSSIBLE.html">impossible</a>))))))</pre> 
+<p><b>Theorem: </b>expr-type-resultp-of-check-unary</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> expr-type-resultp-of-check-unary
+        (<a href="ACL2____B_A2.html">b*</a> ((etype (<a href="C____CHECK-UNARY.html">check-unary</a> op arg-expr arg-etype)))
+            (<a href="C____EXPR-TYPE-RESULTP.html">expr-type-resultp</a> etype))
         :rule-classes :rewrite)</pre> 
 <p><b>Theorem: </b>check-unary-of-unop-fix-op</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> check-unary-of-unop-fix-op
         (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____CHECK-UNARY.html">check-unary</a> (<a href="C____UNOP-FIX.html">unop-fix</a> op)
-                            arg-expr arg-type)
-               (<a href="C____CHECK-UNARY.html">check-unary</a> op arg-expr arg-type)))</pre> 
+                            arg-expr arg-etype)
+               (<a href="C____CHECK-UNARY.html">check-unary</a> op arg-expr arg-etype)))</pre> 
 <p><b>Theorem: </b>check-unary-unop-equiv-congruence-on-op</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> check-unary-unop-equiv-congruence-on-op
         (<a href="ACL2____IMPLIES.html">implies</a> (<a href="C____UNOP-EQUIV.html">unop-equiv</a> op op-equiv)
-                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____CHECK-UNARY.html">check-unary</a> op arg-expr arg-type)
-                        (<a href="C____CHECK-UNARY.html">check-unary</a> op-equiv arg-expr arg-type)))
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____CHECK-UNARY.html">check-unary</a> op arg-expr arg-etype)
+                        (<a href="C____CHECK-UNARY.html">check-unary</a> op-equiv arg-expr arg-etype)))
         :rule-classes :congruence)</pre> 
 <p><b>Theorem: </b>check-unary-of-expr-fix-arg-expr</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> check-unary-of-expr-fix-arg-expr
         (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____CHECK-UNARY.html">check-unary</a> op (<a href="C____EXPR-FIX.html">expr-fix</a> arg-expr)
-                            arg-type)
-               (<a href="C____CHECK-UNARY.html">check-unary</a> op arg-expr arg-type)))</pre> 
+                            arg-etype)
+               (<a href="C____CHECK-UNARY.html">check-unary</a> op arg-expr arg-etype)))</pre> 
 <p><b>Theorem: </b>check-unary-expr-equiv-congruence-on-arg-expr</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> check-unary-expr-equiv-congruence-on-arg-expr
         (<a href="ACL2____IMPLIES.html">implies</a> (<a href="C____EXPR-EQUIV.html">expr-equiv</a> arg-expr arg-expr-equiv)
-                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____CHECK-UNARY.html">check-unary</a> op arg-expr arg-type)
-                        (<a href="C____CHECK-UNARY.html">check-unary</a> op arg-expr-equiv arg-type)))
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____CHECK-UNARY.html">check-unary</a> op arg-expr arg-etype)
+                        (<a href="C____CHECK-UNARY.html">check-unary</a> op arg-expr-equiv arg-etype)))
         :rule-classes :congruence)</pre> 
-<p><b>Theorem: </b>check-unary-of-type-fix-arg-type</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> check-unary-of-type-fix-arg-type
-        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____CHECK-UNARY.html">check-unary</a> op arg-expr (<a href="C____TYPE-FIX.html">type-fix</a> arg-type))
-               (<a href="C____CHECK-UNARY.html">check-unary</a> op arg-expr arg-type)))</pre> 
-<p><b>Theorem: </b>check-unary-type-equiv-congruence-on-arg-type</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> check-unary-type-equiv-congruence-on-arg-type
-        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="C____TYPE-EQUIV.html">type-equiv</a> arg-type arg-type-equiv)
-                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____CHECK-UNARY.html">check-unary</a> op arg-expr arg-type)
-                        (<a href="C____CHECK-UNARY.html">check-unary</a> op arg-expr arg-type-equiv)))
+<p><b>Theorem: </b>check-unary-of-expr-type-fix-arg-etype</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> check-unary-of-expr-type-fix-arg-etype
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____CHECK-UNARY.html">check-unary</a> op arg-expr (<a href="C____EXPR-TYPE-FIX.html">expr-type-fix</a> arg-etype))
+               (<a href="C____CHECK-UNARY.html">check-unary</a> op arg-expr arg-etype)))</pre> 
+<p><b>Theorem: </b>check-unary-expr-type-equiv-congruence-on-arg-etype</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> check-unary-expr-type-equiv-congruence-on-arg-etype
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="C____EXPR-TYPE-EQUIV.html">expr-type-equiv</a> arg-etype arg-etype-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____CHECK-UNARY.html">check-unary</a> op arg-expr arg-etype)
+                        (<a href="C____CHECK-UNARY.html">check-unary</a> op arg-expr arg-etype-equiv)))
         :rule-classes :congruence)</pre> 
 
 </body>

@@ -1,0 +1,167 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Match-tree</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____MATCH-TREE">Click for Match-tree in the Full Manual</a></h3>
+
+<p>Match an object against a flexible pattern and return the unifying substitution</p>  
+<p>Match-tree is a function that takes a pattern, object, and alist, and 
+returns two values: matchedp, which is true only if the pattern matched the 
+object under the bindings already present in alist, and result-alist, an 
+extension of the input alist containing the unifying substitution.</p> 
+ 
+<p>Invocation:</p> 
+<pre class="code">  (<a href="ACL2____MATCH-TREE.html">match-tree</a> pattern obj alist)
+ --&gt;
+  (<a href="ACL2____MV.html">mv</a> matchedp new-alist)
+ )}     
+
+&lt;p&gt;Pseudo-formally, if the input alist is empty, a pattern P matches an object
+X and produces bindings as follows:&lt;/p&gt;
+
+@({
+  Match conditions                                 Bindings produced
+  P is an atom and P = X
+  P is (:? &lt;symb&gt;)                                 (&lt;symb&gt; . X)
+  P is (:! &lt;symb&gt;)                                 (&lt;symb&gt; . X)
+  P is (:?S &lt;symb&gt;) and X is a symbol              (&lt;symb&gt; . X)
+  P is (:?V &lt;symb&gt;) and X is a nonnil symbol       (&lt;symb&gt; . X)
+  P is (:?F &lt;symb&gt;) and X is a non-quote symbol    (&lt;symb&gt; . X)
+  P is (:?L &lt;symb&gt;) and X is not quote             (&lt;symb&gt; . X)
+  P is none of the above,
+       (<a href="COMMON-LISP____CAR.html">car</a> P) matches (<a href="COMMON-LISP____CAR.html">car</a> X),
+       (<a href="COMMON-LISP____CDR.html">cdr</a> P) matches (<a href="COMMON-LISP____CDR.html">cdr</a> X),                    car bindings
+       and the car and cdrs' bindings                UNION
+       agree on all symbols bound in both.         cdr bindings.</pre> 
+ 
+<p>If the input alist is not empty, then the bindings produced must also agree 
+with any bindings of the same symbols that are present in the input alist, and 
+the result alist is the bindings unioned with the input alist.</p> 
+ 
+<p>The <span class="v">(:! x)</span> binding pattern is the same as <span class="v">(:? x)</span> in match-tree 
+itself, but is treated differently by macros <a href="ACL2____TREEMATCH.html">treematch</a>, <a href="ACL2____WHEN-MATCH.html">when-match</a>, and <a href="ACL2____UNLESS-MATCH.html">unless-match</a>; see below.</p> 
+ 
+<h2>Macro support</h2> 
+ 
+<p>Match-tree supports the utility <a href="ACL2____TREEMATCH.html">treematch</a>, which is similar in spirit to <a href="ACL2____CASE-MATCH.html">case-match</a>; e.g., </p> 
+ 
+<pre class="code">(<a href="ACL2____TREEMATCH.html">treematch</a> x
+  ((<a href="COMMON-LISP____CONS.html">cons</a> (:? a) (:? b))    (<a href="COMMON-LISP____LIST.html">list</a> a b))
+  ((foo (:v q))            (<a href="COMMON-LISP____LIST.html">list</a> q))
+  (&amp;                       (<a href="COMMON-LISP____LIST.html">list</a> x)))</pre> 
+<p>expands to approximately:</p> 
+<pre class="code">(<a href="ACL2____B_A2.html">b*</a> (
+     ;; (<a href="COMMON-LISP____CONS.html">cons</a> (:? a) (:? b)) case:
+     ((<a href="ACL2____MV.html">mv</a> matchedp alist) (<a href="ACL2____MATCH-TREE.html">match-tree</a> '(<a href="COMMON-LISP____CONS.html">cons</a> (:? a) (:? b)) x nil))
+     ((when matchedp)
+      (<a href="COMMON-LISP____LET_A2.html">let*</a> ((a (<a href="COMMON-LISP____CDR.html">cdr</a> (<a href="COMMON-LISP____ASSOC.html">assoc</a> 'a alist)))
+             (b (<a href="COMMON-LISP____CDR.html">cdr</a> (<a href="COMMON-LISP____ASSOC.html">assoc</a> 'b alist))))
+         (<a href="COMMON-LISP____LIST.html">list</a> a b)))
+
+     ;; (foo (:v q)) case:
+     ((<a href="ACL2____MV.html">mv</a> matchedp alist) (<a href="ACL2____MATCH-TREE.html">match-tree</a> '(foo (:v q) (:? y)) x nil))
+     ((when matchedp)
+      (<a href="COMMON-LISP____LET_A2.html">let*</a> ((<a href="ACL2____Q.html">q</a> (<a href="COMMON-LISP____CDR.html">cdr</a> (<a href="COMMON-LISP____ASSOC.html">assoc</a> 'q alist))))
+         (<a href="COMMON-LISP____LIST.html">list</a> q))))
+
+  ;; default case:
+  (<a href="COMMON-LISP____LIST.html">list</a> x))</pre> 
+ 
+<p>When a pattern contains <span class="v">(:! x)</span> binders, <span class="v">treematch</span> invokes 
+match-tree with an alist consisting of the previous bindings of those 
+variables; then, the pattern will only match if the corresponding location in 
+the object is equal to the existing binding of the variable, like in <a href="ACL2____CASE-MATCH.html">case-match</a> when a symbol is prefixed with <span class="v">!</span>.  For example, in the 
+following form:</p> 
+ 
+<pre class="code">(<a href="COMMON-LISP____LET.html">let</a> ((y 'bar))
+  (<a href="ACL2____TREEMATCH.html">treematch</a> x
+     ((foo (:! y))  ...)
+     ...))</pre> 
+<p>the match-tree call generated is:</p> 
+<pre class="code">(<a href="ACL2____MATCH-TREE.html">match-tree</a> '(foo (:! y)) x (<a href="COMMON-LISP____LIST.html">list</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'y y)))</pre> 
+<p>which means that this match will only succeed if x equals <span class="v">(foo bar)</span>.</p> 
+ 
+<p>Two <a href="ACL2____B_A2.html">b*</a> binders <span class="v">unless-match</span> and <span class="v">when-match</span> also use match-tree.  One can think of them as expending to a call of <span class="v">treematch</span> with one pattern and a default:</p> 
+ 
+<pre class="code">(<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____WHEN-MATCH.html">when-match</a> obj pattern)
+      match-form))
+   default-form)</pre> 
+<p>and</p> 
+<pre class="code">(<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____UNLESS-MATCH.html">unless-match</a> obj pattern)
+      default-form))
+   match-form)</pre> 
+<p>are both basically equivalent to</p> 
+<pre class="code">(<a href="ACL2____TREEMATCH.html">treematch</a> obj
+  (pattern match-form)
+  (&amp; default-form))</pre> 
+     
+<h2>Reasoning</h2> 
+ 
+<p>The main advantage of match-tree over case-match is reasoning 
+efficiency. When using case-match, each pattern-matching form macroexpands to a 
+conjunction of conditions followed by a series of bindings.  These are 
+relatively automatic to reason about, but they make it difficult to debug 
+problems in proofs (because it takes a lot of reading and decoding car/cdr 
+nests to figure out which patterns did and did not match), and they are 
+expensive to reason about because when a pattern does NOT match, ACL2 typically 
+splits into cases for the disjunction of the matching conditions.</p> 
+ 
+<p>Since match-tree is a function, the user can control how or whether to open 
+it.  We offer a couple of levels of reasoning about it, bundled in theories.</p> 
+ 
+<p>We generally rewrite the second (new-alist) return value of <span class="v">match-tree</span> 
+to <span class="v">match-tree-alist</span>.  This is a simpler function with fewer conditionals 
+that equals that value whenever the pattern matches; presumably the alist isn't 
+relevant otherwise. The theory <span class="v">match-tree-alist-opener-theory</span> opens calls 
+of <span class="v">match-tree-alist</span>.  You may additionally want a rule such as 
+<span class="v">assoc-equal-of-cons</span> to simplify lookups in the alist.</p> 
+ 
+<p>We generally rewrite the first return value (matchedp) to 
+<span class="v">match-tree-matchedp</span> (which is equivalent) when the match was successful. 
+However, we can use different rules to do this and these rules have different 
+side effects to help with reasoning:</p> 
+ 
+<ul> 
+<li>
+<span class="v">match-tree-equals-match-tree-matchedp-when-successful</span> simply 
+rewrites the <span class="v">matchedp</span> return value to <span class="v">match-tree-matchedp</span>, without side 
+effects.</li> 
+ 
+<li>
+<span class="v">match-tree-obj-equals-subst-when-successful</span> rewrites the <span class="v">matchedp</span> 
+value to the conjunction of <span class="v">match-tree-matchedp</span> and a term equating the 
+object with the substitution of the result alist into the pattern.  Rules that 
+expand the substitution are enabled by default, so this quickly produces a 
+hypothesis that gives the shape of the object defined by the pattern.</li> 
+ 
+<li>
+<span class="v">match-tree-open-when-successful</span> rewrites the <span class="v">matchedp</span> value to 
+the conjunction of <span class="v">match-tree-matchedp</span> and <span class="v">match-tree-matchedp-open</span>, 
+and equivalent function that has rules to open calls on known patterns enabled 
+by default (collected in the theory <span class="v">match-tree-opener-theory</span>.</li> 
+ 
+<li>
+<span class="v">match-tree-obj-equals-subst-and-open-when-successful</span> rewrites the 
+<span class="v">matchedp</span> value to the conjunction of all three: <span class="v">match-tree-matchedp</span>, 
+<span class="v">match-tree-matchedp-open</span>, and the equivalence of the object with the 
+substitution.</li> 
+ 
+</ul> 
+ 
+<p>These rules only take effect when we see the <span class="v">matchedp</span> return value as a 
+negative literal (hypothesis/negated conclusion) of a clause, not when 
+backchaining or a positive literal (negated hypothesis/conclusion).  To prove 
+that a pattern does in fact match, or a consequence when it doesn't match, the 
+rule <span class="v">match-tree-open</span> unconditionally rewrites the matchedp value to 
+<span class="v">match-tree-matchedp-open</span>, which by default opens into a conjunction of 
+conditions.</p> 
+ 
+ 
+ 
+
+</body>
+</html>

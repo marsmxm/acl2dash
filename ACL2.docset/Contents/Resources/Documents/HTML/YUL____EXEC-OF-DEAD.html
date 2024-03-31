@@ -8,66 +8,151 @@
 
 <h3><a href="../index.html?topic=YUL____EXEC-OF-DEAD">Click for Exec-of-dead in the Full Manual</a></h3>
 
-<p>Correctness theorems of the execution functions.</p><p>We locally enable the equivalence relations, 
+<p>Correctness theorems of the execution functions.</p><p>As mentioned earlier, 
+     the main theorems are proved by mutual execution, 
+     using the flag approach.</p><p>The current proof uses some <span class="v">:use</span> and <span class="v">:expand</span> hints 
+     for certain cases of the induction proof. 
+     For robustness and efficiency, 
+     we prefer to apply these hints only to those cases. 
+     (In earlier version of this proof, which was more complex at the time, 
+     attempting to apply these hints to all cases uniformly 
+     caused the proof to be too slow, if it worked at all, 
+     presumably due to many unnecessary case splits.) 
+     There may be actually ways to avoid the <span class="v">:use</span> hints, 
+     by proving and enabling suitable rules. 
+     It is less clear whether the <span class="v">:expand</span> hints could be avoided, 
+     given that the functions in question are already enabled, 
+     but ACL2's heuristics prevent their expansion, 
+     even though forcing the expand with the <span class="v">:expand</span> hints 
+     leads to a successful proof in the end. 
+     Perhaps they might be applied uniformly to all subgoals, 
+     but this may cause proof brittleness or inefficiency. 
+     Thus, limiting these <span class="v">:use</span> and <span class="v">:expand</span> hints to the needed cases 
+     seems to be the right thing at this moment.</p><p>To avoid the brittleness and unreadability of subgoal hints, 
+     we use computed hints to robustly and readably designate 
+     the proof cases to which specific hints must apply. 
+     We do that with the function below, 
+     which uses two macros for conciseness. 
+     The proof cases are denoted based on 
+     the flag value and possibly the kind of statement; 
+     these are expressed in terms of occurrences of terms in the clauses.</p><p>We locally enable, for all subgoals, 
+     the execution functions, 
+     the transformation functions, 
+     and the no-function-definition predicates. 
+     We also enable the equivalence relations, 
      since we always want to expand them in the proofs. 
-     Note that, if we put them into a goal hint, 
+     And we enable some additional rules, motivated by the arising subgoals. 
+     Note that, if we put these enablements into a goal hint, 
      they would not apply to subgoals where computed hints apply; 
      this is why we locally enable them instead.</p> 
  
-<h3>Definitions and Theorems</h3><p><b>Theorem: </b>exec-expression-of-dead</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> exec-expression-of-dead
-        (<a href="YUL____EOUTCOME-RESULT-OKEQ.html">eoutcome-result-okeq</a>
-             (<a href="YUL____EXEC-EXPRESSION.html">exec-expression</a> expr cstate (<a href="YUL____FUNENV-DEAD.html">funenv-dead</a> funenv)
-                              limit)
-             (<a href="YUL____EXEC-EXPRESSION.html">exec-expression</a> expr cstate funenv limit)))</pre> 
-<p><b>Theorem: </b>exec-expression-list-of-dead</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> exec-expression-list-of-dead
+<h3>Definitions and Theorems</h3><p><b>Function: </b>exec-of-dead-hints</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ exec-of-dead-hints (id clause world)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORE.html">ignore</a> id world))
+ (<a href="COMMON-LISP____COND.html">cond</a>
+  ((exec-of-dead-flag-is exec-statement)
+   (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____OR.html">or</a> (exec-of-dead-stmt-kind-is :if)
+            (exec-of-dead-stmt-kind-is :for)
+            (exec-of-dead-stmt-kind-is :switch))
+        '(:expand ((<a href="YUL____EXEC-STATEMENT.html">exec-statement</a> stmt cstate funenv limit)
+                   (<a href="YUL____STATEMENT-DEAD.html">statement-dead</a> stmt)))))
+  ((exec-of-dead-flag-is exec-statement-list)
+   '(:in-theory
+         (<a href="ACL2____DISABLE.html">disable</a> statement-kind-when-mode-regular)
+         :use (:instance statement-kind-when-mode-regular
+                         (stmt (<a href="COMMON-LISP____CAR.html">car</a> stmts))
+                         (limit (<a href="COMMON-LISP____1-.html">1-</a> limit)))
+         :expand (<a href="YUL____EXEC-STATEMENT-LIST.html">exec-statement-list</a> (<a href="YUL____STATEMENT-LIST-DEAD.html">statement-list-dead</a> stmts)
+                                      cstate (<a href="YUL____FUNENV-DEAD.html">funenv-dead</a> funenv)
+                                      limit)))
+  ((exec-of-dead-flag-is exec-block)
+   '(:expand (<a href="YUL____EXEC-BLOCK.html">exec-block</a> block cstate funenv limit)))
+  ((exec-of-dead-flag-is exec-switch-rest)
+   '(:expand
+         ((<a href="YUL____BLOCK-OPTION-DEAD.html">block-option-dead</a> default)
+          (<a href="YUL____BLOCK-OPTION-NOFUNP.html">block-option-nofunp</a> default)
+          (<a href="YUL____EXEC-SWITCH-REST.html">exec-switch-rest</a> cases
+                            default target cstate funenv limit))))))</pre> 
+<p><b>Theorem: </b>exec-expression-of-dead</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     exec-expression-of-dead
+     (<a href="ACL2____IMPLIES.html">implies</a> (<a href="YUL____FUNENV-NOFUNP.html">funenv-nofunp</a> funenv)
+              (<a href="YUL____EOUTCOME-RESULT-OKEQ.html">eoutcome-result-okeq</a>
+                   (<a href="YUL____EXEC-EXPRESSION.html">exec-expression</a> expr cstate (<a href="YUL____FUNENV-DEAD.html">funenv-dead</a> funenv)
+                                    limit)
+                   (<a href="YUL____EXEC-EXPRESSION.html">exec-expression</a> expr cstate funenv limit))))</pre> 
+<p><b>Theorem: </b>exec-expression-list-of-dead</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+   exec-expression-list-of-dead
+   (<a href="ACL2____IMPLIES.html">implies</a>
+        (<a href="YUL____FUNENV-NOFUNP.html">funenv-nofunp</a> funenv)
         (<a href="YUL____EOUTCOME-RESULT-OKEQ.html">eoutcome-result-okeq</a>
              (<a href="YUL____EXEC-EXPRESSION-LIST.html">exec-expression-list</a> exprs cstate (<a href="YUL____FUNENV-DEAD.html">funenv-dead</a> funenv)
                                    limit)
-             (<a href="YUL____EXEC-EXPRESSION-LIST.html">exec-expression-list</a> exprs cstate funenv limit)))</pre> 
+             (<a href="YUL____EXEC-EXPRESSION-LIST.html">exec-expression-list</a> exprs cstate funenv limit))))</pre> 
 <p><b>Theorem: </b>exec-funcall-of-dead</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> exec-funcall-of-dead
-        (<a href="YUL____EOUTCOME-RESULT-OKEQ.html">eoutcome-result-okeq</a>
-             (<a href="YUL____EXEC-FUNCALL.html">exec-funcall</a> call cstate (<a href="YUL____FUNENV-DEAD.html">funenv-dead</a> funenv)
-                           limit)
-             (<a href="YUL____EXEC-FUNCALL.html">exec-funcall</a> call cstate funenv limit)))</pre> 
-<p><b>Theorem: </b>exec-function-of-dead</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> exec-function-of-dead
-        (<a href="YUL____EOUTCOME-RESULT-OKEQ.html">eoutcome-result-okeq</a>
-             (<a href="YUL____EXEC-FUNCTION.html">exec-function</a> fun args cstate (<a href="YUL____FUNENV-DEAD.html">funenv-dead</a> funenv)
-                            limit)
-             (<a href="YUL____EXEC-FUNCTION.html">exec-function</a> fun args cstate funenv limit)))</pre> 
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="YUL____FUNENV-NOFUNP.html">funenv-nofunp</a> funenv)
+                 (<a href="YUL____EOUTCOME-RESULT-OKEQ.html">eoutcome-result-okeq</a>
+                      (<a href="YUL____EXEC-FUNCALL.html">exec-funcall</a> call cstate (<a href="YUL____FUNENV-DEAD.html">funenv-dead</a> funenv)
+                                    limit)
+                      (<a href="YUL____EXEC-FUNCALL.html">exec-funcall</a> call cstate funenv limit))))</pre> 
+<p><b>Theorem: </b>exec-function-of-dead</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+   exec-function-of-dead
+   (<a href="ACL2____IMPLIES.html">implies</a> (<a href="YUL____FUNENV-NOFUNP.html">funenv-nofunp</a> funenv)
+            (<a href="YUL____EOUTCOME-RESULT-OKEQ.html">eoutcome-result-okeq</a>
+                 (<a href="YUL____EXEC-FUNCTION.html">exec-function</a> fun args cstate (<a href="YUL____FUNENV-DEAD.html">funenv-dead</a> funenv)
+                                limit)
+                 (<a href="YUL____EXEC-FUNCTION.html">exec-function</a> fun args cstate funenv limit))))</pre> 
 <p><b>Theorem: </b>exec-statement-of-dead</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
-   exec-statement-of-dead
-   (<a href="YUL____SOUTCOME-RESULT-OKEQ.html">soutcome-result-okeq</a> (<a href="YUL____EXEC-STATEMENT.html">exec-statement</a> (<a href="YUL____STATEMENT-DEAD.html">statement-dead</a> stmt)
-                                         cstate (<a href="YUL____FUNENV-DEAD.html">funenv-dead</a> funenv)
-                                         limit)
-                         (<a href="YUL____EXEC-STATEMENT.html">exec-statement</a> stmt cstate funenv limit)))</pre> 
-<p><b>Theorem: </b>exec-statement-list-of-dead</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> exec-statement-list-of-dead
-        (<a href="YUL____SOUTCOME-RESULT-OKEQ.html">soutcome-result-okeq</a>
-             (<a href="YUL____EXEC-STATEMENT-LIST.html">exec-statement-list</a> (<a href="YUL____STATEMENT-LIST-DEAD.html">statement-list-dead</a> stmts nil)
-                                  cstate (<a href="YUL____FUNENV-DEAD.html">funenv-dead</a> funenv)
-                                  limit)
-             (<a href="YUL____EXEC-STATEMENT-LIST.html">exec-statement-list</a> stmts cstate funenv limit)))</pre> 
+ exec-statement-of-dead
+ (<a href="ACL2____IMPLIES.html">implies</a>
+  (<a href="COMMON-LISP____AND.html">and</a> (<a href="YUL____STATEMENT-NOFUNP.html">statement-nofunp</a> stmt)
+       (<a href="YUL____FUNENV-NOFUNP.html">funenv-nofunp</a> funenv))
+  (<a href="YUL____SOUTCOME-RESULT-OKEQ.html">soutcome-result-okeq</a> (<a href="YUL____EXEC-STATEMENT.html">exec-statement</a> (<a href="YUL____STATEMENT-DEAD.html">statement-dead</a> stmt)
+                                        cstate (<a href="YUL____FUNENV-DEAD.html">funenv-dead</a> funenv)
+                                        limit)
+                        (<a href="YUL____EXEC-STATEMENT.html">exec-statement</a> stmt cstate funenv limit))))</pre> 
+<p><b>Theorem: </b>exec-statement-list-of-dead</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+    exec-statement-list-of-dead
+    (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="YUL____STATEMENT-LIST-NOFUNP.html">statement-list-nofunp</a> stmts)
+                  (<a href="YUL____FUNENV-NOFUNP.html">funenv-nofunp</a> funenv))
+             (<a href="YUL____SOUTCOME-RESULT-OKEQ.html">soutcome-result-okeq</a>
+                  (<a href="YUL____EXEC-STATEMENT-LIST.html">exec-statement-list</a> (<a href="YUL____STATEMENT-LIST-DEAD.html">statement-list-dead</a> stmts)
+                                       cstate (<a href="YUL____FUNENV-DEAD.html">funenv-dead</a> funenv)
+                                       limit)
+                  (<a href="YUL____EXEC-STATEMENT-LIST.html">exec-statement-list</a> stmts cstate funenv limit))))</pre> 
 <p><b>Theorem: </b>exec-block-of-dead</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
-     exec-block-of-dead
+ exec-block-of-dead
+ (<a href="ACL2____IMPLIES.html">implies</a>
+     (<a href="COMMON-LISP____AND.html">and</a> (<a href="YUL____BLOCK-NOFUNP.html">block-nofunp</a> block)
+          (<a href="YUL____FUNENV-NOFUNP.html">funenv-nofunp</a> funenv))
      (<a href="YUL____SOUTCOME-RESULT-OKEQ.html">soutcome-result-okeq</a> (<a href="YUL____EXEC-BLOCK.html">exec-block</a> (<a href="YUL____BLOCK-DEAD.html">block-dead</a> block)
                                        cstate (<a href="YUL____FUNENV-DEAD.html">funenv-dead</a> funenv)
                                        limit)
-                           (<a href="YUL____EXEC-BLOCK.html">exec-block</a> block cstate funenv limit)))</pre> 
+                           (<a href="YUL____EXEC-BLOCK.html">exec-block</a> block cstate funenv limit))))</pre> 
 <p><b>Theorem: </b>exec-for-iterations-of-dead</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
-   exec-for-iterations-of-dead
-   (<a href="YUL____SOUTCOME-RESULT-OKEQ.html">soutcome-result-okeq</a>
-        (<a href="YUL____EXEC-FOR-ITERATIONS.html">exec-for-iterations</a> test (<a href="YUL____BLOCK-DEAD.html">block-dead</a> update)
-                             (<a href="YUL____BLOCK-DEAD.html">block-dead</a> body)
-                             cstate (<a href="YUL____FUNENV-DEAD.html">funenv-dead</a> funenv)
-                             limit)
-        (<a href="YUL____EXEC-FOR-ITERATIONS.html">exec-for-iterations</a> test update body cstate funenv limit)))</pre> 
-<p><b>Theorem: </b>exec-switch-rest-of-dead</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> exec-switch-rest-of-dead
-        (<a href="YUL____SOUTCOME-RESULT-OKEQ.html">soutcome-result-okeq</a>
-             (<a href="YUL____EXEC-SWITCH-REST.html">exec-switch-rest</a> (<a href="YUL____SWCASE-LIST-DEAD.html">swcase-list-dead</a> cases)
-                               (<a href="YUL____BLOCK-OPTION-DEAD.html">block-option-dead</a> default)
-                               target cstate (<a href="YUL____FUNENV-DEAD.html">funenv-dead</a> funenv)
-                               limit)
-             (<a href="YUL____EXEC-SWITCH-REST.html">exec-switch-rest</a> cases
-                               default target cstate funenv limit)))</pre> 
+ exec-for-iterations-of-dead
+ (<a href="ACL2____IMPLIES.html">implies</a>
+  (<a href="COMMON-LISP____AND.html">and</a> (<a href="YUL____BLOCK-NOFUNP.html">block-nofunp</a> update)
+       (<a href="YUL____BLOCK-NOFUNP.html">block-nofunp</a> body)
+       (<a href="YUL____FUNENV-NOFUNP.html">funenv-nofunp</a> funenv))
+  (<a href="YUL____SOUTCOME-RESULT-OKEQ.html">soutcome-result-okeq</a>
+       (<a href="YUL____EXEC-FOR-ITERATIONS.html">exec-for-iterations</a> test (<a href="YUL____BLOCK-DEAD.html">block-dead</a> update)
+                            (<a href="YUL____BLOCK-DEAD.html">block-dead</a> body)
+                            cstate (<a href="YUL____FUNENV-DEAD.html">funenv-dead</a> funenv)
+                            limit)
+       (<a href="YUL____EXEC-FOR-ITERATIONS.html">exec-for-iterations</a> test update body cstate funenv limit))))</pre> 
+<p><b>Theorem: </b>exec-switch-rest-of-dead</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+  exec-switch-rest-of-dead
+  (<a href="ACL2____IMPLIES.html">implies</a>
+       (<a href="COMMON-LISP____AND.html">and</a> (<a href="YUL____SWCASE-LIST-NOFUNP.html">swcase-list-nofunp</a> cases)
+            (<a href="YUL____BLOCK-OPTION-NOFUNP.html">block-option-nofunp</a> default)
+            (<a href="YUL____FUNENV-NOFUNP.html">funenv-nofunp</a> funenv))
+       (<a href="YUL____SOUTCOME-RESULT-OKEQ.html">soutcome-result-okeq</a>
+            (<a href="YUL____EXEC-SWITCH-REST.html">exec-switch-rest</a> (<a href="YUL____SWCASE-LIST-DEAD.html">swcase-list-dead</a> cases)
+                              (<a href="YUL____BLOCK-OPTION-DEAD.html">block-option-dead</a> default)
+                              target cstate (<a href="YUL____FUNENV-DEAD.html">funenv-dead</a> funenv)
+                              limit)
+            (<a href="YUL____EXEC-SWITCH-REST.html">exec-switch-rest</a> cases
+                              default target cstate funenv limit))))</pre> 
 
 </body>
 </html>

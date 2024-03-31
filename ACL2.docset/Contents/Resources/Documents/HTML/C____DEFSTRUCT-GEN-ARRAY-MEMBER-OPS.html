@@ -1,0 +1,683 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Defstruct-gen-array-member-ops</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=C____DEFSTRUCT-GEN-ARRAY-MEMBER-OPS">Click for Defstruct-gen-array-member-ops in the Full Manual</a></h3>
+
+<p>Generate the operations for an array member of 
+          the structures defined by <span class="tt"><a href="C____DEFSTRUCT.html">defstruct</a></span>.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(defstruct-gen-array-member-ops struct-tag struct-tag-p 
+                                struct-tag-fix name type size) 
+ 
+  → 
+(mv event checkers readers writers 
+    reader-return-thms writer-return-thms) 
+</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">struct-tag</span> — <font color="#606060">Guard <span class="v">(<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> struct-tag)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">struct-tag-p</span> — <font color="#606060">Guard <span class="v">(<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> struct-tag-p)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">struct-tag-fix</span> — <font color="#606060">Guard <span class="v">(<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> struct-tag-fix)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">name</span> — <font color="#606060">Guard <span class="v">(<a href="C____IDENTP.html">identp</a> name)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">type</span> — <font color="#606060">Guard <span class="v">(<a href="C____TYPEP.html">typep</a> type)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">size</span> — <font color="#606060">Guard <span class="v">(<a href="ACL2____POSP.html">posp</a> size)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">event</span> — <font color="#606060">Type <span class="v">(<a href="ACL2____PSEUDO-EVENT-FORMP.html">pseudo-event-formp</a> event)</span>.</font>
+</dd> 
+<dd>
+<span class="tt">checkers</span> — <font color="#606060">Type <span class="v">(<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> checkers)</span>.</font>
+</dd> 
+<dd>
+<span class="tt">readers</span> — <font color="#606060">Type <span class="v">(<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> readers)</span>.</font>
+</dd> 
+<dd>
+<span class="tt">writers</span> — <font color="#606060">Type <span class="v">(<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> writers)</span>.</font>
+</dd> 
+<dd>
+<span class="tt">reader-return-thms</span> — <font color="#606060">Type <span class="v">(<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> reader-return-thms)</span>.</font>
+</dd> 
+<dd>
+<span class="tt">writer-return-thms</span> — <font color="#606060">Type <span class="v">(<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> writer-return-thms)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>This is only for integer arrays. 
+     The <span class="v">type</span> parameter of this ACL2 function is 
+     the type of the elements of the array.</p><p>The readers and writers read and write elements of the array, 
+     not the whole array, unlike for integer members. 
+     However, these operations are internally defined as a combination of 
+     reading/writing the whole arrays and reading/writing their elements.</p><p>We generate local lemmas about 
+     the writing of the whole arrays 
+     yielding results of the expected types 
+     that in particular are not errors. 
+     In fact, the generated (readers and) writers never return errors.</p><p>Similarly to the operations on integer arrays in <a href="C____ATC-ARRAYS.html">atc-arrays</a>, 
+     we generate 11 readers and 11 writers, 
+     which only differ in the type of the index, 
+     namely ACL2 integers or (10 types of) C integers; 
+     the latter are defined in terms of the former.</p><p>Besides readers and writers, we also generate 11 checkers, 
+     which check that the index is within the array bounds. 
+     These are used in the guards of the readers and writers, 
+     again analogously to the operations on integer arrays in <a href="C____ATC-ARRAYS.html">atc-arrays</a>. 
+     One is for ACL2 integers, and the other 10 are for C integers, 
+     with again the latter defined in terms of the form.</p><p>The reason for generating the index checkers, 
+     as opposed to using the existing ones on integer arrays, 
+     is that, like for readers as explained above, 
+     we do not provide operations to read the whole array, 
+     but rather its elements. 
+     Thus, it makes sense that the checking functions are also provided here. 
+     Note that the definition of the checkers 
+     is in terms of the known length of the array member, 
+     and that guard verification for functions involving these structures 
+     is performed by opening the checkers.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>defstruct-gen-array-member-ops-aux</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ defstruct-gen-array-member-ops-aux
+ (index-types struct-tag struct-tag-p
+              name elem-typep index-okp reader writer)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="C____TYPE-LISTP.html">type-listp</a> index-types)
+                             (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> struct-tag)
+                             (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> struct-tag-p)
+                             (<a href="C____IDENTP.html">identp</a> name)
+                             (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> elem-typep)
+                             (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> index-okp)
+                             (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> reader)
+                             (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> writer))))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="C____TYPE-INTEGER-LISTP.html">type-integer-listp</a> index-types)))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'defstruct-gen-array-member-ops-aux))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+   (((when (<a href="COMMON-LISP____ENDP.html">endp</a> index-types))
+     (<a href="ACL2____MV.html">mv</a> nil nil nil nil nil nil))
+    (index-type (<a href="COMMON-LISP____CAR.html">car</a> index-types))
+    (index-fixtype (<a href="C____INTEGER-TYPE-TO-FIXTYPE.html">integer-type-to-fixtype</a> index-type))
+    (index-typep (<a href="C____PACK.html">pack</a> index-fixtype 'p))
+    (index-getter (<a href="C____PACK.html">pack</a> index-fixtype '-&gt;get))
+    (index-okp-for-index (<a href="ACL2____PACKN-POS.html">packn-pos</a> (<a href="COMMON-LISP____LIST.html">list</a> struct-tag '-
+                                          (<a href="C____IDENT-_E3NAME.html">ident-&gt;name</a> name)
+                                          '-
+                                          index-fixtype '-index-okp)
+                                    struct-tag))
+    (reader-for-index (<a href="ACL2____PACKN-POS.html">packn-pos</a> (<a href="COMMON-LISP____LIST.html">list</a> reader '- index-fixtype)
+                                 struct-tag))
+    (writer-for-index (<a href="ACL2____PACKN-POS.html">packn-pos</a> (<a href="COMMON-LISP____LIST.html">list</a> writer '- index-fixtype)
+                                 struct-tag))
+    (reader-return-thm
+         (<a href="ACL2____PACKN-POS.html">packn-pos</a> (<a href="COMMON-LISP____LIST.html">list</a> elem-typep '-of- reader-for-index)
+                    reader-for-index))
+    (writer-return-thm (<a href="ACL2____PACKN-POS.html">packn-pos</a> (<a href="COMMON-LISP____LIST.html">list</a> struct-tag-p '-of-
+                                        writer-for-index)
+                                  writer-for-index))
+    (events
+     (<a href="COMMON-LISP____CONS.html">cons</a>
+      (<a href="COMMON-LISP____CONS.html">cons</a>
+       'define
+       (<a href="COMMON-LISP____CONS.html">cons</a>
+        index-okp-for-index
+        (<a href="COMMON-LISP____CONS.html">cons</a>
+          (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'index (<a href="COMMON-LISP____CONS.html">cons</a> index-typep 'nil))
+                'nil)
+          (<a href="COMMON-LISP____CONS.html">cons</a> ':returns
+                (<a href="COMMON-LISP____CONS.html">cons</a> '(yes/no booleanp)
+                      (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> index-okp
+                                  (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> index-getter '(index))
+                                        'nil))
+                            '(:hooks (:fix))))))))
+      (<a href="COMMON-LISP____CONS.html">cons</a>
+       (<a href="COMMON-LISP____CONS.html">cons</a>
+        'define
+        (<a href="COMMON-LISP____CONS.html">cons</a>
+         reader-for-index
+         (<a href="COMMON-LISP____CONS.html">cons</a>
+          (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'index (<a href="COMMON-LISP____CONS.html">cons</a> index-typep 'nil))
+                (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'struct (<a href="COMMON-LISP____CONS.html">cons</a> struct-tag-p 'nil))
+                      'nil))
+          (<a href="COMMON-LISP____CONS.html">cons</a>
+           ':guard
+           (<a href="COMMON-LISP____CONS.html">cons</a>
+            (<a href="COMMON-LISP____CONS.html">cons</a> index-okp-for-index '(index))
+            (<a href="COMMON-LISP____CONS.html">cons</a>
+             ':returns
+             (<a href="COMMON-LISP____CONS.html">cons</a>
+              (<a href="COMMON-LISP____CONS.html">cons</a> 'val (<a href="COMMON-LISP____CONS.html">cons</a> elem-typep 'nil))
+              (<a href="COMMON-LISP____CONS.html">cons</a>
+               (<a href="COMMON-LISP____CONS.html">cons</a> reader
+                     (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> index-getter '(index))
+                           '(struct)))
+               (<a href="COMMON-LISP____CONS.html">cons</a>
+                ':guard-hints
+                (<a href="COMMON-LISP____CONS.html">cons</a>
+                 (<a href="COMMON-LISP____CONS.html">cons</a>
+                  (<a href="COMMON-LISP____CONS.html">cons</a>
+                   '"Goal"
+                   (<a href="COMMON-LISP____CONS.html">cons</a>
+                        ':in-theory
+                        (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'enable
+                                    (<a href="COMMON-LISP____CONS.html">cons</a> index-okp-for-index 'nil))
+                              'nil)))
+                  'nil)
+                 '(:hooks (:fix))))))))))))
+       (<a href="COMMON-LISP____CONS.html">cons</a>
+        (<a href="COMMON-LISP____CONS.html">cons</a>
+         'define
+         (<a href="COMMON-LISP____CONS.html">cons</a>
+          writer-for-index
+          (<a href="COMMON-LISP____CONS.html">cons</a>
+           (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'index (<a href="COMMON-LISP____CONS.html">cons</a> index-typep 'nil))
+                 (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'val (<a href="COMMON-LISP____CONS.html">cons</a> elem-typep 'nil))
+                       (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'struct (<a href="COMMON-LISP____CONS.html">cons</a> struct-tag-p 'nil))
+                             'nil)))
+           (<a href="COMMON-LISP____CONS.html">cons</a>
+            ':guard
+            (<a href="COMMON-LISP____CONS.html">cons</a>
+             (<a href="COMMON-LISP____CONS.html">cons</a> index-okp-for-index '(index))
+             (<a href="COMMON-LISP____CONS.html">cons</a>
+              ':returns
+              (<a href="COMMON-LISP____CONS.html">cons</a>
+               (<a href="COMMON-LISP____CONS.html">cons</a> 'new-struct
+                     (<a href="COMMON-LISP____CONS.html">cons</a> struct-tag-p 'nil))
+               (<a href="COMMON-LISP____CONS.html">cons</a>
+                (<a href="COMMON-LISP____CONS.html">cons</a> writer
+                      (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> index-getter '(index))
+                            '(val struct)))
+                (<a href="COMMON-LISP____CONS.html">cons</a>
+                 ':guard-hints
+                 (<a href="COMMON-LISP____CONS.html">cons</a>
+                  (<a href="COMMON-LISP____CONS.html">cons</a>
+                   (<a href="COMMON-LISP____CONS.html">cons</a>
+                    '"Goal"
+                    (<a href="COMMON-LISP____CONS.html">cons</a>
+                        ':in-theory
+                        (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'enable
+                                    (<a href="COMMON-LISP____CONS.html">cons</a> index-okp-for-index 'nil))
+                              'nil)))
+                   'nil)
+                  '(:hooks (:fix))))))))))))
+        'nil))))
+    ((<a href="ACL2____MV.html">mv</a> more-events more-readers more-writers
+         more-checkers more-reader-return-thms
+         more-writer-return-thms)
+     (defstruct-gen-array-member-ops-aux
+          (<a href="COMMON-LISP____CDR.html">cdr</a> index-types)
+          struct-tag struct-tag-p name
+          elem-typep index-okp reader writer)))
+   (<a href="ACL2____MV.html">mv</a> (<a href="COMMON-LISP____APPEND.html">append</a> events more-events)
+       (<a href="COMMON-LISP____CONS.html">cons</a> reader-for-index more-readers)
+       (<a href="COMMON-LISP____CONS.html">cons</a> writer-for-index more-writers)
+       (<a href="COMMON-LISP____CONS.html">cons</a> index-okp-for-index more-checkers)
+       (<a href="COMMON-LISP____CONS.html">cons</a> reader-return-thm
+             more-reader-return-thms)
+       (<a href="COMMON-LISP____CONS.html">cons</a> writer-return-thm
+             more-writer-return-thms)))))</pre> 
+<p><b>Theorem: </b>pseudo-event-form-listp-of-defstruct-gen-array-member-ops-aux.more-events</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ pseudo-event-form-listp-of-defstruct-gen-array-member-ops-aux.more-events
+ (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?more-events ?more-readers ?more-writers
+           ?more-checkers ?more-reader-return-thms
+           ?more-writer-return-thms)
+       (defstruct-gen-array-member-ops-aux
+            index-types struct-tag struct-tag-p name
+            elem-typep index-okp reader writer)))
+     (<a href="ACL2____PSEUDO-EVENT-FORM-LISTP.html">pseudo-event-form-listp</a> more-events))
+ :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>symbol-listp-of-defstruct-gen-array-member-ops-aux.more-readers</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     symbol-listp-of-defstruct-gen-array-member-ops-aux.more-readers
+     (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?more-events ?more-readers ?more-writers
+               ?more-checkers ?more-reader-return-thms
+               ?more-writer-return-thms)
+           (defstruct-gen-array-member-ops-aux
+                index-types struct-tag struct-tag-p name
+                elem-typep index-okp reader writer)))
+         (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> more-readers))
+     :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>symbol-listp-of-defstruct-gen-array-member-ops-aux.more-writers</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     symbol-listp-of-defstruct-gen-array-member-ops-aux.more-writers
+     (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?more-events ?more-readers ?more-writers
+               ?more-checkers ?more-reader-return-thms
+               ?more-writer-return-thms)
+           (defstruct-gen-array-member-ops-aux
+                index-types struct-tag struct-tag-p name
+                elem-typep index-okp reader writer)))
+         (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> more-writers))
+     :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>symbol-listp-of-defstruct-gen-array-member-ops-aux.more-checkers</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+    symbol-listp-of-defstruct-gen-array-member-ops-aux.more-checkers
+    (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?more-events ?more-readers ?more-writers
+              ?more-checkers ?more-reader-return-thms
+              ?more-writer-return-thms)
+          (defstruct-gen-array-member-ops-aux
+               index-types struct-tag struct-tag-p name
+               elem-typep index-okp reader writer)))
+        (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> more-checkers))
+    :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>symbol-listp-of-defstruct-gen-array-member-ops-aux.more-reader-return-thms</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ symbol-listp-of-defstruct-gen-array-member-ops-aux.more-reader-return-thms
+ (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?more-events ?more-readers ?more-writers
+           ?more-checkers ?more-reader-return-thms
+           ?more-writer-return-thms)
+       (defstruct-gen-array-member-ops-aux
+            index-types struct-tag struct-tag-p name
+            elem-typep index-okp reader writer)))
+     (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> more-reader-return-thms))
+ :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>symbol-listp-of-defstruct-gen-array-member-ops-aux.more-writer-return-thms</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ symbol-listp-of-defstruct-gen-array-member-ops-aux.more-writer-return-thms
+ (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?more-events ?more-readers ?more-writers
+           ?more-checkers ?more-reader-return-thms
+           ?more-writer-return-thms)
+       (defstruct-gen-array-member-ops-aux
+            index-types struct-tag struct-tag-p name
+            elem-typep index-okp reader writer)))
+     (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> more-writer-return-thms))
+ :rule-classes :rewrite)</pre> 
+<p><b>Function: </b>defstruct-gen-array-member-ops</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ defstruct-gen-array-member-ops
+ (struct-tag struct-tag-p
+             struct-tag-fix name type size)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> struct-tag)
+                             (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> struct-tag-p)
+                             (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> struct-tag-fix)
+                             (<a href="C____IDENTP.html">identp</a> name)
+                             (<a href="C____TYPEP.html">typep</a> type)
+                             (<a href="ACL2____POSP.html">posp</a> size))))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="C____TYPE-INTEGERP.html">type-integerp</a> type)))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'defstruct-gen-array-member-ops))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+   ((fixtype (<a href="C____INTEGER-TYPE-TO-FIXTYPE.html">integer-type-to-fixtype</a> type))
+    (arr-typep (<a href="C____PACK.html">pack</a> fixtype '-arrayp))
+    (arr-length (<a href="C____PACK.html">pack</a> fixtype '-array-length))
+    (arr-length-alt-def (<a href="C____PACK.html">pack</a> arr-length '-alt-def))
+    (arr-index-okp (<a href="C____PACK.html">pack</a> fixtype '-array-index-okp))
+    (arr-read (<a href="C____PACK.html">pack</a> fixtype '-array-read))
+    (arr-write (<a href="C____PACK.html">pack</a> fixtype '-array-write))
+    (elem-typep (<a href="C____PACK.html">pack</a> fixtype 'p))
+    (type-of-value-when-arr-typep
+         (<a href="C____PACK.html">pack</a> 'type-of-value-when- arr-typep))
+    (index-okp (<a href="ACL2____PACKN-POS.html">packn-pos</a> (<a href="COMMON-LISP____LIST.html">list</a> struct-tag '-
+                                (<a href="C____IDENT-_E3NAME.html">ident-&gt;name</a> name)
+                                '-index-okp)
+                          struct-tag))
+    (reader (<a href="ACL2____PACKN-POS.html">packn-pos</a> (<a href="COMMON-LISP____LIST.html">list</a> struct-tag '-read-
+                             (<a href="C____IDENT-_E3NAME.html">ident-&gt;name</a> name))
+                       struct-tag))
+    (writer (<a href="ACL2____PACKN-POS.html">packn-pos</a> (<a href="COMMON-LISP____LIST.html">list</a> struct-tag '-write-
+                             (<a href="C____IDENT-_E3NAME.html">ident-&gt;name</a> name))
+                       struct-tag))
+    (reader-return-thm (<a href="ACL2____PACKN-POS.html">packn-pos</a> (<a href="COMMON-LISP____LIST.html">list</a> elem-typep '-of- reader)
+                                  reader))
+    (writer-return-thm (<a href="ACL2____PACKN-POS.html">packn-pos</a> (<a href="COMMON-LISP____LIST.html">list</a> struct-tag-p '-of- writer)
+                                  writer))
+    (events
+     (<a href="COMMON-LISP____CONS.html">cons</a>
+      (<a href="COMMON-LISP____CONS.html">cons</a>
+       'define
+       (<a href="COMMON-LISP____CONS.html">cons</a>
+        index-okp
+        (<a href="COMMON-LISP____CONS.html">cons</a>
+         '((index integerp))
+         (<a href="COMMON-LISP____CONS.html">cons</a>
+            ':returns
+            (<a href="COMMON-LISP____CONS.html">cons</a> '(yes/no booleanp)
+                  (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'integer-range-p
+                              (<a href="COMMON-LISP____CONS.html">cons</a> '0 (<a href="COMMON-LISP____CONS.html">cons</a> size '((<a href="ACL2____IFIX.html">ifix</a> index)))))
+                        '(:hooks (:fix))))))))
+      (<a href="COMMON-LISP____CONS.html">cons</a>
+       (<a href="COMMON-LISP____CONS.html">cons</a>
+        'define
+        (<a href="COMMON-LISP____CONS.html">cons</a>
+         reader
+         (<a href="COMMON-LISP____CONS.html">cons</a>
+          (<a href="COMMON-LISP____CONS.html">cons</a> '(index integerp)
+                (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'struct (<a href="COMMON-LISP____CONS.html">cons</a> struct-tag-p 'nil))
+                      'nil))
+          (<a href="COMMON-LISP____CONS.html">cons</a>
+           ':guard
+           (<a href="COMMON-LISP____CONS.html">cons</a>
+            (<a href="COMMON-LISP____CONS.html">cons</a> index-okp '(index))
+            (<a href="COMMON-LISP____CONS.html">cons</a>
+             ':returns
+             (<a href="COMMON-LISP____CONS.html">cons</a>
+              (<a href="COMMON-LISP____CONS.html">cons</a> 'val (<a href="COMMON-LISP____CONS.html">cons</a> elem-typep 'nil))
+              (<a href="COMMON-LISP____CONS.html">cons</a>
+               (<a href="COMMON-LISP____CONS.html">cons</a>
+                'b*
+                (<a href="COMMON-LISP____CONS.html">cons</a>
+                 (<a href="COMMON-LISP____CONS.html">cons</a>
+                  (<a href="COMMON-LISP____CONS.html">cons</a>
+                   'array
+                   (<a href="COMMON-LISP____CONS.html">cons</a>
+                    (<a href="COMMON-LISP____CONS.html">cons</a>
+                         'value-struct-read
+                         (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'ident
+                                     (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="C____IDENT-_E3NAME.html">ident-&gt;name</a> name) 'nil))
+                               (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> struct-tag-fix '(struct))
+                                     'nil)))
+                    'nil))
+                  'nil)
+                 (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> arr-read '(array index))
+                       'nil)))
+               (<a href="COMMON-LISP____CONS.html">cons</a>
+                ':guard-hints
+                (<a href="COMMON-LISP____CONS.html">cons</a>
+                 (<a href="COMMON-LISP____CONS.html">cons</a>
+                  (<a href="COMMON-LISP____CONS.html">cons</a>
+                   '"Goal"
+                   (<a href="COMMON-LISP____CONS.html">cons</a>
+                    ':in-theory
+                    (<a href="COMMON-LISP____CONS.html">cons</a>
+                     (<a href="COMMON-LISP____CONS.html">cons</a>
+                      'enable
+                      (<a href="COMMON-LISP____CONS.html">cons</a>
+                       index-okp
+                       (<a href="COMMON-LISP____CONS.html">cons</a>
+                        arr-index-okp
+                        (<a href="COMMON-LISP____CONS.html">cons</a>
+                         arr-length
+                         (<a href="COMMON-LISP____CONS.html">cons</a>
+                              struct-tag-p '(<a href="C____VALUE-STRUCT-READ.html">value-struct-read</a>))))))
+                     'nil)))
+                  'nil)
+                 '(:hooks (:fix))))))))))))
+       (<a href="COMMON-LISP____CONS.html">cons</a>
+        (<a href="COMMON-LISP____CONS.html">cons</a>
+         'defruledl
+         (<a href="COMMON-LISP____CONS.html">cons</a>
+          'writer-lemma
+          (<a href="COMMON-LISP____CONS.html">cons</a>
+           (<a href="COMMON-LISP____CONS.html">cons</a>
+            'implies
+            (<a href="COMMON-LISP____CONS.html">cons</a>
+             (<a href="COMMON-LISP____CONS.html">cons</a>
+              'and
+              (<a href="COMMON-LISP____CONS.html">cons</a>
+                  (<a href="COMMON-LISP____CONS.html">cons</a> struct-tag-p '(struct))
+                  (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> arr-typep '(array))
+                        (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'equal
+                                    (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> arr-length '(array))
+                                          (<a href="COMMON-LISP____CONS.html">cons</a> size 'nil)))
+                              'nil))))
+             (<a href="COMMON-LISP____CONS.html">cons</a>
+              (<a href="COMMON-LISP____CONS.html">cons</a> struct-tag-p
+                    (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'value-struct-write
+                                (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'quote (<a href="COMMON-LISP____CONS.html">cons</a> name 'nil))
+                                      '(array struct)))
+                          'nil))
+              'nil)))
+           (<a href="COMMON-LISP____CONS.html">cons</a>
+            ':enable
+            (<a href="COMMON-LISP____CONS.html">cons</a>
+             (<a href="COMMON-LISP____CONS.html">cons</a>
+              struct-tag-p
+              (<a href="COMMON-LISP____CONS.html">cons</a>
+               'value-struct-write
+               (<a href="COMMON-LISP____CONS.html">cons</a>
+                'member-value-listp-of-value-struct-write-aux
+                (<a href="COMMON-LISP____CONS.html">cons</a>
+                 'member-value-list-&gt;name-list-of-struct-write-aux
+                 (<a href="COMMON-LISP____CONS.html">cons</a>
+                    'value-struct-read-aux-of-value-struct-write-aux
+                    (<a href="COMMON-LISP____CONS.html">cons</a> arr-length-alt-def
+                          (<a href="COMMON-LISP____CONS.html">cons</a> 'not-errorp-when-member-value-listp
+                                (<a href="COMMON-LISP____CONS.html">cons</a> type-of-value-when-arr-typep
+                                      'nil))))))))
+             'nil)))))
+        (<a href="COMMON-LISP____CONS.html">cons</a>
+         (<a href="COMMON-LISP____CONS.html">cons</a>
+          'define
+          (<a href="COMMON-LISP____CONS.html">cons</a>
+           writer
+           (<a href="COMMON-LISP____CONS.html">cons</a>
+            (<a href="COMMON-LISP____CONS.html">cons</a>
+                 '(index integerp)
+                 (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'val (<a href="COMMON-LISP____CONS.html">cons</a> elem-typep 'nil))
+                       (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'struct (<a href="COMMON-LISP____CONS.html">cons</a> struct-tag-p 'nil))
+                             'nil)))
+            (<a href="COMMON-LISP____CONS.html">cons</a>
+             ':guard
+             (<a href="COMMON-LISP____CONS.html">cons</a>
+              (<a href="COMMON-LISP____CONS.html">cons</a> index-okp '(index))
+              (<a href="COMMON-LISP____CONS.html">cons</a>
+               ':returns
+               (<a href="COMMON-LISP____CONS.html">cons</a>
+                'new-struct
+                (<a href="COMMON-LISP____CONS.html">cons</a>
+                 (<a href="COMMON-LISP____CONS.html">cons</a>
+                  'b*
+                  (<a href="COMMON-LISP____CONS.html">cons</a>
+                   (<a href="COMMON-LISP____CONS.html">cons</a>
+                    (<a href="COMMON-LISP____CONS.html">cons</a>
+                     'array
+                     (<a href="COMMON-LISP____CONS.html">cons</a>
+                      (<a href="COMMON-LISP____CONS.html">cons</a>
+                         'value-struct-read
+                         (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'ident
+                                     (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="C____IDENT-_E3NAME.html">ident-&gt;name</a> name) 'nil))
+                               (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> struct-tag-fix '(struct))
+                                     'nil)))
+                      'nil))
+                    (<a href="COMMON-LISP____CONS.html">cons</a>
+                     (<a href="COMMON-LISP____CONS.html">cons</a> 'new-array
+                           (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> arr-write '(array index val))
+                                 'nil))
+                     'nil))
+                   (<a href="COMMON-LISP____CONS.html">cons</a>
+                    (<a href="COMMON-LISP____CONS.html">cons</a>
+                     'value-struct-write
+                     (<a href="COMMON-LISP____CONS.html">cons</a>
+                         (<a href="COMMON-LISP____CONS.html">cons</a> 'ident
+                               (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="C____IDENT-_E3NAME.html">ident-&gt;name</a> name) 'nil))
+                         (<a href="COMMON-LISP____CONS.html">cons</a> 'new-array
+                               (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> struct-tag-fix '(struct))
+                                     'nil))))
+                    'nil)))
+                 (<a href="COMMON-LISP____CONS.html">cons</a>
+                  ':guard-hints
+                  (<a href="COMMON-LISP____CONS.html">cons</a>
+                   (<a href="COMMON-LISP____CONS.html">cons</a>
+                    (<a href="COMMON-LISP____CONS.html">cons</a>
+                     '"Goal"
+                     (<a href="COMMON-LISP____CONS.html">cons</a>
+                      ':in-theory
+                      (<a href="COMMON-LISP____CONS.html">cons</a>
+                       (<a href="COMMON-LISP____CONS.html">cons</a>
+                        'enable
+                        (<a href="COMMON-LISP____CONS.html">cons</a>
+                         index-okp
+                         (<a href="COMMON-LISP____CONS.html">cons</a>
+                          arr-length
+                          (<a href="COMMON-LISP____CONS.html">cons</a>
+                           arr-index-okp
+                           (<a href="COMMON-LISP____CONS.html">cons</a>
+                              struct-tag-p '(<a href="C____VALUE-STRUCT-READ.html">value-struct-read</a>))))))
+                       'nil)))
+                    'nil)
+                   (<a href="COMMON-LISP____CONS.html">cons</a>
+                    ':hooks
+                    (<a href="COMMON-LISP____CONS.html">cons</a>
+                     '(:fix)
+                     (<a href="COMMON-LISP____CONS.html">cons</a>
+                      '///
+                      (<a href="COMMON-LISP____CONS.html">cons</a>
+                       (<a href="COMMON-LISP____CONS.html">cons</a>
+                        'defruledl
+                        (<a href="COMMON-LISP____CONS.html">cons</a>
+                         'return-lemma
+                         (<a href="COMMON-LISP____CONS.html">cons</a>
+                          (<a href="COMMON-LISP____CONS.html">cons</a>
+                           'implies
+                           (<a href="COMMON-LISP____CONS.html">cons</a>
+                            (<a href="COMMON-LISP____CONS.html">cons</a> struct-tag-p '(struct))
+                            (<a href="COMMON-LISP____CONS.html">cons</a>
+                             (<a href="COMMON-LISP____CONS.html">cons</a>
+                              struct-tag-p
+                              (<a href="COMMON-LISP____CONS.html">cons</a>
+                                   (<a href="COMMON-LISP____CONS.html">cons</a> writer '(index val struct))
+                                   'nil))
+                             'nil)))
+                          (<a href="COMMON-LISP____CONS.html">cons</a>
+                           ':enable
+                           (<a href="COMMON-LISP____CONS.html">cons</a>
+                            (<a href="COMMON-LISP____CONS.html">cons</a> writer '(writer-lemma))
+                            (<a href="COMMON-LISP____CONS.html">cons</a>
+                             ':prep-lemmas
+                             (<a href="COMMON-LISP____CONS.html">cons</a>
+                              (<a href="COMMON-LISP____CONS.html">cons</a>
+                               (<a href="COMMON-LISP____CONS.html">cons</a>
+                                'defrule
+                                (<a href="COMMON-LISP____CONS.html">cons</a>
+                                 'lemma
+                                 (<a href="COMMON-LISP____CONS.html">cons</a>
+                                  (<a href="COMMON-LISP____CONS.html">cons</a>
+                                   'implies
+                                   (<a href="COMMON-LISP____CONS.html">cons</a>
+                                    (<a href="COMMON-LISP____CONS.html">cons</a> struct-tag-p '(struct))
+                                    (<a href="COMMON-LISP____CONS.html">cons</a>
+                                     (<a href="COMMON-LISP____CONS.html">cons</a>
+                                      'equal
+                                      (<a href="COMMON-LISP____CONS.html">cons</a>
+                                       (<a href="COMMON-LISP____CONS.html">cons</a>
+                                        arr-length
+                                        (<a href="COMMON-LISP____CONS.html">cons</a>
+                                         (<a href="COMMON-LISP____CONS.html">cons</a>
+                                          'value-struct-read
+                                          (<a href="COMMON-LISP____CONS.html">cons</a>
+                                             (<a href="COMMON-LISP____CONS.html">cons</a> 'quote
+                                                   (<a href="COMMON-LISP____CONS.html">cons</a> name 'nil))
+                                             '(struct)))
+                                         'nil))
+                                       (<a href="COMMON-LISP____CONS.html">cons</a> size 'nil)))
+                                     'nil)))
+                                  (<a href="COMMON-LISP____CONS.html">cons</a>
+                                   ':enable
+                                   (<a href="COMMON-LISP____CONS.html">cons</a>
+                                       (<a href="COMMON-LISP____CONS.html">cons</a> struct-tag-p
+                                             '(<a href="C____VALUE-STRUCT-READ.html">value-struct-read</a>))
+                                       '(:rule-classes
+                                             :forward-chaining))))))
+                               'nil)
+                              'nil)))))))
+                       (<a href="COMMON-LISP____CONS.html">cons</a>
+                        (<a href="COMMON-LISP____CONS.html">cons</a>
+                         'more-returns
+                         (<a href="COMMON-LISP____CONS.html">cons</a>
+                          (<a href="COMMON-LISP____CONS.html">cons</a>
+                           'new-struct
+                           (<a href="COMMON-LISP____CONS.html">cons</a>
+                            struct-tag-p
+                            (<a href="COMMON-LISP____CONS.html">cons</a>
+                             ':hints
+                             (<a href="COMMON-LISP____CONS.html">cons</a>
+                              (<a href="COMMON-LISP____CONS.html">cons</a>
+                               (<a href="COMMON-LISP____CONS.html">cons</a>
+                                '"Goal"
+                                (<a href="COMMON-LISP____CONS.html">cons</a>
+                                 ':use
+                                 (<a href="COMMON-LISP____CONS.html">cons</a>
+                                  (<a href="COMMON-LISP____CONS.html">cons</a>
+                                   ':instance
+                                   (<a href="COMMON-LISP____CONS.html">cons</a>
+                                    'return-lemma
+                                    (<a href="COMMON-LISP____CONS.html">cons</a>
+                                     (<a href="COMMON-LISP____CONS.html">cons</a>
+                                      'struct
+                                      (<a href="COMMON-LISP____CONS.html">cons</a>
+                                       (<a href="COMMON-LISP____CONS.html">cons</a>
+                                           struct-tag-fix '(struct))
+                                       'nil))
+                                     'nil)))
+                                  'nil)))
+                               'nil)
+                              'nil))))
+                          'nil))
+                        'nil)))))))))))))))
+         'nil)))))
+    ((<a href="ACL2____MV.html">mv</a> more-events more-readers more-writers
+         more-checkers more-reader-return-thms
+         more-writer-return-thms)
+     (defstruct-gen-array-member-ops-aux
+          *integer-nonbool-nonchar-types*
+          struct-tag struct-tag-p name
+          elem-typep index-okp reader writer))
+    (<a href="ACL2____EVENT.html">event</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'encapsulate
+                 (<a href="COMMON-LISP____CONS.html">cons</a> 'nil
+                       (<a href="COMMON-LISP____APPEND.html">append</a> events more-events)))))
+   (<a href="ACL2____MV.html">mv</a> event (<a href="COMMON-LISP____CONS.html">cons</a> index-okp more-checkers)
+       (<a href="COMMON-LISP____CONS.html">cons</a> reader more-readers)
+       (<a href="COMMON-LISP____CONS.html">cons</a> writer more-writers)
+       (<a href="COMMON-LISP____CONS.html">cons</a> reader-return-thm
+             more-reader-return-thms)
+       (<a href="COMMON-LISP____CONS.html">cons</a> writer-return-thm
+             more-writer-return-thms)))))</pre> 
+<p><b>Theorem: </b>pseudo-event-formp-of-defstruct-gen-array-member-ops.event</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ pseudo-event-formp-of-defstruct-gen-array-member-ops.event
+ (<a href="ACL2____B_A2.html">b*</a>
+  (((<a href="ACL2____MV.html">mv</a> acl2::?event ?checkers ?readers ?writers
+        ?reader-return-thms ?writer-return-thms)
+    (<a href="C____DEFSTRUCT-GEN-ARRAY-MEMBER-OPS.html">defstruct-gen-array-member-ops</a> struct-tag struct-tag-p
+                                    struct-tag-fix name type size)))
+  (<a href="ACL2____PSEUDO-EVENT-FORMP.html">pseudo-event-formp</a> event))
+ :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>symbol-listp-of-defstruct-gen-array-member-ops.checkers</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ symbol-listp-of-defstruct-gen-array-member-ops.checkers
+ (<a href="ACL2____B_A2.html">b*</a>
+  (((<a href="ACL2____MV.html">mv</a> acl2::?event ?checkers ?readers ?writers
+        ?reader-return-thms ?writer-return-thms)
+    (<a href="C____DEFSTRUCT-GEN-ARRAY-MEMBER-OPS.html">defstruct-gen-array-member-ops</a> struct-tag struct-tag-p
+                                    struct-tag-fix name type size)))
+  (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> checkers))
+ :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>symbol-listp-of-defstruct-gen-array-member-ops.readers</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ symbol-listp-of-defstruct-gen-array-member-ops.readers
+ (<a href="ACL2____B_A2.html">b*</a>
+  (((<a href="ACL2____MV.html">mv</a> acl2::?event ?checkers ?readers ?writers
+        ?reader-return-thms ?writer-return-thms)
+    (<a href="C____DEFSTRUCT-GEN-ARRAY-MEMBER-OPS.html">defstruct-gen-array-member-ops</a> struct-tag struct-tag-p
+                                    struct-tag-fix name type size)))
+  (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> readers))
+ :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>symbol-listp-of-defstruct-gen-array-member-ops.writers</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ symbol-listp-of-defstruct-gen-array-member-ops.writers
+ (<a href="ACL2____B_A2.html">b*</a>
+  (((<a href="ACL2____MV.html">mv</a> acl2::?event ?checkers ?readers ?writers
+        ?reader-return-thms ?writer-return-thms)
+    (<a href="C____DEFSTRUCT-GEN-ARRAY-MEMBER-OPS.html">defstruct-gen-array-member-ops</a> struct-tag struct-tag-p
+                                    struct-tag-fix name type size)))
+  (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> writers))
+ :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>symbol-listp-of-defstruct-gen-array-member-ops.reader-return-thms</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ symbol-listp-of-defstruct-gen-array-member-ops.reader-return-thms
+ (<a href="ACL2____B_A2.html">b*</a>
+  (((<a href="ACL2____MV.html">mv</a> acl2::?event ?checkers ?readers ?writers
+        ?reader-return-thms ?writer-return-thms)
+    (<a href="C____DEFSTRUCT-GEN-ARRAY-MEMBER-OPS.html">defstruct-gen-array-member-ops</a> struct-tag struct-tag-p
+                                    struct-tag-fix name type size)))
+  (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> reader-return-thms))
+ :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>symbol-listp-of-defstruct-gen-array-member-ops.writer-return-thms</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ symbol-listp-of-defstruct-gen-array-member-ops.writer-return-thms
+ (<a href="ACL2____B_A2.html">b*</a>
+  (((<a href="ACL2____MV.html">mv</a> acl2::?event ?checkers ?readers ?writers
+        ?reader-return-thms ?writer-return-thms)
+    (<a href="C____DEFSTRUCT-GEN-ARRAY-MEMBER-OPS.html">defstruct-gen-array-member-ops</a> struct-tag struct-tag-p
+                                    struct-tag-fix name type size)))
+  (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> writer-return-thms))
+ :rule-classes :rewrite)</pre> 
+
+</body>
+</html>

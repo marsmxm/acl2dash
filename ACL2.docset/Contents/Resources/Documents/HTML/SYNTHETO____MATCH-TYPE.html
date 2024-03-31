@@ -1,0 +1,257 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Match-type</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=SYNTHETO____MATCH-TYPE">Click for Match-type in the Full Manual</a></h3>
+
+<p>Match a source type to a target type.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(match-type expr source target ctxt) → (mv yes/no obligs)</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">expr</span> — <font color="#606060">Guard <span class="v">(<a href="SYNTHETO____EXPRESSIONP.html">expressionp</a> expr)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">source</span> — <font color="#606060">Guard <span class="v">(<a href="SYNTHETO____TYPEP.html">typep</a> source)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">target</span> — <font color="#606060">Guard <span class="v">(<a href="SYNTHETO____TYPEP.html">typep</a> target)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">ctxt</span> — <font color="#606060">Guard <span class="v">(<a href="SYNTHETO____CONTEXTP.html">contextp</a> ctxt)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">yes/no</span> — <font color="#606060">Type <span class="v">(<a href="ACL2____BOOLEANP.html">booleanp</a> yes/no)</span>.</font>
+</dd> 
+<dd>
+<span class="tt">obligs</span> — <font color="#606060">Type <span class="v">(<a href="SYNTHETO____PROOF-OBLIGATION-LISTP.html">proof-obligation-listp</a> obligs)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>This is used when an expression with a statically calculated type 
+     (this is the source type) 
+     is passed as argument to a function with a certain argument type 
+     (this is the target type), 
+     or when a similar situation occurs 
+     (see the static semantic functions that call this function). 
+     We need to make sure that the expression, 
+     besides its inferred source type, 
+     also has the target type. 
+     The expression is passed to this ACL2 function, 
+     for the purpose of generating the proof obligations (see below).</p><p>This is trivial when source and target types are the same. 
+     When the source type is a subtype of the target type, it is also easy. 
+     In other cases, a necessary condition for 
+     the expression to have also the target type is that 
+     the source and target type have a supremum type: 
+     if they do not, they are disjoint types, 
+     and we have a ``typical'' type error.</p><p>If source and destination types have a supremum, 
+     there are three possible situations. 
+     One is that the target type is the supremum: 
+     in this case the source type is a subtype, 
+     and this case has already been described above as easy. 
+     Another case is that the source type is the supremum, 
+     in which case the target type is a subtype: 
+     in this case, we generate proof obligations 
+     saying that the expression satisfies all the predicates 
+     that define the subtypes down to the target type. 
+     The third case is that the supremum differs from both source and target: 
+     in this case, we know that the expression readily has 
+     also the supremum as type (going up the hierarchy from the source type), 
+     but to reach the target type, 
+     we need to generate proof obligations with all the predicates 
+     encountered from the supremum to the target.</p><p>The three cases above can be unified into 
+     (i) calculating the supremum and 
+     (ii) collecting the proof obligations from supremum down to target. 
+     If the supremum is the same as the target, 
+     then there is no obligation. 
+     Otherwise, there is some obligation.</p><p>We collect the subtype restriction expressions 
+     at the same time as we calculate the supremum: 
+     we do so by climbing up from the target type, 
+     and otherwise doing the same as in <span class="tt"><a href="SYNTHETO____SUPREMUM-TYPE.html">supremum-type</a></span> 
+     (which climbs up from its first type argument). 
+     We use the same approach to ensuring termination. 
+     Note that the restriction expressions are collected in reverse: 
+     we put in the correct order, from higher to lower, 
+     and we call <span class="tt"><a href="SYNTHETO____MAKE-SUBPROOF-OBLIGATIONS.html">make-subproof-obligations</a></span> to produce the obligations.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>match-type-aux</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ match-type-aux
+ (expr source target defined-names tops)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="SYNTHETO____EXPRESSIONP.html">expressionp</a> expr)
+                             (<a href="SYNTHETO____TYPEP.html">typep</a> source)
+                             (<a href="SYNTHETO____TYPEP.html">typep</a> target)
+                             (<a href="SYNTHETO____IDENTIFIER-LISTP.html">identifier-listp</a> defined-names)
+                             (<a href="SYNTHETO____TOPLEVEL-LISTP.html">toplevel-listp</a> tops))))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'match-type-aux))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+   ((defined-names (<a href="SYNTHETO____IDENTIFIER-LIST-FIX.html">identifier-list-fix</a> defined-names))
+    ((when (<a href="SYNTHETO____SUBTYPEP.html">subtypep</a> source target tops))
+     (<a href="ACL2____MV.html">mv</a> t nil))
+    (tsub (<a href="SYNTHETO____GET-TYPE-SUBSET.html">get-type-subset</a> target tops))
+    ((when (<a href="COMMON-LISP____NOT.html">not</a> tsub)) (<a href="ACL2____MV.html">mv</a> nil nil))
+    (<a href="COMMON-LISP____SUBST.html">subst</a> (<a href="OMAP____UPDATE.html">omap::update</a> (<a href="SYNTHETO____TYPE-SUBSET-_E3VARIABLE.html">type-subset-&gt;variable</a> tsub)
+                         (<a href="SYNTHETO____EXPRESSION-FIX.html">expression-fix</a> expr)
+                         nil))
+    (restr (<a href="SYNTHETO____SUBST-EXPRESSION.html">subst-expression</a> subst (<a href="SYNTHETO____TYPE-SUBSET-_E3RESTRICTION.html">type-subset-&gt;restriction</a> tsub)))
+    (name (<a href="SYNTHETO____TYPE-DEFINED-_E3NAME.html">type-defined-&gt;name</a> target))
+    ((unless (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> name defined-names))
+     (<a href="ACL2____MV.html">mv</a> nil nil))
+    ((<a href="ACL2____MV.html">mv</a> yes/no restrs)
+     (match-type-aux expr
+                     source (<a href="SYNTHETO____TYPE-SUBSET-_E3SUPERTYPE.html">type-subset-&gt;supertype</a> tsub)
+                     (<a href="ACL2____REMOVE1-EQUAL.html">remove1-equal</a> name defined-names)
+                     tops))
+    ((unless yes/no) (<a href="ACL2____MV.html">mv</a> nil nil)))
+   (<a href="ACL2____MV.html">mv</a> t (<a href="COMMON-LISP____CONS.html">cons</a> restr restrs)))))</pre> 
+<p><b>Theorem: </b>booleanp-of-match-type-aux.yes/no</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     booleanp-of-match-type-aux.yes/no
+     (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?yes/no ?restrs)
+           (match-type-aux expr source target defined-names tops)))
+         (<a href="ACL2____BOOLEANP.html">booleanp</a> yes/no))
+     :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>expression-listp-of-match-type-aux.restrs</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     expression-listp-of-match-type-aux.restrs
+     (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?yes/no ?restrs)
+           (match-type-aux expr source target defined-names tops)))
+         (<a href="SYNTHETO____EXPRESSION-LISTP.html">expression-listp</a> restrs))
+     :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>match-type-aux-of-expression-fix-expr</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     match-type-aux-of-expression-fix-expr
+     (<a href="COMMON-LISP____EQUAL.html">equal</a> (match-type-aux (<a href="SYNTHETO____EXPRESSION-FIX.html">expression-fix</a> expr)
+                            source target defined-names tops)
+            (match-type-aux expr source target defined-names tops)))</pre> 
+<p><b>Theorem: </b>match-type-aux-expression-equiv-congruence-on-expr</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+  match-type-aux-expression-equiv-congruence-on-expr
+  (<a href="ACL2____IMPLIES.html">implies</a>
+       (<a href="SYNTHETO____EXPRESSION-EQUIV.html">expression-equiv</a> expr expr-equiv)
+       (<a href="COMMON-LISP____EQUAL.html">equal</a> (match-type-aux expr source target defined-names tops)
+              (match-type-aux expr-equiv
+                              source target defined-names tops)))
+  :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>match-type-aux-of-type-fix-source</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     match-type-aux-of-type-fix-source
+     (<a href="COMMON-LISP____EQUAL.html">equal</a> (match-type-aux expr (<a href="SYNTHETO____TYPE-FIX.html">type-fix</a> source)
+                            target defined-names tops)
+            (match-type-aux expr source target defined-names tops)))</pre> 
+<p><b>Theorem: </b>match-type-aux-type-equiv-congruence-on-source</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+  match-type-aux-type-equiv-congruence-on-source
+  (<a href="ACL2____IMPLIES.html">implies</a>
+       (<a href="SYNTHETO____TYPE-EQUIV.html">type-equiv</a> source source-equiv)
+       (<a href="COMMON-LISP____EQUAL.html">equal</a> (match-type-aux expr source target defined-names tops)
+              (match-type-aux expr source-equiv
+                              target defined-names tops)))
+  :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>match-type-aux-of-type-fix-target</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     match-type-aux-of-type-fix-target
+     (<a href="COMMON-LISP____EQUAL.html">equal</a> (match-type-aux expr source (<a href="SYNTHETO____TYPE-FIX.html">type-fix</a> target)
+                            defined-names tops)
+            (match-type-aux expr source target defined-names tops)))</pre> 
+<p><b>Theorem: </b>match-type-aux-type-equiv-congruence-on-target</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+  match-type-aux-type-equiv-congruence-on-target
+  (<a href="ACL2____IMPLIES.html">implies</a>
+       (<a href="SYNTHETO____TYPE-EQUIV.html">type-equiv</a> target target-equiv)
+       (<a href="COMMON-LISP____EQUAL.html">equal</a> (match-type-aux expr source target defined-names tops)
+              (match-type-aux expr source
+                              target-equiv defined-names tops)))
+  :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>match-type-aux-of-identifier-list-fix-defined-names</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     match-type-aux-of-identifier-list-fix-defined-names
+     (<a href="COMMON-LISP____EQUAL.html">equal</a> (match-type-aux expr source target
+                            (<a href="SYNTHETO____IDENTIFIER-LIST-FIX.html">identifier-list-fix</a> defined-names)
+                            tops)
+            (match-type-aux expr source target defined-names tops)))</pre> 
+<p><b>Theorem: </b>match-type-aux-identifier-list-equiv-congruence-on-defined-names</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+  match-type-aux-identifier-list-equiv-congruence-on-defined-names
+  (<a href="ACL2____IMPLIES.html">implies</a>
+       (<a href="SYNTHETO____IDENTIFIER-LIST-EQUIV.html">identifier-list-equiv</a> defined-names defined-names-equiv)
+       (<a href="COMMON-LISP____EQUAL.html">equal</a> (match-type-aux expr source target defined-names tops)
+              (match-type-aux expr source
+                              target defined-names-equiv tops)))
+  :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>match-type-aux-of-toplevel-list-fix-tops</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+     match-type-aux-of-toplevel-list-fix-tops
+     (<a href="COMMON-LISP____EQUAL.html">equal</a> (match-type-aux expr source target
+                            defined-names (<a href="SYNTHETO____TOPLEVEL-LIST-FIX.html">toplevel-list-fix</a> tops))
+            (match-type-aux expr source target defined-names tops)))</pre> 
+<p><b>Theorem: </b>match-type-aux-toplevel-list-equiv-congruence-on-tops</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+  match-type-aux-toplevel-list-equiv-congruence-on-tops
+  (<a href="ACL2____IMPLIES.html">implies</a>
+       (<a href="SYNTHETO____TOPLEVEL-LIST-EQUIV.html">toplevel-list-equiv</a> tops tops-equiv)
+       (<a href="COMMON-LISP____EQUAL.html">equal</a> (match-type-aux expr source target defined-names tops)
+              (match-type-aux expr source
+                              target defined-names tops-equiv)))
+  :rule-classes :congruence)</pre> 
+<p><b>Function: </b>match-type</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ match-type (expr source target ctxt)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="SYNTHETO____EXPRESSIONP.html">expressionp</a> expr)
+                             (<a href="SYNTHETO____TYPEP.html">typep</a> source)
+                             (<a href="SYNTHETO____TYPEP.html">typep</a> target)
+                             (<a href="SYNTHETO____CONTEXTP.html">contextp</a> ctxt))))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'match-type))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+    (((<a href="ACL2____MV.html">mv</a> yes/no restrs)
+      (match-type-aux expr source target
+                      (<a href="SYNTHETO____GET-DEFINED-TYPE-NAMES.html">get-defined-type-names</a> (<a href="SYNTHETO____CONTEXT-_E3TOPS.html">context-&gt;tops</a> ctxt))
+                      (<a href="SYNTHETO____CONTEXT-_E3TOPS.html">context-&gt;tops</a> ctxt)))
+     ((unless yes/no) (<a href="ACL2____MV.html">mv</a> nil nil))
+     (obligs
+          (<a href="SYNTHETO____MAKE-SUBPROOF-OBLIGATIONS.html">make-subproof-obligations</a> (<a href="SYNTHETO____CONTEXT-_E3OBLIGATION-VARS.html">context-&gt;obligation-vars</a> ctxt)
+                                     (<a href="SYNTHETO____CONTEXT-_E3OBLIGATION-HYPS.html">context-&gt;obligation-hyps</a> ctxt)
+                                     (<a href="ACL2____REV.html">rev</a> restrs)
+                                     expr)))
+    (<a href="ACL2____MV.html">mv</a> t obligs))))</pre> 
+<p><b>Theorem: </b>booleanp-of-match-type.yes/no</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> booleanp-of-match-type.yes/no
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?yes/no ?obligs)
+              (<a href="SYNTHETO____MATCH-TYPE.html">match-type</a> expr source target ctxt)))
+            (<a href="ACL2____BOOLEANP.html">booleanp</a> yes/no))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>proof-obligation-listp-of-match-type.obligs</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> proof-obligation-listp-of-match-type.obligs
+        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?yes/no ?obligs)
+              (<a href="SYNTHETO____MATCH-TYPE.html">match-type</a> expr source target ctxt)))
+            (<a href="SYNTHETO____PROOF-OBLIGATION-LISTP.html">proof-obligation-listp</a> obligs))
+        :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>match-type-of-expression-fix-expr</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> match-type-of-expression-fix-expr
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SYNTHETO____MATCH-TYPE.html">match-type</a> (<a href="SYNTHETO____EXPRESSION-FIX.html">expression-fix</a> expr)
+                           source target ctxt)
+               (<a href="SYNTHETO____MATCH-TYPE.html">match-type</a> expr source target ctxt)))</pre> 
+<p><b>Theorem: </b>match-type-expression-equiv-congruence-on-expr</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> match-type-expression-equiv-congruence-on-expr
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="SYNTHETO____EXPRESSION-EQUIV.html">expression-equiv</a> expr expr-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SYNTHETO____MATCH-TYPE.html">match-type</a> expr source target ctxt)
+                        (<a href="SYNTHETO____MATCH-TYPE.html">match-type</a> expr-equiv source target ctxt)))
+        :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>match-type-of-type-fix-source</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> match-type-of-type-fix-source
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SYNTHETO____MATCH-TYPE.html">match-type</a> expr (<a href="SYNTHETO____TYPE-FIX.html">type-fix</a> source)
+                           target ctxt)
+               (<a href="SYNTHETO____MATCH-TYPE.html">match-type</a> expr source target ctxt)))</pre> 
+<p><b>Theorem: </b>match-type-type-equiv-congruence-on-source</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> match-type-type-equiv-congruence-on-source
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="SYNTHETO____TYPE-EQUIV.html">type-equiv</a> source source-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SYNTHETO____MATCH-TYPE.html">match-type</a> expr source target ctxt)
+                        (<a href="SYNTHETO____MATCH-TYPE.html">match-type</a> expr source-equiv target ctxt)))
+        :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>match-type-of-type-fix-target</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> match-type-of-type-fix-target
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SYNTHETO____MATCH-TYPE.html">match-type</a> expr source (<a href="SYNTHETO____TYPE-FIX.html">type-fix</a> target)
+                           ctxt)
+               (<a href="SYNTHETO____MATCH-TYPE.html">match-type</a> expr source target ctxt)))</pre> 
+<p><b>Theorem: </b>match-type-type-equiv-congruence-on-target</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> match-type-type-equiv-congruence-on-target
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="SYNTHETO____TYPE-EQUIV.html">type-equiv</a> target target-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SYNTHETO____MATCH-TYPE.html">match-type</a> expr source target ctxt)
+                        (<a href="SYNTHETO____MATCH-TYPE.html">match-type</a> expr source target-equiv ctxt)))
+        :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>match-type-of-context-fix-ctxt</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> match-type-of-context-fix-ctxt
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SYNTHETO____MATCH-TYPE.html">match-type</a> expr source target (<a href="SYNTHETO____CONTEXT-FIX.html">context-fix</a> ctxt))
+               (<a href="SYNTHETO____MATCH-TYPE.html">match-type</a> expr source target ctxt)))</pre> 
+<p><b>Theorem: </b>match-type-context-equiv-congruence-on-ctxt</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> match-type-context-equiv-congruence-on-ctxt
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="SYNTHETO____CONTEXT-EQUIV.html">context-equiv</a> ctxt ctxt-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SYNTHETO____MATCH-TYPE.html">match-type</a> expr source target ctxt)
+                        (<a href="SYNTHETO____MATCH-TYPE.html">match-type</a> expr source target ctxt-equiv)))
+        :rule-classes :congruence)</pre> 
+
+</body>
+</html>

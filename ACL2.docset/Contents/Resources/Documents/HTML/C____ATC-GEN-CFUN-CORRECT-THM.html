@@ -10,8 +10,8 @@
 
 <p>Generate the correctness theorem for a C function.</p><div class="box"><dl> 
   <dt>Signature</dt>
-<dt><pre class="code">(atc-gen-cfun-correct-thm fn typed-formals 
-                          type affect prec-fns prog-const 
+<dt><pre class="code">(atc-gen-cfun-correct-thm fn typed-formals type 
+                          affect prec-fns prec-tags prog-const 
                           fn-thms fn-fun-env-thm limit wrld) 
  
   → 
@@ -29,6 +29,9 @@
 </dd> 
   <dd>
 <span class="tt">prec-fns</span> — <font color="#606060">Guard <span class="v">(<a href="C____ATC-SYMBOL-FNINFO-ALISTP.html">atc-symbol-fninfo-alistp</a> prec-fns)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">prec-tags</span> — <font color="#606060">Guard <span class="v">(<a href="C____ATC-STRING-TAGINFO-ALISTP.html">atc-string-taginfo-alistp</a> prec-tags)</span>.</font>
 </dd> 
   <dd>
 <span class="tt">prog-const</span> — <font color="#606060">Guard <span class="v">(<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> prog-const)</span>.</font>
@@ -69,12 +72,18 @@
      The second result of <span class="tt"><a href="C____EXEC-FUN.html">exec-fun</a></span> is equated to 
      the computation state 
      calculated by <span class="tt"><a href="C____ATC-GEN-CFUN-FINAL-COMPUSTATE.html">atc-gen-cfun-final-compustate</a></span>.</p><p>The function <span class="v">fn</span> returns 
-     an optional C result and zero or more modified arrays. 
+     an optional C result and zero or more modified arrays and structures. 
      If it returns a C result (i.e. if the C function is not <span class="v">void</span>), 
      we bind a result variable to it; 
-     this is <span class="v">nil</span> if the C function is <span class="v">void</span>. 
-     We also bind the formals that are arrays 
-     to the (other or only) results of <span class="v">fn</span> (if any).</p><p>The guard of <span class="v">fn</span> is used as hypothesis, 
+     the value is <span class="v">nil</span> if the C function is <span class="v">void</span>. 
+     We also bind the formals that are arrays or structures 
+     to the (other or only) results of <span class="v">fn</span> (if any). 
+     We actually use new variables for the latter, 
+     for greater clarity in the theorem formulation: 
+     the new variables are obtained by adding <span class="v">-NEW</span> 
+     to the corresponding array and structure formals of <span class="v">fn</span>; 
+     these new names should not cause any conflicts, 
+     because the names of the formals must be portable C identifiers.</p><p>The guard of <span class="v">fn</span> is used as hypothesis, 
      along with the fact that <span class="v">compst</span> is a computation state.</p><p>We use a variable for the function environment, 
      which we equate to the translation unit's function environment 
      in a hypothesis. 
@@ -100,12 +109,18 @@
      that is calculated by the code generation code 
      as sufficient to run <span class="tt"><a href="C____EXEC-FUN.html">exec-fun</a></span> to completion.</p><p>The proof is a symbolic execution of the generated translation unit, 
      which is a constant: see <a href="C____ATC-PROOF-SUPPORT.html">atc-proof-support</a>. 
-     The proof is carried out in the theory that consists of 
-     exactly the general rules listed there, 
+     The proof is carried out in the theory that consists of exactly 
+     the general rules in <span class="tt"><a href="C_____A2ATC-ALL-RULES_A2.html">*atc-all-rules*</a></span>, 
+     some structure-specific rules that are similar to 
+     rules for arrays in <span class="tt"><a href="C_____A2ATC-ALL-RULES_A2.html">*atc-all-rules*</a></span>, 
+     plus the definition of <span class="tt"><a href="COMMON-LISP____NOT.html">not</a></span> (more on this below), 
      plus the definition of <span class="v">fn</span> (clearly), 
      plus the theorems about the results of the functions called by <span class="v">fn</span>, 
      plust the type prescriptions of the functions called by <span class="v">fn</span>, 
-     plus the correctness theorems of the functions called by <span class="v">fn</span>; 
+     plus the correctness theorems of the functions called by <span class="v">fn</span>, 
+     plus the theorems asserting that 
+     the measures of the called recursive functions are naturals, 
+     plus the theorem about the current function in the function environment; 
      here `called' means `directly called'. 
      During symbolic execution, the initial limit for <span class="v">fn</span> 
      is progressively decremented, 
@@ -122,15 +137,15 @@
      these functions return errors. 
      The type prescriptions of the callable functions 
      are needed to discharge some proof subgoal that arise. 
-     We also enable <span class="tt"><a href="COMMON-LISP____NOT.html">not</a></span>, 
-     because without it we have found at least one case 
-     in which some ACL2 heuristic defeats 
+     We enable <span class="tt"><a href="COMMON-LISP____NOT.html">not</a></span> because, without it, 
+     we have found at least one case in which some ACL2 heuristic defeats 
      what should be a propositional inference; 
      the issue is related to clausification, 
      and enabling <span class="tt"><a href="COMMON-LISP____NOT.html">not</a></span> seems to overcome the issue, 
      at least in that case we found.</p><p>Furthermore, we generate a <span class="v">:use</span> hint 
      to augment the theorem's formula with the guard theorem of <span class="v">fn</span>, 
-     with the pointer arguments replaced by the dereferenced arrays. 
+     with the pointer arguments replaced by 
+     the dereferenced arrays and structures. 
      This is critical to ensure that the symbolic execution of the C operators 
      does not split on the error cases: 
      the fact that <span class="v">fn</span> is guard-verified 
@@ -152,14 +167,15 @@
  
 <h3>Definitions and Theorems</h3><p><b>Function: </b>atc-gen-cfun-correct-thm</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
  atc-gen-cfun-correct-thm
- (fn typed-formals
-     type affect prec-fns prog-const
+ (fn typed-formals type
+     affect prec-fns prec-tags prog-const
      fn-thms fn-fun-env-thm limit wrld)
  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> fn)
                              (<a href="C____ATC-SYMBOL-TYPE-ALISTP.html">atc-symbol-type-alistp</a> typed-formals)
                              (<a href="C____TYPEP.html">typep</a> type)
                              (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> affect)
                              (<a href="C____ATC-SYMBOL-FNINFO-ALISTP.html">atc-symbol-fninfo-alistp</a> prec-fns)
+                             (<a href="C____ATC-STRING-TAGINFO-ALISTP.html">atc-string-taginfo-alistp</a> prec-tags)
                              (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> prog-const)
                              (<a href="ACL2____SYMBOL-SYMBOL-ALISTP.html">symbol-symbol-alistp</a> fn-thms)
                              (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> fn-fun-env-thm)
@@ -180,7 +196,7 @@
          pointer-subst instantiation)
      (<a href="C____ATC-GEN-OUTER-BINDINGS-AND-HYPS.html">atc-gen-outer-bindings-and-hyps</a> typed-formals compst-var nil))
     (diff-pointer-hyps
-         (<a href="C____ATC-GEN-DIFF-ADDRESS-HYPS.html">atc-gen-diff-address-hyps</a> (<a href="ACL2____STRIP-CDRS.html">strip-cdrs</a> pointer-subst)))
+         (<a href="C____ATC-GEN-OBJECT-DISJOINT-HYPS.html">atc-gen-object-disjoint-hyps</a> (<a href="ACL2____STRIP-CDRS.html">strip-cdrs</a> pointer-subst)))
     (hyps
      (<a href="COMMON-LISP____CONS.html">cons</a>
       'and
@@ -204,14 +220,16 @@
                       (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="ACL2____UNTRANSLATE.html">untranslate</a> (<a href="ACL2____UGUARD_B2.html">uguard+</a> fn wrld) nil wrld)
                             'nil)))))))))
     (exec-fun-args (<a href="ACL2____FSUBLIS-VAR-LST.html">fsublis-var-lst</a> pointer-subst formals))
+    (affect-new (<a href="ACL2____ADD-SUFFIX-TO-FN-LST.html">acl2::add-suffix-to-fn-lst</a> affect "-NEW"))
     (fn-results (<a href="COMMON-LISP____APPEND.html">append</a> (<a href="COMMON-LISP____IF.html">if</a> (<a href="C____TYPE-CASE.html">type-case</a> type :void)
                             nil (<a href="COMMON-LISP____LIST.html">list</a> result-var))
-                        affect))
+                        affect-new))
     (fn-binder (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ENDP.html">endp</a> (<a href="COMMON-LISP____CDR.html">cdr</a> fn-results))
                    (<a href="COMMON-LISP____CAR.html">car</a> fn-results)
                    (<a href="COMMON-LISP____CONS.html">cons</a> 'mv fn-results)))
     (final-compst (<a href="C____ATC-GEN-CFUN-FINAL-COMPUSTATE.html">atc-gen-cfun-final-compustate</a>
-                       affect pointer-subst compst-var))
+                       affect
+                       typed-formals pointer-subst compst-var))
     (concl
      (<a href="COMMON-LISP____CONS.html">cons</a>
       'equal
@@ -239,15 +257,35 @@
                                      (<a href="COMMON-LISP____CONS.html">cons</a> hyps (<a href="COMMON-LISP____CONS.html">cons</a> concl 'nil)))
                                'nil))))
     (called-fns (<a href="ACL2____ALL-FNNAMES.html">all-fnnames</a> (<a href="ACL2____UBODY_B2.html">ubody+</a> fn wrld)))
+    (not-error-thms
+         (<a href="C____ATC-STRING-TAGINFO-ALIST-TO-NOT-ERROR-THMS.html">atc-string-taginfo-alist-to-not-error-thms</a> prec-tags))
+    (valuep-thms
+         (<a href="C____ATC-STRING-TAGINFO-ALIST-TO-VALUEP-THMS.html">atc-string-taginfo-alist-to-valuep-thms</a> prec-tags))
+    (value-kind-thms
+         (<a href="C____ATC-STRING-TAGINFO-ALIST-TO-VALUE-KIND-THMS.html">atc-string-taginfo-alist-to-value-kind-thms</a> prec-tags))
     (result-thms
        (<a href="C____ATC-SYMBOL-FNINFO-ALIST-TO-RESULT-THMS.html">atc-symbol-fninfo-alist-to-result-thms</a> prec-fns called-fns))
+    (struct-reader-return-thms
+         (<a href="C____ATC-STRING-TAGINFO-ALIST-TO-READER-RETURN-THMS.html">atc-string-taginfo-alist-to-reader-return-thms</a> prec-tags))
+    (struct-writer-return-thms
+         (<a href="C____ATC-STRING-TAGINFO-ALIST-TO-WRITER-RETURN-THMS.html">atc-string-taginfo-alist-to-writer-return-thms</a> prec-tags))
     (correct-thms
       (<a href="C____ATC-SYMBOL-FNINFO-ALIST-TO-CORRECT-THMS.html">atc-symbol-fninfo-alist-to-correct-thms</a> prec-fns called-fns))
     (measure-thms (<a href="C____ATC-SYMBOL-FNINFO-ALIST-TO-MEASURE-NAT-THMS.html">atc-symbol-fninfo-alist-to-measure-nat-thms</a>
                        prec-fns called-fns))
-    (type-prescriptions
+    (type-prescriptions-called
          (<a href="ACL2____LOOP_42.html">loop$</a> for called in (<a href="ACL2____STRIP-CARS.html">strip-cars</a> prec-fns)
                 collect (<a href="COMMON-LISP____CONS.html">cons</a> ':t (<a href="COMMON-LISP____CONS.html">cons</a> called 'nil))))
+    (type-prescriptions-struct-readers
+         (<a href="ACL2____LOOP_42.html">loop$</a> for reader in
+                (<a href="C____ATC-STRING-TAGINFO-ALIST-TO-READERS.html">atc-string-taginfo-alist-to-readers</a> prec-tags)
+                collect (<a href="COMMON-LISP____CONS.html">cons</a> ':t (<a href="COMMON-LISP____CONS.html">cons</a> reader 'nil))))
+    (type-of-value-thms
+         (<a href="C____ATC-STRING-TAGINFO-ALIST-TO-TYPE-OF-VALUE-THMS.html">atc-string-taginfo-alist-to-type-of-value-thms</a> prec-tags))
+    (member-read-thms
+         (<a href="C____ATC-STRING-TAGINFO-ALIST-TO-MEMBER-READ-THMS.html">atc-string-taginfo-alist-to-member-read-thms</a> prec-tags))
+    (member-write-thms
+         (<a href="C____ATC-STRING-TAGINFO-ALIST-TO-MEMBER-WRITE-THMS.html">atc-string-taginfo-alist-to-member-write-thms</a> prec-tags))
     (hints
      (<a href="COMMON-LISP____CONS.html">cons</a>
       (<a href="COMMON-LISP____CONS.html">cons</a>
@@ -258,24 +296,43 @@
          (<a href="COMMON-LISP____CONS.html">cons</a>
           'union-theories
           (<a href="COMMON-LISP____CONS.html">cons</a>
-           (<a href="COMMON-LISP____CONS.html">cons</a> 'theory
-                 (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'quote (<a href="COMMON-LISP____CONS.html">cons</a> 'atc-all-rules 'nil))
-                       'nil))
+           '(<a href="ACL2____THEORY.html">theory</a> 'atc-all-rules)
            (<a href="COMMON-LISP____CONS.html">cons</a>
             (<a href="COMMON-LISP____CONS.html">cons</a>
              'quote
              (<a href="COMMON-LISP____CONS.html">cons</a>
-              (<a href="COMMON-LISP____CONS.html">cons</a>
-               'not
-               (<a href="COMMON-LISP____CONS.html">cons</a>
-                fn
+              (<a href="COMMON-LISP____APPEND.html">append</a>
+               not-error-thms
+               (<a href="COMMON-LISP____APPEND.html">append</a>
+                valuep-thms
                 (<a href="COMMON-LISP____APPEND.html">append</a>
-                 type-prescriptions
-                 (<a href="COMMON-LISP____APPEND.html">append</a>
+                 value-kind-thms
+                 (<a href="COMMON-LISP____CONS.html">cons</a>
+                  'not
+                  (<a href="COMMON-LISP____CONS.html">cons</a>
+                   fn
+                   (<a href="COMMON-LISP____APPEND.html">append</a>
                     result-thms
-                    (<a href="COMMON-LISP____APPEND.html">append</a> correct-thms
-                            (<a href="COMMON-LISP____APPEND.html">append</a> measure-thms
-                                    (<a href="COMMON-LISP____CONS.html">cons</a> fn-fun-env-thm 'nil)))))))
+                    (<a href="COMMON-LISP____APPEND.html">append</a>
+                     struct-reader-return-thms
+                     (<a href="COMMON-LISP____APPEND.html">append</a>
+                      struct-writer-return-thms
+                      (<a href="COMMON-LISP____APPEND.html">append</a>
+                       type-of-value-thms
+                       (<a href="COMMON-LISP____APPEND.html">append</a>
+                        member-read-thms
+                        (<a href="COMMON-LISP____APPEND.html">append</a>
+                         member-write-thms
+                         (<a href="COMMON-LISP____APPEND.html">append</a>
+                          type-prescriptions-called
+                          (<a href="COMMON-LISP____APPEND.html">append</a>
+                           type-prescriptions-struct-readers
+                           (<a href="COMMON-LISP____APPEND.html">append</a>
+                            correct-thms
+                            (<a href="COMMON-LISP____APPEND.html">append</a>
+                             measure-thms
+                             (<a href="COMMON-LISP____CONS.html">cons</a>
+                                 fn-fun-env-thm 'nil))))))))))))))))
               'nil))
             'nil)))
          (<a href="COMMON-LISP____CONS.html">cons</a>
@@ -284,8 +341,7 @@
                          (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> ':guard-theorem (<a href="COMMON-LISP____CONS.html">cons</a> fn 'nil))
                                (<a href="COMMON-LISP____CONS.html">cons</a> ':extra-bindings-ok
                                      instantiation)))
-                   (<a href="COMMON-LISP____CONS.html">cons</a> ':expand
-                         (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> ':lambdas 'nil) 'nil)))))))
+                   '(:expand (:lambdas)))))))
       'nil))
     ((<a href="ACL2____MV.html">mv</a> local-event exported-event)
      (<a href="ACL2____EVMAC-GENERATE-DEFTHM.html">evmac-generate-defthm</a> name

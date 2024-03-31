@@ -1,0 +1,517 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Guarantees-of-the-top-level-loop</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____GUARANTEES-OF-THE-TOP-LEVEL-LOOP">Click for Guarantees-of-the-top-level-loop in the Full Manual</a></h3>
+
+<p>ACL2 interactive top-level read-eval-print loop</p><p>We often refer to the ``top-level loop,'' or just ``the loop'' when 
+  the context is understood.  The loop is the interactive read-eval-print loop 
+  with which the user interacts to issue commands, query the ACL2 logical 
+  world, test functions, conjectures, and systems, etc.  This documentation 
+  topic mainly addresses the logical guarantees of the loop.  For practical 
+  advice about interacting with and configuring the loop see <span class="tt"><a href="ACL2____LD.html">ld</a></span>. 
+  <span class="v">Ld</span> is the ACL2 implementation of the loop (as a macro that calls a 
+  <span class="tt"><a href="ACL2____STATE.html">state</a></span>-using function with many parameters which may be set by the 
+  user).  <span class="v">Ld</span> is called initially when ACL2 is fired up.</p> 
+ 
+  <p>But here we are concerned with what it means, logically, when a term 
+  <i>tm</i> evaluates without error to a value <i>v</i> in the loop.</p> 
+ 
+  <h3>A Strawman Proposal on the Meaning of Top-Level Evaluation</h3> 
+ 
+  <p>One might like to think that for any term, <i>tm</i>, a non-erroneous 
+  interaction like</p> 
+ 
+  <pre class="code">ACL2 !&gt;<i>tm</i> 
+<i>v</i> 
+</pre> 
+ 
+  <p>means that the formula</p> 
+ 
+  <pre class="code">(equal <i>tm</i> '<i>v</i>) 
+</pre> 
+ 
+  <p>is a theorem and can be proved by the prover.</p> 
+ 
+  <p>For example, let <span class="v">sq</span> be a :logic mode function that squares its 
+  argument.  (For the sake of a later example, let us also make the <a href="ACL2____GUARD.html">guard</a> of <span class="v">sq</span> be <span class="v">t</span> and verify the guard by fixing (with <span class="tt"><a href="ACL2____RFIX.html">rfix</a></span>) the argument to be a rational, but those aspects of <span class="v">sq</span> are 
+  irrelevant in our immediate use of it below.)</p> 
+ 
+  <pre class="code">(defun sq (x) 
+  (declare (xargs :guard t :verify-guards t)) 
+  (let ((x (rfix x))) 
+    (* x x))) 
+</pre> 
+ 
+  <p>then the evaluation</p> 
+ 
+  <pre class="code">ACL2 !&gt;(sq 3) 
+9 
+</pre> 
+ 
+  <p>suggests that <span class="v">(<a href="COMMON-LISP____EQUAL.html">equal</a> (sq 3) 9)</span> is a theorem and that is indeed 
+  provable by the ACL2 theorem prover.</p> 
+ 
+  <p>But the situation is quite subtle and deserves further discussion.  That 
+  is what this topic is about.</p> 
+ 
+  <p><b>Spoiler Alert</b>: We will not give logical semantics to every 
+  non-erroneous evaluation in this discussion.  We only hint at how it can be 
+  done for many terms.  Furthermore, even for those terms whose evaluations do 
+  correspond to theorems, the logical theory in which those theorems can be 
+  proved is not the theory supported by the ACL2 prover but an extension of it. 
+  We ultimately describe below the so-called <i>evaluation theory</i> which is 
+  an extension of ACL2's <i>proof theory</i>.  So this documentation topic 
+  discusses two logical theories.  Because any theory in which proofs are done 
+  might be called the ``proof theory'' and in this section we need to clearly 
+  distinguish between the two theories being discussed, we'll refer to the 
+  theory supported by the ACL2 theorem prover as the <i>prover's 
+  theory</i>.</p> 
+ 
+  <h3>Problems Raised by <span class="v">:Program</span> Mode Functions</h3> 
+ 
+  <p>Suppose <span class="v">prog-sq</span> is defined as a <span class="v">:</span><span class="tt"><a href="ACL2____PROGRAM.html">program</a></span> mode function 
+  that squares its argument.  Then the top-level evaluation</p> 
+ 
+  <pre class="code">ACL2 !&gt;(prog-sq 3) 
+9 
+</pre> 
+ 
+  <p>clearly should not suggest</p> 
+ 
+  <pre class="code">(equal (prog-sq 3) 9) 
+</pre> 
+ 
+  <p>is a theorem.  <span class="v">:Program</span> mode functions are not defined in the 
+  prover's theory.  (<span class="v">:Program</span> mode functions may not terminate and any 
+  naive attempt to add their definitions to the prover's theory as axioms could 
+  result in unsoundness.)  The top-level loop has the ability to evaluate 
+  <span class="v">:program</span> mode expressions but it is ``magic,'' unsupported by proof. 
+  (Non-termination by the evaluator can't manifest unsoundness: such 
+  computations just never produce an answer.)  The evaluation of <span class="v">:program</span> 
+  mode expressions is supported in the loop primarily as a way to execute 
+  commands like <span class="tt"><a href="COMMON-LISP____DEFUN.html">defun</a></span> and <span class="tt"><a href="ACL2____DEFTHM.html">defthm</a></span>.  But it is also a convenience 
+  that allows ACL2 to be used as a <a href="ACL2____PROGRAMMING.html">programming</a> language (e.g., to 
+  prototype a system one might eventually admit to the logic and prove theorems 
+  about).</p> 
+ 
+  <p>Therefore, when attempting to define the logical meaning of top-level 
+  evaluations we might restrict our attention to <span class="v">:</span><span class="tt"><a href="ACL2____LOGIC.html">logic</a></span> mode terms 
+  only.  But this is not sufficient for several reasons.</p> 
+ 
+  <p><span class="v">:Program</span> mode functions raise another problem discussed below in 
+  connection with <span class="v">apply$</span>.</p> 
+ 
+  <h3>Problems Raised by Single-Threaded Objects</h3> 
+ 
+  <p>Evaluation of terms involving single-threaded objects or ``<a href="ACL2____STOBJ.html">stobj</a>s'' 
+  raise problems, even if the terms involved are in <span class="v">:logic</span> mode.  Here is 
+  a top-level evaluation sequence</p> 
+ 
+  <pre class="code">ACL2 !&gt;(defstobj st fld) 
+... 
+ST 
+ACL2 !&gt;(update-fld 3 st) 
+&lt;st&gt; 
+ACL2 !&gt;(update-fld (sq (fld st)) st) 
+&lt;st&gt; 
+ACL2 !&gt;(fld st) 
+9 
+</pre> 
+ 
+  <p>but the strawman conjecture from the last evaluation, <span class="v">(<a href="COMMON-LISP____EQUAL.html">equal</a> (fld st)
+  9)</span>, is not a theorem.  However, a related formula is a theorem and can be 
+  proved by the prover.</p> 
+ 
+  <pre class="code">(implies (stp st) 
+         (let* ((st (update-fld 3 st)) 
+                (st (update-fld (sq (fld st)) st))) 
+           (equal (fld st) 3))) 
+</pre> 
+ 
+  <p>This reminds us that the top-level loop tracks changes to each ``live'' 
+  stobj and records them in the ACL2 <span class="tt"><a href="ACL2____STATE.html">state</a></span>.  Those changes must be 
+  reflected in any suggested theorems.</p> 
+ 
+  <h3>Problems Raised by Apply$</h3> 
+ 
+  <p><span class="tt"><a href="ACL2____APPLY_42.html">Apply$</a></span> calls <span class="tt"><a href="ACL2____APPLY_42-USERFN.html">apply$-userfn</a></span> to handle the application of 
+  user-defined function symbols.  <span class="v">Apply$-userfn</span> is undefined but might be 
+  constrained by <span class="tt"><a href="ACL2____WARRANT.html">warrant</a></span> hypotheses (see <span class="tt"><a href="ACL2____DEFWARRANT.html">defwarrant</a></span>).  Recall 
+  that warrants link the functions approved by <span class="v">defwarrant</span> to their names 
+  and constrain <span class="v">(<a href="ACL2____APPLY_42.html">apply$</a> 'fn (<a href="COMMON-LISP____LIST.html">list</a> a1 ... an))</span> to be <span class="v">(fn a1 ... an)</span> 
+  under certain <span class="tt"><a href="ACL2____TAME.html">tame</a></span>ness conditions.  As noted at the bottom of the 
+  discussion of <span class="tt"><a href="ACL2____DEFWARRANT.html">defwarrant</a></span>, there is a model of the prover's theory in 
+  which all warrants issued by <span class="v">defwarrant</span> are true.  The top-level loop 
+  assumes that all those warrants are true.  But the prover's theory does not, 
+  because explicit warrant hypotheses are essential to avoiding the so-called 
+  ``local problem'' (see <b>Lesson 12</b> of <a href="ACL2____INTRODUCTION-TO-APPLY_42.html">introduction-to-apply$</a>).</p> 
+ 
+  <p>One might wonder why we have warrants at all, aside from the local 
+  problem.  The key reason is that inconsistency can result from 
+  non-terminating recursion if we had the following 
+  axiom schema</p> 
+ 
+  <pre class="code"><b>Unsound Axiom Schema</b>: 
+(equal (apply$ '<i>f</i> (list a1 ... an)) (<i>f</i> a1 ... an)) 
+</pre> 
+ 
+  <p>for every defined function <i>f</i>.  See the <span class="v">russell</span> example in 
+  <a href="ACL2____INTRODUCTION-TO-APPLY_42.html">introduction-to-apply$</a>.  So warrants and the restrictions enforced by 
+  <span class="tt"><a href="ACL2____DEFWARRANT.html">defwarrant</a></span> keep the prover's theory consistent.  One might then ask 
+  ``how do we get away with letting the top-level loop <span class="v">apply$</span> all badged 
+  <span class="v">:program</span> mode functions?''  The answer is simple: <span class="v">:program</span> mode 
+  functions are not axiomatized so we don't have a theory to worry about!</p> 
+ 
+  <p>To illustrate the difference between the behavior of the top-level loop 
+  and the prover, suppose the function <span class="v">sq</span>, defined above, has been 
+  warranted.</p> 
+ 
+  <pre class="code">(defwarrant sq) 
+</pre> 
+ 
+  <p>and then consider the top-level evaluation</p> 
+ 
+  <pre class="code">ACL2 !&gt;(apply$ 'sq '(3)) 
+9 
+</pre> 
+ 
+  <p>This is possible because the warrant for <span class="v">sq</span> is assumed true in the 
+  top-level loop and that warrant tells the loop that <span class="v">(<a href="ACL2____APPLY_42.html">apply$</a> 'sq '(3))</span> = 
+  <span class="v">(sq 3)</span>.</p> 
+ 
+  <p>However, <span class="v">(<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____APPLY_42.html">apply$</a> 'sq '(3)) '9)</span> is not a theorem in the 
+  prover's theory.  Instead, this is a theorem</p> 
+ 
+  <pre class="code">(implies (warrant sq) 
+         (equal (apply$ 'sq '(3)) '9)) 
+</pre> 
+ 
+  <p>where <span class="v">(<a href="ACL2____WARRANT.html">warrant</a> sq)</span> is just a convenient abbreviation for 
+  <span class="v">(apply$-warrant-sq)</span>.</p> 
+ 
+  <p>Thus, to extend the strawman conjecture to functions in which <span class="v">apply$</span> 
+  is ancestral would require tracking the warrants relevant to the execution 
+  path (or punting and collecting all warrants) and amending the conjecture to 
+  add those warrants as hypotheses to the equality.</p> 
+ 
+  <p>But <span class="v">apply$</span> introduces another source of complexity: mixed-mode 
+  functions (see <a href="ACL2____MIXED-MODE-FUNCTIONS.html">mixed-mode-functions</a>).  Recall the <span class="v">:program</span> mode 
+  function <span class="v">prog-sq</span> which squares its argument.  We can assign a badge to 
+  <span class="v">prog-sq</span> and then define a <span class="v">:logic</span> mode function that <span class="v">apply$</span>s 
+  it!</p> 
+ 
+  <pre class="code">(defbadge prog-sq) 
+ 
+(defun logic-sq (x) 
+  (declare (xargs :mode :logic)) 
+  (apply$ 'prog-sq (list x))) 
+</pre> 
+ 
+  <p>Since the top-level loop can evaluate applications of <span class="v">:program</span> mode 
+  symbols we see the following evaluation.</p> 
+ 
+  <pre class="code">ACL2 !&gt;(logic-sq 3) 
+9 
+</pre> 
+ 
+  <p>Note that <span class="v">(logic-sq 3)</span> is a <span class="v">:logic</span> mode term and <span class="v">logic-sq</span> 
+  can even be warranted with <span class="v">defwarrant</span>.  But neither</p> 
+ 
+  <pre class="code">(equal (logic-sq 3) '9) 
+</pre> 
+ 
+  <p>nor</p> 
+ 
+  <pre class="code">(implies (warrant logic-sq) (equal (logic-sq 3) '9)) 
+</pre> 
+ 
+  <p>is a theorem in the prover's theory because <span class="v">prog-sq</span> is undefined in 
+  that theory.  For what it is worth, the prover can prove</p> 
+ 
+  <pre class="code">(implies (warrant logic-sq) (equal (logic-sq 3) (apply$ 'prog-sq '(3)))) 
+</pre> 
+ 
+  <p>This example contradicts the suggestion, just above, that if we properly 
+  considered warrants we could give logical meaning to evaluations of 
+  <span class="v">:logic</span> mode terms involving <span class="v">apply$</span>.</p> 
+ 
+  <h3>Problems Raised by Constrained Functions</h3> 
+ 
+  <p>Constrained functions raise problems if they have been given 
+  attachments (see <span class="tt"><a href="ACL2____DEFATTACH.html">defattach</a></span>).  The top-level loop uses attachments to 
+  compute values consistent with the constraints, but the prover's theory does 
+  not.  Attachments are useful for building and testing instances of models 
+  consistent with the constraints.</p> 
+ 
+  <p>For example, let <span class="v">(nonneg-rat x)</span> be constrained to return some 
+  nonnegative rational.</p> 
+ 
+  <pre class="code">(encapsulate (((nonneg-rat *) =&gt; *)) 
+  (local (defun nonneg-rat (x) 
+           (declare (ignore x)) 
+           0)) 
+  (defthm nonneg-rat-constraint 
+    (and (rationalp (nonneg-rat x)) 
+         (&lt;= 0 (nonneg-rat x))))) 
+</pre> 
+ 
+  <p>It is impossible to evaluate <span class="v">(nonneg-rat 3)</span> in the top-level loop. 
+  But we can attach another function to it provided we can prove that function 
+  always returns a nonnegative rational.  Since <span class="v">sq</span>, as defined above to 
+  <span class="v">rfix</span> its argument as a rational, satisfies that constraint, we can attach 
+  <span class="v">sq</span> to <span class="v">nonneg-rat</span>.</p> 
+ 
+  <pre class="code">(defattach nonneg-rat sq) 
+</pre> 
+ 
+  <p>and then we can ``evaluate'' calls of <span class="v">nonneg-rat</span> in the loop, getting 
+  results that are consistent with its constraint (but overly specific!).</p> 
+ 
+  <pre class="code">ACL2 !&gt;(nonneg-rat 3) 
+9 
+</pre> 
+ 
+  <p>But of course the strawman conjecture <span class="v">(<a href="COMMON-LISP____EQUAL.html">equal</a> (nonneg-rat 3) '9)</span> is 
+  not a theorem of the prover's theory.</p> 
+ 
+  <h3>The Prover's Theory</h3> 
+ 
+  <p>The ACL2 logic formalizes an applicative (functional and side-effect free) 
+  extension of a subset of Common Lisp (see <a href="ACL2____COMMON-LISP.html">common-lisp</a>).  It is 
+  described in chapter 6 of <a href="http://www.cs.utexas.edu/users/moore/publications/acl2-books/car/index.html" target="_blank"><nobr>Computer-Aided 
+  Reasoning: An Approach<img src="../Icon_External_Link.png" title="External link to http://www.cs.utexas.edu/users/moore/publications/acl2-books/car/index.html"></nobr></a>, by Kaufmann, Manolios, and Moore, as an extension 
+  of quantifier-free first-order logic with equality (section 6.1).  The syntax 
+  is that of translated <a href="ACL2____TERM.html">term</a>s though the user is allowed to use a more 
+  flexible syntax which can be extended by defining constant symbols and 
+  macros (see <span class="tt"><a href="ACL2____DEFCONST.html">defconst</a></span> and <span class="tt"><a href="COMMON-LISP____DEFMACRO.html">defmacro</a></span>).  To see the formal 
+  translation of such a term use the command <span class="v">:</span><span class="tt"><a href="ACL2____TRANS.html">trans</a></span>.  In section 
+  6.2 of the book, axioms are added to characterize the basic data objects of 
+  numbers (integers, rationals, and complex rationals), characters, strings, 
+  symbols, and ordered pairs.  In section 6.3, the ordinals up to epsilon-0 are 
+  constructed from ordered pairs and integers; a well-founded ``less than'' 
+  relation is also defined.  But the book's construction of the ordinals is now 
+  obsolete.  A new representation was implemented after the book was published. 
+  See <a href="ACL2____ORDINALS.html">ordinals</a>.  In Section 6.4, a conservative Principle of 
+  Definition (see <span class="tt"><a href="COMMON-LISP____DEFUN.html">defun</a></span> and <span class="tt"><a href="ACL2____DEFUNS.html">defuns</a></span> or <span class="tt"><a href="ACL2____MUTUAL-RECURSION.html">mutual-recursion</a></span>) 
+  is introduced, allowing the addition of axioms defining new function symbols. 
+  In Section 6.5, a Principle of Induction up to epsilon-0 is described. 
+  Induction and recursion are duals: every admissible recursive function 
+  suggests an induction and vice versa and this duality is used by the ACL2 
+  prover to select an often appropriate induction scheme for a conjecture.  See 
+  <a href="ACL2____INDUCTION.html">induction</a> and <span class="tt"><a href="ACL2____HINTS.html">hints</a></span> for ways to influence this selection. 
+  Finally, in section 6.6, the book introduces <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span> to introduce 
+  constrained functions and functional instantiation (a derived rule of 
+  inference akin to second order instantiation), and a variety of other ways of 
+  conservatively adding new function symbols.</p> 
+ 
+  <p>The ACl2 prover proves theorems in the extension of the above theory 
+  obtained by adding the axioms introduced by <a href="ACL2____EVENTS.html">events</a> successfully 
+  carried out in the user's session.  The most common such axiom-adding events 
+  are <span class="tt"><a href="COMMON-LISP____DEFUN.html">defun</a></span>, <span class="tt"><a href="ACL2____DEFCHOOSE.html">defchoose</a></span>, and <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span>, which all 
+  conservatively extend the theory by the addition of axioms about new function 
+  symbols.  But <span class="v">defun</span> is just a special case of <span class="v">defuns</span> which adds a 
+  mutually recursive clique of new names (see also <span class="tt"><a href="ACL2____MUTUAL-RECURSION.html">mutual-recursion</a></span>). 
+  <span class="tt"><a href="ACL2____DEFSTOBJ.html">Defstobj</a></span> and <span class="tt"><a href="ACL2____DEFABSSTOBJ.html">defabsstobj</a></span> add recognizers, constructors, and 
+  accessors for single-threaded objects (aka ``<a href="ACL2____STOBJ.html">stobj</a>s'') but logically 
+  just use <span class="v">defun</span> to add new functions and then syntactically restrict 
+  their use.  Finally, we provide a means of adding an arbitrary formula as an 
+  axiom, <span class="tt"><a href="ACL2____DEFAXIOM.html">defaxiom</a></span>, but <i>strongly discourage its use</i>.  There are 
+  many other events that add axioms, e.g., <span class="tt"><a href="ACL2____DEFUN-NX.html">defun-nx</a></span> and <span class="tt"><a href="ACL2____DEFUN-SK.html">defun-sk</a></span> but these are defined as macros that expand into the primitives 
+  just listed.  In addition, there is a facility for including files of 
+  previously admitted events, <span class="tt"><a href="ACL2____INCLUDE-BOOK.html">include-book</a></span>.</p> 
+ 
+  <p>Given a user's session, we call the above described theory the <i>prover's 
+  theory</i>.</p> 
+ 
+  <p>Now recall the strawman proposal for what evaluation in the top-level loop 
+  means, i.e., that the evaluation</p> 
+ 
+  <pre class="code">ACL2 !&gt;<i>tm</i> 
+<i>v</i> 
+</pre> 
+ 
+  <p>might mean that the formula</p> 
+ 
+  <pre class="code">(equal <i>tm</i> '<i>v</i>) 
+</pre> 
+ 
+  <p>is a theorem.  We have illustrated with <span class="v">:program</span> mode functions, uses 
+  of <span class="v">apply$</span>, and of constrained functions that this strawman conjecture is 
+  <i>not</i> necessarily a theorem of the prover's theory!</p> 
+ 
+  <p>However, there is a theory in which many of these conjectures are 
+  theorems.</p> 
+ 
+  <h3>The Evaluation Theory</h3> 
+ 
+  <p>The <i>evaluation theory</i> is obtained from the prover's theory as 
+  follows.</p> 
+ 
+  <ul> 
+ 
+  <li>
+<p>Instead of treating stobj names as variables, the evaluation theory 
+  treats them as abbreviations for the ``current value'' of the stobj, 
+  specifically, the constant obtained by composing the sequence of all updates 
+  to the stobj's fields carried out so far in the top-level loop.  Thus, for 
+  example, in the evaluation theories created by this sequence of top-level 
+  evaluations</p> 
+ 
+  <pre class="code">ACL2 !&gt;(defstobj st fld)                           ; [1] 
+ST 
+ACL2 !&gt;(update-fld 3 st)                           ; [2] 
+&lt;st&gt; 
+ACL2 !&gt;(update-fld (* (fld st) (fld st)) st)       ; [3] 
+&lt;st&gt; 
+</pre> 
+ 
+  <p><span class="v">st</span> is an abbreviation for <span class="v">(NIL)</span> after evaluation [1], an 
+  abbreviation for <span class="v">(3)</span> after evaluation [2], and an abbreviation for 
+  <span class="v">(9)</span> after evaluation [3].</p>
+</li> 
+ 
+  <li><p>Every warrant created by <span class="v">defwarrant</span> is assumed true as an 
+  axiom.</p></li> 
+ 
+  <li><p>For every <span class="v">(<a href="ACL2____DEFATTACH.html">defattach</a> f g)</span> event in the prover's theory the 
+  axiom (i.e., constraints) on <span class="v">f</span> is replaced by the axiom <span class="v">(<a href="COMMON-LISP____EQUAL.html">equal</a> (f
+  ...) (<a href="ACL2____G.html">g</a> ...))</span> in the evaluation theory.</p></li> 
+ 
+  </ul> 
+ 
+  <p>Given the restrictions enforced by <span class="v">defun</span>, <span class="v">defstobj</span>, 
+  <span class="v">defwarrant</span>, <span class="v">apply$</span>, <span class="v">encapsulate</span>, and <span class="v">defattach</span>, the 
+  evaluation theory is consistent if the prover's theory is consistent and free 
+  of <span class="v">defaxiom</span> events.</p> 
+ 
+  <p>Furthermore, the top-level evaluation</p> 
+ 
+  <pre class="code">ACL2 !&gt;<i>tm</i> 
+<i>v</i> 
+</pre> 
+ 
+  <p>means that</p> 
+ 
+  <pre class="code">(equal <i>tm</i> '<i>v</i>) 
+</pre> 
+ 
+  <p>is a theorem in the evaluation theory provided</p> 
+ 
+  <ul> 
+ 
+  <li>
+<i>tm</i> is a <span class="v">:logic</span> mode term, and</li> 
+ 
+  <li>every symbol that reaches the first argument of any <span class="v">apply$-userfn</span> in 
+  the execution of <i>tm</i> is in <span class="v">:logic</span> mode.</li> 
+ 
+  </ul> 
+ 
+  <p>The ACL2 prover cannot generally prove these theorems, since it operates 
+  in the prover's theory.  However, as noted, there are often ways to encode 
+  the conjectures into ACL2 formulas that are provable though the ACL2 system 
+  does not provide tools for doing so.</p> 
+ 
+  <h3>Some Examples of Top-Level Evaluations</h3> 
+ 
+  <p>In this section we illustrate some consequences of the guarantee that for 
+  any term, <i>tm</i>, satisfying certain restrictions, if <i>tm</i> evaluates 
+  to a value <i>v</i>, then the term</p> 
+ 
+  <pre class="code">(equal <i>tm</i> '<i>v</i>) 
+</pre> 
+ 
+  <p>is a theorem of the evaluation theory.</p> 
+ 
+  <p>Each command below is enumerated and after the entire sequence we make 
+  observations about the results and implications.  It might also help to read 
+  the section <b>Top-Level Evaluation of Apply$</b> in the documentation for 
+  <span class="tt"><a href="ACL2____APPLY_42.html">apply$</a></span>, which describes how <span class="v">apply$</span> is implemented in the 
+  top-level loop.</p> 
+ 
+  <pre class="code">ACL2 !&gt;(<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "projects/apply/top" :dir :system)
+...
+ACL2 !&gt;(<a href="COMMON-LISP____DEFUN.html">defun</a> my-cons (x y)                                  ; [1]
+          (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :mode :program))
+          (<a href="COMMON-LISP____CONS.html">cons</a> x y))
+...
+ACL2 !&gt;(<a href="ACL2____DEFBADGE.html">defbadge</a> my-cons)                                    ; [2]
+
+MY-CONS now has the badge (APPLY$-BADGE 2 1 . T) but has
+no warrant.
+
+ T
+ACL2 !&gt;(<a href="ACL2____APPLY_42.html">apply$</a> 'my-cons '(3 4))                              ; [3]
+(3 . 4)
+ACL2 !&gt;(<a href="ACL2____THM.html">thm</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (my-cons 3 4) '(3 . 4)))                  ; [4]
+...
+******** FAILED ********
+ACL2 !&gt;(<a href="ACL2____VERIFY-TERMINATION.html">verify-termination</a> my-cons)                          ; [5]
+...
+ACL2 !&gt;(<a href="ACL2____APPLY_42.html">apply$</a> 'my-cons '(3 4))                              ; [6]
+
+
+ACL2 Error in TOP-LEVEL:  The value of APPLY$-USERFN is not
+ specified on MY-CONS because MY-CONS has not been warranted.
+
+ACL2 !&gt;(<a href="ACL2____DEFWARRANT.html">defwarrant</a> my-cons)                                  ; [7]
+
+MY-CONS is now warranted by APPLY$-WARRANT-MY-CONS, with
+badge (APPLY$-BADGE 2 1 . T).
+
+ACL2 !&gt;(<a href="ACL2____APPLY_42.html">apply$</a> 'my-cons '(3 4))                              ; [8]
+(3 . 4)
+
+ACL2 !&gt;ACL2 !&gt;(<a href="ACL2____THM.html">thm</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (my-cons 3 4) '(3 . 4)))           ; [9]
+...
+******** FAILED ********
+ACL2 !&gt;(<a href="ACL2____THM.html">thm</a>                                                  ;[10]
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____WARRANT.html">warrant</a> my-cons)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (my-cons 3 4) '(3 . 4))))
+...
+Q.E.D.
+...
+Proof succeeded.</pre> 
+ 
+  <p>In events [1] and [2] <span class="v">my-cons</span> is introduced as a badged <span class="v">:program</span> 
+  mode function.  Command [3] shows that we can <span class="v">apply$</span> <span class="v">'my-cons</span> in 
+  the top-level loop and get the ``expected'' value.  This is ``magic'' on 
+  several levels!  There is no axiom in the evaluation theory defining 
+  <span class="v">my-cons</span> and there is no warrant connecting the symbol <span class="v">'my-cons</span> to 
+  the function <span class="v">my-cons</span>.  The failure of the first <span class="v">thm</span> command, [4], 
+  shows that the prover's theory knows nothing of the behavior of <span class="v">apply$</span> 
+  on <span class="v">'my-cons</span>.  After converting <span class="v">my-cons</span> to <span class="v">:logic</span> mode with 
+  <span class="tt"><a href="ACL2____VERIFY-TERMINATION.html">verify-termination</a></span> in [5] we can no longer evaluate the application 
+  of <span class="v">my-cons</span> at the top-level, as shown by [6]!  This is surprising 
+  because one might expect ACL2 to be able to do more with a <span class="v">:logic</span> mode 
+  function than its <span class="v">:program</span> mode counterpart.  But in the evolving 
+  evaluation theory as of [6], <span class="v">my-cons</span> is a <span class="v">:logic</span> mode function with 
+  no warrant and so logically speaking <span class="v">(<a href="ACL2____APPLY_42.html">apply$</a> 'my-cons ...)</span>  is 
+  undefined.  Computing a value for it at [6] would violate the guarantee that 
+  values of <span class="v">:logic</span> mode terms can be proved correct in the evaluation 
+  theory — i.e., that the computed value can be derived logically.  Such 
+  a derivation is impossible without a warrant.  However, after 
+  <span class="v">defwarrant</span>, in [7], confirms that it is sound to issue a 
+  warrant (linking the symbol <span class="v">'my-cons</span> to the function <span class="v">my-cons</span> via 
+  <span class="v">apply$</span>), the evaluation of the <span class="v">'my-cons</span> term in [8] succeeds.  The 
+  <span class="v">defwarrant</span> soundly extends the proof theory by adding a definition for 
+  the warrant function for <span class="v">my-cons</span> and extends the evaluation theory by 
+  assuming the warrant for <span class="v">my-cons</span> is true.  This latter extension is also 
+  sound.  However, [9] shows that we still cannot prove (in the prover's 
+  theory) that the evaluation of the <span class="v">apply$</span> term is correct, because we 
+  did not provide the warrant as a hypothesis.  However, if we amend the 
+  conjecture to include the warrant, as in [10], the proof (in the prover's 
+  theory) succeeds.  While all warrants are assumed true in the evaluation 
+  theory, they must be made explicit as hypotheses for proofs in the prover's 
+  theory.  This is the mechanism whereby ACL2 can avoid the ``local problem'' 
+  illustrated <b>Lesson 12</b> of <a href="ACL2____INTRODUCTION-TO-APPLY_42.html">introduction-to-apply$</a> and discussed 
+  more thoroughly in <a href="http://www.cs.utexas.edu/users/kaufmann/papers/apply/index.html" target="_blank"><nobr>``Limited 
+  Second-Order Functionality in a First-Order Setting''<img src="../Icon_External_Link.png" title="External link to http://www.cs.utexas.edu/users/kaufmann/papers/apply/index.html"></nobr></a> by Matt Kaufmann 
+  and J Strother Moore.</p>
+</body>
+</html>

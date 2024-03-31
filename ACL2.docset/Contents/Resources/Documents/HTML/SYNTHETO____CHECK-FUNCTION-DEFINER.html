@@ -1,0 +1,170 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Check-function-definer</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=SYNTHETO____CHECK-FUNCTION-DEFINER">Click for Check-function-definer in the Full Manual</a></h3>
+
+<p>Check if a function definer is statically well-formed.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(check-function-definer definer output-types fn-name ctxt) 
+  → 
+(mv err? obligs)</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">definer</span> — <font color="#606060">Guard <span class="v">(<a href="SYNTHETO____FUNCTION-DEFINERP.html">function-definerp</a> definer)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">output-types</span> — <font color="#606060">Guard <span class="v">(<a href="SYNTHETO____TYPE-LISTP.html">type-listp</a> output-types)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">fn-name</span> — <font color="#606060">Guard <span class="v">(<a href="COMMON-LISP____STRINGP.html">stringp</a> fn-name)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">ctxt</span> — <font color="#606060">Guard <span class="v">(<a href="SYNTHETO____CONTEXTP.html">contextp</a> ctxt)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">obligs</span> — <font color="#606060">Type <span class="v">(<a href="SYNTHETO____PROOF-OBLIGATION-LISTP.html">proof-obligation-listp</a> obligs)</span>.</font>
+</dd> 
+ 
+</dl></div> 
+<p>The context has no types being defined, 
+     but it may have functions (if this definer is part of function recursion), 
+     as well as variables in scope (namely, the function's inputs); 
+     it may also have obligation hypotheses, 
+     coming from preconditions. 
+     This motivates the guard of this ACL2 function.</p><p>For a regular function definition, 
+     we check the body and ensure that its type(s) is 
+     the same as the function's output type(s). 
+     This is too strong in general; we will relax this check.</p><p>For a quantifier function definition, 
+     we ensure that the bound variables do not conflict with the inputs; 
+     we augment the context with those variables and check the matrix, 
+     ensuring that it returns a single boolean value. 
+     We ensure also that the output of the function is a boolean.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>check-function-definer</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ check-function-definer
+ (definer output-types fn-name ctxt)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="SYNTHETO____FUNCTION-DEFINERP.html">function-definerp</a> definer)
+                             (<a href="SYNTHETO____TYPE-LISTP.html">type-listp</a> output-types)
+                             (<a href="COMMON-LISP____STRINGP.html">stringp</a> fn-name)
+                             (<a href="SYNTHETO____CONTEXTP.html">contextp</a> ctxt))))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> fn-name))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____NULL.html">null</a> (<a href="SYNTHETO____CONTEXT-_E3TYPES.html">context-&gt;types</a> ctxt))))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'check-function-definer))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="SYNTHETO____FUNCTION-DEFINER-CASE.html">function-definer-case</a>
+   definer
+   :regular
+   (<a href="ACL2____B_A2.html">b*</a>
+    ((result (<a href="SYNTHETO____CHECK-EXPRESSION.html">check-expression</a> definer.body ctxt)))
+    (<a href="SYNTHETO____TYPE-RESULT-CASE.html">type-result-case</a>
+     result
+     :err (<a href="ACL2____MV.html">mv</a> result.info nil)
+     :ok
+     (<a href="ACL2____B_A2.html">b*</a>
+        ((result1 (<a href="SYNTHETO____MATCH-TO-TARGET.html">match-to-target</a> definer.body
+                                   result.types output-types ctxt)))
+        (<a href="SYNTHETO____TYPE-RESULT-CASE.html">type-result-case</a> result1
+                          :err (<a href="ACL2____MV.html">mv</a> result1.info nil)
+                          :ok (<a href="ACL2____MV.html">mv</a> nil
+                                  (<a href="COMMON-LISP____APPEND.html">append</a> result.obligations
+                                          result1.obligations))))))
+   :quantified
+   (<a href="ACL2____B_A2.html">b*</a>
+    ((bound-names
+          (<a href="SYNTHETO____TYPED-VARIABLE-LIST-_E3NAME-LIST.html">typed-variable-list-&gt;name-list</a> definer.variables))
+     (free-names (<a href="SYNTHETO____TYPED-VARIABLE-LIST-_E3NAME-LIST.html">typed-variable-list-&gt;name-list</a>
+                      (<a href="SYNTHETO____CONTEXT-_E3OBLIGATION-VARS.html">context-&gt;obligation-vars</a> ctxt)))
+     ((when (<a href="ACL2____INTERSECTP-EQUAL.html">intersectp-equal</a> bound-names free-names))
+      (<a href="ACL2____MV.html">mv</a> (<a href="COMMON-LISP____LIST.html">list</a> :bound-variables-conflict-with-inputs
+                bound-names free-names)
+          nil))
+     (bound-var-ctxt
+          (<a href="SYNTHETO____TYPED-VARIABLES-TO-VARIABLE-CONTEXT.html">typed-variables-to-variable-context</a> definer.variables))
+     (ctxt (<a href="SYNTHETO____CONTEXT-ADD-VARIABLES.html">context-add-variables</a> bound-var-ctxt ctxt))
+     (result (<a href="SYNTHETO____CHECK-EXPRESSION.html">check-expression</a> definer.matrix ctxt)))
+    (<a href="SYNTHETO____TYPE-RESULT-CASE.html">type-result-case</a>
+     result
+     :err (<a href="ACL2____MV.html">mv</a> result.info nil)
+     :ok
+     (<a href="ACL2____B_A2.html">b*</a>
+        ((<a href="SYNTHETO____TYPE.html">type</a> (<a href="SYNTHETO____ENSURE-SINGLE-TYPE.html">ensure-single-type</a> result.types))
+         ((when (<a href="COMMON-LISP____NOT.html">not</a> type))
+          (<a href="ACL2____MV.html">mv</a> (<a href="COMMON-LISP____LIST.html">list</a> :multi-valued-matrix definer.matrix)
+              nil))
+         ((unless (<a href="SYNTHETO____TYPE-EQUIV.html">type-equiv</a> type (<a href="SYNTHETO____TYPE-BOOLEAN.html">type-boolean</a>)))
+          (<a href="ACL2____MV.html">mv</a> (<a href="COMMON-LISP____LIST.html">list</a> :non-boolean-matrix definer.matrix)
+              nil))
+         ((unless
+               (<a href="SYNTHETO____TYPE-LIST-EQUIV.html">type-list-equiv</a> output-types (<a href="COMMON-LISP____LIST.html">list</a> (<a href="SYNTHETO____TYPE-BOOLEAN.html">type-boolean</a>))))
+          (<a href="ACL2____MV.html">mv</a> (<a href="COMMON-LISP____LIST.html">list</a> :non-boolean-quantified-output-types
+                    (<a href="SYNTHETO____TYPE-LIST-FIX.html">type-list-fix</a> output-types))
+              nil)))
+        (<a href="ACL2____MV.html">mv</a> nil result.obligations)))))))</pre> 
+<p><b>Theorem: </b>proof-obligation-listp-of-check-function-definer.obligs</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+  proof-obligation-listp-of-check-function-definer.obligs
+  (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?err? ?obligs)
+        (<a href="SYNTHETO____CHECK-FUNCTION-DEFINER.html">check-function-definer</a> definer output-types fn-name ctxt)))
+      (<a href="SYNTHETO____PROOF-OBLIGATION-LISTP.html">proof-obligation-listp</a> obligs))
+  :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>check-function-definer-of-function-definer-fix-definer</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ check-function-definer-of-function-definer-fix-definer
+ (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SYNTHETO____CHECK-FUNCTION-DEFINER.html">check-function-definer</a> (<a href="SYNTHETO____FUNCTION-DEFINER-FIX.html">function-definer-fix</a> definer)
+                                output-types fn-name ctxt)
+        (<a href="SYNTHETO____CHECK-FUNCTION-DEFINER.html">check-function-definer</a> definer output-types fn-name ctxt)))</pre> 
+<p><b>Theorem: </b>check-function-definer-function-definer-equiv-congruence-on-definer</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ check-function-definer-function-definer-equiv-congruence-on-definer
+ (<a href="ACL2____IMPLIES.html">implies</a>
+   (<a href="SYNTHETO____FUNCTION-DEFINER-EQUIV.html">function-definer-equiv</a> definer definer-equiv)
+   (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SYNTHETO____CHECK-FUNCTION-DEFINER.html">check-function-definer</a> definer output-types fn-name ctxt)
+          (<a href="SYNTHETO____CHECK-FUNCTION-DEFINER.html">check-function-definer</a> definer-equiv
+                                  output-types fn-name ctxt)))
+ :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>check-function-definer-of-type-list-fix-output-types</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ check-function-definer-of-type-list-fix-output-types
+ (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SYNTHETO____CHECK-FUNCTION-DEFINER.html">check-function-definer</a> definer (<a href="SYNTHETO____TYPE-LIST-FIX.html">type-list-fix</a> output-types)
+                                fn-name ctxt)
+        (<a href="SYNTHETO____CHECK-FUNCTION-DEFINER.html">check-function-definer</a> definer output-types fn-name ctxt)))</pre> 
+<p><b>Theorem: </b>check-function-definer-type-list-equiv-congruence-on-output-types</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ check-function-definer-type-list-equiv-congruence-on-output-types
+ (<a href="ACL2____IMPLIES.html">implies</a>
+   (<a href="SYNTHETO____TYPE-LIST-EQUIV.html">type-list-equiv</a> output-types output-types-equiv)
+   (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SYNTHETO____CHECK-FUNCTION-DEFINER.html">check-function-definer</a> definer output-types fn-name ctxt)
+          (<a href="SYNTHETO____CHECK-FUNCTION-DEFINER.html">check-function-definer</a> definer
+                                  output-types-equiv fn-name ctxt)))
+ :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>check-function-definer-of-str-fix-fn-name</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ check-function-definer-of-str-fix-fn-name
+ (<a href="COMMON-LISP____EQUAL.html">equal</a>
+      (<a href="SYNTHETO____CHECK-FUNCTION-DEFINER.html">check-function-definer</a> definer output-types (<a href="ACL2____STR-FIX.html">str-fix</a> fn-name)
+                              ctxt)
+      (<a href="SYNTHETO____CHECK-FUNCTION-DEFINER.html">check-function-definer</a> definer output-types fn-name ctxt)))</pre> 
+<p><b>Theorem: </b>check-function-definer-streqv-congruence-on-fn-name</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ check-function-definer-streqv-congruence-on-fn-name
+ (<a href="ACL2____IMPLIES.html">implies</a>
+   (<a href="ACL2____STREQV.html">streqv</a> fn-name fn-name-equiv)
+   (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SYNTHETO____CHECK-FUNCTION-DEFINER.html">check-function-definer</a> definer output-types fn-name ctxt)
+          (<a href="SYNTHETO____CHECK-FUNCTION-DEFINER.html">check-function-definer</a> definer
+                                  output-types fn-name-equiv ctxt)))
+ :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>check-function-definer-of-context-fix-ctxt</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ check-function-definer-of-context-fix-ctxt
+ (<a href="COMMON-LISP____EQUAL.html">equal</a>
+    (<a href="SYNTHETO____CHECK-FUNCTION-DEFINER.html">check-function-definer</a> definer
+                            output-types fn-name (<a href="SYNTHETO____CONTEXT-FIX.html">context-fix</a> ctxt))
+    (<a href="SYNTHETO____CHECK-FUNCTION-DEFINER.html">check-function-definer</a> definer output-types fn-name ctxt)))</pre> 
+<p><b>Theorem: </b>check-function-definer-context-equiv-congruence-on-ctxt</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ check-function-definer-context-equiv-congruence-on-ctxt
+ (<a href="ACL2____IMPLIES.html">implies</a>
+   (<a href="SYNTHETO____CONTEXT-EQUIV.html">context-equiv</a> ctxt ctxt-equiv)
+   (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SYNTHETO____CHECK-FUNCTION-DEFINER.html">check-function-definer</a> definer output-types fn-name ctxt)
+          (<a href="SYNTHETO____CHECK-FUNCTION-DEFINER.html">check-function-definer</a> definer
+                                  output-types fn-name ctxt-equiv)))
+ :rule-classes :congruence)</pre> 
+
+</body>
+</html>

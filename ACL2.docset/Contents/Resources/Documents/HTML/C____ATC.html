@@ -12,21 +12,27 @@
           a proof-generating C code generator for ACL2.</p><h3>Introduction</h3><p>This manual page contains user-level reference documentation for ATC. 
       Users who are new to ATC should start with the <a href="C____ATC-TUTORIAL.html">tutorial</a>, which provides user-level pedagogical information 
       on how ATC works and how to use ATC effectively.</p><p>This manual page refers to the official C standard 
-      in the manner explained in <a href="C____C.html">the top-level XDOC topic of this C library</a>.</p><h3>General Form</h3><pre class="code">(<a href="C____ATC.html">atc</a> fn1 ... fn
-     :output-file ...  ; no default
-     :proofs      ...  ; default t
-     :const-name  ...  ; default :auto
-     :print       ...  ; default :result
-  )</pre><h3>Inputs</h3><p><span class="v">fn1</span>, ..., <span class="v">fnp</span></p><blockquote>
-<p>Names of target ACL2 functions to translate to C.</p>
-<p>Each <span class="v">fni</span> must be a symbol that names a function 
-       that satisfies the conditions discussed in the section 
-       `Representation of C Code in ACL2'.</p>
-<p>These function names must be all distinct.</p>
+      in the manner explained in <a href="C____C.html">the top-level XDOC topic of this C library</a>.</p><h3>General Form</h3><pre class="code">(<a href="C____ATC.html">atc</a> t1 ... tp
+     :output-file     ...  ; no default
+     :pretty-printing ...  ; default nil
+     :proofs          ...  ; default t
+     :const-name      ...  ; default :auto
+     :print           ...  ; default :result
+  )</pre><h3>Inputs</h3><p><span class="v">t1</span>, ..., <span class="v">tp</span></p><blockquote>
+<p>Names of ACL2 targets to translate to C.</p>
+<p>Each <span class="v">ti</span> must be a symbol that names one of the following:</p>
+<ul>
+<li>An ACL2 function that satisfies the conditions discussed in 
+        the section `Representation of C Code in ACL2'.</li>
+<li>A C structure type shallowly embedded in ACL2, 
+        introduced via <span class="tt"><a href="C____DEFSTRUCT.html">defstruct</a></span>.</li>
+</ul>
+<p>The function names must be all distinct from each other.</p>
+<p>The <span class="tt"><a href="C____DEFSTRUCT.html">defstruct</a></span> names must be all distinct from each other.</p>
 <p>There must be at least one target function.</p>
 <p>Each recursive target function must be called by 
        at least one recursive or non-recursive target function 
-       that follows it in the list <span class="v">(fn1 ... fnp)</span>.</p>
+       that follows it in the list <span class="v">(t1 ... tp)</span>.</p>
 </blockquote><p><span class="v">:output-file</span> — no default</p><blockquote>
 <p>Path of the file where the generated C code goes.</p>
 <p>This must be an ACL2 string that is a file path. 
@@ -38,6 +44,31 @@
        if it does not exist, it is created; 
        if it exists, it is overwritten. 
        The file name must include a <span class="v">.c</span> extension.</p>
+</blockquote><p><span class="v">:pretty-printing</span> — default <span class="v">nil</span></p><blockquote>
+<p>Specifies options for how the generated C code is pretty-printed.</p>
+<p>This must be a <a href="ACL2____KEYWORD-VALUE-LISTP.html">keyword-value list</a> <span class="v">(opt-name1 opt-value1 opt-name2 opt-value2 ...)</span> 
+       where each <span class="v">opt-namek</span> is a keyword among the ones described below, 
+       and each <span class="v">opt-value1</span> is one of the allowed values 
+       for the corresponding keyword as described below.</p>
+<p>The following pretty-printing options are supported:</p>
+<ul><li>
+<span class="v">:parenthesize-nested-conditionals t/nil</span>, 
+        where <span class="v">t/nil</span> is either <span class="v">t</span> or <span class="v">nil</span>. 
+        This option specifies whether a conditional expression 
+        that is the `then' or `else' branch of another conditional expression 
+        is parenthesized or not. 
+        The parentheses are not necessary 
+        according to the precedence rules of C, 
+        but may help make the code more readable. 
+        The default value of this option is <span class="v">nil</span>, 
+        which means that no parentheses are added. 
+        If this option is <span class="v">t</span>, then parentheses are added. 
+        For example, based on whether this option is <span class="v">nil</span> or <span class="v">t</span>, 
+        an expression may be printed as either<pre class="code">a ? b ? c : d : e ? f g</pre>or<pre class="code">a ? (b ? c : e) : (e ? f : g)</pre>.</li></ul>
+<p>This is currently the only supported pretty-printing option. 
+       More options, 
+       to control additional aspects of the pretty-print of the C code, 
+       may be added in the future.</p>
 </blockquote><p><span class="v">:proofs</span> — default <span class="v">t</span></p><blockquote>
 <p>Specifies whether proofs should be generated or not.</p>
 <p>This must be one of the following:</p>
@@ -85,25 +116,34 @@
          the internal operations of <span class="v">atc</span>.</li>
 <li>
 <span class="v">:all</span>, to print, 
-          besides any error output, 
-          the results, 
-          and the additional information, 
-          also ACL2's output in response to all the submitted events.</li>
+         besides any error output, 
+         the results, 
+         and the additional information, 
+         also ACL2's output in response to all the submitted events.</li>
 </ul>
 <p>If the call of <span class="v">atc</span> is redundant, 
         an indication to that effect is printed on the screen, 
         unless <span class="v">:print</span> is <span class="v">nil</span>.</p>
-</blockquote><h3>Representation of C Code in ACL2</h3><p>For now ATC supports the ACL2 representation of 
-      a single C translation unit (which goes into the generated file). 
-      This translation unit consists of one or more C function definitions.</p><p>Each C function definition is represented by an ACL2 function definition. 
-      These are 
-      the non-recursive target ACL2 functions <span class="v">fni</span> passed as inputs; 
-      the recursive target ACL2 functions <span class="v">fni</span> passed as inputs 
-      represent loops in the C functions instead, as explained below. 
-      The order of the C functions in the translation unit is the same as 
-      the order of the (non-recursive) inputs <span class="v">fn1</span>, ..., <span class="v">fnp</span>.</p><p>Each function <span class="v">fni</span> must be in logic mode and guard-verified. 
+</blockquote><h3>Representation of C Code in ACL2</h3><p>Currently ATC supports the ACL2 representation of 
+      a single C translation unit, which goes into the generated file. 
+      This translation unit consists of 
+      one or more C function definitions 
+      and zero or more C structure type declarations.</p><p>Each C structure type declaration is represented by a <span class="tt"><a href="C____DEFSTRUCT.html">defstruct</a></span>, 
+      whose name is passed as one of the targets <span class="v">ti</span> to ATC. 
+      The symbol name, which is a portable ASCII C identifier 
+      as defined in Section `Portable ASCII C Identifiers' below 
+      (this is enforced by <span class="tt"><a href="C____DEFSTRUCT.html">defstruct</a></span>), 
+      represents the tag of the C structure type. 
+      The requirement that all the structure targets <span class="v">ti</span> are distinct 
+      implies that all their symbol names are distinct 
+      (this is enforced by <span class="tt"><a href="C____DEFSTRUCT.html">defstruct</a></span>).</p><p>Each C function definition is represented by an ACL2 function definition. 
+      These are the non-recursive target ACL2 functions <span class="v">ti</span> passed to ATC; 
+      the recursive target ACL2 functions <span class="v">ti</span> passed as inputs 
+      represent loops in the C functions instead, as explained below.</p><p>The order of the C structure types and functions in the translation unit 
+      is the same as the order of the corresponding targets 
+      in the list <span class="v">(t1 ... tp)</span> passed to ATC.</p><p>Each target function <span class="v">fn</span> must be in logic mode and guard-verified. 
       The function must not occur in its own guard, 
-      which is rare but allowed in ACL2.</p><p>The symbol name of each non-recursive <span class="v">fni</span> 
+      which is rare but allowed in ACL2.</p><p>The symbol name of each non-recursive function target <span class="v">fn</span> 
       must be a portable ASCII C identifier 
       as defined in Section `Portable ASCII C Identifiers' below. 
       That symbol name is used as the name of the corresponding C function. 
@@ -116,30 +156,30 @@
       the symbol names of the recursive target functions: 
       these represent C loops, not C functions; 
       the names of the recursive target functions 
-      are not represented at all in the C code.</p><p>The symbol name of each formal parameter of each <span class="v">fni</span>, 
+      are not represented at all in the C code.</p><p>The symbol name of each formal parameter of each function target <span class="v">fn</span>, 
       both non-recursive and recursive, 
       must be a portable ASCII C identifier 
       as defined in Section `Portable ASCII C Identifiers' below. 
-      When <span class="v">fni</span> is non-recursive, 
+      When <span class="v">fn</span> is non-recursive, 
       the symbol names of its parameters are used as 
       the names of the formal parameters of the corresponding C function, 
       in the same order. 
-      Therefore, the formal parameters of each <span class="v">fni</span> 
+      Therefore, the formal parameters of each <span class="v">fn</span> 
       must have all distinct symbol names; 
       even if they are in different packages, 
       they must have distinct symbol names 
       (the package names are ignored). 
-      When <span class="v">fni</span> is recursive, 
+      When <span class="v">fn</span> is recursive, 
       the symbol names of its parameters are used as names of C variables, 
-      as explained below.</p><p>When <span class="v">fni</span> is recursive, 
+      as explained below.</p><p>When <span class="v">fn</span> is recursive, 
       it must have at least one formal parameter. 
-      When <span class="v">fni</span> is non-recursive, 
-      it may have any number of formal parameters, including none.</p><p>If <span class="v">fni</span> is recursive, 
+      When <span class="v">fn</span> is non-recursive, 
+      it may have any number of formal parameters, including none.</p><p>If <span class="v">fn</span> is recursive, 
       it must be singly (not mutually) recursive, 
       its well-founded relation must be <span class="tt"><a href="ACL2____O_C3.html">o&lt;</a></span>, 
       and its measure must yield a natural number. 
       The latter requirement is checked via an applicability condition, 
-      as described in the `Applicability Conditions' section.</p><p>The guard of each <span class="v">fni</span> must include, 
+      as described in the `Applicability Conditions' section.</p><p>The guard of each <span class="v">fn</span> must include, 
       for every formal parameter <span class="v">x</span>, 
       a conjunct of one of the following forms, 
       which determines the C type of 
@@ -184,54 +224,63 @@
 <span class="v">(<a href="C____SLLONG-ARRAYP.html">sllong-arrayp</a> x)</span>, representing <span class="v">signed long long *</span>.</li>
 <li>
 <span class="v">(<a href="C____ULLONG-ARRAYP.html">ullong-arrayp</a> x)</span>, representing <span class="v">unsigned long long *</span>.</li>
+<li>
+<span class="v">(struct-&lt;tag&gt;-p x)</span>, 
+       where <span class="v">&lt;tag&gt;</span> is one of the <span class="tt"><a href="C____DEFSTRUCT.html">defstruct</a></span> targets <span class="v">ti</span>, 
+       representing a pointer type to the corresponding C structure type, 
+       <span class="v">struct &lt;tag&gt; *</span>. 
+       The <span class="v">&lt;tag&gt;</span> target must precede <span class="v">fn</span> 
+       in the list of targets <span class="v">(t1 ... tn)</span>.</li>
 </ul><p>The conjuncts may be at any level of nesting, 
       but must be extractable by flattening 
       the <span class="tt"><a href="COMMON-LISP____AND.html">and</a></span> structure of the guard term. 
       The rest of the guard (i.e. other than the conjuncts above) 
       is not explicitly represented in the C code.</p><p>The return type of 
-      the C function corresponding to each non-recursive <span class="v">fni</span> 
-      is automatically determined from the body, as explained below.</p><p>The <a href="ACL2____FUNCTION-DEFINEDNESS.html">unnormalized body</a> of each <span class="v">fni</span> must be as follows:</p><ul>
-<li>If <span class="v">fni</span> is non-recursive, the unnormalized body must be 
-       a statement term for <span class="v">fni</span> with loop flag <span class="v">nil</span> 
-       returning type <span class="v">T</span> and affecting variables <span class="v">vars</span>, 
+      the C function corresponding to each non-recursive target function <span class="v">fn</span> 
+      is automatically determined from the body, as explained below.</p><p>The <a href="ACL2____FUNCTION-DEFINEDNESS.html">unnormalized body</a> of each <span class="v">fn</span> must be as follows:</p><ul>
+<li>If <span class="v">fn</span> is non-recursive, the unnormalized body must be 
+       a statement term for <span class="v">fn</span> with loop flag <span class="v">nil</span> 
+       returning type <span class="v">T</span> and affecting variables <span class="v">vars</span> 
+       (as defined below), 
        where each variable in <span class="v">vars</span> 
-       is a formal parameter of <span class="v">fni</span> with pointer type 
+       is a formal parameter of <span class="v">fn</span> with pointer type 
        and where <span class="v">T</span> is not <span class="v">void</span> if <span class="v">vars</span> is <span class="v">nil</span>. 
-       The return type of the C function represented by <span class="v">fni</span> is <span class="v">T</span>.</li>
-<li>If <span class="v">fni</span> is recursive, the unnormalized body must be 
-       a loop term for <span class="v">fni</span> affecting variables <span class="v">vars</span>, 
+       The return type of the C function represented by <span class="v">fn</span> is <span class="v">T</span>.</li>
+<li>If <span class="v">fn</span> is recursive, the unnormalized body must be 
+       a loop term for <span class="v">fn</span> affecting variables <span class="v">vars</span> 
+       (as defined below), 
        where each variable in <span class="v">vars</span> 
-       is a formal parameter of <span class="v">fni</span>.</li>
+       is a formal parameter of <span class="v">fn</span>.</li>
 </ul><p>The above-mentioned notions of 
-      (i) statement term for <span class="v">fni</span> with loop flag <span class="v">L</span> 
+      (i) statement term for <span class="v">fn</span> with loop flag <span class="v">L</span> 
       returning <span class="v">T</span> and affecting <span class="v">vars</span> and 
-      (ii) loop term for <span class="v">fni</span> affecting <span class="v">vars</span> 
+      (ii) loop term for <span class="v">fn</span> affecting <span class="v">vars</span> 
       are defined below, along with the notions of 
-      (iii) expression term for <span class="v">fni</span> 
+      (iii) expression term for <span class="v">fn</span> 
       returning <span class="v">T</span> and affecting <span class="v">vars</span>, 
-      (iv) pure expression term for <span class="v">fni</span> returning <span class="v">T</span>, 
-      (v) expression term for <span class="v">fni</span> returning boolean, 
+      (iv) pure expression term for <span class="v">fn</span> returning <span class="v">T</span>, 
+      (v) expression term for <span class="v">fn</span> returning boolean, 
       (vi) C type of a variable, and 
-      (vii) assignable variable.</p><p>A <i>statement term for</i> <span class="v">fni</span> with loop flag <span class="v">L</span> 
+      (vii) assignable variable.</p><p>A <i>statement term for</i> <span class="v">fn</span> <i>with loop flag</i> <span class="v">L</span> 
       <i>returning</i> <span class="v">T</span> and <i>affecting</i> <span class="v">vars</span>, 
-      where <span class="v">fni</span> is a target function, 
+      where <span class="v">fn</span> is a target function, 
       <span class="v">L</span> is either <span class="v">t</span> or <span class="v">nil</span>, 
       <span class="v">T</span> is a C type (possibly <span class="v">void</span>), 
       and <span class="v">vars</span> is a list of distinct symbols, 
       is inductively defined as one of the following:</p><ul>
-<li>An expression term for <span class="v">fni</span> 
+<li>An expression term for <span class="v">fn</span> 
        returning <span class="v">T</span> and affecting <span class="v">vars</span>, 
        when <span class="v">L</span> is <span class="v">nil</span>, 
        <span class="v">T</span> is a non-<span class="v">void</span> non-pointer C type, 
        <span class="v">vars</span> is <span class="v">nil</span>, 
-       and <span class="v">fni</span> is not recursive. 
+       and <span class="v">fn</span> is not recursive. 
        That is, an expression term returning a C value is also 
        a statement term returning that C value. 
        This represents a C <span class="v">return</span> statement 
        whose expression is represented by the same term, 
-       viewed as an expression term returning a C value.</li>
+       viewed as an expression term.</li>
 <li>A term <span class="v">(<a href="ACL2____MV.html">mv</a> ret var1 ... varn)</span>, 
-       when <span class="v">ret</span> is an expression term for <span class="v">fni</span> 
+       when <span class="v">ret</span> is an expression term for <span class="v">fn</span> 
        returning <span class="v">T</span> and affecting no variables, 
        <span class="v">L</span> is <span class="v">nil</span>, 
        <span class="v">T</span> is a non-<span class="v">void</span> non-pointer type, 
@@ -258,27 +307,27 @@
        preceding statements that may modify <span class="v">var1</span>, ..., <span class="v">varn</span>, 
        but since ACL2 is functional, 
        the possibly modified variables must be returned by the term.</li>
-<li>A call of <span class="v">fni</span> on variables identical to its formal parameters, 
+<li>A call of <span class="v">fn</span> on variables identical to its formal parameters, 
        when the C types of the variables are 
        the same as the C types of the formal parameters, 
        <span class="v">L</span> is <span class="v">t</span>, 
        <span class="v">T</span> is <span class="v">void</span>, 
-       and <span class="v">fni</span> is recursive. 
+       and <span class="v">fn</span> is recursive. 
        This represents no actual C code: 
        it just serves to conclude 
-       the computation in the body of the loop represented by <span class="v">fni</span>.</li>
+       the computation in the body of the loop represented by <span class="v">fn</span>.</li>
 <li>A call of <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span> on 
        (i) a test of the form <span class="v">(<a href="ACL2____MBT.html">mbt</a> ...)</span> or <span class="v">(<a href="ACL2____MBT_42.html">mbt$</a> ...)</span>, 
        (ii) a `then' branch that is 
-       a statement term for <span class="v">fni</span> with loop flag <span class="v">L</span> 
+       a statement term for <span class="v">fn</span> with loop flag <span class="v">L</span> 
        returning <span class="v">T</span> and affecting <span class="v">vars</span>, and 
        (iii) an `else' branch that may be any ACL2 term. 
        This represents the same C code represented by the `then' branch. 
        Both the test and the `else' branch are ignored; 
        the reason is that ATC generates C code under guard assumptions.</li>
 <li>A call of <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span> on 
-       (i) a test that is an expression term for <span class="v">fni</span> returning boolean and 
-       (ii) branches that are statement terms for <span class="v">fni</span> with loop flag <span class="v">L</span> 
+       (i) a test that is an expression term for <span class="v">fn</span> returning boolean and 
+       (ii) branches that are statement terms for <span class="v">fn</span> with loop flag <span class="v">L</span> 
        returning <span class="v">T</span> and affecting <span class="v">vars</span>. 
        This represents a C <span class="v">if</span> conditional statement 
        whose test expression is represented by the test term 
@@ -288,10 +337,10 @@
        as defined in Section `Portable ASCII C Identifiers' below, 
        the symbol name of <span class="v">var</span> is distinct from 
        the symbol names of all the other ACL2 variables in scope, 
-       <span class="v">term</span> is an expression term for <span class="v">fni</span> 
+       <span class="v">term</span> is an expression term for <span class="v">fn</span> 
        returning a non-<span class="v">void</span> non-pointer C type 
        and affecting no variables, and 
-       <span class="v">body</span> is a statement term for <span class="v">fni</span> with loop flag <span class="v">L</span> 
+       <span class="v">body</span> is a statement term for <span class="v">fn</span> with loop flag <span class="v">L</span> 
        returning <span class="v">T</span> and affecting <span class="v">vars</span>. 
        This represents, as indicated by the wrapper <span class="tt"><a href="C____DECLAR.html">declar</a></span>, 
        a declaration of a C local variable represented by <span class="v">var</span>, 
@@ -300,11 +349,11 @@
        The C type of the variable is determined from the initializer.</li>
 <li>A term <span class="v">(<a href="COMMON-LISP____LET.html">let</a> ((var (<a href="C____ASSIGN.html">assign</a> term))) body)</span>, 
        when <span class="v">var</span> is assignable, 
-       <span class="v">term</span> is an expression term for <span class="v">fni</span> 
+       <span class="v">term</span> is an expression term for <span class="v">fn</span> 
        returning the same non-<span class="v">void</span> non-pointer C type 
        as the C type of <span class="v">var</span> 
        and affecting no variables, and 
-       <span class="v">body</span> is a statement term for <span class="v">fni</span> with loop flag <span class="v">L</span> 
+       <span class="v">body</span> is a statement term for <span class="v">fn</span> with loop flag <span class="v">L</span> 
        returning <span class="v">T</span> and affecting <span class="v">vars</span>. 
        This represents, as indicated by the wrapper <span class="tt"><a href="C____ASSIGN.html">assign</a></span>, 
        an assignment to 
@@ -329,27 +378,82 @@
        <span class="v">var</span> has a pointer type whose referenced type is 
        the C integer type corresponding to <span class="v">&lt;type1&gt;</span>, 
        <span class="v">var</span> is one of the variables in <span class="v">vars</span>, 
-       <span class="v">term1</span> is a pure expression term for <span class="v">fni</span> 
+       <span class="v">term1</span> is a pure expression term for <span class="v">fn</span> 
        returning the C type corresponding to <span class="v">&lt;type2&gt;</span>, 
-       <span class="v">term2</span> is a pure expression term for <span class="v">fni</span> 
+       <span class="v">term2</span> is a pure expression term for <span class="v">fn</span> 
        returning the C type corresponding to <span class="v">&lt;type1&gt;</span>, 
-       <span class="v">body</span> is a statement term for <span class="v">fni</span> with loop flag <span class="v">L</span> 
+       <span class="v">body</span> is a statement term for <span class="v">fn</span> with loop flag <span class="v">L</span> 
        returning <span class="v">T</span> and affecting <span class="v">vars</span>. 
        This represents a C assignment to 
        an element of the array represented by <span class="v">var</span> 
        with the subscript expression represented by <span class="v">term1</span> 
        with the new element expression represented by <span class="v">term2</span>, 
        followed by the C code represented by <span class="v">body</span>.</li>
+<li>A term 
+       <span class="v">(<a href="COMMON-LISP____LET.html">let</a> ((var (struct-&lt;tag&gt;-write-&lt;member&gt; term var))) body)</span>, 
+       when <span class="v">&lt;tag&gt;</span> is a <span class="tt"><a href="C____DEFSTRUCT.html">defstruct</a></span> name, 
+       <span class="v">&lt;member&gt;</span> is the name of 
+       one of the members of that <span class="tt"><a href="C____DEFSTRUCT.html">defstruct</a></span>, 
+       <span class="v">&lt;member&gt;</span> has an integer type in the <span class="tt"><a href="C____DEFSTRUCT.html">defstruct</a></span>, 
+       <span class="v">var</span> is in scope, 
+       <span class="v">var</span> has a pointer type whose referenced type is 
+       the C structure type represented by <span class="v">&lt;tag&gt;</span>, 
+       <span class="v">var</span> is one of the variables in <span class="v">vars</span>, 
+       <span class="v">term</span> is a pure expression term for <span class="v">fn</span> 
+       returning the C integer type of <span class="v">&lt;member&gt;</span>, 
+       <span class="v">body</span> is a statement term for <span class="v">fn</span> with loop flag <span class="v">L</span> 
+       returning <span class="v">T</span> and affecting <span class="v">vars</span>. 
+       This represents a C assignment to 
+       a member of the structure represented by <span class="v">var</span> via its pointer 
+       with the new value expression represented by <span class="v">term</span>, 
+       followed by the C code represented by <span class="v">body</span>.</li>
+<li>A term 
+       <span class="v">(<a href="COMMON-LISP____LET.html">let</a>
+           ((var (struct-&lt;tag&gt;-write-&lt;member&gt;-&lt;type&gt; term1 term2 var))) body)</span>, 
+       when <span class="v">&lt;tag&gt;</span> is a <span class="tt"><a href="C____DEFSTRUCT.html">defstruct</a></span> name, 
+       <span class="v">&lt;member&gt;</span> is the name of 
+       one of the members of that <span class="tt"><a href="C____DEFSTRUCT.html">defstruct</a></span>, 
+       <span class="v">&lt;member&gt;</span> has an integer array type in the <span class="tt"><a href="C____DEFSTRUCT.html">defstruct</a></span> 
+       with element type <span class="v">&lt;type2&gt;</span>, 
+       <span class="v">&lt;type&gt;</span> and <span class="v">&lt;type2&gt;</span> are among<ul>
+<li><span class="v">schar</span></li>
+<li><span class="v">uchar</span></li>
+<li><span class="v">sshort</span></li>
+<li><span class="v">ushort</span></li>
+<li><span class="v">sint</span></li>
+<li><span class="v">uint</span></li>
+<li><span class="v">slong</span></li>
+<li><span class="v">ulong</span></li>
+<li><span class="v">sllong</span></li>
+<li><span class="v">ullong</span></li>
+</ul>
+<span class="v">var</span> is in scope, 
+       <span class="v">var</span> has a pointer type whose referenced type is 
+       the C structure type represented by <span class="v">&lt;tag&gt;</span>, 
+       <span class="v">var</span> is one of the variables in <span class="v">vars</span>, 
+       <span class="v">term1</span> is a pure expression term for <span class="v">fn</span> 
+       returning the C type corresponding to <span class="v">&lt;type2&gt;</span>, 
+       <span class="v">term2</span> is a pure expression term for <span class="v">fn</span> 
+       returning the C type corresponding to <span class="v">&lt;type&gt;</span>, 
+       <span class="v">body</span> is a statement term for <span class="v">fn</span> with loop flag <span class="v">L</span> 
+       returning <span class="v">T</span> and affecting <span class="v">vars</span>. 
+       This represents a C assignment to 
+       an element of a member of the structure represented by <span class="v">var</span> 
+       via its pointer, using <span class="v">term1</span> as the index, 
+       with the new value expression represented by <span class="v">term2</span>, 
+       followed by the C code represented by <span class="v">body</span>.</li>
 <li>A term <span class="v">(<a href="COMMON-LISP____LET.html">let</a> ((var term)) body)</span>, 
        when <span class="v">var</span> is assignable, 
-       <span class="v">term</span> is a statement term for <span class="v">fni</span> with loop flag <span class="v">nil</span> 
+       <span class="v">var</span> is among <span class="v">vars</span> if it is a formal parameter of <span class="v">fn</span> 
+       that has pointer type if <span class="v">fn</span> is non-recursive, 
+       <span class="v">term</span> is a statement term for <span class="v">fn</span> with loop flag <span class="v">nil</span> 
        returning <span class="v">void</span> and affecting <span class="v">var</span> 
-       that is 
-       either a call of a target function <span class="v">fnj</span> with <span class="v">j &lt; i</span> 
+       that is either a call of a target function 
+       that precedes <span class="v">fn</span> in the list of targets <span class="v">(t1 ... tn)</span> 
        whose body term returns <span class="v">void</span> and affects <span class="v">var</span> 
        or an <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span> whose test is an expression term returning boolean 
        (not a test <span class="v">(<a href="ACL2____MBT.html">mbt</a> ...)</span> or <span class="v">(<a href="ACL2____MBT_42.html">mbt$</a> ...)</span>), and 
-       <span class="v">body</span> is a statement term for <span class="v">fni</span> with loop flag <span class="v">L</span> 
+       <span class="v">body</span> is a statement term for <span class="v">fn</span> with loop flag <span class="v">L</span> 
        returning <span class="v">T</span> and affecting <span class="v">vars</span>. 
        This represents the C code represented by <span class="v">term</span>, 
        which may modify the variable represented by <span class="v">var</span>, 
@@ -361,10 +465,13 @@
        the symbol name of <span class="v">var1</span> is distinct from 
        the symbol names of all the other ACL2 variables in scope, 
        each <span class="v">vari</span> with <span class="v">i</span> &gt; 1 is assignable, 
-       <span class="v">term</span> is an expression term for <span class="v">fni</span> 
+       each <span class="v">vari</span> with <span class="v">i</span> &gt; 1 is among <span class="v">vars</span> 
+       if it is a formal parameter of <span class="v">fn</span> 
+       that has pointer type if <span class="v">fn</span> is non-recursive, 
+       <span class="v">term</span> is an expression term for <span class="v">fn</span> 
        returning a non-<span class="v">void</span> non-pointer C type 
        and affecting the variables <span class="v">(var2 ... varn)</span>, and 
-       <span class="v">body</span> is a statement term for <span class="v">fni</span> with loop flag <span class="v">L</span> 
+       <span class="v">body</span> is a statement term for <span class="v">fn</span> with loop flag <span class="v">L</span> 
        returning <span class="v">T</span> and affecting <span class="v">vars</span>. 
        This represents, as indicated by the wrapper <span class="v">declarn</span>, 
        a declaration of a C local variable represented by <span class="v">var1</span>, 
@@ -374,16 +481,19 @@
 <li>A term <span class="v">(<a href="ACL2____MV-LET.html">mv-let</a> (var1 var2 ... varn) (assignn term) body)</span>, 
        when <span class="v">n</span> &gt; 1, 
        each <span class="v">vari</span> is assignable, 
-       <span class="v">term</span> is an expression term for <span class="v">fni</span> 
+       each <span class="v">vari</span> with <span class="v">i</span> &gt; 1 is among <span class="v">vars</span> 
+       if it is a formal parameter of <span class="v">fn</span> 
+       that has pointer type if <span class="v">fn</span> is non-recursive, 
+       <span class="v">term</span> is an expression term for <span class="v">fn</span> 
        returning the same non-<span class="v">void</span> non-pointer C type 
        as the C type of <span class="v">vari</span> 
        and affecting the variables <span class="v">(var2 ... varn)</span> 
-       that is 
-       either a call of a recursive target function <span class="v">fnj</span> with <span class="v">j &lt; i</span> 
+       that is either a call of a recursive target function 
+       that precedes <span class="v">fn</span> in the list of targets <span class="v">(t1 ... tn)</span> 
        whose body term returns <span class="v">void</span> and affects <span class="v">(var1 ... varn)</span> 
        or an <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span> whose test is an expression term returning boolean 
        (not a test <span class="v">(<a href="ACL2____MBT.html">mbt</a> ...)</span> or <span class="v">(<a href="ACL2____MBT_42.html">mbt$</a> ...)</span>), and 
-       <span class="v">body</span> is a statement term for <span class="v">fni</span> with loop flag <span class="v">L</span> 
+       <span class="v">body</span> is a statement term for <span class="v">fn</span> with loop flag <span class="v">L</span> 
        returning <span class="v">T</span> and affecting <span class="v">vars</span>. 
        This represents, as indicated by the wrapper <span class="v">assignn</span>, 
        an assignment to 
@@ -393,59 +503,63 @@
 <li>A term <span class="v">(<a href="ACL2____MV-LET.html">mv-let</a> (var1 ... varn) term body)</span>, 
        when <span class="v">n</span> &gt; 1, 
        each <span class="v">vari</span> is assignable, 
-       <span class="v">term</span> is a statement term for <span class="v">fni</span> with loop flag <span class="v">nil</span> 
+       each <span class="v">vari</span> is among <span class="v">vars</span> if it is a formal parameter of <span class="v">fn</span> 
+       that has pointer type if <span class="v">fn</span> is non-recursive, 
+       <span class="v">term</span> is a statement term for <span class="v">fn</span> with loop flag <span class="v">nil</span> 
        returning <span class="v">void</span> and affecting <span class="v">(var1 ... varn)</span> 
-       that is 
-       either a call of a recursive target function <span class="v">fnj</span> with <span class="v">j &lt; i</span> 
+       that is either a call of a recursive target function 
+       that precedes <span class="v">fn</span> in the list of targets <span class="v">(t1 ... tn)</span> 
        whose body term returns <span class="v">void</span> and affects <span class="v">(var1 ... varn)</span> 
        or an <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span> whose test is an expression term returning boolean 
        (not a test <span class="v">(<a href="ACL2____MBT.html">mbt</a> ...)</span> or <span class="v">(<a href="ACL2____MBT_42.html">mbt$</a> ...)</span>), and 
-       <span class="v">body</span> is a statement term for <span class="v">fni</span> with loop flag <span class="v">L</span> 
+       <span class="v">body</span> is a statement term for <span class="v">fn</span> with loop flag <span class="v">L</span> 
        returning <span class="v">T</span> and affecting <span class="v">vars</span>. 
        This represents the C code represented by <span class="v">term</span>, 
        which may modify the variables represented by <span class="v">var1</span>, ..., <span class="v">varn</span>, 
        followed by the C code represented by <span class="v">body</span>.</li>
-<li>A call of a recursive target function <span class="v">fnj</span> with <span class="v">j &lt; i</span>, 
+<li>A call of a recursive target function <span class="v">fn0</span> 
+       that precedes <span class="v">fn</span> in the list of targets <span class="v">(t1 ... tn)</span>, 
        on variables identical to its formal parameters, 
        when the C types of the variables are 
-       the same as the C types of the formal parameters, 
+       the same as the C types of the formal parameters of <span class="v">fn0</span>, 
        <span class="v">L</span> is <span class="v">nil</span>, 
        <span class="v">T</span> is <span class="v">void</span>, 
        <span class="v">vars</span> is not <span class="v">nil</span>, 
-       and the body of <span class="v">fnj</span> is 
-       a loop term for <span class="v">fnj</span> affecting <span class="v">vars</span>. 
+       and the body of <span class="v">fn0</span> is 
+       a loop term for <span class="v">fn0</span> affecting <span class="v">vars</span>. 
        This represents the C <span class="v">while</span> statement 
-       represented by the body of <span class="v">fnj</span>, as explained below.</li>
-<li>A call of a non-recursive target function <span class="v">fnj</span> with <span class="v">j &lt; i</span>, 
-       on pure expression terms for <span class="v">fni</span> returning non-<span class="v">void</span> C types, 
+       represented by the body of <span class="v">fn0</span>, as explained below.</li>
+<li>A call of a non-recursive target function <span class="v">fn0</span> 
+       that precedes <span class="v">fn</span> in the list of targets <span class="v">(t1 ... tn)</span>, 
+       on pure expression terms for <span class="v">fn</span> returning non-<span class="v">void</span> C types, 
        when the C types of the terms are 
        the same as the C types of the formal parameters, 
        each term of pointer type is a variable 
-       identical to the corresponding formal parameter of <span class="v">fnj</span>, 
+       identical to the corresponding formal parameter of <span class="v">fn0</span>, 
        <span class="v">L</span> is <span class="v">nil</span>, 
        <span class="v">T</span> is <span class="v">void</span>, 
-       and the body of <span class="v">fnj</span> is 
-       a statement term for <span class="v">fnj</span> 
+       and the body of <span class="v">fn0</span> is 
+       a statement term for <span class="v">fn0</span> 
        returning <span class="v">void</span> and affecting <span class="v">vars</span>. 
        This represents an expression statement 
-       whose expression is call of the C function corresponding to <span class="v">fnj</span>.</li>
-</ul><p>A <i>loop term for</i> <span class="v">fni</span> 
+       whose expression is call of the C function corresponding to <span class="v">fn0</span>.</li>
+</ul><p>A <i>loop term for</i> <span class="v">fn</span> 
       <i>affecting</i> <span class="v">vars</span>, 
-      where <span class="v">fni</span> is a target function 
+      where <span class="v">fn</span> is a target function 
       and  <span class="v">vars</span> is a non-empty list of distinct symbols, 
       is inductively defined as one of the following:</p><ul>
 <li>A call of <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span> on 
        (i) a test of the form <span class="v">(<a href="ACL2____MBT.html">mbt</a> ...)</span> or <span class="v">(<a href="ACL2____MBT_42.html">mbt$</a> ...)</span>, 
        (ii) a `then' branch that is 
-       a loop term for <span class="v">fni</span> affecting <span class="v">vars</span>, and 
+       a loop term for <span class="v">fn</span> affecting <span class="v">vars</span>, and 
        (iii) an `else' branch that may be any ACL2 term. 
        This represents the same C code represented by the `then' branch. 
        Both the test and the `else' branch are ignored; 
        the reason is that ATC generates C code under guard assumptions.</li>
 <li>A call of <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span> on 
-       (i) a test that is an expression term for <span class="v">fni</span> returning boolean, 
+       (i) a test that is an expression term for <span class="v">fn</span> returning boolean, 
        (ii) a `then' branch that is 
-       a statement term for <span class="v">fni</span> with loop flag <span class="v">t</span> 
+       a statement term for <span class="v">fn</span> with loop flag <span class="v">t</span> 
        returning <span class="v">void</span> and affecting <span class="v">vars</span>, and 
        (iii) an `else' branch that is 
        either the variable <span class="v">var</span> when <span class="v">vars</span> is the singleton <span class="v">(var)</span>, 
@@ -457,30 +571,31 @@
        as explained below; 
        the `else' branch represents no actual C code, 
        because it just serves to complete the <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span>.</li>
-</ul><p>An <i>expression term for</i> <span class="v">fni</span> 
+</ul><p>An <i>expression term for</i> <span class="v">fn</span> 
       <i>returning</i> <span class="v">T</span> and 
       <i>affecting</i> <span class="v">vars</span>, 
-      where <span class="v">fni</span> is a target function, 
+      where <span class="v">fn</span> is a target function, 
       <span class="v">T</span> is a non-<span class="v">void</span> C type, 
       and <span class="v">vars</span> is a list of distinct symbols, 
       is inductively defined as one of the following:</p><ul>
-<li>A pure expression term for <span class="v">fni</span> returning <span class="v">T</span>, 
+<li>A pure expression term for <span class="v">fn</span> returning <span class="v">T</span>, 
        when <span class="v">vars</span> is <span class="v">nil</span>.</li>
-<li>A call of a non-recursive target function <span class="v">fnj</span> with <span class="v">j &lt; i</span>, 
-       on pure expression terms for <span class="v">fni</span> returning non-<span class="v">void</span> C types, 
+<li>A call of a non-recursive target function <span class="v">fn0</span> 
+       that precedes <span class="v">fn</span> in the list of targets <span class="v">(t1 ... tn)</span>, 
+       on pure expression terms for <span class="v">fn</span> returning non-<span class="v">void</span> C types, 
        when the types of the terms are equal to 
-       the C types of the formal parameters of <span class="v">fnj</span>, 
+       the C types of the formal parameters of <span class="v">fn0</span>, 
        each term of pointer type is a variable 
-       identical to the corresponding formal parameter of <span class="v">fnj</span>, 
-       and the body of <span class="v">fnj</span> is 
-       a statement term for <span class="v">fnj</span> 
+       identical to the corresponding formal parameter of <span class="v">fn0</span>, 
+       and the body of <span class="v">fn0</span> is 
+       a statement term for <span class="v">fn0</span> 
        returning <span class="v">T</span> and affecting <span class="v">vars</span>. 
        This represents a call of the corresponding C function.</li>
-</ul><p>A <i>pure expression term for</i> <span class="v">fni</span> <i>returning</i> <span class="v">T</span>, 
-      where <span class="v">fni</span> is a target function and 
+</ul><p>A <i>pure expression term for</i> <span class="v">fn</span> <i>returning</i> <span class="v">T</span>, 
+      where <span class="v">fn</span> is a target function and 
       <span class="v">T</span> is a non-<span class="v">void</span> C type, 
       is inductively defined as one of the following:</p><ul>
-<li>A formal parameter of <span class="v">fni</span>, 
+<li>A formal parameter of <span class="v">fn</span>, 
        when <span class="v">T</span> is the type of the formal parameter. 
        This represents the corresponding C formal parameter, 
        as an expression.</li>
@@ -509,7 +624,7 @@
        of the C type indicated by the name of the function, 
        expressed in decimal, octal, or hexadecimal base.</li>
 <li>A call of a function <span class="v">&lt;op&gt;-&lt;type&gt;</span> on 
-       a pure expression term for <span class="v">fni</span> returning <span class="v">U</span>, 
+       a pure expression term for <span class="v">fn</span> returning <span class="v">U</span>, 
        when <span class="v">&lt;op&gt;</span> is among<ul>
 <li><span class="v">plus</span></li>
 <li><span class="v">minus</span></li>
@@ -538,7 +653,7 @@
        These functions covers all the C unary operators 
        (using the nomenclature in [C]).</li>
 <li>A call of a function <span class="v">&lt;op&gt;-&lt;type1&gt;-&lt;type2&gt;</span> 
-       on pure expression terms for <span class="v">fni</span> returning <span class="v">U</span> and <span class="v">V</span>, 
+       on pure expression terms for <span class="v">fn</span> returning <span class="v">U</span> and <span class="v">V</span>, 
        when <span class="v">&lt;op&gt;</span> is among<ul>
 <li><span class="v">add</span></li>
 <li><span class="v">sub</span></li>
@@ -582,7 +697,7 @@
        and the non-pure operators <span class="v">=</span>, <span class="v">+=</span>, etc., 
        are represented differently.</li>
 <li>A call of a function <span class="v">&lt;type1&gt;-from-&lt;type2&gt;</span> 
-       on a pure expression term for <span class="v">fni</span> returning <span class="v">U</span>, 
+       on a pure expression term for <span class="v">fn</span> returning <span class="v">U</span>, 
        when <span class="v">&lt;type1&gt;</span> and <span class="v">&lt;type2&gt;</span> are among<ul>
 <li><span class="v">schar</span></li>
 <li><span class="v">uchar</span></li>
@@ -605,9 +720,9 @@
        happen automatically in certain circumstances in C, 
        these functions always represent explicit casts; 
        implict conversions are represented implicitly, 
-       e.g. via the function for a unary operator that promoteds the operand.</li>
+       e.g. via the function for a unary operator that promotes the operand.</li>
 <li>A call of <span class="v">&lt;type1&gt;-array-read-&lt;type2&gt;</span> 
-       on expression terms for <span class="v">fni</span> returning <span class="v">U</span> and <span class="v">V</span>, 
+       on pure expression terms for <span class="v">fn</span> returning <span class="v">U</span> and <span class="v">V</span>, 
        when <span class="v">&lt;type1&gt;</span> and <span class="v">&lt;type2&gt;</span> are among<ul>
 <li><span class="v">schar</span></li>
 <li><span class="v">uchar</span></li>
@@ -626,24 +741,57 @@
        This represents an array subscripting expression. 
        The guard verification requirement ensures that 
        the array access is well-defined.</li>
+<li>A call of <span class="v">struct-&lt;tag&gt;-read-&lt;member&gt;</span> 
+       on a pure expression term for <span class="v">fn</span> returning <span class="v">U</span> 
+       when <span class="v">&lt;tag&gt;</span> is a <span class="tt"><a href="C____DEFSTRUCT.html">defstruct</a></span> name, 
+       <span class="v">&lt;member&gt;</span> is the name of 
+       one of the members of that <span class="tt"><a href="C____DEFSTRUCT.html">defstruct</a></span>, 
+       <span class="v">&lt;member&gt;</span> has an integer type in the <span class="tt"><a href="C____DEFSTRUCT.html">defstruct</a></span>, 
+       <span class="v">T</span> is the C integer type of <span class="v">&lt;member&gt;</span>, and 
+       <span class="v">U</span> is the pointer type to 
+       the C structure type represented by <span class="v">&lt;tag&gt;</span>. 
+       This represents an access to a structure member by pointer.</li>
+<li>A call of <span class="v">struct-&lt;tag&gt;-read-&lt;member&gt;-&lt;type&gt;</span> 
+       on pure expression terms for <span class="v">fn</span> returning <span class="v">U</span> and <span class="v">V</span> 
+       when <span class="v">&lt;tag&gt;</span> is a <span class="tt"><a href="C____DEFSTRUCT.html">defstruct</a></span> name, 
+       <span class="v">&lt;member&gt;</span> is the name of 
+       one of the members of that <span class="tt"><a href="C____DEFSTRUCT.html">defstruct</a></span>, 
+       <span class="v">&lt;type&gt;</span> is among<ul>
+<li><span class="v">schar</span></li>
+<li><span class="v">uchar</span></li>
+<li><span class="v">sshort</span></li>
+<li><span class="v">ushort</span></li>
+<li><span class="v">sint</span></li>
+<li><span class="v">uint</span></li>
+<li><span class="v">slong</span></li>
+<li><span class="v">ulong</span></li>
+<li><span class="v">sllong</span></li>
+<li><span class="v">ullong</span></li>
+</ul>
+<span class="v">T</span> is the C element type of the array type of <span class="v">&lt;member&gt;</span>, 
+       <span class="v">U</span> is the C type corresponding to <span class="v">&lt;type&gt;</span>, and 
+       <span class="v">V</span> is the pointer type to 
+       the C structure type represented by <span class="v">&lt;tag&gt;</span>. 
+       This represents an access to 
+       an element of a structure member by pointer.</li>
 <li>A call of <span class="tt"><a href="C____SINT-FROM-BOOLEAN.html">sint-from-boolean</a></span> on 
-       an expression term for <span class="v">fni</span> returning boolean, 
+       an expression term for <span class="v">fn</span> returning boolean, 
        when <span class="v">T</span> is <span class="v">int</span>. 
        This converts an expression term returning boolean 
        to a pure expression term returning <span class="v">int</span>.</li>
 <li>A call of <span class="tt"><a href="C____CONDEXPR.html">condexpr</a></span> on 
        a call of <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span> on 
-       (i) a test that is an expression term for <span class="v">fni</span> returning boolean and 
+       (i) a test that is an expression term for <span class="v">fn</span> returning boolean and 
        (ii) branches that are 
-       pure expression terms for <span class="v">fni</span> returning <span class="v">T</span>. 
+       pure expression terms for <span class="v">fn</span> returning <span class="v">T</span>. 
        This represents a C <span class="v">?:</span> conditional expression 
        whose test expression is represented by the test term 
        and whose branch expressions are represented by the branch terms.</li>
-</ul><p>An <i>expression term for</i> <span class="v">fni</span> <i>returning boolean</i>, 
-      where <span class="v">fni</span> is a target function, 
+</ul><p>An <i>expression term for</i> <span class="v">fn</span> <i>returning boolean</i>, 
+      where <span class="v">fn</span> is a target function, 
       is inductively defined as one of the following:</p><ul>
 <li>A call of a function <span class="v">boolean-from-&lt;type&gt;</span> 
-       on a pure expression term for <span class="v">fni</span> returning <span class="v">U</span>, 
+       on a pure expression term for <span class="v">fn</span> returning <span class="v">U</span>, 
        when <span class="v">&lt;type&gt;</span> is among<ul>
 <li><span class="v">schar</span></li>
 <li><span class="v">uchar</span></li>
@@ -660,7 +808,7 @@
        This converts a pure expression term returning a C type 
        to an expression term returning boolean.</li>
 <li>A call of one of the following functions and macros 
-       on expression terms for <span class="v">fni</span> returning booleans:<ul>
+       on expression terms for <span class="v">fn</span> returning booleans:<ul>
 <li><span class="tt"><a href="COMMON-LISP____NOT.html">not</a></span></li>
 <li><span class="tt"><a href="COMMON-LISP____AND.html">and</a></span></li>
 <li><span class="tt"><a href="COMMON-LISP____OR.html">or</a></span></li>
@@ -672,10 +820,13 @@
 <li>If <span class="v">var</span> is a formal parameter, 
        the C type is the one derived from the guard as explained earlier.</li>
 <li>If <span class="v">var</span> is not a formal parameter, 
-       it must be introduced by a <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span> with <span class="tt"><a href="C____DECLAR.html">declar</a></span>, 
-       and its C type is the one of the term argument of <span class="tt"><a href="C____DECLAR.html">declar</a></span>.</li>
+       it must be introduced by 
+       a <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span> with <span class="tt"><a href="C____DECLAR.html">declar</a></span> 
+       or an <span class="tt"><a href="ACL2____MV-LET.html">mv-let</a></span> with <span class="v">declarn</span>, 
+       and its C type is the one of the term argument of 
+       <span class="tt"><a href="C____DECLAR.html">declar</a></span> or <span class="v">declarn</span>.</li>
 </ul><p>The C type of a variable is never <span class="v">void</span>.</p><p>A variable <span class="v">var</span> bound in 
-      a <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span> or <span class="tt"><a href="ACL2____MV-LET.html">mv-let</a></span> in a target function <span class="v">fni</span> 
+      a <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span> or <span class="tt"><a href="ACL2____MV-LET.html">mv-let</a></span> in a target function <span class="v">fn</span> 
       is <i>assignable</i> when it is in scope, 
       i.e. it is identical to a function parameter 
       or to a variable bound in an enclosing <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span> or <span class="tt"><a href="ACL2____MV-LET.html">mv-let</a></span>, 
@@ -733,12 +884,13 @@
       The loop flag <span class="v">L</span> serves to ensure that 
       the body of a loop function ends with a recursive call 
       on all paths (i.e. at all the leaves of its <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span> structure, 
-      and that recursive calls of the loop function occur nowhere else.</p><p>The body of the C function represented by each non-recursive <span class="v">fni</span> 
+      and that recursive calls of the loop function occur nowhere else.</p><p>The body of the C function represented by each non-recursive <span class="v">fn</span> 
       is the compound statement consisting of 
       the block items (i.e. statements and declarations) 
       represented by the ACL2 function's body 
-      (which is a statement term).</p><p>The restriction <span class="v">j &lt; i</span> when <span class="v">fni</span> calls <span class="v">fnj</span> means that 
-      no (direct or indirect) recursion is allowed in the C code 
+      (which is a statement term).</p><p>The restriction that each function <span class="v">fn</span> may only call 
+      a function that precedes it in the list of targets <span class="v">(t1 ... tn)</span>, 
+      means that no (direct or indirect) recursion is allowed in the C code 
       and the target functions must be specified 
       in a topological order of their call graph.</p><p>The guard verification requirement ensures that 
       the constraints about C types described above holds, 
@@ -811,7 +963,24 @@ enum       return     volatile   _Thread_local</pre>
           (<a href="ACL2____MV-NTH.html">mv-nth</a> '1 mv)
           ...
           (<a href="ACL2____MV-NTH.html">mv-nth</a> 'n-1 mv)))
- term)</pre><h3>Applicability Conditions</h3><p>In addition to the requirements on the inputs stated above, 
+ term)</pre><p>Since ATC operates on translated terms, 
+       there is no direct restriction 
+       on the untranslated bodies of the functions, 
+       which in particular may use any macro or any named constant, 
+       so long as their translated form 
+       satisfies all the requirements stated in this ATC documentation; 
+       the restrictions on the translated bodies thus impose 
+       indirect restrictions on the untranslated bodies. 
+       Note also that ATC treats, for instance, 
+       a translated term of the form <span class="v">(<a href="COMMON-LISP____IF.html">if</a> a b 'nil)</span> 
+       as if it were the translation of <span class="v">(<a href="COMMON-LISP____AND.html">and</a> a b)</span> 
+       in an untranslated function body, 
+       even though that untranslated function body 
+       may include <span class="v">(<a href="COMMON-LISP____IF.html">if</a> a b 'nil)</span> directly, 
+       or some other macro that expands to that: 
+       this does not cause any problem of course, 
+       because if two untranslated terms become the same translated term, 
+       then they are equivalent for ATC's purposes.</p><h3>Applicability Conditions</h3><p>In addition to the requirements on the inputs stated above, 
       the following <a href="ACL2____EVENT-MACRO-APPLICABILITY-CONDITIONS.html">applicability conditions</a> must be proved. 
       The proofs are attempted when ATC is called. 
       No hints can be supplied to ATC for these applicability conditions; 
@@ -840,22 +1009,23 @@ enum       return     volatile   _Thread_local</pre>
        the C function generated from <span class="v">fn</span> 
        yields the same result as the function <span class="v">fn</span>. 
        That is, 
-       the C function is functionally equivalent to the ACL2 function.</p><p>If the ACL2 function takes arrays as inputs, 
+       the C function is functionally equivalent to the ACL2 function.</p><p>If the ACL2 function takes arrays or pointers to structures as inputs, 
        the generated correctness theorem includes hypotheses 
-       saying that the arrays are all at different addresses. 
+       saying that the arrays and structures are all at different addresses. 
        The formal model of C that the proofs rely on 
-       assumes that arrays do not overlap. 
+       assumes that arrays and structures do not overlap. 
        Thus, the guarantees provided by the generated theorems about the C code 
-       hold only if pointers to distinct, non-overlapping arrays 
+       hold only if pointers to distinct, non-overlapping arrays and structures 
        are passed to the generated C functions.</p><p>If the <span class="v">:proofs</span> input is <span class="v">nil</span>, 
        this theorem is not generated.</p><h3>Generated C Code</h3><p>ATC generates a single C file that contains 
       a translation unit that contains 
-      a C function for each target ACL2 function <span class="v">fni</span>, 
-      as explained in Section `Representation of C Code in ACL2'.</p><p>The guard verification requirement stated earlier for each <span class="v">fni</span> 
+      a C structure type declaration or a C fucnction 
+      for each target <span class="v">ti</span> (except recursive target functions), 
+      as explained in Section `Representation of C Code in ACL2'.</p><p>The guard verification requirement stated earlier for each function 
       implies that the generated C operations 
       never exhibit undefined behavior, 
       provided that they are called with values 
-      whose ACL2 counterparts satisfy the guard of <span class="v">fni</span>.</p><h4>Compiling and Running the C Code</h4><p>The generated C code can be compiled and run as any other C code. 
+      whose ACL2 counterparts satisfy the guard of the function.</p><h4>Compiling and Running the C Code</h4><p>The generated C code can be compiled and run as any other C code. 
        For instance, one can use <span class="v">gcc</span> on macOS or Linux.</p><p>Just compiling the generated C file may result in an error 
        due to the lack of a <span class="v">main</span> function in the file. 
        The code generated by ATC is meant to be called by external C code, 
@@ -863,7 +1033,7 @@ enum       return     volatile   _Thread_local</pre>
        To test the generated code, 
        one can write a separate C file with a <span class="v">main</span> function, 
        and compile both files together. 
-       By default, an executable <span class="v">a.out</span> will be generated 
+       By default, an executable <span class="v">a.out</span> is generated 
        (if using <span class="v">gcc</span> on macOS or Linux).</p><p>The directory <span class="v">[books]/kestrel/c/atc/tests</span> 
        contains some examples of C code generation 
        and handwritten C code to test the generated code.</p><h3>Redundancy</h3><p>A call of ATC is redundant if and only if 

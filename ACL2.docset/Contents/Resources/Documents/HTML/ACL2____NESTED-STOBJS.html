@@ -11,9 +11,8 @@
 <p>Using <a href="ACL2____STOBJ.html">stobj</a>s that contain stobjs</p><p>For this topic we assume that you already understand the basics of 
  single-threaded objects in ACL2.  See <a href="ACL2____STOBJ.html">stobj</a>, and in particular, see 
  <a href="ACL2____DEFSTOBJ.html">defstobj</a>, which notes that a stobj field can itself be a stobj, an 
- array of stobjs, or a <a href="ACL2____STOBJ-TABLE.html">stobj-table</a>.  The present <a href="COMMON-LISP____DOCUMENTATION.html">documentation</a> 
- topic expands on that point.  However, we ignore stobj-table fields here; see 
- <a href="ACL2____STOBJ-TABLE.html">stobj-table</a> for such documentation.</p> 
+ array or hash-tablle of stobjs, or a <a href="ACL2____STOBJ-TABLE.html">stobj-table</a>.  The present <a href="COMMON-LISP____DOCUMENTATION.html">documentation</a> topic expands on that point.  However, we ignore stobj-table 
+ fields here; see <a href="ACL2____STOBJ-TABLE.html">stobj-table</a> for such documentation.</p> 
  
  <p>Our presentation is in five sections.  First we augment the documentation 
  for <span class="tt"><a href="ACL2____DEFSTOBJ.html">defstobj</a></span> by explaining how stobjs may be specified for fields in a 
@@ -40,11 +39,13 @@
  <p>Recall that the <span class="v">:type</span> keyword of a <span class="tt"><a href="ACL2____DEFSTOBJ.html">defstobj</a></span> field descriptor 
  can be a ``type-indicator'' that specifies the type of the field as a 
  type-spec (see <a href="ACL2____TYPE-SPEC.html">type-spec</a>).  For example, the following specifies an 
- integer field and a field that is an array of bytes.</p> 
+ integer field, a field that is an array of bytes, and a field that is a 
+ hash table whose values are integers.</p> 
  
  <pre class="code">(<a href="ACL2____DEFSTOBJ.html">defstobj</a> st
   (int-field :type integer :initially 0)
-  (ar-field :type (<a href="COMMON-LISP____ARRAY.html">array</a> unsigned-byte (10)) :initially 0))</pre> 
+  (ar-field :type (<a href="COMMON-LISP____ARRAY.html">array</a> unsigned-byte (10)) :initially 0)
+  (ht-field :type (hash-table eql nil integer) :initially 0))</pre> 
  
  <p>But the <span class="v">:type</span> of a stobj field descriptor may instead be based on a 
  stobj.  For example, the following sequence of three <a href="ACL2____EVENTS.html">events</a> is legal. 
@@ -53,37 +54,48 @@
  which here is <span class="v">sub1</span>. The second field descriptor of <span class="v">top</span>, named 
  <span class="v">sub2-ar-field</span>, illustrates a second new kind of value for <span class="v">:type</span>: an 
  array whose elements are specified by the name of a previously-introduced 
- stobj, in this case, the stobj <span class="v">sub2</span>.  (See <a href="ACL2____STOBJ-TABLE.html">stobj-table</a> for the 
- third new kind of value for <span class="v">:type</span>.)</p> 
+ stobj, in this case, the stobj <span class="v">sub2</span>.  The third field descriptor is 
+ analogous to the second, but with a hash table instead of an array.  (See 
+ <a href="ACL2____STOBJ-TABLE.html">stobj-table</a> for the fourth new kind of value for <span class="v">:type</span>.)</p> 
  
  <pre class="code">(<a href="ACL2____DEFSTOBJ.html">defstobj</a> sub1 fld1)
 (<a href="ACL2____DEFSTOBJ.html">defstobj</a> sub2 fld2)
 (<a href="ACL2____DEFSTOBJ.html">defstobj</a> top
   (sub1-field :type sub1)
-  (sub2-ar-field :type (<a href="COMMON-LISP____ARRAY.html">array</a> sub2 (10))))</pre> 
+  (sub2-ar-field :type (<a href="COMMON-LISP____ARRAY.html">array</a> sub2 (10)))
+  (sub2-ht-field :type (hash-table equal nil sub2)))</pre> 
  
  <p>The <span class="v">:initially</span> keyword is illegal for fields whose <span class="v">:type</span> is a 
- stobj or an array of stobjs (or, not further discussed here, a <a href="ACL2____STOBJ-TABLE.html">stobj-table</a>.  Each such initial value is provided by a corresponding call of 
- the stobj creator for that stobj.  In particular, in the case of an array of 
- stobjs, the stobj creator is called once for each element of the array, so 
- that the array elements are distinct.  For example, each element of 
- <span class="v">sub2-ar-field</span> in the example above is initially provided by a separate 
- call of <span class="v">create-sub2</span>.  Each initial element is thus unique, and in 
- particular is distinct from the initial global value of the stobj.  Similarly, 
- the initial global stobj for <span class="v">sub1</span> is distinct from the initial 
+ stobj, an array of stobjs, or a hash table of stobjs (or, not further 
+ discussed here, a <a href="ACL2____STOBJ-TABLE.html">stobj-table</a>).  For a stobj field, the initial value 
+ is provided by a corresponding call of the stobj creator for that stobj.  For 
+ a field that is an array of stobjs, the stobj creator is called once for each 
+ element of the array, so that the array elements are distinct.  For example, 
+ each element of <span class="v">sub2-ar-field</span> in the example above is initially provided 
+ by a separate call of <span class="v">create-sub2</span>.  Each initial element is thus unique, 
+ and in particular is distinct from the initial global value of the stobj. 
+ Similarly, the initial global stobj for <span class="v">sub1</span> is distinct from the initial 
  <span class="v">sub1-field</span> field of the global stobj for <span class="v">top</span>, as these result from 
  separate calls of <span class="v">create-sub1</span>.</p> 
+ 
+ <p>For a hash-table field, the <span class="v">:initially</span> keyword is not actually used 
+ for the initial hash table, which is empty.  Instead, the <span class="v">:initially</span> 
+ keyword typically determines the value returned when an accessor is applied to 
+ a key that is not bound — but not for a hash table with stobj values. 
+ In that case, a fresh copy of the indicated stobj is returned when applying 
+ the accessor to an unbound key.</p> 
  
  <p>When a stobj is used in a field of another stobj, we may refer to the 
  former field as a ``child stobj'' and the latter stobj as a ``parent stobj''. 
  So in the example above, <span class="v">sub1-field</span> is a child stobj of type <span class="v">sub1</span> 
- for parent stobj <span class="v">top</span>, and <span class="v">sub2-ar-field</span> is an array of child stobjs 
- of type <span class="v">sub2</span> for parent stobj <span class="v">top</span>.  A child stobj has the same 
- structural shape as the global stobj of its type, but as explained above, 
- these are distinct structures.  We follow standard terminology by saying 
- ``isomorphic'' to indicate the same structural shape.  So for example, (the 
- value of) <span class="v">sub1-field</span> is isomorphic to <span class="v">sub1</span>, though these are 
- distinct structures.</p> 
+ for parent stobj <span class="v">top</span>, <span class="v">sub2-ar-field</span> is an array of child stobjs of 
+ type <span class="v">sub2</span> for parent stobj <span class="v">top</span>, and <span class="v">sub2-ht-field</span> is a hash 
+ table of child stobjs of type <span class="v">sub2</span> for parent stobj <span class="v">top</span>.  A child 
+ stobj has the same structural shape as the global stobj of its type, but as 
+ explained above, these are distinct structures.  We follow standard 
+ terminology by saying ``isomorphic'' to indicate the same structural shape. 
+ So for example, (the value of) <span class="v">sub1-field</span> is isomorphic to <span class="v">sub1</span>, 
+ though these are distinct structures.</p> 
  
  <p>ACL2 enforces the following restriction, which can allow for greater 
  efficiency in the raw Lisp code generated for <span class="v">stobj-let</span> forms, as per the 
@@ -141,8 +153,9 @@
  accessing of stobj fields can result in logically inexplicable changes to the 
  child stobj when the parent stobj is changed.  Thus, ACL2 disallows direct 
  calls of stobj accessors and updaters for fields whose <span class="v">:type</span> is a stobj 
- or an array of stobjs (or a <a href="ACL2____STOBJ-TABLE.html">stobj-table</a>).  Instead, ACL2 provides 
- <span class="v">stobj-let</span> for reading and writing such fields in a sound manner.</p> 
+ or an array or hash table of stobjs (or a <a href="ACL2____STOBJ-TABLE.html">stobj-table</a>).  Instead, ACL2 
+ provides <span class="v">stobj-let</span> for reading and writing such fields in a sound 
+ manner.</p> 
  
  <h3>SECTION: Accessing and updating stobj fields of stobjs using 
  <span class="v">stobj-let</span>
@@ -493,7 +506,9 @@ ACL2 !&gt;</pre>
  
  <p>The aforementioned community book, 
  <span class="v">books/system/tests/nested-stobj-tests.lisp</span>, contains a corresponding 
- checker immediately following this definition.</p> 
+ checker immediately following this definition.  Also see that book for an 
+ analogous example using a hash-table field in place of an array field; search 
+ there for ``hash tables with stobj value types''.</p> 
  
  <h3>SECTION: Precise documentation for <span class="v">stobj-let</span>
 </h3> 
@@ -519,23 +534,27 @@ ACL2 !&gt;</pre>
  stobj name (<span class="v">ST</span>) for each binding.  Each of these accessors and (if 
  supplied) updaters is a stobj accessor for the same stobj, which is typically 
  <span class="v">ST</span> but may be a stobj congruent to <span class="v">ST</span>.  In the case <span class="v">(ACC ST)</span>, 
- <span class="v">ACC</span> is the accessor for a scalar (hence not array) field.  In the case 
- <span class="v">(ACCi I ST)</span>, <span class="v">ACCi</span> is the accessor for an array field and <span class="v">I</span> is 
- either a variable, a natural number, a list <span class="v">(<a href="COMMON-LISP____QUOTE.html">quote</a> N)</span> where <span class="v">N</span> is a 
- natural number, or a symbol introduced by <span class="tt"><a href="ACL2____DEFCONST.html">defconst</a></span>.  If <span class="v">UPDATER</span> 
- is supplied, then it is a symbol that is the name of the stobj updater for the 
- field of <span class="v">ST</span> accessed by <span class="v">ACCESSOR</span>.  If <span class="v">UPDATER</span> is not supplied, 
- then for the discussion below we consider it to be, implicitly, the symbol in 
- the same package as the function symbol of <span class="v">ACCESSOR</span> (i.e., <span class="v">ACC</span> or 
- <span class="v">ACCi</span>), obtained by prepending the string <span class="v">"UPDATE-"</span> to the <span class="tt"><a href="COMMON-LISP____SYMBOL-NAME.html">symbol-name</a></span> of that function symbol.  Finally, <span class="v">ACCESSOR</span> has a <a href="ACL2____SIGNATURE.html">signature</a> specifying a return value that is either <span class="v">VAL</span> or is a stobj 
+ <span class="v">ACC</span> is the accessor for a scalar (hence not array, hash-table, or 
+ stobj-table) field.  In the case <span class="v">(ACC I ST)</span>, <span class="v">ACC</span> is the accessor for 
+ an array or hash-table field and <span class="v">I</span> is either a symbol, a natural number, 
+ or a list <span class="v">(<a href="COMMON-LISP____QUOTE.html">quote</a> C)</span>.  If <span class="v">UPDATER</span> is supplied, then it is a symbol 
+ that is the name of the stobj updater for the field of <span class="v">ST</span> accessed by 
+ <span class="v">ACCESSOR</span>.  If <span class="v">UPDATER</span> is not supplied, then for the discussion below 
+ we consider it to be, implicitly, the symbol in the same package as the 
+ function symbol <span class="v">ACC</span> of <span class="v">ACCESSOR</span>, obtained by prepending the string 
+ <span class="v">"UPDATE-"</span> to the <span class="tt"><a href="COMMON-LISP____SYMBOL-NAME.html">symbol-name</a></span> of <span class="v">ACC</span> unless the name of 
+ <span class="v">ACC</span> ends in <span class="v">"-GET"</span> (suggesting a hash-table field access), in 
+ which case the implicit <span class="v">UPDATER</span> is obtained by replacing the suffix 
+ <span class="v">"-GET"</span> with <span class="v">"-PUT"</span>.  Finally, <span class="v">ACCESSOR</span> has a <a href="ACL2____SIGNATURE.html">signature</a> specifying a return value that is either <span class="v">VAL</span> or is a stobj 
  that is congruent to <span class="v">VAL</span>. (This means that only stobjs may be bound in 
  these bindings.)</p> 
  
  <p>If the conditions above are met, then the General Form expands to one of 
  the expressions below, depending on whether the list 
  <span class="v">PRODUCER-VARIABLES</span> has one member or more than one member, respectively. 
- (But see below for extra code that may be inserted if there are stobj array 
- accesses in <span class="v">BINDINGS</span>.)  We observe the following conventions.</p> 
+ (But see below for extra code, denoted ``<span class="v">&lt;check&gt;</span>'', that may be inserted 
+ if there are stobj array or hash-table accesses in <span class="v">BINDINGS</span>.)  We observe 
+ the following conventions.</p> 
  
  <ul> 
  
@@ -588,14 +607,15 @@ ACL2 !&gt;</pre>
  FORM</span>'), where <span class="v">FORM'</span> is the translation of <span class="v">FORM</span>.  (See <a href="ACL2____TERM.html">term</a> 
  for a discussion of translation.)  The <span class="v">&lt;check&gt;</span> expression generates an 
  extra <a href="ACL2____GUARD.html">guard</a> proof obligation, which guarantees that no aliasing occurs 
- in <span class="v">BINDINGS</span> for two variables bound to accesses of the same stobj array, 
- when at least one of the two variables is a producer variable.  When ACL2 
- determines that no such aliasing is possible, for example because all the 
- array accesses use distinct numeric indices or because there are no producer 
- variables, then <span class="v">FORM</span> does not undergo such replacement.  Warning: The use 
- of <span class="v">:</span><span class="tt"><a href="ACL2____TRANS1.html">trans1</a></span> will not show this addition of a check.  But you can 
- see it after admitting the definition of <span class="v">FN</span> (perhaps using <span class="tt"><a href="ACL2____SKIP-PROOFS.html">skip-proofs</a></span> if you are having difficult admitting the definition) as 
- follows.</p> 
+ in <span class="v">BINDINGS</span> for two variables bound to accesses of the same stobj array 
+ or hash table, when at least one of the two variables is a producer variable. 
+ When ACL2 determines that no such aliasing is possible, for example because 
+ all the array or hash-table accesses use distinct numeric indices or because 
+ there are no producer variables, then <span class="v">FORM</span> does not undergo such 
+ replacement.  Warning: The use of <span class="v">:</span><span class="tt"><a href="ACL2____TRANS1.html">trans1</a></span> will not show this 
+ addition of a check.  But you can see it after admitting the definition of 
+ <span class="v">FN</span> (perhaps using <span class="tt"><a href="ACL2____SKIP-PROOFS.html">skip-proofs</a></span> if you are having difficult 
+ admitting the definition) as follows.</p> 
  
  <pre class="code">(<a href="ACL2____UNTRANSLATE.html">untranslate</a> (<a href="ACL2____BODY.html">body</a> 'FN nil (<a href="ACL2____W.html">w</a> state)) nil (<a href="ACL2____W.html">w</a> state))</pre> 
  
@@ -635,9 +655,9 @@ ACL2 !&gt;</pre>
  
  <p>For <span class="v">acc</span> and <span class="v">acc$c</span> as above, <span class="v">acc</span> is considered to be a scalar 
  accessor if <span class="v">acc$c</span> is a scalar accessor, and otherwise <span class="v">acc</span> is an 
- array accessor (unless it is a stobj-table accessor, discussed elsewhere; see 
- <a href="ACL2____STOBJ-TABLE.html">stobj-table</a>); similarly for <span class="v">upd</span>, which therefore is a scalar 
- accessor if and only if <span class="v">acc</span> is a scalar accessor.</p> 
+ array or hash-table accessor (unless it is a stobj-table accessor, discussed 
+ elsewhere; see <a href="ACL2____STOBJ-TABLE.html">stobj-table</a>); similarly for <span class="v">upd</span>, which therefore is 
+ a scalar accessor if and only if <span class="v">acc</span> is a scalar accessor.</p> 
  
  <p>A child stobj accessor/updater pair may be used in <span class="v">stobj-let</span> in the 
  same way when the parent is an abstract stobj as when the parent is a concrete 
@@ -649,7 +669,9 @@ ACL2 !&gt;</pre>
  <span class="v">books/system/tests/abstract-stobj-nesting/two-usuallyequal-nums-stobj-simpler.lisp</span>, 
  which is based on a book contributed by Sol Swords.  This example introduces 
  an abstract stobj with child stobj fields, and uses <span class="v">stobj-let</span> to read and 
- write those fields.</p> 
+ write those fields.  For even simpler examples that illustrate array and 
+ hash-table fields, see community books <span class="v">absstobj-with-arrays.lisp</span> and 
+ <span class="v">absstobj-with-hash-tables.lisp</span> in the same directory as above.</p> 
  
  <p>We start by introducing a concrete stobj with two child stobj fields, each 
  of which represents a natural number, together with a ``valid bit'' that, when 

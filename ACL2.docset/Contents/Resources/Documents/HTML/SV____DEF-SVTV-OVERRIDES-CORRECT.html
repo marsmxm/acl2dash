@@ -1,0 +1,151 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Def-svtv-overrides-correct</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=SV____DEF-SVTV-OVERRIDES-CORRECT">Click for Def-svtv-overrides-correct in the Full Manual</a></h3>
+
+<p>Macro to prove a theorem relating an SVTV run with overrides to a generalized one without them.</p> 
+<p>Usage:</p> 
+<pre class="code">(<a href="SV____DEF-SVTV-OVERRIDES-CORRECT.html">def-svtv-overrides-correct</a> &lt;svtv-name&gt;)</pre> 
+ 
+<p>Prerequisites: this requires the following two events to be done first.  See 
+<a href="SV____DEF-SVTV-OVERRIDE-THMS.html">def-svtv-override-thms</a> which does all three:</p> 
+<pre class="code">(<a href="SV____DEF-SVTV-PARTIAL-MONOTONIC.html">def-svtv-partial-monotonic</a> &lt;svtv-name&gt; &lt;export-name&gt;)
+(<a href="SV____DEF-SVTV-OVERRIDES-CRUX.html">def-svtv-overrides-crux</a> &lt;svtv-name&gt; &lt;export-name&gt;)</pre> 
+ 
+<p>This proves a theorem giving sufficient conditions under which a lemma 
+involving an <a href="ACL2____SVTV-RUN.html">svtv-run</a> using conditional overrides can be shown to imply 
+a more general theorem about an svtv-run without these overrides. The form of 
+the theorem is as follows:</p> 
+ 
+<pre class="code">(<a href="ACL2____B_A2.html">b*</a> ((spec-run  (<a href="ACL2____SVTV-RUN.html">svtv-run</a> (&lt;svtv&gt;) spec-env))
+     (lemma-run (<a href="ACL2____SVTV-RUN.html">svtv-run</a> (&lt;svtv&gt;) lemma-env))
+     (triples (&lt;override-triples&gt;)))
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="SV____SVEX-ENV-_C3_C3_D3.html">svex-env-&lt;&lt;=</a> (svex-env-removekeys
+                               (svar-override-triplelist-override-vars triples) lemma-env)
+                              spec-env)
+                (<a href="SV____SVEX-ENV-_C3_C3_D3.html">svex-env-&lt;&lt;=</a>
+                 (<a href="SV____SVEX-ENV-EXTRACT.html">svex-env-extract</a> (svar-override-triplelist-&gt;valvars triples) lemma-env)
+                 (svtv-pipeline-override-triples-extract triples spec-run))
+                (svex-envs-agree (&lt;non-triple-override-tests&gt;)
+                                 lemma-env spec-env)
+                (svex-env-keys-no-1s-p (svar-override-triplelist-&gt;testvars triples) spec-env))
+           (<a href="SV____SVEX-ENV-_C3_C3_D3.html">svex-env-&lt;&lt;=</a> lemma-run spec-run)))</pre> 
+ 
+<p>We'll go through an example of how this might work.</p> 
+ 
+ 
+<p>Suppose that <span class="v">multiplier-svtv</span> is set up as follows:</p> 
+<pre class="code">(<a href="SV____DEFSVTV-PHASEWISE.html">defsvtv-phasewise</a> multiplier-svtv
+  :mod *multiplier-mod*
+  :phases
+   ((:label start
+     :inputs (("clk" 0 :toggle 1)
+              ("valid"  1)
+              ("opcode" opcode)
+              ("src1"   a)
+              ("src2"   b)))
+
+    (:label next :delay 2
+     :outputs (("mul.part_prods" partial-products-ref))
+     :overrides (("mul.part_prods" (partial-products override-partial-products))))
+
+    (:label finish :delay 2
+     :outputs (("mul_result" product)))))</pre> 
+ 
+<p>Notice that #("mul.part_prods") is both an output and a conditional override 
+signal at the same phase. (It would be fine to name the output variable the 
+same as the override value variable; in this case we differentiate them for 
+clarity.)  As usual with multipliers, we'll prove the result correct by 
+splitting at the partial products.  In this case, suppose we prove the 
+following lemma:</p> 
+ 
+<pre class="code">(def-fgl-thm partial-prods-to-product
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 128 partial-products)
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SV____SVEX-ENV-LOOKUP.html">svex-env-lookup</a> 'product (<a href="ACL2____SVTV-RUN.html">svtv-run</a> (multipler-svtv)
+                                                      `((override-partial-products . -1)
+                                                        (partial-products . ,partial-products)
+                                                        (opcode . ,*mul-opcode*))))
+                  (sum-partial-products partial-products))))</pre> 
+ 
+<p>We'd like to generalize this so that we can compose it with a proof about 
+the partial product values.  A nice form of the generalized theorem would be 
+something like this:</p> 
+ 
+<pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> partial-prods-to-product-gen
+   (<a href="COMMON-LISP____LET_A2.html">let*</a> ((run (<a href="ACL2____SVTV-RUN.html">svtv-run</a> (multipler-svtv) env))
+          (partial-products (<a href="SV____SVEX-ENV-LOOKUP.html">svex-env-lookup</a> 'partial-products run)))
+     (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (no-override-tests-set env)
+                   (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SV____SVEX-ENV-LOOKUP.html">svex-env-lookup</a> 'opcode env) *mul-opcode*)
+                   (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 128 partial-products))
+              (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SV____SVEX-ENV-LOOKUP.html">svex-env-lookup</a> 'product run)
+                     (sum-partial-products partial-products)))))</pre> 
+ 
+<p>Our overrides-correct theorem can help prove something like this.  In 
+particular, we can instantiate our override theorem with <span class="v">spec-env</span> set to 
+<span class="v">env</span> and <span class="v">lemma-env</span> set to the following:</p> 
+ 
+<pre class="code">`((override-partial-products . -1)
+  (partial-products . ,(<a href="SV____SVEX-ENV-LOOKUP.html">svex-env-lookup</a> 'partial-products-ref (<a href="ACL2____SVTV-RUN.html">svtv-run</a> (multipler-svtv) env)))
+  (opcode . ,*mul-opcode*))</pre> 
+ 
+<p>Here we've taken the env used in our lemma and instantiated the override 
+variable with the value of its reference variable from the run on the 
+generalized env.</p> 
+ 
+<p>The overrides-correct theorem refers to two additional 0-ary functions: 
+<span class="v">&lt;override-triples&gt;</span> and <span class="v">&lt;non-triple-override-tests&gt;</span>. The override 
+triples are defined by the <span class="v">def-svtv-overrides-crux</span> event and contain 
+triples of corresponding override test, override value, and reference output 
+variables.  We'll assume that <span class="v">override-partial-products</span>, 
+<span class="v">partial-products</span>, and <span class="v">partial-products-ref</span> is one such triple.  The 
+<span class="v">&lt;non-triple-override-tests&gt;</span> will often be <span class="v">nil</span>, but will otherwise 
+contain any override test variables not among the triples.</p> 
+ 
+<ul> 
+<li>The first hyp: 
+<pre class="code">(<a href="SV____SVEX-ENV-_C3_C3_D3.html">svex-env-&lt;&lt;=</a> (svex-env-removekeys
+               (svar-override-triplelist-override-vars triples) lemma-env)
+              spec-env)</pre> 
+This says that for every variable other than the override-test and 
+override-value variables of the triples, lemma-env's binding is <span class="v">4vec-&lt;&lt;=</span> that of spec-env. This is satisfied because the only such variable bound in lemma-env is <span class="v">opcode</span>, and we've assumed its binding in spec-env to be the same.</li> 
+ 
+<li>The second hyp: 
+<pre class="code">(<a href="SV____SVEX-ENV-_C3_C3_D3.html">svex-env-&lt;&lt;=</a>
+ (<a href="SV____SVEX-ENV-EXTRACT.html">svex-env-extract</a> (svar-override-triplelist-&gt;valvars triples) lemma-env)
+ (svtv-pipeline-override-triples-extract triples spec-run))</pre> 
+This says that for every override value variable of the triples, its binding in 
+<span class="v">lemma-env</span> is <span class="v">4vec-&lt;&lt;=</span> the value of its corresponding reference 
+variable from the <span class="v">svtv-run</span> with <span class="v">spec-env</span>.  This is true because 
+<span class="v">partial-products</span> is bound to exactly that reference variable value in our 
+lemma-env, and no other override value variable of the triples is bound in 
+lemma-env, meaning they are all implicitly <span class="v">4vec-x</span> and therefore 
+<span class="v">4vec-&lt;&lt;=</span> any value.</li> 
+ 
+<li>The third hyp: 
+<pre class="code">(svex-envs-agree (&lt;non-triple-override-tests&gt;)
+                 lemma-env spec-env)</pre> 
+says that any override test variables not among the triples must be bound to 
+the same value in <span class="v">lemma-env</span> and <span class="v">spec-env</span>.  We don't have any that are 
+bound in <span class="v">lemma-env</span>, so if there were any such variables they would need to 
+be assumed to also be <span class="v">x</span> in spec-env.</li> 
+ 
+<li>The fourth hyp: 
+<pre class="code">(svex-env-keys-no-1s-p (svar-override-triplelist-&gt;testvars triples) spec-env)</pre> 
+should be assumed in the generalized theorem, instead of the placeholder hyp 
+<span class="v">(no-override-tests-set env)</span> above.</li> 
+</ul> 
+ 
+<p>Having satisfied the hyps of our override theorem, we then can assume that 
+the <span class="v">svtv-run</span> on the lemma-env is <span class="v">svex-env-&lt;&lt;=</span> the run of the 
+spec-env.  We can use this to prove our conclusion, since (presumably) 
+sum-of-partial-products returns an integer and this means any value greater in 
+the 4vec lattice must be equal.</p> 
+ 
+
+</body>
+</html>

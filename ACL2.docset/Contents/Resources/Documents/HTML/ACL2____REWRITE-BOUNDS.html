@@ -1,0 +1,170 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Rewrite-bounds</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____REWRITE-BOUNDS">Click for Rewrite-bounds in the Full Manual</a></h3>
+
+<p>Substitute upper bounds and lower bounds for subterms in comparisons.</p> <p>Replace expressions by upper and lower bounds for them inside 
+inequalities.  Usage, as a computed hint:</p> 
+ 
+<pre class="code">(<a href="ACL2____REWRITE-BOUNDS.html">rewrite-bounds</a> ((<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> a 10)
+                 ;; replace the variable a by 10 in upper-boundable contexts
+
+                 (:free (b) (<a href="COMMON-LISP_____E3.html">&gt;</a> (foo b c) (bar b)))
+                 ;; replace (foo b c), for any b, by (bar b) in
+                 ;; lower-boundable contexts (note: C is not a free variable)
+
+                 ...)
+
+                 ;; optional keywords:
+
+                 ;; theory to use in addition to the bound-rewrite meta rule
+                 ;; -- default is (<a href="ACL2____ENABLE.html">enable</a>), i.e., the ambient theory for the
+                 ;; event
+                 :in-theory (<a href="ACL2____ENABLE.html">enable</a> foo bar)
+
+                 ;; wait until stable under simplification (<a href="ACL2____DEFAULT.html">default</a> t)
+                 :wait-til-stablep nil
+
+                 ;; look for constant bounds assumed in the clause
+                 :clause-auto-bounds nil
+                 ;; look for constant bounds from linear rules
+                 :linear-auto-bounds nil
+                 ;; use both of these kinds of automatic bounds
+                 :auto-bounds nil)</pre> 
+ 
+<p>Here, lower-boundable contexts are locations where decreasing the 
+subexpression makes the goal stronger, and upper boundable contexts are 
+locations where increasing the value of the subexpression makes the goal 
+stronger (the new goal implies the original goal).  More on this below.</p> 
+ 
+<p>Note that performing such replacements may change a theorem to a 
+non-theorem.  Actually, this procedure leaves the original literals behind 
+inside <span class="v">hide</span> forms, but it still is best to be careful to apply this 
+strategy in the right places.</p> 
+ 
+<h3>Details</h3> 
+ 
+<p>ACL2 has a powerful nonlinear arithmetic decision procedure, but 
+often it stalls on relatively simple proofs.  For example, it goes out to 
+lunch on this problem:</p> 
+ 
+<pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> hard-nonlinear-problem
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____RATIONALP.html">rationalp</a> a)
+                (<a href="COMMON-LISP____RATIONALP.html">rationalp</a> b)
+                (<a href="COMMON-LISP____RATIONALP.html">rationalp</a> c)
+                (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> 0 a)
+                (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> 0 b)
+                (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> 1 c)
+                (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> a 10)
+                (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> b 20)
+                (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> c 30))
+           (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> (<a href="COMMON-LISP_____B2.html">+</a> (<a href="COMMON-LISP_____A2.html">*</a> a b c)
+                  (<a href="COMMON-LISP_____A2.html">*</a> a b)
+                  (<a href="COMMON-LISP_____A2.html">*</a> b c)
+                  (<a href="COMMON-LISP_____A2.html">*</a> a c))
+               (<a href="COMMON-LISP_____B2.html">+</a> (<a href="COMMON-LISP_____A2.html">*</a> 10 20 30)
+                  (<a href="COMMON-LISP_____A2.html">*</a> 10 20)
+                  (<a href="COMMON-LISP_____A2.html">*</a> 20 30)
+                  (<a href="COMMON-LISP_____A2.html">*</a> 10 30))))
+  :hints ((<a href="COMMON-LISP____AND.html">and</a> stable-under-simplificationp
+               '(:nonlinearp t))))</pre> 
+ 
+<p>This can be proved using a fairly simple argument: each variable only occurs 
+in the conclusion in a context where the LHS expression increases monotonically 
+as it increases (because the rest of the variables are nonnegative). 
+Therefore, to find the upper bound for the LHS expression, set each variable to 
+its upper bound.  This upper bound is the same as the RHS, and the comparison 
+is non-strict, so the conclusion holds.</p> 
+ 
+<p>The computed hint <span class="v">rewrite-bounds</span> can run this sort of proof: it 
+replaces subterms within comparisons with user-provided upper or lower bounds, 
+depending on the context in which they occur.  In this theorem all of the 
+occurrences of the variables in the conclusion are upper-boundable instances, 
+because replacing them by some larger expression results in a new conjecture 
+that implies the original conjecture.  So we can use the following hint to 
+prove the theorem instantaneously:</p> 
+ 
+<pre class="code">(<a href="ACL2____REWRITE-BOUNDS.html">rewrite-bounds</a> ((<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> a 10)
+                 (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> b 20)
+                 (<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> c 30)))</pre> 
+ 
+<p>This instructs our metafunction to replace <span class="v">a</span> by 10, <span class="v">b</span> by 20, and 
+<span class="v">c</span> by 30 when it encounters them in upper-boundable contexts.  It will also 
+only do the replacement if it can prove that the inequality holds in its 
+context.</p> 
+ 
+<p>A final detail: Observe that the occurrence of <span class="v">a</span> in <span class="v">(<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> 0 a)</span> is 
+also an upper-boundable context.  However, performing the replacement here 
+would be bad because it would destroy the information that <span class="v">a</span> is 
+nonnegative.  In particular, replacing <span class="v">a</span> by its bound here would result in 
+a trivially true hypothesis.  The meta rule avoids making such replacements 
+when it can determine that they are trivial.</p> 
+ 
+<h3>Boundable Contexts</h3> 
+ 
+<p>The rules used for determining which contexts are upper or lower boundable 
+are as follows.</p> 
+ 
+<table class="xtable"> 
+<tr>
+<th>Preconditions</th> 
+    <th>Results</th> 
+</tr> 
+<tr>
+<td>
+<span class="v">(<a href="COMMON-LISP_____C3.html">&lt;</a> a b)</span> or <span class="v">(<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> a b)</span> in hypothesis/negated literal</td> 
+    <td>
+<span class="v">a</span> lower boundable, <span class="v">b</span> upper boundable</td> 
+</tr> 
+<tr>
+<td>
+<span class="v">(<a href="COMMON-LISP_____C3.html">&lt;</a> a b)</span> or <span class="v">(<a href="COMMON-LISP_____C3_D3.html">&lt;=</a> a b)</span> in conclusion/non-negated literal</td> 
+    <td>
+<span class="v">a</span> upper boundable, <span class="v">b</span> lower boundable</td> 
+</tr> 
+<tr>
+<td>
+<span class="v">(<a href="COMMON-LISP_____B2.html">+</a> a b)</span> in upper/lower boundable context</td> 
+    <td>
+<span class="v">a</span>, <span class="v">b</span> upper/lower boundable</td> 
+</tr> 
+<tr>
+<td>
+<span class="v">(<a href="COMMON-LISP____-.html">-</a> a)</span> in upper/lower boundable context</td> 
+    <td>
+<span class="v">a</span> lower/upper boundable</td> 
+</tr> 
+<tr>
+<td>
+<span class="v">(<a href="COMMON-LISP_____A2.html">*</a> a b)</span> in upper/lower boundable context, <span class="v">b</span> nonnegative</td> 
+    <td>
+<span class="v">a</span> upper/lower boundable</td> 
+</tr> 
+<tr>
+<td>
+<span class="v">(<a href="COMMON-LISP_____A2.html">*</a> a b)</span> in upper/lower boundable context, <span class="v">b</span> nonpositive</td> 
+    <td>
+<span class="v">a</span> lower/upper boundable</td> 
+</tr> 
+<tr>
+<td>
+<span class="v">(<a href="COMMON-LISP_____F2.html">/</a> a)</span> in upper/lower boundable context, <span class="v">a</span> positive/negative</td> 
+    <td>
+<span class="v">a</span> lower/upper boundable if bound is also positive/negative</td> 
+</tr> 
+</table> 
+ 
+<h3>Future work</h3> 
+ 
+<ul> 
+<li>Add better control over replacements</li> 
+<li>Add more boundable contexts</li> 
+<li>Add more smarts to prevent bad replacements.</li> 
+</ul>
+</body>
+</html>

@@ -1,0 +1,653 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Atc-gen-tag-member-write-thms</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=C____ATC-GEN-TAG-MEMBER-WRITE-THMS">Click for Atc-gen-tag-member-write-thms in the Full Manual</a></h3>
+
+<p>Generate the theorems to rewrite 
+          the execution of certain assignment expressions to structure writes, 
+          for a member of a structure type.</p><div class="box"><dl> 
+  <dt>Signature</dt>
+<dt><pre class="code">(atc-gen-tag-member-write-thms tag recognizer fixer-recognizer-thm 
+                               not-error-thm type-of-value-thm 
+                               meminfo names-to-avoid wrld) 
+ 
+  → 
+(mv local-events member-write-thms updated-names-to-avoid)</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">tag</span> — <font color="#606060">Guard <span class="v">(<a href="C____IDENTP.html">identp</a> tag)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">recognizer</span> — <font color="#606060">Guard <span class="v">(<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> recognizer)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">fixer-recognizer-thm</span> — <font color="#606060">Guard <span class="v">(<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> fixer-recognizer-thm)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">not-error-thm</span> — <font color="#606060">Guard <span class="v">(<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> not-error-thm)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">type-of-value-thm</span> — <font color="#606060">Guard <span class="v">(<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> type-of-value-thm)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">meminfo</span> — <font color="#606060">Guard <span class="v">(<a href="C____DEFSTRUCT-MEMBER-INFOP.html">defstruct-member-infop</a> meminfo)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">names-to-avoid</span> — <font color="#606060">Guard <span class="v">(<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> names-to-avoid)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">wrld</span> — <font color="#606060">Guard <span class="v">(<a href="ACL2____PLIST-WORLDP.html">plist-worldp</a> wrld)</span>.</font>
+</dd> 
+<dt>Returns</dt>
+<dd>
+<span class="tt">local-events</span> — A <span class="tt"><a href="ACL2____PSEUDO-EVENT-FORM-LISTP.html">pseudo-event-form-listp</a></span>.</dd> 
+<dd>
+<span class="tt">member-write-thms</span> — A <span class="tt"><a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a></span>.</dd> 
+<dd>
+<span class="tt">updated-names-to-avoid</span> — A <span class="tt"><a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a></span>.</dd> 
+ 
+</dl></div> 
+<p>This class of theorems are the structure counterpart of 
+     the ones that rewrite <span class="tt"><a href="C____EXEC-EXPR-ASG.html">exec-expr-asg</a></span> 
+     that have <span class="v">:arrsub</span> left expressions 
+     to array writers, 
+     in <a href="C____ATC-EXEC-EXPR-ASG-ARRSUB-RULES-GENERATION.html">atc-exec-expr-asg-arrsub-rules-generation</a>.</p><p>For a scalar member (which must have integer type), 
+     we generate a single theorem that 
+     rewrites certain calls of <span class="tt"><a href="C____EXEC-EXPR-ASG.html">exec-expr-asg</a></span> 
+     to calls of the writer.</p><p>For an array member (which must have integer element type), 
+     we generate 10 theorems, one for each integer index type. 
+     The theorem rewrites certain calls of <span class="tt"><a href="C____EXEC-EXPR-ASG.html">exec-expr-asg</a></span> 
+     to calls of the writers. 
+     The generation of these theorems relies on the fact that 
+     the order of the writers and the checkers matches the order of 
+     the types in <span class="tt"><a href="C_____A2INTEGER-NONBOOL-NONCHAR-TYPES_A2.html">*integer-nonbool-nonchar-types*</a></span>. 
+     Note that the <span class="tt"><a href="C____DEFSTRUCT-MEMBER-INFO.html">defstruct-member-info</a></span> 
+     contains 11 writers and 11 checkers, 
+     where the first writer and checker operate on ACL2 integers, 
+     while the other 10 writers and 10 checkers operate on C integers. 
+     We iterate through the 10 writers and checkers on C integers, 
+     while using the writer and checker on ACL2 integers at each iteration.</p> 
+ 
+<h3>Definitions and Theorems</h3><p><b>Function: </b>atc-gen-tag-member-write-thms-aux</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ atc-gen-tag-member-write-thms-aux
+ (<a href="ACL2____TAG.html">tag</a> recognizer fixer-recognizer-thm
+      memname elemtype indextypes
+      writer-acl2int checker-acl2int writers
+      checkers writer-return-thm not-error-thm
+      type-of-value-thm names-to-avoid wrld)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="C____IDENTP.html">identp</a> tag)
+                             (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> recognizer)
+                             (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> fixer-recognizer-thm)
+                             (<a href="C____IDENTP.html">identp</a> memname)
+                             (<a href="C____TYPEP.html">typep</a> elemtype)
+                             (<a href="C____TYPE-LISTP.html">type-listp</a> indextypes)
+                             (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> writer-acl2int)
+                             (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> checker-acl2int)
+                             (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> writers)
+                             (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> checkers)
+                             (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> writer-return-thm)
+                             (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> not-error-thm)
+                             (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> type-of-value-thm)
+                             (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> names-to-avoid)
+                             (<a href="ACL2____PLIST-WORLDP.html">plist-worldp</a> wrld))))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="C____TYPE-INTEGERP.html">type-integerp</a> elemtype)
+                             (<a href="C____TYPE-INTEGER-LISTP.html">type-integer-listp</a> indextypes))))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'atc-gen-tag-member-write-thms-aux))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+   (((when (<a href="COMMON-LISP____ENDP.html">endp</a> indextypes))
+     (<a href="ACL2____MV.html">mv</a> nil nil nil))
+    (indextype (<a href="COMMON-LISP____CAR.html">car</a> indextypes))
+    (writer (<a href="COMMON-LISP____CAR.html">car</a> writers))
+    (checker (<a href="COMMON-LISP____CAR.html">car</a> checkers))
+    (indexfixtype (<a href="C____INTEGER-TYPE-TO-FIXTYPE.html">integer-type-to-fixtype</a> indextype))
+    (elemfixtype (<a href="C____INTEGER-TYPE-TO-FIXTYPE.html">integer-type-to-fixtype</a> elemtype))
+    (indextypep (<a href="C____PACK.html">pack</a> indexfixtype 'p))
+    (elemtypep (<a href="C____PACK.html">pack</a> elemfixtype 'p))
+    (indextype-integer-value (<a href="C____PACK.html">pack</a> indexfixtype '-integer-value))
+    (array-writer (<a href="C____PACK.html">pack</a> elemfixtype '-array-write-alt-def))
+    (array-checker (<a href="C____PACK.html">pack</a> elemfixtype '-array-index-okp))
+    (not-error-array-thm (<a href="C____PACK.html">pack</a> 'not-errorp-when-
+                               elemfixtype '-arrayp))
+    (kind-array-thm (<a href="C____PACK.html">pack</a> 'value-kind-when-
+                          elemfixtype '-arrayp))
+    (valuep-when-indextype (<a href="C____PACK.html">pack</a> 'valuep-when- indextypep))
+    (valuep-when-elemtypep (<a href="C____PACK.html">pack</a> 'valuep-when- elemtypep))
+    (indextype-&gt;get (<a href="C____PACK.html">pack</a> indexfixtype '-&gt;get))
+    (type-thm (<a href="C____PACK.html">pack</a> indexfixtype '-&gt;get$inline))
+    (thm-name (<a href="C____PACK.html">pack</a> 'exec-member-write-when-
+                    recognizer '-and-
+                    (<a href="C____IDENT-_E3NAME.html">ident-&gt;name</a> memname)
+                    '-
+                    indexfixtype))
+    (arrayp-of-arrary-write (<a href="C____PACK.html">pack</a> elemfixtype '-arrayp-of-
+                                  elemfixtype '-array-write))
+    ((<a href="ACL2____MV.html">mv</a> thm-name names-to-avoid)
+     (<a href="ACL2____FRESH-LOGICAL-NAME-WITH-_42S-SUFFIX.html">fresh-logical-name-with-$s-suffix</a>
+          thm-name nil names-to-avoid wrld))
+    (<a href="ACL2____FORMULA.html">formula</a>
+     (<a href="COMMON-LISP____CONS.html">cons</a>
+      'implies
+      (<a href="COMMON-LISP____CONS.html">cons</a>
+       (<a href="COMMON-LISP____CONS.html">cons</a>
+        'and
+        (<a href="COMMON-LISP____CONS.html">cons</a>
+         '(<a href="ACL2____SYNTAXP.html">syntaxp</a> (<a href="ACL2____QUOTEP.html">quotep</a> e))
+         (<a href="COMMON-LISP____CONS.html">cons</a>
+          '(<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____EXPR-KIND.html">expr-kind</a> e) :binary)
+          (<a href="COMMON-LISP____CONS.html">cons</a>
+           '(<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____BINOP-KIND.html">binop-kind</a> (<a href="C____EXPR-BINARY-_E3OP.html">expr-binary-&gt;op</a> e))
+                   :asg)
+           (<a href="COMMON-LISP____CONS.html">cons</a>
+            '(<a href="COMMON-LISP____EQUAL.html">equal</a> left (<a href="C____EXPR-BINARY-_E3ARG1.html">expr-binary-&gt;arg1</a> e))
+            (<a href="COMMON-LISP____CONS.html">cons</a>
+             '(<a href="COMMON-LISP____EQUAL.html">equal</a> right (<a href="C____EXPR-BINARY-_E3ARG2.html">expr-binary-&gt;arg2</a> e))
+             (<a href="COMMON-LISP____CONS.html">cons</a>
+              '(<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____EXPR-KIND.html">expr-kind</a> left) :arrsub)
+              (<a href="COMMON-LISP____CONS.html">cons</a>
+               '(<a href="COMMON-LISP____EQUAL.html">equal</a> array (<a href="C____EXPR-ARRSUB-_E3ARR.html">expr-arrsub-&gt;arr</a> left))
+               (<a href="COMMON-LISP____CONS.html">cons</a>
+                '(<a href="COMMON-LISP____EQUAL.html">equal</a> index (<a href="C____EXPR-ARRSUB-_E3SUB.html">expr-arrsub-&gt;sub</a> left))
+                (<a href="COMMON-LISP____CONS.html">cons</a>
+                 '(<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____EXPR-KIND.html">expr-kind</a> array) :memberp)
+                 (<a href="COMMON-LISP____CONS.html">cons</a>
+                  '(<a href="COMMON-LISP____EQUAL.html">equal</a> target (<a href="C____EXPR-MEMBERP-_E3TARGET.html">expr-memberp-&gt;target</a> array))
+                  (<a href="COMMON-LISP____CONS.html">cons</a>
+                   '(<a href="COMMON-LISP____EQUAL.html">equal</a> member (<a href="C____EXPR-MEMBERP-_E3NAME.html">expr-memberp-&gt;name</a> array))
+                   (<a href="COMMON-LISP____CONS.html">cons</a>
+                    '(<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____EXPR-KIND.html">expr-kind</a> target) :ident)
+                    (<a href="COMMON-LISP____CONS.html">cons</a>
+                     (<a href="COMMON-LISP____CONS.html">cons</a>
+                      'equal
+                      (<a href="COMMON-LISP____CONS.html">cons</a>
+                       'member
+                       (<a href="COMMON-LISP____CONS.html">cons</a>
+                            (<a href="COMMON-LISP____CONS.html">cons</a> 'ident
+                                  (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="C____IDENT-_E3NAME.html">ident-&gt;name</a> memname) 'nil))
+                            'nil)))
+                     (<a href="COMMON-LISP____CONS.html">cons</a>
+                      '(<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____ZP.html">zp</a> limit))
+                      (<a href="COMMON-LISP____CONS.html">cons</a>
+                       '(<a href="COMMON-LISP____EQUAL.html">equal</a> ptr
+                               (<a href="C____READ-VAR.html">read-var</a> (<a href="C____EXPR-IDENT-_E3GET.html">expr-ident-&gt;get</a> target)
+                                         compst))
+                       (<a href="COMMON-LISP____CONS.html">cons</a>
+                        '(<a href="C____VALUEP.html">valuep</a> ptr)
+                        (<a href="COMMON-LISP____CONS.html">cons</a>
+                         '(<a href="C____VALUE-CASE.html">value-case</a> ptr :pointer)
+                         (<a href="COMMON-LISP____CONS.html">cons</a>
+                          '(<a href="COMMON-LISP____NOT.html">not</a> (<a href="C____VALUE-POINTER-NULLP.html">value-pointer-nullp</a> ptr))
+                          (<a href="COMMON-LISP____CONS.html">cons</a>
+                           (<a href="COMMON-LISP____CONS.html">cons</a>
+                            'equal
+                            (<a href="COMMON-LISP____CONS.html">cons</a>
+                             '(<a href="C____VALUE-POINTER-_E3REFTYPE.html">value-pointer-&gt;reftype</a> ptr)
+                             (<a href="COMMON-LISP____CONS.html">cons</a>
+                              (<a href="COMMON-LISP____CONS.html">cons</a>
+                               'type-struct
+                               (<a href="COMMON-LISP____CONS.html">cons</a>
+                                (<a href="COMMON-LISP____CONS.html">cons</a> 'ident
+                                      (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="C____IDENT-_E3NAME.html">ident-&gt;name</a> tag) 'nil))
+                                'nil))
+                              'nil)))
+                           (<a href="COMMON-LISP____CONS.html">cons</a>
+                            '(<a href="COMMON-LISP____EQUAL.html">equal</a>
+                                struct
+                                (<a href="C____READ-OBJECT.html">read-object</a>
+                                     (<a href="C____VALUE-POINTER-_E3DESIGNATOR.html">value-pointer-&gt;designator</a> ptr)
+                                     compst))
+                            (<a href="COMMON-LISP____CONS.html">cons</a>
+                             (<a href="COMMON-LISP____CONS.html">cons</a> recognizer '(struct))
+                             (<a href="COMMON-LISP____CONS.html">cons</a>
+                              '(<a href="COMMON-LISP____EQUAL.html">equal</a>
+                                  idx (<a href="C____EXEC-EXPR-PURE.html">exec-expr-pure</a> index compst))
+                              (<a href="COMMON-LISP____CONS.html">cons</a>
+                               (<a href="COMMON-LISP____CONS.html">cons</a> indextypep '(idx))
+                               (<a href="COMMON-LISP____CONS.html">cons</a>
+                                (<a href="COMMON-LISP____CONS.html">cons</a> checker '(idx))
+                                (<a href="COMMON-LISP____CONS.html">cons</a>
+                                 '(<a href="COMMON-LISP____EQUAL.html">equal</a>
+                                      val
+                                      (<a href="C____EXEC-EXPR-PURE.html">exec-expr-pure</a> right compst))
+                                 (<a href="COMMON-LISP____CONS.html">cons</a>
+                                     (<a href="COMMON-LISP____CONS.html">cons</a> elemtypep '(val))
+                                     'nil)))))))))))))))))))))))))))
+       (<a href="COMMON-LISP____CONS.html">cons</a>
+        (<a href="COMMON-LISP____CONS.html">cons</a>
+         'equal
+         (<a href="COMMON-LISP____CONS.html">cons</a>
+             '(<a href="C____EXEC-EXPR-ASG.html">exec-expr-asg</a> e compst fenv limit)
+             (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'write-object
+                         (<a href="COMMON-LISP____CONS.html">cons</a> '(<a href="C____VALUE-POINTER-_E3DESIGNATOR.html">value-pointer-&gt;designator</a> ptr)
+                               (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> writer '(idx val struct))
+                                     '(compst))))
+                   'nil)))
+        'nil))))
+    (hints
+     (<a href="COMMON-LISP____CONS.html">cons</a>
+      (<a href="COMMON-LISP____CONS.html">cons</a>
+       '"Goal"
+       (<a href="COMMON-LISP____CONS.html">cons</a>
+        ':in-theory
+        (<a href="COMMON-LISP____CONS.html">cons</a>
+         (<a href="COMMON-LISP____CONS.html">cons</a>
+          'quote
+          (<a href="COMMON-LISP____CONS.html">cons</a>
+           (<a href="COMMON-LISP____CONS.html">cons</a>
+            'exec-expr-asg
+            (<a href="COMMON-LISP____CONS.html">cons</a>
+             'exec-integer
+             (<a href="COMMON-LISP____CONS.html">cons</a>
+              'value-struct-read
+              (<a href="COMMON-LISP____CONS.html">cons</a>
+               'value-struct-write
+               (<a href="COMMON-LISP____CONS.html">cons</a>
+                'not-errorp-when-valuep-rewrite
+                (<a href="COMMON-LISP____CONS.html">cons</a>
+                 'value-integerp
+                 (<a href="COMMON-LISP____CONS.html">cons</a>
+                  'value-unsigned-integerp-alt-def
+                  (<a href="COMMON-LISP____CONS.html">cons</a>
+                   'value-signed-integerp-alt-def
+                   (<a href="COMMON-LISP____CONS.html">cons</a>
+                    'value-fix-when-valuep
+                    (<a href="COMMON-LISP____CONS.html">cons</a>
+                     'ifix
+                     (<a href="COMMON-LISP____CONS.html">cons</a>
+                      'integer-range-p
+                      (<a href="COMMON-LISP____CONS.html">cons</a>
+                       '(:e ident)
+                       (<a href="COMMON-LISP____CONS.html">cons</a>
+                        '(:compound-recognizer consp-when-ucharp)
+                        (<a href="COMMON-LISP____CONS.html">cons</a>
+                         recognizer
+                         (<a href="COMMON-LISP____CONS.html">cons</a>
+                          fixer-recognizer-thm
+                          (<a href="COMMON-LISP____CONS.html">cons</a>
+                           not-error-thm
+                           (<a href="COMMON-LISP____CONS.html">cons</a>
+                            type-of-value-thm
+                            (<a href="COMMON-LISP____CONS.html">cons</a>
+                             kind-array-thm
+                             (<a href="COMMON-LISP____CONS.html">cons</a>
+                              indextype-integer-value
+                              (<a href="COMMON-LISP____CONS.html">cons</a>
+                               checker
+                               (<a href="COMMON-LISP____CONS.html">cons</a>
+                                checker-acl2int
+                                (<a href="COMMON-LISP____CONS.html">cons</a>
+                                 writer
+                                 (<a href="COMMON-LISP____CONS.html">cons</a>
+                                  writer-acl2int
+                                  (<a href="COMMON-LISP____CONS.html">cons</a>
+                                   not-error-array-thm
+                                   (<a href="COMMON-LISP____CONS.html">cons</a>
+                                    array-writer
+                                    (<a href="COMMON-LISP____CONS.html">cons</a>
+                                     array-checker
+                                     (<a href="COMMON-LISP____CONS.html">cons</a>
+                                      valuep-when-elemtypep
+                                      (<a href="COMMON-LISP____CONS.html">cons</a>
+                                       valuep-when-indextype
+                                       (<a href="COMMON-LISP____APPEND.html">append</a>
+                                        *integer-value-disjoint-rules*
+                                        (<a href="COMMON-LISP____CONS.html">cons</a>
+                                         (<a href="COMMON-LISP____CONS.html">cons</a> ':t
+                                               (<a href="COMMON-LISP____CONS.html">cons</a> type-thm 'nil))
+                                         'nil))))))))))))))))))))))))))))))
+           'nil))
+         (<a href="COMMON-LISP____CONS.html">cons</a>
+          ':use
+          (<a href="COMMON-LISP____CONS.html">cons</a>
+           (<a href="COMMON-LISP____CONS.html">cons</a>
+            (<a href="COMMON-LISP____CONS.html">cons</a>
+             ':instance
+             (<a href="COMMON-LISP____CONS.html">cons</a>
+              writer-return-thm
+              (<a href="COMMON-LISP____CONS.html">cons</a>
+               (<a href="COMMON-LISP____CONS.html">cons</a>
+                'index
+                (<a href="COMMON-LISP____CONS.html">cons</a>
+                 (<a href="COMMON-LISP____CONS.html">cons</a>
+                     indextype-&gt;get
+                     '((<a href="C____EXEC-EXPR-PURE.html">exec-expr-pure</a>
+                            (<a href="C____EXPR-ARRSUB-_E3SUB.html">expr-arrsub-&gt;sub</a> (<a href="C____EXPR-BINARY-_E3ARG1.html">expr-binary-&gt;arg1</a> e))
+                            compst)))
+                 'nil))
+               '((val (<a href="C____EXEC-EXPR-PURE.html">exec-expr-pure</a> (<a href="C____EXPR-BINARY-_E3ARG2.html">expr-binary-&gt;arg2</a> e)
+                                      compst))
+                 (struct
+                  (<a href="C____READ-OBJECT.html">read-object</a>
+                   (<a href="C____VALUE-POINTER-_E3DESIGNATOR.html">value-pointer-&gt;designator</a>
+                    (<a href="C____READ-VAR.html">read-var</a>
+                     (<a href="C____EXPR-IDENT-_E3GET.html">expr-ident-&gt;get</a>
+                      (<a href="C____EXPR-MEMBERP-_E3TARGET.html">expr-memberp-&gt;target</a>
+                          (<a href="C____EXPR-ARRSUB-_E3ARR.html">expr-arrsub-&gt;arr</a> (<a href="C____EXPR-BINARY-_E3ARG1.html">expr-binary-&gt;arg1</a> e))))
+                     compst))
+                   compst))))))
+            (<a href="COMMON-LISP____CONS.html">cons</a>
+             (<a href="COMMON-LISP____CONS.html">cons</a>
+              ':instance
+              (<a href="COMMON-LISP____CONS.html">cons</a>
+               arrayp-of-arrary-write
+               (<a href="COMMON-LISP____CONS.html">cons</a>
+                (<a href="COMMON-LISP____CONS.html">cons</a>
+                 'array
+                 (<a href="COMMON-LISP____CONS.html">cons</a>
+                  (<a href="COMMON-LISP____CONS.html">cons</a>
+                   'value-struct-read-aux
+                   (<a href="COMMON-LISP____CONS.html">cons</a>
+                    (<a href="COMMON-LISP____CONS.html">cons</a> 'ident
+                          (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="C____IDENT-_E3NAME.html">ident-&gt;name</a> memname) 'nil))
+                    '((<a href="C____VALUE-STRUCT-_E3MEMBERS.html">value-struct-&gt;members</a>
+                       (<a href="C____READ-OBJECT.html">read-object</a>
+                        (<a href="C____VALUE-POINTER-_E3DESIGNATOR.html">value-pointer-&gt;designator</a>
+                         (<a href="C____READ-VAR.html">read-var</a>
+                             (<a href="C____EXPR-IDENT-_E3GET.html">expr-ident-&gt;get</a>
+                                  (<a href="C____EXPR-MEMBERP-_E3TARGET.html">expr-memberp-&gt;target</a>
+                                       (<a href="C____EXPR-ARRSUB-_E3ARR.html">expr-arrsub-&gt;arr</a>
+                                            (<a href="C____EXPR-BINARY-_E3ARG1.html">expr-binary-&gt;arg1</a> e))))
+                             compst))
+                        compst)))))
+                  'nil))
+                (<a href="COMMON-LISP____CONS.html">cons</a>
+                 (<a href="COMMON-LISP____CONS.html">cons</a>
+                  'index
+                  (<a href="COMMON-LISP____CONS.html">cons</a>
+                   (<a href="COMMON-LISP____CONS.html">cons</a>
+                     indextype-&gt;get
+                     '((<a href="C____EXEC-EXPR-PURE.html">exec-expr-pure</a>
+                            (<a href="C____EXPR-ARRSUB-_E3SUB.html">expr-arrsub-&gt;sub</a> (<a href="C____EXPR-BINARY-_E3ARG1.html">expr-binary-&gt;arg1</a> e))
+                            compst)))
+                   'nil))
+                 '((element (<a href="C____EXEC-EXPR-PURE.html">exec-expr-pure</a> (<a href="C____EXPR-BINARY-_E3ARG2.html">expr-binary-&gt;arg2</a> e)
+                                            compst)))))))
+             'nil))
+           'nil)))))
+      'nil))
+    ((<a href="ACL2____MV.html">mv</a> event &amp;)
+     (<a href="ACL2____EVMAC-GENERATE-DEFTHM.html">evmac-generate-defthm</a> thm-name
+                            :formula formula
+                            :hints hints
+                            :enable nil))
+    ((<a href="ACL2____MV.html">mv</a> events thm-names names-to-avoid)
+     (atc-gen-tag-member-write-thms-aux
+          tag recognizer fixer-recognizer-thm
+          memname elemtype (<a href="COMMON-LISP____CDR.html">cdr</a> indextypes)
+          writer-acl2int
+          checker-acl2int (<a href="COMMON-LISP____CDR.html">cdr</a> writers)
+          (<a href="COMMON-LISP____CDR.html">cdr</a> checkers)
+          writer-return-thm not-error-thm
+          type-of-value-thm names-to-avoid wrld)))
+   (<a href="ACL2____MV.html">mv</a> (<a href="COMMON-LISP____CONS.html">cons</a> event events)
+       (<a href="COMMON-LISP____CONS.html">cons</a> thm-name thm-names)
+       names-to-avoid))))</pre> 
+<p><b>Function: </b>atc-gen-tag-member-write-thms</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ atc-gen-tag-member-write-thms
+ (<a href="ACL2____TAG.html">tag</a> recognizer fixer-recognizer-thm
+      not-error-thm type-of-value-thm
+      meminfo names-to-avoid wrld)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="C____IDENTP.html">identp</a> tag)
+                             (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> recognizer)
+                             (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> fixer-recognizer-thm)
+                             (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> not-error-thm)
+                             (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> type-of-value-thm)
+                             (<a href="C____DEFSTRUCT-MEMBER-INFOP.html">defstruct-member-infop</a> meminfo)
+                             (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> names-to-avoid)
+                             (<a href="ACL2____PLIST-WORLDP.html">plist-worldp</a> wrld))))
+ (<a href="COMMON-LISP____LET.html">let</a>
+  ((__function__ 'atc-gen-tag-member-write-thms))
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
+  (<a href="ACL2____B_A2.html">b*</a>
+   ((memtype (<a href="C____DEFSTRUCT-MEMBER-INFO-_E3MEMTYPE.html">defstruct-member-info-&gt;memtype</a> meminfo))
+    (memname (<a href="C____MEMBER-TYPE-_E3NAME.html">member-type-&gt;name</a> memtype))
+    (<a href="C____TYPE.html">type</a> (<a href="C____MEMBER-TYPE-_E3TYPE.html">member-type-&gt;type</a> memtype))
+    (writers (<a href="C____DEFSTRUCT-MEMBER-INFO-_E3WRITERS.html">defstruct-member-info-&gt;writers</a> meminfo))
+    (writer-return-thms
+         (<a href="C____DEFSTRUCT-MEMBER-INFO-_E3WRITER-RETURN-THMS.html">defstruct-member-info-&gt;writer-return-thms</a> meminfo))
+    (writer-return-thm (<a href="COMMON-LISP____CAR.html">car</a> writer-return-thms))
+    (checkers (<a href="C____DEFSTRUCT-MEMBER-INFO-_E3CHECKERS.html">defstruct-member-info-&gt;checkers</a> meminfo))
+    ((when (<a href="C____TYPE-INTEGERP.html">type-integerp</a> type))
+     (<a href="ACL2____B_A2.html">b*</a>
+      (((unless (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____CONSP.html">consp</a> writers)
+                     (<a href="COMMON-LISP____ENDP.html">endp</a> (<a href="COMMON-LISP____CDR.html">cdr</a> writers))))
+        (<a href="ACL2____PROG2_42.html">prog2$</a> (<a href="ACL2____RAISE.html">raise</a> "Internal error: not one writer ~x0."
+                       writers)
+                (<a href="ACL2____MV.html">mv</a> nil nil nil)))
+       (writer (<a href="COMMON-LISP____CAR.html">car</a> writers))
+       (thm-name (<a href="C____PACK.html">pack</a> 'exec-member-write-when-
+                       recognizer '-and-
+                       (<a href="C____IDENT-_E3NAME.html">ident-&gt;name</a> memname)))
+       ((<a href="ACL2____MV.html">mv</a> thm-name names-to-avoid)
+        (<a href="ACL2____FRESH-LOGICAL-NAME-WITH-_42S-SUFFIX.html">fresh-logical-name-with-$s-suffix</a>
+             thm-name nil names-to-avoid wrld))
+       (<a href="C____TYPEP.html">typep</a> (<a href="C____ATC-TYPE-TO-RECOGNIZER.html">atc-type-to-recognizer</a> type wrld))
+       ((unless typep)
+        (<a href="ACL2____RAISE.html">raise</a> "Internal error: unsupported member type ~x0."
+               type)
+        (<a href="ACL2____MV.html">mv</a> nil nil nil))
+       (<a href="ACL2____FORMULA.html">formula</a>
+        (<a href="COMMON-LISP____CONS.html">cons</a>
+         'implies
+         (<a href="COMMON-LISP____CONS.html">cons</a>
+          (<a href="COMMON-LISP____CONS.html">cons</a>
+           'and
+           (<a href="COMMON-LISP____CONS.html">cons</a>
+            '(<a href="ACL2____SYNTAXP.html">syntaxp</a> (<a href="ACL2____QUOTEP.html">quotep</a> e))
+            (<a href="COMMON-LISP____CONS.html">cons</a>
+             '(<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____EXPR-KIND.html">expr-kind</a> e) :binary)
+             (<a href="COMMON-LISP____CONS.html">cons</a>
+              '(<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____BINOP-KIND.html">binop-kind</a> (<a href="C____EXPR-BINARY-_E3OP.html">expr-binary-&gt;op</a> e))
+                      :asg)
+              (<a href="COMMON-LISP____CONS.html">cons</a>
+               '(<a href="COMMON-LISP____EQUAL.html">equal</a> left (<a href="C____EXPR-BINARY-_E3ARG1.html">expr-binary-&gt;arg1</a> e))
+               (<a href="COMMON-LISP____CONS.html">cons</a>
+                '(<a href="COMMON-LISP____EQUAL.html">equal</a> right (<a href="C____EXPR-BINARY-_E3ARG2.html">expr-binary-&gt;arg2</a> e))
+                (<a href="COMMON-LISP____CONS.html">cons</a>
+                 '(<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____EXPR-KIND.html">expr-kind</a> left) :memberp)
+                 (<a href="COMMON-LISP____CONS.html">cons</a>
+                  '(<a href="COMMON-LISP____EQUAL.html">equal</a> target (<a href="C____EXPR-MEMBERP-_E3TARGET.html">expr-memberp-&gt;target</a> left))
+                  (<a href="COMMON-LISP____CONS.html">cons</a>
+                   '(<a href="COMMON-LISP____EQUAL.html">equal</a> member (<a href="C____EXPR-MEMBERP-_E3NAME.html">expr-memberp-&gt;name</a> left))
+                   (<a href="COMMON-LISP____CONS.html">cons</a>
+                    '(<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____EXPR-KIND.html">expr-kind</a> target) :ident)
+                    (<a href="COMMON-LISP____CONS.html">cons</a>
+                     (<a href="COMMON-LISP____CONS.html">cons</a>
+                      'equal
+                      (<a href="COMMON-LISP____CONS.html">cons</a>
+                       'member
+                       (<a href="COMMON-LISP____CONS.html">cons</a>
+                            (<a href="COMMON-LISP____CONS.html">cons</a> 'ident
+                                  (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="C____IDENT-_E3NAME.html">ident-&gt;name</a> memname) 'nil))
+                            'nil)))
+                     (<a href="COMMON-LISP____CONS.html">cons</a>
+                      '(<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____ZP.html">zp</a> limit))
+                      (<a href="COMMON-LISP____CONS.html">cons</a>
+                       '(<a href="COMMON-LISP____EQUAL.html">equal</a> ptr
+                               (<a href="C____READ-VAR.html">read-var</a> (<a href="C____EXPR-IDENT-_E3GET.html">expr-ident-&gt;get</a> target)
+                                         compst))
+                       (<a href="COMMON-LISP____CONS.html">cons</a>
+                        '(<a href="C____VALUEP.html">valuep</a> ptr)
+                        (<a href="COMMON-LISP____CONS.html">cons</a>
+                         '(<a href="C____VALUE-CASE.html">value-case</a> ptr :pointer)
+                         (<a href="COMMON-LISP____CONS.html">cons</a>
+                          '(<a href="COMMON-LISP____NOT.html">not</a> (<a href="C____VALUE-POINTER-NULLP.html">value-pointer-nullp</a> ptr))
+                          (<a href="COMMON-LISP____CONS.html">cons</a>
+                           (<a href="COMMON-LISP____CONS.html">cons</a>
+                            'equal
+                            (<a href="COMMON-LISP____CONS.html">cons</a>
+                             '(<a href="C____VALUE-POINTER-_E3REFTYPE.html">value-pointer-&gt;reftype</a> ptr)
+                             (<a href="COMMON-LISP____CONS.html">cons</a>
+                              (<a href="COMMON-LISP____CONS.html">cons</a>
+                               'type-struct
+                               (<a href="COMMON-LISP____CONS.html">cons</a>
+                                (<a href="COMMON-LISP____CONS.html">cons</a> 'ident
+                                      (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="C____IDENT-_E3NAME.html">ident-&gt;name</a> tag) 'nil))
+                                'nil))
+                              'nil)))
+                           (<a href="COMMON-LISP____CONS.html">cons</a>
+                            '(<a href="COMMON-LISP____EQUAL.html">equal</a>
+                                struct
+                                (<a href="C____READ-OBJECT.html">read-object</a>
+                                     (<a href="C____VALUE-POINTER-_E3DESIGNATOR.html">value-pointer-&gt;designator</a> ptr)
+                                     compst))
+                            (<a href="COMMON-LISP____CONS.html">cons</a>
+                             (<a href="COMMON-LISP____CONS.html">cons</a> recognizer '(struct))
+                             (<a href="COMMON-LISP____CONS.html">cons</a>
+                              '(<a href="COMMON-LISP____EQUAL.html">equal</a>
+                                  val (<a href="C____EXEC-EXPR-PURE.html">exec-expr-pure</a> right compst))
+                              (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> typep '(val))
+                                    'nil)))))))))))))))))))))
+          (<a href="COMMON-LISP____CONS.html">cons</a>
+           (<a href="COMMON-LISP____CONS.html">cons</a>
+            'equal
+            (<a href="COMMON-LISP____CONS.html">cons</a>
+                 '(<a href="C____EXEC-EXPR-ASG.html">exec-expr-asg</a> e compst fenv limit)
+                 (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> 'write-object
+                             (<a href="COMMON-LISP____CONS.html">cons</a> '(<a href="C____VALUE-POINTER-_E3DESIGNATOR.html">value-pointer-&gt;designator</a> ptr)
+                                   (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CONS.html">cons</a> writer '(val struct))
+                                         '(compst))))
+                       'nil)))
+           'nil))))
+       (hints
+        (<a href="COMMON-LISP____CONS.html">cons</a>
+         (<a href="COMMON-LISP____CONS.html">cons</a>
+          '"Goal"
+          (<a href="COMMON-LISP____CONS.html">cons</a>
+           ':in-theory
+           (<a href="COMMON-LISP____CONS.html">cons</a>
+            (<a href="COMMON-LISP____CONS.html">cons</a>
+             'quote
+             (<a href="COMMON-LISP____CONS.html">cons</a>
+              (<a href="COMMON-LISP____CONS.html">cons</a>
+               'exec-expr-asg
+               (<a href="COMMON-LISP____CONS.html">cons</a>
+                'not-errorp-when-valuep-rewrite
+                (<a href="COMMON-LISP____CONS.html">cons</a>
+                 'valuep-when-ucharp
+                 (<a href="COMMON-LISP____CONS.html">cons</a>
+                  'valuep-when-scharp
+                  (<a href="COMMON-LISP____CONS.html">cons</a>
+                   'valuep-when-ushortp
+                   (<a href="COMMON-LISP____CONS.html">cons</a>
+                    'valuep-when-sshortp
+                    (<a href="COMMON-LISP____CONS.html">cons</a>
+                     'valuep-when-uintp
+                     (<a href="COMMON-LISP____CONS.html">cons</a>
+                      'valuep-when-sintp
+                      (<a href="COMMON-LISP____CONS.html">cons</a>
+                       'valuep-when-ulongp
+                       (<a href="COMMON-LISP____CONS.html">cons</a>
+                        'valuep-when-slongp
+                        (<a href="COMMON-LISP____CONS.html">cons</a>
+                         'valuep-when-ullongp
+                         (<a href="COMMON-LISP____CONS.html">cons</a>
+                          'valuep-when-sllongp
+                          (<a href="COMMON-LISP____CONS.html">cons</a>
+                           'consp-when-ucharp
+                           (<a href="COMMON-LISP____CONS.html">cons</a>
+                            'consp-when-scharp
+                            (<a href="COMMON-LISP____CONS.html">cons</a>
+                             'consp-when-ushortp
+                             (<a href="COMMON-LISP____CONS.html">cons</a>
+                              'consp-when-sshortp
+                              (<a href="COMMON-LISP____CONS.html">cons</a>
+                               'consp-when-uintp
+                               (<a href="COMMON-LISP____CONS.html">cons</a>
+                                'consp-when-sintp
+                                (<a href="COMMON-LISP____CONS.html">cons</a>
+                                 'consp-when-ulongp
+                                 (<a href="COMMON-LISP____CONS.html">cons</a>
+                                  'consp-when-slongp
+                                  (<a href="COMMON-LISP____CONS.html">cons</a>
+                                   'consp-when-ullongp
+                                   (<a href="COMMON-LISP____CONS.html">cons</a>
+                                    'consp-when-sllongp
+                                    (<a href="COMMON-LISP____CONS.html">cons</a>
+                                     'uchar-fix-when-ucharp
+                                     (<a href="COMMON-LISP____CONS.html">cons</a>
+                                      'schar-fix-when-scharp
+                                      (<a href="COMMON-LISP____CONS.html">cons</a>
+                                       'ushort-fix-when-ushortp
+                                       (<a href="COMMON-LISP____CONS.html">cons</a>
+                                        'sshort-fix-when-sshortp
+                                        (<a href="COMMON-LISP____CONS.html">cons</a>
+                                         'uint-fix-when-uintp
+                                         (<a href="COMMON-LISP____CONS.html">cons</a>
+                                          'sint-fix-when-sintp
+                                          (<a href="COMMON-LISP____CONS.html">cons</a>
+                                           'ulong-fix-when-ulongp
+                                           (<a href="COMMON-LISP____CONS.html">cons</a>
+                                            'slong-fix-when-slongp
+                                            (<a href="COMMON-LISP____CONS.html">cons</a>
+                                             'ullong-fix-when-ullongp
+                                             (<a href="COMMON-LISP____CONS.html">cons</a>
+                                              'sllong-fix-when-sllongp
+                                              (<a href="COMMON-LISP____CONS.html">cons</a>
+                                               writer
+                                               (<a href="COMMON-LISP____CONS.html">cons</a>
+                                                not-error-thm
+                                                (<a href="COMMON-LISP____CONS.html">cons</a>
+                                                 recognizer
+                                                 (<a href="COMMON-LISP____CONS.html">cons</a>
+                                                  fixer-recognizer-thm
+                                                  (<a href="COMMON-LISP____CONS.html">cons</a>
+                                                   type-of-value-thm
+                                                   'nil)))))))))))))))))))))))))))))))))))))
+              'nil))
+            (<a href="COMMON-LISP____CONS.html">cons</a>
+             ':use
+             (<a href="COMMON-LISP____CONS.html">cons</a>
+              (<a href="COMMON-LISP____CONS.html">cons</a>
+               ':instance
+               (<a href="COMMON-LISP____CONS.html">cons</a>
+                writer-return-thm
+                '((val (<a href="ACL2____B_A2.html">b*</a> ((left (<a href="C____EXPR-BINARY-_E3ARG1.html">expr-binary-&gt;arg1</a> e)))
+                           (<a href="C____EXEC-EXPR-PURE.html">exec-expr-pure</a> (<a href="C____EXPR-BINARY-_E3ARG2.html">expr-binary-&gt;arg2</a> e)
+                                           compst)))
+                  (struct
+                   (<a href="ACL2____B_A2.html">b*</a>
+                    ((left (<a href="C____EXPR-BINARY-_E3ARG1.html">expr-binary-&gt;arg1</a> e))
+                     (target (<a href="C____EXPR-MEMBERP-_E3TARGET.html">expr-memberp-&gt;target</a> left))
+                     (ptr (<a href="C____READ-VAR.html">read-var</a> (<a href="C____EXPR-IDENT-_E3GET.html">expr-ident-&gt;get</a> target)
+                                    compst))
+                     (struct
+                        (<a href="C____READ-OBJECT.html">read-object</a> (<a href="C____VALUE-POINTER-_E3DESIGNATOR.html">value-pointer-&gt;designator</a> ptr)
+                                     compst)))
+                    struct)))))
+              'nil)))))
+         'nil))
+       ((<a href="ACL2____MV.html">mv</a> event &amp;)
+        (<a href="ACL2____EVMAC-GENERATE-DEFTHM.html">evmac-generate-defthm</a> thm-name
+                               :formula formula
+                               :hints hints
+                               :enable nil)))
+      (<a href="ACL2____MV.html">mv</a> (<a href="COMMON-LISP____LIST.html">list</a> event)
+          (<a href="COMMON-LISP____LIST.html">list</a> thm-name)
+          names-to-avoid)))
+    ((unless (<a href="C____TYPE-CASE.html">type-case</a> type :array))
+     (<a href="ACL2____PROG2_42.html">prog2$</a> (<a href="ACL2____RAISE.html">raise</a> "Internal error: member type ~x0." type)
+             (<a href="ACL2____MV.html">mv</a> nil nil nil)))
+    (elemtype (<a href="C____TYPE-ARRAY-_E3OF.html">type-array-&gt;of</a> type))
+    ((unless (<a href="C____TYPE-INTEGERP.html">type-integerp</a> elemtype))
+     (<a href="ACL2____PROG2_42.html">prog2$</a> (<a href="ACL2____RAISE.html">raise</a> "Internal error: array member element type ~x0."
+                    elemtype)
+             (<a href="ACL2____MV.html">mv</a> nil nil nil))))
+   (atc-gen-tag-member-write-thms-aux
+        tag
+        recognizer fixer-recognizer-thm memname
+        elemtype *integer-nonbool-nonchar-types*
+        (<a href="COMMON-LISP____CAR.html">car</a> writers)
+        (<a href="COMMON-LISP____CAR.html">car</a> checkers)
+        (<a href="COMMON-LISP____CDR.html">cdr</a> writers)
+        (<a href="COMMON-LISP____CDR.html">cdr</a> checkers)
+        writer-return-thm
+        not-error-thm type-of-value-thm
+        names-to-avoid wrld))))</pre> 
+
+</body>
+</html>

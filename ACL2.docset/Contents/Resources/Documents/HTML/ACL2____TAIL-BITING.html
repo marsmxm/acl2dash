@@ -1,0 +1,233 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Tail-biting</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____TAIL-BITING">Click for Tail-biting in the Full Manual</a></h3>
+
+<p>Rewriting a true term to <span class="v">NIL</span></p><p>On rare occasions, a true term can <a href="ACL2____REWRITE.html">rewrite</a> to <span class="v">NIL</span>. 
+ Such ``tail-biting'' behavior can make the prover fail to prove a theorem but 
+ will not make it ``prove'' a non-theorem.  This topic explains this behavior, 
+ first with one paragraph explaining it in high-level terms and then, for those 
+ interested in details, with a specific example.  That example includes 
+ discussion that exposes more of the ACL2 implementation than is usually 
+ exposed in documentation topics, so we expect that most readers will skip 
+ it.</p> 
+ 
+ <p>When backchaining to rewrite a hypothesis <span class="v">H</span> of a <a href="ACL2____REWRITE.html">rewrite</a> or 
+ <a href="ACL2____LINEAR.html">linear</a> rule, ACL2 uses the following heuristic: assume that <span class="v">H</span> is 
+ false when trying to prove it.  That is sound: proposition <span class="v">P</span> is 
+ equivalent to proposition <span class="v">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____NOT.html">not</a> P) P)</span>.  We do not discuss why 
+ ACL2 does this or why it rarely results in so-called ``tail-biting'': 
+ rewriting the hypothesis to <span class="v">NIL</span> by using the fact that it has been 
+ assumed false.  But that can happen on rare occasions.  So if you see a term 
+ rewrite to <span class="v">NIL</span> when you know it to be true, consider whether this is 
+ because it was encountered earlier during the backchaining process, when it 
+ was assumed false.</p> 
+ 
+ <p>===== Maybe stop here (lower-level explanation follows)! =====</p> 
+ 
+ <p>The example below shows how tail-biting can happen.  As noted above, 
+ beware: this explanation is closer to the implementation than is found in most 
+ of the ACL2 documentation.  We give the example in full first, and then we 
+ conclude with a more concise summary.  Key to this explanation is the notion 
+ of the <i>ancestors-stack</i>, which is a data structure kept by the rewriter 
+ as it backchains through hypotheses, to record the negation of each hypothesis 
+ encountered during backchaining.</p> 
+ 
+ <p>We begin with a very simple definition and theorem.  Note that we treat 
+ <span class="tt"><a href="COMMON-LISP____MEMBER.html">member</a></span> below as <span class="tt"><a href="ACL2____MEMBER-EQUAL.html">member-equal</a></span>, to simplify the exposition.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> copylist (x)
+  (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ENDP.html">endp</a> x)
+      nil
+      (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CAR.html">car</a> x) (copylist (<a href="COMMON-LISP____CDR.html">cdr</a> x)))))
+
+(<a href="ACL2____DEFTHM.html">defthm</a> key-rule
+  (<a href="ACL2____IMPLIES.html">implies</a>
+   (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____MEMBER.html">member</a> a lst)) ; hypothesis later denoted as ``H''
+   (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____MEMBER.html">member</a> a (copylist lst)))))</pre> 
+ 
+ <p>The following ``weird'' rule backchains from <span class="v">(<a href="COMMON-LISP____MEMBER.html">member</a> a (<a href="COMMON-LISP____CDR.html">cdr</a> lst))</span> to 
+ <span class="v">(<a href="COMMON-LISP____MEMBER.html">member</a> a lst)</span>, sort of un-opening <span class="v">member</span>.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> weird
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____CONSP.html">consp</a> lst)
+                (<a href="COMMON-LISP____MEMBER.html">member</a> a lst)
+                (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> a (<a href="COMMON-LISP____CAR.html">car</a> lst))))
+           (<a href="COMMON-LISP____MEMBER.html">member</a> a (<a href="COMMON-LISP____CDR.html">cdr</a> lst))))</pre> 
+ 
+ <p>Now here is our main theorem.  It ought to follow by simplification from 
+ <span class="v">key-rule</span> above, if we can just establish the hypothesis <span class="v">H</span> of 
+ <span class="v">key-rule</span> from the hypotheses of <span class="v">main</span>.  The instance of <span class="v">H</span> is 
+ <span class="v">(<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____MEMBER.html">member</a> aaa (<a href="COMMON-LISP____CDR.html">cdr</a> xxx)))</span>.  The rewriter cannot establish this because 
+ it requires a proof by induction.  So the proof is bound to fail here.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> main
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____CONSP.html">consp</a> (<a href="COMMON-LISP____CDR.html">cdr</a> xxx))
+                (<a href="ACL2____NAT-LISTP.html">nat-listp</a> xxx)
+                (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> aaa))
+           (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____MEMBER.html">member</a> aaa (copylist (<a href="COMMON-LISP____CDR.html">cdr</a> xxx)))))
+  :hints (("Goal"
+           :do-not-induct t
+           :do-not '(eliminate-destructors))))</pre> 
+ 
+ <p>So we decide to monitor key-rule and see why it failed:</p> 
+ 
+ <pre class="code">(<a href="ACL2____MONITOR_12.html">monitor!</a> '(:rewrite key-rule) t)
+
+(<a href="ACL2____DEFTHM.html">defthm</a> main ...) ; exactly as above
+
+:eval
+:a!</pre> 
+ 
+ <p>And we see that <span class="tt"><a href="ACL2____BRR.html">brr</a></span> reports that ``<span class="v">:HYP 1 rewrote to 'NIL</span>'', 
+ i.e., that the relevant instance of <span class="v">H</span>, <span class="v">(<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____MEMBER.html">member</a> aaa (<a href="COMMON-LISP____CDR.html">cdr</a> xxx)))</span>, 
+ rewrote to <span class="v">NIL</span>.  This seems to suggest <span class="v">aaa</span> is in <span class="v">(<a href="COMMON-LISP____CDR.html">cdr</a> xxx)</span>.</p> 
+ 
+ <p>But we know it can't be!  The hypotheses of main say <span class="v">aaa</span> is a symbol 
+ and <span class="v">xxx</span> is a list of natural numbers.  So <span class="v">aaa</span> can't be in <span class="v">(<a href="COMMON-LISP____CDR.html">cdr</a>
+ xxx)</span>. We can prove it:</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> hyps-of-main-imply-hyp-1
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____CONSP.html">consp</a> (<a href="COMMON-LISP____CDR.html">cdr</a> xxx))
+                (<a href="ACL2____NAT-LISTP.html">nat-listp</a> xxx)
+                (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> aaa))
+           (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____MEMBER.html">member</a> aaa (<a href="COMMON-LISP____CDR.html">cdr</a> xxx)))))</pre> 
+ 
+ <p>And using that rule we can now prove <span class="v">main</span>:</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> main
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____CONSP.html">consp</a> (<a href="COMMON-LISP____CDR.html">cdr</a> xxx))
+                (<a href="ACL2____NAT-LISTP.html">nat-listp</a> xxx)
+                (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> aaa))
+           (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____MEMBER.html">member</a> aaa (copylist (<a href="COMMON-LISP____CDR.html">cdr</a> xxx)))))
+  :hints (("Goal"
+           :do-not-induct t
+           :do-not '(eliminate-destructors))))</pre> 
+ 
+ <p>So the question is: why did the hypothesis of <span class="v">key-rule</span> 
+ rewrite to <span class="v">NIL</span>?</p> 
+ 
+ <p>Let's undo back through <span class="v">hyps-of-main-imply-hyp-1</span> and monitor 
+ <span class="v">key-rule</span>, <span class="v">weird</span>, and the definition of <span class="tt"><a href="ACL2____MEMBER-EQUAL.html">member-equal</a></span>, and 
+ also <a href="COMMON-LISP____TRACE.html">trace</a> system function <span class="v">ancestors-check-builtin</span>, which queries 
+ the ancestor-stack, and then repeat the doomed proof attempt for 
+ <span class="v">main</span>.</p> 
+ 
+ <pre class="code">(<a href="ACL2____UBT_12.html">ubt!</a> 'hyps-of-main-imply-hyp-1)
+(<a href="ACL2____MONITOR.html">monitor</a> '(:rewrite key-rule) ''(:go))
+(<a href="ACL2____MONITOR.html">monitor</a> '(:rewrite weird) ''(:go))
+(<a href="ACL2____MONITOR.html">monitor</a> '(:definition member-equal) ''(:go))
+(<a href="ACL2____TRACE_42.html">trace$</a> ancestors-check-builtin)
+
+(<a href="ACL2____DEFTHM.html">defthm</a> main
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____CONSP.html">consp</a> (<a href="COMMON-LISP____CDR.html">cdr</a> xxx))
+                (<a href="ACL2____NAT-LISTP.html">nat-listp</a> xxx)
+                (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> aaa))
+           (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____MEMBER.html">member</a> aaa (copylist (<a href="COMMON-LISP____CDR.html">cdr</a> xxx)))))
+  :hints (("Goal"
+           :do-not-induct t
+           :do-not '(eliminate-destructors))))</pre> 
+ 
+ <p>Here is the series of breaks on (:REWRITE WEIRD), except that the second 
+ break is elided because you will see at the subsequent ``2x (:REWRITE WEIRD) 
+ failed...''  that everything that goes on there is irrelevant.  Also deleted 
+ are some irrelevant calls of <span class="v">ancestors-check-builtin</span>, but the important 
+ one remains.</p> 
+ 
+ <pre class="code">(1 Breaking (:REWRITE KEY-RULE) on (<a href="ACL2____MEMBER-EQUAL.html">MEMBER-EQUAL</a> AAA (COPYLIST (<a href="COMMON-LISP____CDR.html">CDR</a> XXX))):
+1 ACL2 &gt;:GO
+
+(2 Breaking (:REWRITE WEIRD) on (<a href="ACL2____MEMBER-EQUAL.html">MEMBER-EQUAL</a> AAA (<a href="COMMON-LISP____CDR.html">CDR</a> XXX)):
+...
+2x (:REWRITE WEIRD) failed because :HYP 2 rewrote to
+(<a href="ACL2____MEMBER-EQUAL.html">MEMBER-EQUAL</a> AAA (<a href="COMMON-LISP____CDR.html">CDR</a> XXX)).
+2)
+
+(2 Breaking (:DEFINITION MEMBER-EQUAL) on (<a href="ACL2____MEMBER-EQUAL.html">MEMBER-EQUAL</a> AAA (<a href="COMMON-LISP____CDR.html">CDR</a> XXX)):
+2 ACL2 &gt;:GO
+
+(3 Breaking (:REWRITE WEIRD) on (<a href="ACL2____MEMBER-EQUAL.html">MEMBER-EQUAL</a> AAA (<a href="COMMON-LISP____CDR.html">CDR</a> (<a href="COMMON-LISP____CDR.html">CDR</a> XXX))):
+3 ACL2 &gt;:GO
+1&gt; (ANCESTORS-CHECK-BUILTIN (<a href="ACL2____MEMBER-EQUAL.html">MEMBER-EQUAL</a> AAA (<a href="COMMON-LISP____CDR.html">CDR</a> XXX))
+                            (((<a href="ACL2____MEMBER-EQUAL.html">MEMBER-EQUAL</a> AAA (<a href="COMMON-LISP____CDR.html">CDR</a> XXX))
+                              (<a href="ACL2____MEMBER-EQUAL.html">MEMBER-EQUAL</a> AAA (<a href="COMMON-LISP____CDR.html">CDR</a> XXX))
+                              2 2 0 ((:REWRITE KEY-RULE))
+                              . 1))
+                            ((:REWRITE WEIRD)))
+&lt;1 (ANCESTORS-CHECK-BUILTIN T T)
+
+3 (:REWRITE WEIRD) produced 'T.
+3)
+
+2 (:DEFINITION MEMBER-EQUAL) produced 'T.
+2)
+
+1x (:REWRITE KEY-RULE) failed because :HYP 1 rewrote to 'NIL.  (See
+:DOC tail-biting if this surprises you.)
+1)</pre> 
+ 
+ <p>So we've entered the break on <span class="v">key-rule</span> and backchained to prove its 
+ hypothesis, <span class="v">(<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____MEMBER.html">member</a> aaa (<a href="COMMON-LISP____CDR.html">cdr</a> xxx)))</span>.  We thus assume the negation, 
+ <span class="v">(<a href="COMMON-LISP____MEMBER.html">member</a> aaa (<a href="COMMON-LISP____CDR.html">cdr</a> xxx))</span>, on the ancestors stack and then open <span class="v">(<a href="COMMON-LISP____MEMBER.html">member</a>
+ aaa (<a href="COMMON-LISP____CDR.html">cdr</a> xxx))</span> with the definition.  That results in a call of <span class="v">(<a href="COMMON-LISP____MEMBER.html">member</a>
+ aaa (<a href="COMMON-LISP____CDR.html">cdr</a> (<a href="COMMON-LISP____CDR.html">cdr</a> xxx)))</span> and we backchain through <span class="v">weird</span> to <span class="v">(<a href="COMMON-LISP____MEMBER.html">member</a>
+ aaa (<a href="COMMON-LISP____CDR.html">cdr</a> xxx))</span> and find it assumed true (on the ancestors-stack).  So 
+ <span class="v">weird</span> rewrites <span class="v">(member-aaa (<a href="COMMON-LISP____CDR.html">cdr</a> (<a href="COMMON-LISP____CDR.html">cdr</a> xxx)))</span> to 
+ <span class="v">T</span> (propositionally) and so <span class="v">member-equal</span> returns <span class="v">T</span>, so <span class="v">H</span> 
+ rewrites to <span class="v">NIL</span>.</p> 
+ 
+ <p>This is not unsound; it is just tail biting.  Here is a summary of what has 
+ happened.</p> 
+ 
+ <p>1. Attempt to rewrite <span class="v">(<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____MEMBER.html">member</a> aaa (copylist (<a href="COMMON-LISP____CDR.html">cdr</a> xxx))))</span> to 
+ <span class="v">T</span>.</p> 
+ 
+ <p>2. Attempt to rewrite <span class="v">(<a href="COMMON-LISP____MEMBER.html">member</a> aaa (copylist (<a href="COMMON-LISP____CDR.html">cdr</a> xxx)))</span> to 
+ <span class="v">NIL</span>.</p> 
+ 
+ <p>3. Backchain with <span class="v">key-rule</span> to <span class="v">(<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____MEMBER.html">member</a> aaa (<a href="COMMON-LISP____CDR.html">cdr</a> xxx)))</span>.</p> 
+ 
+ <p>4. Assume <span class="v">(<a href="COMMON-LISP____MEMBER.html">member</a> aaa (<a href="COMMON-LISP____CDR.html">cdr</a> xxx))</span> by putting it on the ancestors-stack. 
+ This is sound because we are trying to prove <span class="v">(<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____MEMBER.html">member</a> aaa (<a href="COMMON-LISP____CDR.html">cdr</a>
+ xxx)))</span>, and it is sound to assume <span class="v">(<a href="COMMON-LISP____NOT.html">not</a> P)</span> when proving <span class="v">P</span>.</p> 
+ 
+ <p>5. Expand <span class="v">(<a href="COMMON-LISP____MEMBER.html">member</a> aaa (<a href="COMMON-LISP____CDR.html">cdr</a> xxx))</span>, given <span class="v">(<a href="COMMON-LISP____CONSP.html">consp</a> (<a href="COMMON-LISP____CDR.html">cdr</a> xxx))</span>, to 
+ <span class="v">(<a href="COMMON-LISP____OR.html">or</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> aaa (<a href="COMMON-LISP____CADR.html">cadr</a> xxx)) (<a href="COMMON-LISP____MEMBER.html">member</a> aaa (<a href="COMMON-LISP____CDDR.html">cddr</a> xxx)))</span></p> 
+ 
+ <p>6. Rewrite <span class="v">(<a href="COMMON-LISP____MEMBER.html">member</a> aaa (<a href="COMMON-LISP____CDDR.html">cddr</a> xxx))</span>) using <span class="v">weird</span>.</p> 
+ 
+ <p>7. Backchain with weird on (member aaa (cddr xxx)) and relieve its 
+ hypotheses under the substitution <span class="v">a := aaa</span>, <span class="v">lst := (<a href="COMMON-LISP____CDR.html">cdr</a> xxx)</span>. 
+ 
+ <ul> 
+ 
+ <li>a. <span class="v">(<a href="COMMON-LISP____CONSP.html">consp</a> (<a href="COMMON-LISP____CDR.html">cdr</a> xxx))</span> is true (hypothesis of <span class="v">main</span>).</li> 
+ 
+ <li>b. <span class="v">(<a href="COMMON-LISP____MEMBER.html">member</a> aaa (<a href="COMMON-LISP____CDR.html">cdr</a> xxx))</span> is true (TAIL BITING!).</li> 
+ 
+ <li>c. <span class="v">(<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> aaa (<a href="COMMON-LISP____CAR.html">car</a> (<a href="COMMON-LISP____CDR.html">cdr</a> xxx))))</span> is true, presumably from 
+ expansion of hypotheses of <span class="v">main</span>.</li> 
+ 
+ </ul></p> 
+ 
+ <p>8. So <span class="v">weird</span> applies, hence the following are true: 
+ 
+ <ul> 
+ 
+ <li>From 6. <span class="v">(<a href="COMMON-LISP____MEMBER.html">member</a> aaa (<a href="COMMON-LISP____CDDR.html">cddr</a> xxx))</span>
+</li> 
+ 
+ <li>From 5. <span class="v">(<a href="COMMON-LISP____MEMBER.html">member</a> aaa (<a href="COMMON-LISP____CDR.html">cdr</a> xxx))</span>
+</li> 
+ 
+ </ul> 
+ 
+ So 3 fails because <span class="v">(<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____MEMBER.html">member</a> aaa (<a href="COMMON-LISP____CDR.html">cdr</a> xxx)))</span> rewrites to <span class="v">NIL</span>.</p> 
+ 
+</body>
+</html>

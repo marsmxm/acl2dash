@@ -1,0 +1,601 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>With-global-stobj</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____WITH-GLOBAL-STOBJ">Click for With-global-stobj in the Full Manual</a></h3>
+
+<p>Operate on a global single-threaded object</p><p>See <a href="ACL2____STOBJ.html">stobj</a> for an introduction to single-threaded 
+ objects.  Also see <a href="ACL2____DEFSTOBJ.html">defstobj</a> for additional background.</p> 
+ 
+ <p>The <span class="v">with-global-stobj</span> macro is a relatively advanced utility that 
+ allows stobjs to be accessed directly from the ACL2 <a href="ACL2____STATE.html">state</a>.  Examples 
+ may be found in <a href="ACL2____COMMUNITY-BOOK.html">community-book</a> file 
+ <span class="v">books/system/tests/with-global-stobj-input.lsp</span>; we draw heavily from them 
+ below.</p> 
+ 
+ <pre class="code">Example Forms:
+
+; Read-only form (<a href="COMMON-LISP____LENGTH.html">length</a> 3)
+(<a href="ACL2____WITH-GLOBAL-STOBJ.html">with-global-stobj</a> st
+  ;; body:
+  (fld st))
+
+; Updating form (<a href="COMMON-LISP____LENGTH.html">length</a> 4; (returns state))
+(<a href="ACL2____WITH-GLOBAL-STOBJ.html">with-global-stobj</a>
+  st ; bound stobj
+  (st) ; output signature of body
+  ;; body:
+  (update-fld x st))
+
+; Updating form (<a href="COMMON-LISP____LENGTH.html">length</a> 4; returns (<a href="ACL2____MV.html">mv</a> * * state st2))
+(<a href="ACL2____WITH-GLOBAL-STOBJ.html">with-global-stobj</a>
+  st ; bound stobj
+  (nil st nil state st2) ; output signature of body
+  ;; body:
+  (<a href="COMMON-LISP____LET_A2.html">let*</a> ((st (update-fld x st))
+         (st2 (update-fld2 x st2)))
+    (<a href="ACL2____MV.html">mv</a> (fld st) st (fld st2) state st2)))</pre> 
+ 
+ <p>In the forms above, we call <span class="v">st</span> the stobj that is ``bound by'' the 
+ <span class="v">with-global-stobj</span> call, and the ``body'' of the form is the last 
+ argument.  The read-only form above, like all read-only forms, has a body that 
+ does not return the stobj bound by the form.  Each updating form above 
+ specifies an output signature as a list, which must contain the stobj bound by 
+ the form, whose elements are all <span class="v">nil</span> (designating a non-stobj value) or a 
+ stobj name.  That output signature reflects the result of the body; the entire 
+ form does not return the bound stobj, but does return <span class="tt"><a href="ACL2____STATE.html">state</a></span>, as 
+ explained below.</p> 
+ 
+ <p><span class="v">With-global-stobj</span> is a macro, and the example forms above expand as 
+ follows.</p> 
+ 
+ <pre class="code">ACL2 !&gt;:trans1 (<a href="ACL2____WITH-GLOBAL-STOBJ.html">with-global-stobj</a> st
+                 (fld st))
+ (<a href="COMMON-LISP____LET.html">LET</a> ((ST (READ-USER-STOBJ-ALIST 'ST STATE)))
+      (FLD ST))
+ACL2 !&gt;:trans1 (<a href="ACL2____WITH-GLOBAL-STOBJ.html">with-global-stobj</a> st
+                 (st)
+                 (update-fld x st))
+ (<a href="COMMON-LISP____LET.html">LET</a> ((ST (READ-USER-STOBJ-ALIST 'ST STATE)))
+      (<a href="COMMON-LISP____LET.html">LET</a> ((ST (UPDATE-FLD X ST)))
+           (WRITE-USER-STOBJ-ALIST 'ST ST STATE)))
+ACL2 !&gt;:trans1 (<a href="ACL2____WITH-GLOBAL-STOBJ.html">with-global-stobj</a> st
+                 (nil st nil state st2)
+                 (<a href="COMMON-LISP____LET_A2.html">let*</a> ((st (update-fld x st))
+                        (st2 (update-fld2 x st2)))
+                   (<a href="ACL2____MV.html">mv</a> (fld st) st (fld st2) state st2)))
+ (<a href="COMMON-LISP____LET.html">LET</a> ((ST (READ-USER-STOBJ-ALIST 'ST STATE)))
+      (<a href="ACL2____MV-LET.html">MV-LET</a> ({WGS}0 ST {WGS}1 STATE ST2)
+              (<a href="COMMON-LISP____LET_A2.html">LET*</a> ((ST (UPDATE-FLD X ST))
+                     (ST2 (UPDATE-FLD2 X ST2)))
+                    (<a href="ACL2____MV.html">MV</a> (FLD ST) ST (FLD ST2) STATE ST2))
+              (<a href="COMMON-LISP____LET.html">LET</a> ((<a href="ACL2____STATE.html">STATE</a> (WRITE-USER-STOBJ-ALIST 'ST ST STATE)))
+                   (<a href="ACL2____MV_F3.html">MV?</a> {WGS}0 {WGS}1 STATE ST2))))
+ACL2 !&gt;</pre> 
+ 
+ <p>The first illustrates that in the read-only form, the bound stobj, which is 
+ <span class="v">st</span> in that example, is bound to its value in the <span class="v">user-stobj-alist</span> 
+ field of the ACL2 <a href="ACL2____STATE.html">state</a>.  The second and third similarly bind the 
+ stobj, <span class="v">st</span>, but then update that stobj according to the body of the 
+ <span class="v">with-global-stobj</span> call (its last argument) and then update the 
+ <span class="v">user-stobj-alist</span> of the state with that stobj's resulting value.  You can 
+ of course use <span class="v">:</span><span class="tt"><a href="ACL2____TRANS1.html">trans1</a></span> in this way to see expansions of other 
+ <span class="v">with-global-stobj</span> calls.</p> 
+ 
+ <p>Note that ACL2 expects you to use <span class="v">with-global-stobj</span>, not its 
+ expansions in terms of the <a href="ACL2____NON-EXECUTABLE.html">non-executable</a> functions 
+ <span class="v">read-user-stobj-alist</span>, which accesses the bound stobj from the 
+ user-stobj-alist of <span class="v">state</span>, and <span class="v">write-user-stobj-alist</span>, which 
+ completes the write for updating <span class="v">with-global-stobj</span> forms.  These are 
+ defined as follows, in terms of the ACL2 state's user-stobj-alist field, which 
+ maps stobj names to their values.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFUN-NX.html">defun-nx</a> read-user-stobj-alist (st state)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> st)
+                  :stobjs state))
+  (<a href="COMMON-LISP____CDR.html">cdr</a> (<a href="ACL2____ASSOC-EQ.html">assoc-eq</a> st (user-stobj-alist1 state))))
+
+(<a href="ACL2____DEFUN-NX.html">defun-nx</a> write-user-stobj-alist (st val state)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> st)
+                  :stobjs state))
+  (update-user-stobj-alist1
+   (<a href="ACL2____PUT-ASSOC-EQ.html">put-assoc-eq</a> st val (user-stobj-alist1 state))
+   state))</pre> 
+ 
+ <p><span class="v">With-global-stobj</span> can be useful when you want a function to read or 
+ write a stobj but you don't want to pass that stobj as a formal parameter.  As 
+ long as you pass <span class="v">state</span> as a formal parameter, you can access the stobj 
+ using <span class="v">with-global-stobj</span>.</p> 
+ 
+ <p>This topic is intended to be sufficient preparation for the use of 
+ <span class="v">with-global-stobj</span>.  Those who want to read more about design and 
+ underlying theory are welcome to peruse the (long) ACL2 source code comments, 
+ ``Essay on the Design of With-global-stobj'' and ``Essay on Correctness of 
+ Evaluation with Stobjs''.</p> 
+ 
+ <h3>More Examples</h3> 
+ 
+ <p>As noted above, examples may be found in <a href="ACL2____COMMUNITY-BOOK.html">community-book</a> file 
+ <span class="v">books/system/tests/with-global-stobj-input.lsp</span>.  Here we discuss some of 
+ those examples.</p> 
+ 
+ <p>Let us start by introducing a couple of stobjs.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFSTOBJ.html">defstobj</a> st fld)
+(<a href="ACL2____DEFSTOBJ.html">defstobj</a> st2 fld2 :congruent-to st)</pre> 
+ 
+ <p>Calls of <span class="v">with-global-stobj</span> are illegal at the top level (as opposed to 
+ occurrences in the bodies of a definition or a theorem).</p> 
+ 
+ <pre class="code">(<a href="ACL2____WITH-GLOBAL-STOBJ.html">with-global-stobj</a> st (fld st))</pre> 
+ 
+ <p>One solution may be to use <span class="tt"><a href="ACL2____TOP-LEVEL.html">top-level</a></span>.</p> 
+ 
+ <pre class="code">(<a href="ACL2____TOP-LEVEL.html">top-level</a> (<a href="ACL2____WITH-GLOBAL-STOBJ.html">with-global-stobj</a> st (fld st)))</pre> 
+ 
+ <p>Normally, however, <span class="v">with-global-stobj</span> is used inside definition bodies. 
+ Here we read and write the stobj, <span class="v">st</span>, directly from the ACL2 <a href="ACL2____STATE.html">state</a>.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> rd0 (<a href="ACL2____STATE.html">state</a>)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs state))
+  (<a href="ACL2____WITH-GLOBAL-STOBJ.html">with-global-stobj</a> st (fld st)))
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> wr0 (x state)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs state))
+  (<a href="ACL2____WITH-GLOBAL-STOBJ.html">with-global-stobj</a> st (st) (update-fld x st)))</pre> 
+ 
+ <p>Let's see these in action, first writing and then reading.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(wr0 2 state)
+&lt;state&gt;
+ACL2 !&gt;(rd0 state)
+2
+ACL2 !&gt;(fld st)
+2
+ACL2 !&gt;</pre> 
+ 
+ <p>We can use various stobj operations, even the rather fancy <span class="tt"><a href="ACL2____SWAP-STOBJS.html">swap-stobjs</a></span>, in the body of a <span class="v">with-global-stobj</span> call.  The following 
+ events are admissible.</p> 
+ 
+ <pre class="code">(update-fld 1 st)
+(update-fld 2 st2)
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> f3 (st2 state)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (st2 state)))
+  (<a href="ACL2____WITH-GLOBAL-STOBJ.html">with-global-stobj</a>
+    st
+    (st2 st)
+    (<a href="ACL2____SWAP-STOBJS.html">swap-stobjs</a> st2 st)))
+
+(f3 st2 state)
+
+(<a href="ACL2____ASSERT-EVENT.html">assert-event</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (fld st) 2)
+                   (<a href="COMMON-LISP____EQUAL.html">equal</a> (fld st2) 1)))</pre> 
+ 
+ <p>The following function writes to both <span class="v">st</span> and <span class="v">st2</span> without passing 
+ in either one (just <span class="v">state</span>).  Notice that the inner <span class="v">with-global-stobj</span> 
+ call has a body that returns the indicated values <span class="v">st</span> and <span class="v">st2</span>, but 
+ since <span class="v">st2</span> is bound by the call, it is dropped before returning from the 
+ call, and <span class="v">state</span> is added — which explains the list <span class="v">(st state)</span> 
+ supplied to the outer call.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> write-global-st-st2 (fld fld2 state)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs state))
+  (<a href="ACL2____WITH-GLOBAL-STOBJ.html">with-global-stobj</a> st
+    (st state)
+    (<a href="COMMON-LISP____LET.html">let</a> ((st (update-fld fld st)))
+      (<a href="ACL2____WITH-GLOBAL-STOBJ.html">with-global-stobj</a> st2
+        (st st2)
+        (<a href="COMMON-LISP____LET.html">let</a> ((st2 (update-fld fld2 st2)))
+          (<a href="ACL2____MV.html">mv</a> st st2))))))</pre> 
+ 
+ <p>Let's check that this works as expected.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(write-global-st-st2 'a 'b state)
+&lt;state&gt;
+ACL2 !&gt;(fld st)
+A
+ACL2 !&gt;(fld st2)
+B
+ACL2 !&gt;</pre> 
+ 
+ <p>We can also read both fields.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> read-global-st-st2 (<a href="ACL2____STATE.html">state</a>)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs state))
+  (<a href="ACL2____WITH-GLOBAL-STOBJ.html">with-global-stobj</a> st
+    (<a href="ACL2____WITH-GLOBAL-STOBJ.html">with-global-stobj</a> st2
+      (<a href="COMMON-LISP____LIST.html">list</a> (fld st) (fld st2)))))</pre> 
+ 
+ <p>Then, continuing with the session above:</p> 
+ 
+ <pre class="code">ACL2 !&gt;(read-global-st-st2 state)
+(A B)
+ACL2 !&gt;</pre> 
+ 
+ <p>We can reason about <span class="v">with-global-stobj</span> by reasoning about its 
+ expansions.  Consider the following theorem (continuing the session 
+ above).</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> rd0-of-wr0
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> (rd0 (wr0 val state))
+         val))</pre> 
+ 
+ <p>This fails to prove, but each of the two checkpoints has a term of the form 
+ <span class="v">(<a href="ACL2____ASSOC-EQUAL.html">ASSOC-EQUAL</a> 'ST (<a href="ACL2____PUT-ASSOC-EQUAL.html">PUT-ASSOC-EQUAL</a> 'ST _ _))</span>.  That suggests the following 
+ lemma.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> assoc-equal-put-assoc-equal
+  (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____ASSOC-EQUAL.html">assoc-equal</a> key (<a href="ACL2____PUT-ASSOC-EQUAL.html">put-assoc-equal</a> key val alist))
+         (<a href="COMMON-LISP____CONS.html">cons</a> key val)))</pre> 
+ 
+ <p>This lemma proves automatically, after which <span class="v">rd0-of-wr0</span> proves 
+ automatically.</p> 
+ 
+ <h3>Syntax and Semantics</h3> 
+ 
+ <p>This section provides a reference for <span class="v">with-global-stobj</span>.  The next 
+ section discusses restrictions that avoid aliasing problems.</p> 
+ 
+ <pre class="code">General Forms:
+; Read-only form (<a href="COMMON-LISP____LENGTH.html">length</a> 3):
+(<a href="ACL2____WITH-GLOBAL-STOBJ.html">with-global-stobj</a> st form)
+; Updating form (<a href="COMMON-LISP____LENGTH.html">length</a> 4):
+(<a href="ACL2____WITH-GLOBAL-STOBJ.html">with-global-stobj</a> st lst form)</pre> 
+ 
+ <p>where <span class="v">st</span> is the name of a <a href="ACL2____STOBJ.html">stobj</a> that is user-defined 
+ (i.e., not <span class="v">state</span>), <span class="v">form</span> is subject to syntactic restrictions 
+ discussed below, and <span class="v">lst</span> is a list, sometimes called an ``output 
+ signature''.  That list indicates the list of <span class="v">N</span> values returned by 
+ <span class="v">form</span>, which must include the bound stobj, <span class="v">st</span>: thus <span class="v">lst</span> is 
+ <span class="v">(st)</span> if <span class="v">N</span> is 1, indicating that <span class="v">form</span> returns an instance of 
+ that stobj; and otherwise <span class="v">form</span> returns multiple values <span class="v">(x0 x1
+ ... xk)</span> where <span class="v">k</span> is <span class="v">N-1</span> and for each <span class="v">i</span>, <span class="v">xi</span> is either 
+ <span class="v">nil</span> if the <span class="v">i</span>th value is an ordinary value or else is the name of a 
+ stobj returned in that position (and one such stobj name is the bound 
+ stobj).</p> 
+ 
+ <p>In each General Form above, <span class="v">st</span> and <span class="v">form</span> are called the ``bound 
+ stobj'' and ``body'' of the <span class="v">with-global-stobj</span> call (respectively).</p> 
+ 
+ <p>For the read-only form, the bound stobj (which is <span class="v">st</span> above) must not 
+ be returned by the body of the form.</p> 
+ 
+ <p>For the updating form, the values actually returned are obtained by 
+ removing <span class="v">st</span> from <span class="v">lst</span> and then, if <span class="v">state</span> is not already in 
+ <span class="v">lst</span>, adding <span class="v">state</span> at the end of <span class="v">lst</span>.  Consider the following 
+ example.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> f0 (st2 state)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (st2 state)))
+  (<a href="ACL2____WITH-GLOBAL-STOBJ.html">with-global-stobj</a>
+    st
+    (st st2 nil state)
+    (<a href="ACL2____MV.html">mv</a> st st2 nil state)))</pre> 
+ 
+ <p>In this case, <span class="v">lst</span> is <span class="v">(st st2 nil state)</span>, and the following 
+ expansion shows that <span class="v">st</span> has been dropped from the returned values.</p> 
+ 
+ <pre class="code">ACL2 !&gt;:trans1 (<a href="ACL2____WITH-GLOBAL-STOBJ.html">with-global-stobj</a>
+                 st
+                 (st st2 nil state)
+                 (<a href="ACL2____MV.html">mv</a> st st2 nil state))
+ (<a href="COMMON-LISP____LET.html">LET</a> ((ST (READ-USER-STOBJ-ALIST 'ST STATE)))
+      (<a href="ACL2____MV-LET.html">MV-LET</a> (ST ST2 {WGS}0 STATE)
+              (<a href="ACL2____MV.html">MV</a> ST ST2 NIL STATE)
+              (<a href="COMMON-LISP____LET.html">LET</a> ((<a href="ACL2____STATE.html">STATE</a> (WRITE-USER-STOBJ-ALIST 'ST ST STATE)))
+                   (<a href="ACL2____MV_F3.html">MV?</a> ST2 {WGS}0 STATE))))
+ACL2 !&gt;</pre> 
+ 
+ <p>Evaluation of an updating <span class="v">with-global-stobj</span> form always 
+ updates <span class="v">state</span>: specifically it updates its <span class="v">user-stobj-alist</span> field 
+ (see <a href="ACL2____STATE.html">state</a>).  The following example is similar to the one above, except 
+ that this time the body of the <span class="v">with-global-stobj</span> call does not return 
+ state; nevertheless, the entire call does return state.  It illustrates that 
+ when <span class="v">state</span> is not in the list given as the second argument of an updating 
+ <span class="v">with-global-stobj</span> call, then the <span class="v">with-global-stobj</span> form not only 
+ drops the bound stobj from its return values but also adds <span class="v">state</span> as the 
+ last returned value (or, if the bound stobj was the sole symbol in the list, 
+ then the call returns <span class="v">state</span> as the sole value).</p> 
+ 
+ <pre class="code">ACL2 !&gt;:trans1 (<a href="ACL2____WITH-GLOBAL-STOBJ.html">with-global-stobj</a>
+                 st
+                 (st st2 nil)
+                 (<a href="ACL2____MV.html">mv</a> st st2 nil))
+ (<a href="COMMON-LISP____LET.html">LET</a> ((ST (READ-USER-STOBJ-ALIST 'ST STATE)))
+      (<a href="ACL2____MV-LET.html">MV-LET</a> (ST ST2 {WGS}0)
+              (<a href="ACL2____MV.html">MV</a> ST ST2 NIL)
+              (<a href="COMMON-LISP____LET.html">LET</a> ((<a href="ACL2____STATE.html">STATE</a> (WRITE-USER-STOBJ-ALIST 'ST ST STATE)))
+                   (<a href="ACL2____MV_F3.html">MV?</a> ST2 {WGS}0 STATE))))
+ACL2 !&gt;</pre> 
+ 
+ <p>Note that because <span class="v">with-global-stobj</span> updates <span class="v">state</span>, then 
+ <span class="v">state</span> must be a known stobj when <span class="v">with-global-stobj</span> is called.  In 
+ particular, in order to call <span class="v">with-global-stobj</span> in the body of a function, 
+ <span class="v">state</span> should be a formal parameter of that function.</p> 
+ 
+ <h3>Syntactic Restrictions to Avoid Aliasing</h3> 
+ 
+ <p>For the examples in this section, we continue to assume that the following 
+ <span class="tt"><a href="ACL2____DEFSTOBJ.html">defstobj</a></span> <a href="ACL2____EVENTS.html">events</a> have been evaluated.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFSTOBJ.html">defstobj</a> st fld)
+(<a href="ACL2____DEFSTOBJ.html">defstobj</a> st2 fld2 :congruent-to st)</pre> 
+ 
+ <p>Consider the following definition.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> foo (st state)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (st state)))
+  (<a href="COMMON-LISP____LET.html">let</a> ((<a href="ACL2____STATE.html">state</a> (<a href="ACL2____WITH-GLOBAL-STOBJ.html">with-global-stobj</a> st
+                 (st)
+                 (update-fld 3 st))))
+    (<a href="ACL2____MV.html">mv</a> (fld st) state)))</pre> 
+ 
+ <p>ACL2 admits that form, but causes an error with the following call of 
+ <span class="v">foo</span>.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(foo st state)
+
+
+ACL2 Error in TOP-LEVEL:  Illegal top-level form, (FOO ST STATE).
+The stobj ST occurs free, yet may be bound by an updating WITH-GLOBAL-
+STOBJ form, as the top-level form calls FOO, which makes an updating
+WITH-GLOBAL-STOBJ call that binds ST.  See :DOC with-global-stobj.
+
+ACL2 !&gt;</pre> 
+ 
+ <p>Let us see why this call must be illegal; then we'll study the error 
+ message.  The <span class="v">with-global-stobj</span> form above will set the field, <span class="v">fld</span>, 
+ of <span class="v">st</span> to the value, 3.  Moreover, ACL2 uses destructive update on stobjs: 
+ the actual Lisp object representing <span class="v">st</span> has value 3 in its field, and this 
+ is the same object for which we return <span class="v">(fld st)</span> from <span class="v">foo</span>.  So if 
+ <span class="v">(foo st state)</span> were allowed to execute, it would return the multiple 
+ values <span class="v">(3 &lt;state&gt;)</span>.  However, ACL2 can prove that ACL2 returns <span class="v">(fld
+ st)</span> unchanged:</p> 
+ 
+ <pre class="code">(<a href="ACL2____THM.html">thm</a> (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____STP.html">stp</a> st)
+              (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 0 (foo st state))
+                     (fld st))))</pre> 
+ 
+ <p>What we are seeing is a violation of single-threadedness.</p> 
+ 
+ <p>Now let's look at the error message above.  It explains that ``the stobj ST 
+ occurs free'' in <span class="v">(foo st state)</span>: indeed, <span class="v">st</span> is the first argument of 
+ that call.  Therefore, <span class="v">st</span> can be accessed in that top-level form; indeed, 
+ we have seen that it is returned as the first value.  However, <span class="v">st</span> can 
+ also be destructively modified because of the updating <span class="v">with-global-stobj</span> 
+ call in the body of <span class="v">foo</span>: ``the top-level form calls FOO, which makes an 
+ updating WITH-GLOBAL-STOBJ call that binds ST.''  As we have discussed, that 
+ updating call destroys single-threadedness, and hence must be avoided.  We may 
+ call this an ``aliasing problem'', since the bound stobj shares structure with 
+ the formal parameter.</p> 
+ 
+ <p>By contrast, there is no such problem if we replace <span class="v">st</span> by its 
+ congruent stobj, <span class="v">st2</span>, in the top-level call.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(foo st2 state)
+(NIL &lt;state&gt;)
+ACL2 !&gt;(fld st2)
+NIL
+ACL2 !&gt;(fld st)
+3
+ACL2 !&gt;</pre> 
+ 
+ <p>In this case there is no aliasing problem.  The formal parameter <span class="v">st</span> of 
+ <span class="v">foo</span> is bound to the (global) value of <span class="v">st2</span>, which does not share 
+ structure with the (global) value of stobj <span class="v">st</span> that is updated by the 
+ <span class="v">with-global-stobj</span> form.</p> 
+ 
+ <p>Note that the aliasing problem can be buried through a chain of function 
+ calls, as we now illustrate.  Function <span class="v">foo2</span> is like <span class="v">foo</span> above, with 
+ two changes: instead of updating the field with <span class="v">3</span> we update it with the 
+ formal parameter, <span class="v">val</span>; and that update is done inside the called 
+ function, <span class="v">foo2-sub</span>, rather than directly in the body of <span class="v">foo2</span>.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> foo2-sub (val state)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs state))
+  (<a href="ACL2____WITH-GLOBAL-STOBJ.html">with-global-stobj</a> st
+    (st)
+    (update-fld val st)))
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> foo2 (val st state)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (st state)))
+  (<a href="COMMON-LISP____LET.html">let</a> ((<a href="ACL2____STATE.html">state</a> (foo2-sub val state)))
+    (<a href="ACL2____MV.html">mv</a> (fld st) state val)))</pre> 
+ 
+ <p>The error message is essentially the same, except that the chain of calls 
+ is shown that leads to the problematic updating <span class="v">with-global-stobj</span> form. 
+ The behavior on <span class="v">st2</span> instead of <span class="v">st</span> is fine, as before.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(foo2 3 st state)
+
+
+ACL2 Error in TOP-LEVEL:  Illegal top-level form, (FOO2 3 ST STATE).
+The stobj ST occurs free, yet may be bound by an updating WITH-GLOBAL-
+STOBJ form, as the top-level form calls FOO2, which calls FOO2-SUB,
+which makes an updating WITH-GLOBAL-STOBJ call that binds ST.  See
+:DOC with-global-stobj.
+
+ACL2 !&gt;(foo2 4 st2 state)
+(NIL &lt;state&gt; 4)
+ACL2 !&gt;(fld st2)
+NIL
+ACL2 !&gt;(fld st)
+4
+ACL2 !&gt;</pre> 
+ 
+ <p>So far we have seen just one aliasing problem, i.e., between a free stobj 
+ in a top-level form and a subsidiary updating <span class="v">with-global-stobj</span> form. 
+ Another case is where the free stobj in a top-level form is actually 
+ returned (we might say, updated) by that form; in that case, any subsidiary 
+ <span class="v">with-global-stobj</span> form is problematic, even if it is read-only.  Here is 
+ an example.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> g2 (val st state)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (st state)))
+  (<a href="COMMON-LISP____LET.html">let</a> ((st (update-fld val st)))
+    (<a href="COMMON-LISP____LET.html">let</a> ((f (<a href="ACL2____WITH-GLOBAL-STOBJ.html">with-global-stobj</a> st (fld st))))
+      (<a href="ACL2____MV.html">mv</a> f (fld st) st state))))
+
+(g2 nil st state)</pre> 
+ 
+ <p>As before, the definition is fine, but the ensuing top-level call is not. 
+ And as before, if we replace the top-level stobj occurrence by one that is 
+ congruent to <span class="v">st</span>, there is no error: <span class="v">(g2 5 st2 state)</span>.</p> 
+ 
+ <p>Note that there is no aliasing problem when there is no update of the 
+ stobj, either in the top-level form or in the subsidiary 
+ <span class="v">with-global-stobj</span> form.  The following are perfectly legal, for 
+ example.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> g1 (st state)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (st state)))
+  (<a href="COMMON-LISP____LET.html">let</a> ((f (<a href="ACL2____WITH-GLOBAL-STOBJ.html">with-global-stobj</a> st (fld st))))
+    (<a href="ACL2____MV.html">mv</a> f state (fld st))))
+
+(g1 st state)</pre> 
+ 
+ <p>So far we have seen two similar error cases due to aliasing: both are 
+ top-level calls involving a stobj occurrence that has an occurrence below 
+ bound by <span class="v">with-global-stobj</span>, where at least one of the two occurrences 
+ updates the stobj.  Consider this: a top-level call like <span class="v">(foo st state)</span> 
+ could be viewed as grabbing <span class="v">st</span> from the ACL2 state, hence could be viewed 
+ as being <span class="v">(<a href="ACL2____WITH-GLOBAL-STOBJ.html">with-global-stobj</a> st (foo st state))</span>.  So we can think of the 
+ restrictions as being about nested <span class="v">with-global-stobj</span> calls, and that 
+ leads us to the final two cases.  Here is a summary of all the restrictions to 
+ prevent aliasing, starting with the two discussed above about top-level 
+ evaluation, and ending with the two new ones about nested 
+ <span class="v">with-global-stobj</span> calls.</p> 
+ 
+ <ul> 
+ 
+ <li>In a form <span class="v">u</span> that is legal at the top-level, where <span class="v">u</span> has a free 
+ occurrence of stobj <span class="v">st</span>, there is no updating <span class="v">with-global-stobj</span> call 
+ that binds <span class="v">st</span> and is invoked during evaluation of <span class="v">u</span>.</li> 
+ 
+ <li>In a form <span class="v">u</span> that is legal at the top-level, where <span class="v">u</span> returns 
+ stobj <span class="v">st</span>, there is no <span class="v">with-global-stobj</span> call that binds <span class="v">st</span> and 
+ is invoked during evaluation of <span class="v">u</span>.</li> 
+ 
+ <li>In a form <span class="v">(<a href="ACL2____WITH-GLOBAL-STOBJ.html">with-global-stobj</a> st u)</span>, there is no 
+ updating <span class="v">with-global-stobj</span> call that binds <span class="v">st</span> and is invoked during 
+ evaluation of <span class="v">u</span>.</li> 
+ 
+ <li>In an updating form <span class="v">(<a href="ACL2____WITH-GLOBAL-STOBJ.html">with-global-stobj</a> st lst u)</span>, there is no 
+ <span class="v">with-global-stobj</span> call that binds <span class="v">st</span> and is invoked during 
+ evaluation of <span class="v">u</span>.</li> 
+ 
+ </ul> 
+ 
+ <p>Our restrictions that prevent aliasing are syntactic ones, sufficient to 
+ prevent the invocations described above.  They are implemented by searching 
+ for calls of <span class="v">read-user-stobj-alist</span> to identify expansions of 
+ <span class="v">with-global-stobj</span> calls, and by searing for calls of 
+ <span class="v">write-user-stobj-alist</span> to identify expansions of updating 
+ <span class="v">with-global-stobj</span> calls.</p> 
+ 
+ <p>Finally, we note that the syntactic restrictions extend to <a href="ACL2____GUARD.html">guard</a>s. 
+ Consider again the function <span class="v">rd0</span> as defined above, and let's use it in the 
+ guard of a function.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> rd0 (<a href="ACL2____STATE.html">state</a>)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs state))
+  (<a href="ACL2____WITH-GLOBAL-STOBJ.html">with-global-stobj</a> st (fld st)))
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> call-rd0-in-guard (<a href="ACL2____STATE.html">state</a>)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs state
+                  :guard (rd0 state))
+           (<a href="COMMON-LISP____IGNORE.html">ignore</a> state))
+  17)</pre> 
+ 
+ <p>Then as before, it is an error for a top-level form to update <span class="v">st</span> and 
+ also call a function that may lead to a <span class="v">with-global-stobj</span> call that binds 
+ <span class="v">st</span>.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="COMMON-LISP____LET.html">let</a> ((st (update-fld 3 st)))
+         (<a href="ACL2____MV.html">mv</a> st (call-rd0-in-guard state)))
+
+
+ACL2 Error in TOP-LEVEL:  Illegal top-level form,
+(<a href="COMMON-LISP____LET.html">LET</a> ((ST (UPDATE-FLD 3 ST))) (<a href="COMMON-LISP____LIST.html">LIST</a> ST (CALL-RD0-IN-GUARD STATE))).
+The stobj ST is returned by evaluation of that form, yet is bound by
+a WITH-GLOBAL-STOBJ form, as the top-level form calls CALL-RD0-IN-GUARD,
+which calls RD0, which makes a WITH-GLOBAL-STOBJ call that binds ST.
+See :DOC with-global-stobj.
+
+ACL2 !&gt;</pre> 
+ 
+ <h3>Constrained Functions and Defattach</h3> 
+ 
+ <p>Consider the following constrained function introduction.</p> 
+ 
+ <pre class="code">(<a href="ACL2____ENCAPSULATE.html">encapsulate</a>
+  (((crn0 state) =&gt; *))
+  (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> crn0 (<a href="ACL2____STATE.html">state</a>)
+           (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs state))
+           (state-p state))))</pre> 
+ 
+ <p>If we try to attach <span class="v">rd0</span> (defined above) to <span class="v">crn0</span> we get an error, 
+ as shown just below.  In short, this error says that since <span class="v">rd0</span> may lead 
+ to a call of <span class="v">with-global-stobj</span> that binds <span class="v">st</span>, then with this 
+ attachment, <span class="v">crn0</span> may lead to such a call; yet there is no record in the 
+ <a href="ACL2____WORLD.html">world</a> that <span class="v">crn0</span> may lead to such a call.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____DEFATTACH.html">defattach</a> crn0 rd0)
+
+
+ACL2 Error in ( DEFATTACH CRN0 RD0):  The attachment of RD0 to CRN0
+restricts stobjs bound by WITH-GLOBAL-STOBJ under calls of RD0, according
+to the :GLOBAL-STOBJS keyword (<a href="ACL2____DEFAULT.html">default</a> nil) in the signature introducing
+CRN0.  But this restriction is violated for stobj ST:  the attempt
+is to attach RD0, which makes a WITH-GLOBAL-STOBJ call that binds ST,
+yet that stobj is not specified by the :GLOBAL-STOBJS keyword of CRN0.
+See :DOC with-global-stobj.
+
+
+Summary
+Form:  ( DEFATTACH CRN0 RD0)
+Rules: NIL
+Time:  0.00 seconds (prove: 0.00, print: 0.00, other: 0.00)
+
+ACL2 Error [Failure] in ( DEFATTACH CRN0 RD0):  See :DOC failure.
+
+******** FAILED ********
+ACL2 !&gt;</pre> 
+ 
+ <p>The solution is to note, in the signature of the constrained function, that 
+ it may lead to a <span class="v">with-global-stobj</span> call.  This is accomplished by using 
+ the keyword, <span class="v">:GLOBAL-STOBJS</span>, in the signature of the function.  The value 
+ of that keyword is <span class="v">nil</span> by default, indicating that there is no such call. 
+ Otherwise the value is a cons of the form <span class="v">(r . w)</span>, where <span class="v">r</span> and 
+ <span class="v">w</span> are disjoint lists of stobjs.  Their interpretation is as follows: 
+ <span class="v">w</span> includes all stobjs for which an attachment may have an updating 
+ <span class="v">with-global-stobj</span> call, and <span class="v">r</span> includes all stobjs not in <span class="v">w</span> for 
+ which an attachment may have a <span class="v">with-global-stobj</span> call.  Consider the 
+ following modification of the <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span> form above.</p> 
+ 
+ <pre class="code">(<a href="ACL2____ENCAPSULATE.html">encapsulate</a>
+  (((crn1 state) =&gt; * :global-stobjs ((st) . nil)))
+  (<a href="ACL2____LOCAL.html">local</a> (<a href="COMMON-LISP____DEFUN.html">defun</a> crn1 (<a href="ACL2____STATE.html">state</a>)
+           (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs state))
+           (state-p state))))</pre> 
+ 
+ <p>Then the form <span class="v">(<a href="ACL2____DEFATTACH.html">defattach</a> crn1 rd0)</span> is legal: unlike <span class="v">crn0</span>, 
+ <span class="v">crn1</span> has specified that <span class="v">st</span> may be bound by <span class="v">with-global-stobj</span> in 
+ an attachment.</p> 
+ 
+ <p>The requirement is thus as follows.  Consider attachment of <span class="v">g</span> to a 
+ constrained function <span class="v">f</span>, where <span class="v">g</span> may lead to updating 
+ <span class="v">with-global-stobj</span> calls that bind stobjs <span class="v">w1</span>, <span class="v">w2</span>, ..., <span class="v">wk</span>, 
+ and also <span class="v">g</span> may lead to <span class="v">with-global-stobj</span> calls that bind, in 
+ addition to the <span class="v">wi</span>, stobjs <span class="v">r1</span>, <span class="v">r2</span>, ..., <span class="v">rn</span>.  Then the 
+ signature of <span class="v">f</span> must specify a value <span class="v">(r . w)</span> for the keyword 
+ <span class="v">:GLOBAL-STOBJS</span>, where <span class="v">r</span> and <span class="v">w</span> are lists of stobjs such that: 
+ <span class="v">w</span> includes all <span class="v">wi</span>, and the union of <span class="v">r</span> and <span class="v">w</span> includes all 
+ <span class="v">ri</span>.</p>
+</body>
+</html>

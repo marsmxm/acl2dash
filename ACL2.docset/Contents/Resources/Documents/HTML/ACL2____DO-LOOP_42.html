@@ -1,0 +1,891 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Do-loop$</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____DO-LOOP_42">Click for Do-loop$ in the Full Manual</a></h3>
+
+<p>Iteration with <span class="tt"><a href="ACL2____LOOP_42.html">loop$</a></span> using local variables and <a href="ACL2____STOBJ.html">stobj</a>s</p><p>This topic assumes that you have read the introduction to 
+ <span class="v">loop$</span> expressions in ACL2; see <a href="ACL2____LOOP_42.html">loop$</a>.  Here we give more complete 
+ documentation on <span class="v">DO</span> <span class="v">loop$</span> expressions, beginning with an informal 
+ introduction based largely on examples and then continuing with detailed 
+ syntax and semantics.</p> 
+ 
+ <p>More examples of <span class="tt"><a href="ACL2____LOOP_42.html">loop$</a></span> expressions, including <span class="v">DO</span> <span class="v">loop$</span>s, 
+ may be found in <a href="ACL2____COMMUNITY-BOOK.html">community-book</a> <span class="v">projects/apply/loop-tests.lisp</span>.</p> 
+ 
+ <h3>INFORMAL INTRODUCTION</h3> 
+ 
+ <p>The most basic <span class="v">DO</span> <span class="v">loop$</span> expressions have the following form.</p> 
+ 
+ <pre class="code">(<a href="ACL2____LOOP_42.html">loop$</a> WITH v1 = a1
+       ...
+       WITH vn = an
+       DO body)</pre> 
+ 
+ <p><b>A Basic Example</b></p> 
+ 
+ <p>The example <span class="v">loop$</span> expression below initially stores the list <span class="v">(a b
+ c)</span> in the variable <span class="v">x</span> and <span class="v">nil</span> in the variable <span class="v">y</span>.  Then it 
+ iterates, repeatedly popping the first element of <span class="v">x</span> onto <span class="v">y</span> until 
+ <span class="v">x</span> is empty.  Then it returns the final value of <span class="v">y</span>.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____LOOP_42.html">loop$</a> with x = '(a b c)
+              with y = nil
+              do (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____CONSP.html">consp</a> x)
+                        (<a href="COMMON-LISP____PROGN.html">progn</a> (setq y (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CAR.html">car</a> x) y))
+                               (setq x (<a href="COMMON-LISP____CDR.html">cdr</a> x))))
+                       (t (return y))))
+(C B A)
+ACL2 !&gt;</pre> 
+ 
+ <p>This example illustrates the basic operation of <span class="v">DO</span> <span class="v">loop$</span> 
+ expressions.</p> 
+ 
+ <ul> 
+ 
+ <li>Initially, variables are initialized according to the <span class="v">WITH</span> 
+ clauses: for each binding <span class="v">WITH Vi = Ei</span>, we say that <span class="v">Vi</span> is a 
+ <i><span class="v">WITH</span>-bound variable</i>, and <span class="v">Vi</span> is initially bound to the value 
+ of <span class="v">Ei</span>. 
+ 
+ <ul><li>In this example, <span class="v">x</span> is initially bound to the list <span class="v">(a b c)</span> 
+ and <span class="v">y</span> is initially bound to <span class="v">nil</span>.</li></ul>
+</li> 
+ 
+ <li>Then, the <i>loop body</i> — i.e., the term after the <span class="v">DO</span> 
+ keyword — is repeatedly evaluated.  An update to <span class="v">WITH</span>-bound 
+ variable <span class="v">Vj</span> occurs whenever an expression <span class="v">(setq Vj Ej)</span> is 
+ encountered while evaluating the loop body, binding <span class="v">Vj</span> to the value of 
+ <span class="v">Ej</span> (which may reference the current values of <span class="v">WITH</span>-bound variables). 
+ 
+ <ul><li>In this example, as long is <span class="v">x</span> is a cons, <span class="v">y</span> is assigned to 
+ <span class="v">(<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CAR.html">car</a> x) y)</span> and then <span class="v">x</span> is assigned to the <span class="v">cdr</span> of its 
+ current value.</li></ul>
+</li> 
+ 
+ <li>Ultimately an expression <span class="v">(RETURN E)</span> should be encountered, in which 
+ case the value of <span class="v">E</span> is returned — where as before, <span class="v">E</span> may 
+ reference the current values of <span class="v">WITH</span>-bound variables. 
+ 
+ <ul><li>In this example, when <span class="v">x</span> is not a cons (and hence is, in fact, 
+ <span class="v">nil</span>), the current value of <span class="v">y</span> is returned as the value of the 
+ <span class="v">loop$</span> expression.  By this point each element of the initial value of 
+ <span class="v">x</span> has been pushed onto <span class="v">y</span>, so the value <span class="v">(c b a)</span> is 
+ returned.</li></ul>
+</li> 
+ 
+ </ul> 
+ 
+ <p>Note that <span class="v">progn</span> is permitted as shown, to connect a sequence of 
+ expressions.  Indeed, that is how more than one assignment is accomplished; 
+ unlike Common Lisp, the <span class="v">DO</span> keyword is followed by exactly one expression, 
+ so <span class="v">DO expr1 expr2</span> is illegal in ACL2 but <span class="v">DO (<a href="COMMON-LISP____PROGN.html">progn</a> expr1 expr2)</span> is 
+ fine.</p> 
+ 
+ <p>Also note that the <span class="v">WITH</span>-bound variables are initialized sequentially: 
+ later bindings may reference values of earlier ones, for example as 
+ follows.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____LOOP_42.html">loop$</a> with x = (<a href="COMMON-LISP_____A2.html">*</a> 3 4) with y = (<a href="COMMON-LISP_____A2.html">*</a> 10 x) do (return (<a href="COMMON-LISP____LIST.html">list</a> y)))
+(120)
+ACL2 !&gt;</pre> 
+ 
+ <p><b>Parallel Assignment Using <span class="v">Mv-setq</span></b></p> 
+ 
+ <p>ACL2 also supports parallel assignment to two or more variables, using 
+ <span class="v">mv-setq</span>.  The following is equivalent to the example immediately 
+ above.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____LOOP_42.html">loop$</a> with x = '(a b c)
+               with y = nil
+               do (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____CONSP.html">consp</a> x)
+                         (mv-setq (x y)
+                                  (<a href="ACL2____MV.html">mv</a> (<a href="COMMON-LISP____CDR.html">cdr</a> x) (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CAR.html">car</a> x) y))))
+                        (t (return y))))
+(C B A)
+ACL2 !&gt;</pre> 
+ 
+ <p>Thus, the first argument of an <span class="v">mv-setq</span> call is not evaluated, and is a 
+ list of distinct variables of length at least 2.  The second argument is any 
+ expression that returns multiple values consistent with the first argument 
+ — ``consistent'' in the sense that the number of values returned equals 
+ the number of variables in the first argument and stobjs must match up.  Thus, 
+ the rules for <span class="v">(mv-setq vars expr)</span> are the same as for <span class="v">(<a href="ACL2____MV-LET.html">mv-let</a> vars
+ expr ...)</span>.</p> 
+ 
+ <p><b>The <span class="v">FINALLY</span> Clause</b></p> 
+ 
+ <p>We have seen the <span class="v">loop$</span> keywords <span class="v">WITH</span> and <span class="v">DO</span>.  A third 
+ <span class="v">loop$</span> keyword, <span class="v">FINALLY</span>, is also supported.  Here is a variant of the 
+ preceding example that illustrates the use of <span class="v">FINALLY</span>.  The iteration 
+ stops with the <span class="v">(loop-finish)</span> form this time, rather than with a call of 
+ <span class="v">return</span>.  Execution of <span class="v">(loop-finish)</span> passes control to the the 
+ <span class="v">FINALLY</span> clause, which is executed just like the <span class="v">DO</span> body but with a 
+ single pass, thus determining the value of the <span class="v">loop$</span> — in this 
+ example, returning the final value of <span class="v">y</span>.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____LOOP_42.html">loop$</a> with x = '(a b c)
+              with y = nil
+              do (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____CONSP.html">consp</a> x)
+                        (<a href="COMMON-LISP____PROGN.html">progn</a> (setq y (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CAR.html">car</a> x) y))
+                               (setq x (<a href="COMMON-LISP____CDR.html">cdr</a> x))))
+                       (t (loop-finish)))
+              finally (return y))
+(C B A)
+ACL2 !&gt;</pre> 
+ 
+ <p>This example illustrates that <span class="v">(loop-finish)</span> terminates the iteration, 
+ passing control to the <span class="v">FINALLY</span> clause if there is one.  The <span class="v">FINALLY</span> 
+ clause is evaluated under the current bindings of the <span class="v">WITH</span>-bound 
+ variables, just as a <span class="v">DO</span> body is executed (but with a single pass rather 
+ than iteration).</p> 
+ 
+ <p>The value returned by a <span class="v">DO</span> <span class="v">loop$</span> expression is <span class="v">nil</span> when no 
+ <span class="v">return</span> expression is evaluated (or more generally, a suitable value 
+ consistent with the <span class="v">:VALUES</span> keyword discussed below).  Here is an 
+ example, which illustrates an error that may be easy to commit.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____LOOP_42.html">loop$</a> with x = '(a b c)
+              with y = nil
+              do (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____CONSP.html">consp</a> x)
+                        (<a href="COMMON-LISP____PROGN.html">progn</a> (setq y (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CAR.html">car</a> x) y))
+                               (setq x (<a href="COMMON-LISP____CDR.html">cdr</a> x))))
+                       (t (loop-finish)))
+              finally (<a href="COMMON-LISP____LENGTH.html">length</a> y))
+NIL
+ACL2 !&gt;</pre> 
+ 
+ <p>Presumably the intention was to return the length of <span class="v">y</span>, which in this 
+ case would be 3.  But then the <span class="v">FINALLY</span> clause should have been 
+ <span class="v">(return (<a href="COMMON-LISP____LENGTH.html">length</a> y))</span>.</p> 
+ 
+ <p><b>The <span class="v">:VALUES</span> Keyword</b></p> 
+ 
+ <p>The <span class="v">:VALUES</span> keyword is necessary for a <span class="v">loop$</span> expression that 
+ returns a <a href="ACL2____STOBJ.html">stobj</a> or <a href="ACL2____MULTIPLE-VALUE.html">multiple-value</a>s.  When the <span class="v">:VALUES</span> 
+ keyword is used, the syntax is <span class="v">:VALUES (v0 ... vk)</span>, where each <span class="v">vi</span> is 
+ either <span class="v">nil</span> or a stobj name: <span class="v">:VALUES (nil)</span> denotes return of a single 
+ ordinary value; <span class="v">:VALUES (<a href="ACL2____S.html">s</a>)</span> denotes return of a single value that is a 
+ stobj named <span class="v">s</span>; and <span class="v">:VALUES (v0 ... vk)</span> for k &gt; 0 denotes return 
+ of k+1 values, where <span class="v">vi</span> is <span class="v">nil</span> if the ith returned value is an 
+ ordinary value, and otherwise <span class="v">vi</span> is the name of the stobj returned as 
+ the ith value.  No stobj name may be duplicated, and <span class="v">:VALUES</span> must appear 
+ between the <span class="v">DO</span> loop keyword and the <span class="v">DO</span> body.  Let's look at an 
+ example.</p> 
+ 
+ <p>Below we introduce a <a href="ACL2____STOBJ.html">stobj</a> and add a <a href="ACL2____WARRANT.html">warrant</a> for its accessor 
+ and updater.  Warrants are necessary for functions called in <span class="v">DO</span> bodies 
+ and <span class="v">FINALLY</span> clauses in order for those forms to be evaluated.  See <a href="ACL2____LOOP_42.html">loop$</a> for a discussion of the necessity of such warrants.  The two <span class="v">loop$</span> 
+ expressions are similar in nature to those above, first without and then with 
+ a <span class="v">FINALLY</span> clause; also see the discussion below.  All forms below 
+ complete successfully.</p> 
+ 
+ <pre class="code">(<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "projects/apply/top" :dir :system)
+(<a href="ACL2____DEFSTOBJ.html">defstobj</a> st fld)
+(<a href="ACL2____DEFWARRANT.html">defwarrant</a> fld)
+(<a href="ACL2____DEFWARRANT.html">defwarrant</a> update-fld)
+; Check that (fld st) is currently nil.
+(<a href="ACL2____ASSERT-EVENT.html">assert-event</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (fld st) nil))
+(<a href="ACL2____LOOP_42.html">loop$</a> with x = '(1 2 3)
+       do
+       :values (st)
+       (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____ENDP.html">endp</a> x)
+              (return st))
+             (t (mv-setq (st x)
+                         (<a href="COMMON-LISP____LET.html">let</a> ((st (update-fld (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CAR.html">car</a> x)
+                                                     (fld st))
+                                               st)))
+                           (<a href="ACL2____MV.html">mv</a> st (<a href="COMMON-LISP____CDR.html">cdr</a> x)))))))
+(<a href="ACL2____ASSERT-EVENT.html">assert-event</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (fld st) '(3 2 1)))
+(update-fld nil st)
+(<a href="ACL2____ASSERT-EVENT.html">assert-event</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (fld st) nil))
+(<a href="ACL2____LOOP_42.html">loop$</a> with x = '(1 2 3)
+       do
+       :values (st)
+       (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____ENDP.html">endp</a> x)
+              (loop-finish))
+             (t (<a href="COMMON-LISP____PROGN.html">progn</a> (setq st
+                             (update-fld (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CAR.html">car</a> x)
+                                               (fld st))
+                                         st))
+                       (setq x (<a href="COMMON-LISP____CDR.html">cdr</a> x)))))
+       finally (return st))
+(<a href="ACL2____ASSERT-EVENT.html">assert-event</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (fld st) '(3 2 1)))</pre> 
+ 
+ <p>These loops are similar to those we saw earlier, but this time, when we pop 
+ values from <span class="v">x</span> they go into a stobj.  Since we return that stobj, <span class="v">st</span>, 
+ the <span class="v">:VALUES</span> is <span class="v">(st)</span>.  One might expect it to be <span class="v">st</span> instead, but 
+ <span class="v">:VALUES</span> is always a list; when a single value is returned, <span class="v">:VALUES</span> 
+ is a one-element list.  Thus, the default for <span class="v">:VALUES</span> is <span class="v">(nil)</span>.</p> 
+ 
+ <p>Notice that the examples above apply <span class="v">setq</span> to <span class="v">st</span>.  This 
+ illustrates that a variable assigned by <span class="v">setq</span> or <span class="v">mv-setq</span> must either 
+ be declared in a <span class="v">WITH</span> clause or be a known stobj.  Of course, here 
+ <span class="v">st</span> is a known stobj.  In fact, stobjs are not allowed to be declared in 
+ <span class="v">WITH</span> clauses (and that is not necessary for assigning to them).</p> 
+ 
+ <p><b>The <span class="v">OF-TYPE</span> Keyword</b></p> 
+ 
+ <p>So far our examples have all involved <span class="v">loop$</span> expressions that are 
+ evaluated directed at the ACL2 prompt.  These do not require the <span class="v">OF-TYPE</span> 
+ keyword described in this section.  But <span class="v">loop$</span> expressions may also appear 
+ in definitions.  When these definitions are to be <a href="ACL2____GUARD.html">guard</a>-verified, 
+ <span class="v">OF-TYPE</span> keyword may be critical.</p> 
+ 
+ <p>Consider the following example, which searches for an even number in a 
+ given list of integers, returning <span class="v">t</span> if one is found and else <span class="v">nil</span>. 
+ As usual, we start by including the usual book for reasoning about 
+ <span class="v">loop$</span>.</p> 
+ 
+ <pre class="code">(<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "projects/apply/top" :dir :system)
+(<a href="COMMON-LISP____DEFUN.html">defun</a> has-evenp (x)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____INTEGER-LISTP.html">integer-listp</a> x)))
+  (<a href="ACL2____LOOP_42.html">loop$</a> with temp of-type (satisfies integer-listp) = x
+         do
+         (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____ENDP.html">endp</a> temp)
+                (return nil))
+               ((<a href="COMMON-LISP____EVENP.html">evenp</a> (<a href="COMMON-LISP____CAR.html">car</a> temp))
+                (return t))
+               (t
+                (setq temp (<a href="COMMON-LISP____CDR.html">cdr</a> temp))))))</pre> 
+ 
+ <p>We see that the expression immediately following <span class="v">OF-TYPE</span> is a legal 
+ <a href="ACL2____TYPE-SPEC.html">type-spec</a>, in this case expressing that <span class="v">(<a href="ACL2____INTEGER-LISTP.html">integer-listp</a> temp)</span> holds 
+ for every value of <span class="v">temp</span> during execution of the <span class="v">loop$</span>.  Let's see 
+ why this use of <span class="v">OF-TYPE</span> is necessary.  When it is omitted, guard 
+ verification fails with the following top-level checkpoints.</p> 
+ 
+ <pre class="code">Subgoal 1.2
+(<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____AND.html">AND</a> (<a href="ACL2____ALISTP.html">ALISTP</a> ALIST)
+              (<a href="COMMON-LISP____NOT.html">NOT</a> (<a href="COMMON-LISP____CONSP.html">CONSP</a> (<a href="COMMON-LISP____CDR.html">CDR</a> (ASSOC-EQ-SAFE 'TEMP ALIST)))))
+         (<a href="COMMON-LISP____NOT.html">NOT</a> (<a href="COMMON-LISP____CDR.html">CDR</a> (ASSOC-EQ-SAFE 'TEMP ALIST))))
+
+Subgoal 1.1
+(<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____AND.html">AND</a> (<a href="ACL2____ALISTP.html">ALISTP</a> ALIST)
+              (<a href="COMMON-LISP____CONSP.html">CONSP</a> (<a href="COMMON-LISP____CDR.html">CDR</a> (ASSOC-EQ-SAFE 'TEMP ALIST))))
+         (<a href="COMMON-LISP____INTEGERP.html">INTEGERP</a> (<a href="COMMON-LISP____CADR.html">CADR</a> (ASSOC-EQ-SAFE 'TEMP ALIST))))</pre> 
+ 
+ <p>To understand these checkpoints we need to understand a bit about how ACL2 
+ gives a semantics to <span class="v">DO</span> <span class="v">loop$</span> expressions (as we explain in more 
+ detail in the section on Semantics below).  In the ACL2 logic, a <span class="v">DO</span> 
+ <span class="v">loop$</span> expression is represented as a transformation on the variable, 
+ <span class="v">alist</span>, an association list that assigns a value to every variable in the 
+ expression.  This alist is transformed by each iteration through the loop.</p> 
+ 
+ <p>The value of the variable <span class="v">temp</span> in <span class="v">alist</span> is <span class="v">(assoc-eq-safe
+ 'temp alist)</span>, where <span class="v">assoc-eq-safe</span> is just a variant of <span class="tt"><a href="COMMON-LISP____ASSOC.html">assoc</a></span> 
+ whose guard makes no requirements on the alist.  The first checkpoint 
+ above (Subgoal 1.2) thus says that if the value of <span class="v">temp</span> is not a cons, 
+ then it's <span class="v">nil</span>.  That requirement comes from the expression, <span class="v">(<a href="COMMON-LISP____ENDP.html">endp</a>
+ temp)</span>, since the guard of <span class="tt"><a href="COMMON-LISP____ENDP.html">endp</a></span> is that its argument is a cons or 
+ <span class="v">nil</span>.  The second checkpoint (Subgoal 1.1) says that if the value of 
+ <span class="v">temp</span> is a cons, then its <span class="v">car</span> is an integer.  That requirement comes 
+ from the expression <span class="v">(<a href="COMMON-LISP____EVENP.html">evenp</a> (<a href="COMMON-LISP____CAR.html">car</a> temp))</span>, since the guard for <span class="tt"><a href="COMMON-LISP____EVENP.html">evenp</a></span> 
+ requires its argument to be an integer.</p> 
+ 
+ <p>When we add the restriction provided by the <span class="v">OF-TYPE</span> keyword that 
+ <span class="v">temp</span> satisfies <span class="tt"><a href="ACL2____INTEGER-LISTP.html">integer-listp</a></span>, the checkpoints each get the added 
+ hypothesis <span class="v">(<a href="ACL2____INTEGER-LISTP.html">integer-listp</a> (<a href="COMMON-LISP____CDR.html">cdr</a> (assoc-eq-safe 'temp alist)))</span>.  That 
+ allows the guard proof to go through.  This addition also imposes that same 
+ requirement on the initial alist, but it is discharged because the guard for 
+ <span class="v">has-evenp</span> specifies <span class="v">(<a href="ACL2____INTEGER-LISTP.html">integer-listp</a> x)</span> and <span class="v">temp</span> is initially 
+ assigned to <span class="v">x</span>.  Importantly, use of the <span class="v">OF-TYPE</span> keyword on a 
+ variable imposes a guard proof obligation for every assignment to that 
+ variable, that the new value of that variable also satisfies the given type. 
+ In this case, this means that under the hypotheses that <span class="v">(<a href="COMMON-LISP____ENDP.html">endp</a> temp)</span> and 
+ <span class="v">(<a href="COMMON-LISP____EVENP.html">evenp</a> (<a href="COMMON-LISP____CAR.html">car</a> temp))</span> are false, and also assuming that <span class="v">temp</span> satisfies 
+ <span class="v">integer-listp</span> — where here, <span class="v">temp</span> is <span class="v">(<a href="COMMON-LISP____CDR.html">cdr</a> (assoc-eq-safe
+ 'temp alist))</span> — then <span class="v">(<a href="COMMON-LISP____CDR.html">cdr</a> temp</span>) satisfies <span class="v">integer-listp</span>. 
+ ACL2 discharges this requirement automatically.</p> 
+ 
+ <p><b>The <span class="v">:GUARD</span> Keyword</b></p> 
+ 
+ <p>Consider the following definition, which is identical to the one for 
+ <span class="v">has-evenp</span> displayed above except that instead of using the <span class="v">OF-TYPE</span> 
+ keyword, it uses the <span class="v">:GUARD</span> keyword.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> has-evenp (x)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____INTEGER-LISTP.html">integer-listp</a> x)))
+  (<a href="ACL2____LOOP_42.html">loop$</a> with temp = x
+         do
+         :guard (<a href="ACL2____INTEGER-LISTP.html">integer-listp</a> temp)
+         (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____ENDP.html">endp</a> temp)
+                (return nil))
+               ((<a href="COMMON-LISP____EVENP.html">evenp</a> (<a href="COMMON-LISP____CAR.html">car</a> temp))
+                (return t))
+               (t
+                (setq temp (<a href="COMMON-LISP____CDR.html">cdr</a> temp))))))</pre> 
+ 
+ <p>This definition is accepted by ACL2 for much the same reason that the 
+ preceding one was accepted.  The difference is that while the <span class="v">OF-TYPE</span> 
+ keyword adds a requirement at every assignment of the variable, the 
+ <span class="v">:GUARD</span> imposes the invariant that when the guard holds entering the 
+ <span class="v">loop$</span> body, it also holds when the <span class="v">loop$</span> body is next entered.  Thus 
+ we see the following in the <span class="v">Goal</span> generated for the guard conjecture, 
+ where <span class="v">new-alist</span> is let-bound (not shown here) to the result of updating 
+ <span class="v">alist</span> after one iteration through the loop, and where <span class="v">(<a href="COMMON-LISP____EQUAL.html">equal</a> exit-flg
+ nil)</span> indicates that another iteration is pending (because neither a 
+ <span class="v">return</span> nor a <span class="v">loop-finish</span> was executed).</p> 
+ 
+ <pre class="code">(<a href="ACL2____IMPLIES.html">IMPLIES</a> (<a href="COMMON-LISP____AND.html">AND</a> (<a href="COMMON-LISP____AND.html">AND</a> (<a href="ACL2____ALISTP.html">ALISTP</a> ALIST)
+                   (<a href="ACL2____INTEGER-LISTP.html">INTEGER-LISTP</a> (<a href="COMMON-LISP____CDR.html">CDR</a> (ASSOC-EQ-SAFE 'TEMP ALIST))))
+              (<a href="COMMON-LISP____EQUAL.html">EQUAL</a> EXIT-FLG NIL))
+         (<a href="COMMON-LISP____AND.html">AND</a> (<a href="ACL2____ALISTP.html">ALISTP</a> NEW-ALIST)
+              (<a href="ACL2____INTEGER-LISTP.html">INTEGER-LISTP</a> (<a href="COMMON-LISP____CDR.html">CDR</a> (ASSOC-EQ-SAFE 'TEMP NEW-ALIST)))))</pre> 
+ 
+ <p><b>The <span class="v">:MEASURE</span> Keyword</b></p> 
+ 
+ <p>The discussion above doesn't address the obvious possibility that a <span class="v">DO</span> 
+ <span class="v">loop$</span> may not terminate.  Consider the following example, which not only 
+ assumes that the usual book has been included as discussed above, but also 
+ assumes that the form <span class="v">(<a href="ACL2____DEFWARRANT.html">defwarrant</a> princ$)</span> has been evaluated.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____LOOP_42.html">loop$</a> with x = '(100 200 300)
+              do
+              :values (<a href="ACL2____STATE.html">state</a>)
+              (setq state (<a href="ACL2____PRINC_42.html">princ$</a> (<a href="COMMON-LISP____CAR.html">car</a> x) *standard-co* state)))
+
+
+ACL2 Error in TOP-LEVEL:  No :MEASURE was provided after the DO operator
+and we failed to find a likely measure.  Please supply a :MEASURE in
+(<a href="ACL2____LOOP_42.html">LOOP$</a> WITH X = '(100 200 300)
+       DO :VALUES (<a href="ACL2____STATE.html">STATE</a>)
+       (SETQ STATE
+             (<a href="ACL2____PRINC_42.html">PRINC$</a> (<a href="COMMON-LISP____CAR.html">CAR</a> X) *STANDARD-CO* STATE))).
+See :DOC loop$.
+
+ACL2 !&gt;</pre> 
+ 
+ <p>As suggested by the error message, ACL2 has tried to guess a measure, i.e., 
+ a term whose value is expected to decrease on each successive iteration.  This 
+ notion of ``decrease'' is the expected one when the value of the measure is a 
+ natural number: smaller in the sense of <span class="v">&lt;</span>.  In general, the measure 
+ decreases in the sense of <span class="v">L&lt;</span> when <span class="v">lex-fix</span> is applied to each 
+ argument; see <a href="ACL2____L_C3.html">L&lt;</a>.</p> 
+ 
+ <p>Of course, no measure decreases in the example above, because the values of 
+ the variables don't change with each iteration.  We can see what happens when 
+ we supply an explicit measure: the body is evaluated, as evidenced by the 
+ appeaance of <span class="v">100</span> in the output, but then the measure is evaluated and is 
+ seen not to have decreased from what it was at the start of the previous 
+ iteration.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____LOOP_42.html">loop$</a> with x = '(100 200 300)
+              do
+              :values (<a href="ACL2____STATE.html">state</a>)
+              :measure (<a href="ACL2____ACL2-COUNT.html">acl2-count</a> x)
+              (setq state (<a href="ACL2____PRINC_42.html">princ$</a> (<a href="COMMON-LISP____CAR.html">car</a> x) *standard-co* state)))
+100
+
+HARD ACL2 ERROR in DO$:  The measure, (<a href="ACL2____ACL2-COUNT.html">ACL2-COUNT</a> X), used in the do
+loop$ statement
+(<a href="ACL2____LOOP_42.html">LOOP$</a> WITH X = '(100 200 300)
+       DO :VALUES (<a href="ACL2____STATE.html">STATE</a>)
+       :MEASURE (<a href="ACL2____ACL2-COUNT.html">ACL2-COUNT</a> X)
+       (SETQ STATE
+             (<a href="ACL2____PRINC_42.html">PRINC$</a> (<a href="COMMON-LISP____CAR.html">CAR</a> X) *STANDARD-CO* STATE)))
+
+failed to decrease!  In particular, when the incoming alist (an alist
+of dotted pairs specifying the values of all the variables) was
+((X 100 200 300)
+ (<a href="ACL2____STATE.html">STATE</a> .
+        ACL2_INVISIBLE::|The Live State Itself|))
+the alist produced by the do body was
+((<a href="ACL2____STATE.html">STATE</a> .
+        ACL2_INVISIBLE::|The Live State Itself|)
+ (X 100 200 300))
+and the measure went from
+603
+to
+603.
+Logically, do$ returns ACL2_INVISIBLE::|The Live State Itself| in this
+situation.
+
+
+
+ACL2 Error in TOP-LEVEL:  Evaluation aborted.  To debug see :DOC print-
+gv, see :DOC trace, and see :DOC wet.
+
+ACL2 !&gt;</pre> 
+ 
+ <p>Presumably the following is what was intended.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____LOOP_42.html">loop$</a> with x = '(100 200 300)
+              do
+              :values (<a href="ACL2____STATE.html">state</a>)
+              :measure (<a href="ACL2____ACL2-COUNT.html">acl2-count</a> x)
+              (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____ATOM.html">atom</a> x)
+                  (return state)
+                (<a href="COMMON-LISP____PROGN.html">progn</a>
+                  (setq state (<a href="ACL2____PRINC_42.html">princ$</a> (<a href="COMMON-LISP____CAR.html">car</a> x) *standard-co* state))
+                  (setq x (<a href="COMMON-LISP____CDR.html">cdr</a> x)))))
+100200300&lt;state&gt;
+ACL2 !&gt;</pre> 
+ 
+ <p>In fact, the <span class="v">:MEASURE</span> can be omitted in this case; ACL2 is able to 
+ guess <span class="v">(<a href="ACL2____ACL2-COUNT.html">ACL2-COUNT</a> X)</span>.</p> 
+ 
+ <p><a href="ACL2____GUARD.html">Guard</a> verification requires a proof that the measure does indeed go 
+ down in the sense of <span class="v">L&lt;</span>, after applying <span class="v">lex-fix</span> to the arguments; 
+ see <a href="ACL2____L_C3.html">L&lt;</a>.  Fortunately, guard verification takes advantage of 
+ information specified by <span class="v">OF-TYPE</span> and <span class="v">:GUARD</span> keywords.  For example, 
+ the following two definitions are admitted (after the usual initial 
+ <span class="v">include-book</span> form), even though termination would not be provable without 
+ the <span class="v">OF-TYPE</span> expression in the first and the DO body's <span class="v">:GUARD</span> in the 
+ second; consider the case that <span class="v">n</span> is -1.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> foo (<a href="COMMON-LISP____MAX.html">max</a>)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____NATP.html">natp</a> max)))
+  (<a href="ACL2____LOOP_42.html">loop$</a> with n of-type (satisfies natp) = max
+         do
+         (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP_____D3.html">=</a> n 0)
+             (return 'stop)
+           (setq n (<a href="COMMON-LISP____-.html">-</a> n 1)))))
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> foo (<a href="COMMON-LISP____MAX.html">max</a>)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____NATP.html">natp</a> max)))
+  (<a href="ACL2____LOOP_42.html">loop$</a> with n = max
+         do
+         :guard (<a href="ACL2____NATP.html">natp</a> n)
+         (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP_____D3.html">=</a> n 0)
+             (return 'stop)
+           (setq n (<a href="COMMON-LISP____-.html">-</a> n 1)))))</pre> 
+ 
+ <p><b>A More Complex Example</b></p> 
+ 
+ <p>We conclude with an example presented in the documentation for <span class="tt"><a href="ACL2____LOOP_42.html">loop$</a></span> that illustrates all the features above.  Notice that the <span class="v">:GUARD</span> 
+ keyword may appear not only in the <span class="v">DO</span> body but also in the <span class="v">FINALLY</span> 
+ clause, to specify that the indicated guard holds upon entry to the 
+ <span class="v">FINALLY</span> clause.  Here we assume that we have already evaluated not only 
+ the usual <span class="v">include-book</span> form, but also the <span class="v">defstobj</span> and 
+ <span class="v">defwarrant</span> forms above.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> test-loop$ (i0 max st)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____NATP.html">natp</a> i0) (<a href="ACL2____NATP.html">natp</a> max))
+                  :stobjs st))
+  (<a href="ACL2____LOOP_42.html">loop$</a> with i of-type (satisfies natp) = i0
+         with cnt of-type integer = 0
+         do
+         :measure (<a href="ACL2____NFIX.html">nfix</a> (<a href="COMMON-LISP____-.html">-</a> max i))
+         :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____NATP.html">natp</a> max)
+                     (<a href="ACL2____NATP.html">natp</a> cnt)
+                     (<a href="ACL2____STP.html">stp</a> st))
+         :values (nil st) ; shape of return; can be omitted when it's (nil)
+         (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP_____E3_D3.html">&gt;=</a> i max)
+             (loop-finish)
+           (<a href="COMMON-LISP____PROGN.html">progn</a> (setq st (update-fld i st))
+                  (mv-setq (cnt i)
+                           (<a href="ACL2____MV.html">mv</a> (<a href="COMMON-LISP_____B2.html">+</a> 1 cnt) (<a href="COMMON-LISP_____B2.html">+</a> 1 i)))))
+         finally
+         :guard (<a href="ACL2____STP.html">stp</a> st)
+         (return
+          (<a href="ACL2____MV.html">mv</a> (<a href="COMMON-LISP____LIST.html">list</a> 'from i0 'to max 'is cnt 'steps 'and 'fld '= (fld st))
+              st))))</pre> 
+ 
+ <p>Notice that any variables bound above the <span class="v">loop$</span> may appear in it, for 
+ example, the formal parameters of this function.  But only variables that are 
+ <span class="v">WITH</span>-bound or declared as <a href="ACL2____STOBJ.html">stobj</a>s may be assigned with <span class="v">setq</span> or 
+ <span class="v">mv-setq</span>.  The <span class="v">:GUARD</span> of <span class="v">(<a href="ACL2____STP.html">stp</a> st)</span> is necessary, because ACL2 
+ does not automatically infer that stobj recognizer calls hold inside 
+ <span class="v">loop$</span> expressions the way it does in ordinary bodies of <span class="tt"><a href="COMMON-LISP____DEFUN.html">defun</a></span> 
+ forms.</p> 
+ 
+ <p>We can evaluate the function above, as in the following example.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(test-loop$ 3 8 st)
+((FROM 3 TO 8 IS 5 STEPS AND FLD = 7)
+ &lt;st&gt;)
+ACL2 !&gt;</pre> 
+ 
+ <h3>SYNTAX</h3> 
+ 
+ <pre class="code">General Form:
+
+(<a href="ACL2____LOOP_42.html">LOOP$</a> WITH var1 OF-TYPE spec1 = init1 ; a WITH declaration
+       WITH var2 OF-TYPE spec2 = init2
+       ...
+       DO
+       :measure m
+       :guard do-guard
+       :values v
+       do-body
+       FINALLY
+       :guard fin-guard
+       fin-body)</pre> 
+ 
+ <p>where much of that is optional: ``<span class="v">OF-TYPE speci</span>'', ``<span class="v">=
+ initi</span>'' (when ``<span class="v">OF-TYPE speci</span>'' is present), ``<span class="v">:MEASURE m</span>'', the 
+ two ``<span class="v">:GUARD</span> ...'' clauses, ``<span class="v">:VALUES v</span>'', and ``<span class="v">FINALLY
+ fin-body</span>''.  If the <span class="v">:MEASURE</span> is omitted, ACL2 tries to guess a likely 
+ measure using the same heuristic it does with recursive <span class="tt"><a href="COMMON-LISP____DEFUN.html">defun</a></span>s.  If 
+ <span class="v">:VALUES</span> is omitted then <span class="v">v</span> defaults to <span class="v">(nil)</span>; it indicates the 
+ shape of the return value for the <span class="v">loop$</span> expression.</p> 
+ 
+ <p><span class="v">Do-body</span> must be a cons, not an atom, as must each of the following 
+ that is supplied: <span class="v">m</span>, <span class="v">do-guard</span>, <span class="v">v</span>, <span class="v">fin-guard</span>, and 
+ <span class="v">fin-body</span>.</p> 
+ 
+ <p>All ACL2 function symbols in the measure <span class="v">m</span> and the two bodies must be 
+ <a href="ACL2____BADGE.html">badge</a>d so <span class="tt"><a href="ACL2____APPLY_42.html">apply$</a></span> can handle them.  Furthermore, they must be 
+ <a href="ACL2____WARRANT.html">warrant</a>ed if proofs are to be done about them or if they are in <a href="ACL2____LOGIC.html">logic</a> mode and are called during evaluation.</p> 
+ 
+ <p>The do- and fin- bodies allow a sort of ``DO-body term''.  These DO-body 
+ terms are as follows, informally (in particular we are ignoring here 
+ distinctions between translated and untranslated terms; see <a href="ACL2____TERM.html">term</a>).  As 
+ usual, the restrictions on return values apply only to code, not to terms 
+ occurring in theorem statements.</p> 
+ 
+ <ul> 
+ 
+ <li>Every ordinary term that returns a single, non-stobj value</li> 
+ 
+ <li>An <span class="v">IF</span> call whose first argument is an ordinary term (which 
+ necessarily returns a single, non-stobj value) and whose true and false 
+ branches are DO-body terms</li> 
+ 
+ <li>A <span class="v">LET</span>, <span class="v">LET*</span>, or <span class="v">MV-LET</span> expression, subject to the following 
+ restrictions (unless the term is an ordinary term). 
+ 
+ <ul> 
+ 
+ <li>The terms in the bindings are all ordinary terms.</li> 
+ 
+ <li>The body is a DO-body term.</li> 
+ 
+ <li>No variable bound in the bindings is <span class="v">WITH</span>-bound, a known <a href="ACL2____STOBJ.html">stobj</a>, or a variable occurring free in the surrounding DO loop$ 
+ expression.</li> 
+ 
+ </ul>
+</li> 
+ 
+ <li>
+<span class="v">(<a href="COMMON-LISP____PROGN.html">PROGN</a> term1 term2 ... termk)</span>, where each <span class="v">termi</span> is a DO-body 
+ term; also <span class="v">(PROG2 term1 term2)</span> in that case</li> 
+ 
+ <li>
+<span class="v">(RETURN term)</span>, where <span class="v">term</span> is an ordinary term</li> 
+ 
+ <li>
+<span class="v">(LOOP-FINISH)</span>, but only in a DO body, not in a <span class="v">FINALLY</span> 
+ clause</li> 
+ 
+ <li>
+<span class="v">(SETQ var term)</span>, where the variable <span class="v">var</span> is declared in a 
+ <span class="v">WITH</span> declaration or is a stobj name, and <span class="v">term</span> is an ordinary term 
+ that returns a single value, that value being a stobj of type <span class="v">var</span> if 
+ <span class="v">var</span> is a stobj</li> 
+ 
+ <li>
+<span class="v">(MV-SETQ (var0 ... varn) term)</span> for two or more distinct variables 
+ <span class="v">vari</span>, where each <span class="v">vari</span> is declared in a <span class="v">WITH</span> declaration or is a 
+ stobj name, and <span class="v">term</span> is an ordinary term that returns n+1 values, where 
+ if <span class="v">vari</span> is a stobj then the ith value returned is of that type</li> 
+ 
+ </ul> 
+ 
+ <p>Notice that in code, where restrictions on return values are in force, no 
+ stobj may be let-bound in a <span class="v">DO</span> body or <span class="v">FINALLY</span> clause.  This is due 
+ not only to the explicit restriction above for <span class="v">LET</span>, <span class="v">LET*</span>, and 
+ <span class="v">MV-LET</span> expressions, but also due to the first condition above, on 
+ ordinary terms returning a single, non-stobj value.</p> 
+ 
+ <p>We conclude this section by discussing some syntactic restrictions.</p> 
+ 
+ <p>The following restriction applies to <span class="v">loop$</span> expressions meeting the 
+ following two conditions: <span class="v">:VALUES</span> specifies other than the default of 
+ <span class="v">(NIL)</span>, and there is at least one <span class="v">loop-finish</span> expression in the 
+ <span class="v">loop$</span> body.  In that case, there must be a <span class="v">FINALLY</span> clause that ACL2 
+ recognizes as always executing a <span class="v">return</span> call.  This makes sense, since in 
+ Common Lisp, the value returned by a <span class="v">loop</span> is <span class="v">nil</span> when ``falling 
+ through'' without executing a <span class="v">return</span>; but <span class="v">nil</span> would violate the 
+ specified <span class="v">:VALUES</span> in the case above.</p> 
+ 
+ <p>As noted above, assignments with <span class="v">setq</span> and <span class="v">mv-setq</span> may only set 
+ stobj variables and variables declared using <span class="v">WITH</span>.  This restriction 
+ applies to the innermost <span class="v">loop$</span> that contains the assignment.  The 
+ following, for example, is illegal because the <span class="v">WITH</span> declaration for 
+ <span class="v">x</span> is not in the <span class="v">loop$</span> immediately above the assignment to <span class="v">x</span> 
+ with <span class="v">setq</span>.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> do-loop-nested-outer-with-var-bad (lst)
+  (<a href="ACL2____LOOP_42.html">loop$</a> with x = lst
+         do
+         (return
+          (<a href="ACL2____LOOP_42.html">loop$</a> with temp = '(1 2 3)
+                 do
+                 (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____ENDP.html">endp</a> temp)
+                        (return (<a href="ACL2____PAIRLIS_42.html">pairlis$</a> x x)))
+                       (t (<a href="COMMON-LISP____PROGN.html">progn</a> (setq x (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CAR.html">car</a> temp) x))
+                                 (setq temp (<a href="COMMON-LISP____CDR.html">cdr</a> temp)))))))))</pre> 
+ 
+ <p>However, we expect it to be easy in general to work around this 
+ restriction.  The following definition, for example, accomplishes what was 
+ presumably intended above and is accepted by ACL2.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> do-loop-nested-outer-with-var (lst)
+  (<a href="ACL2____LOOP_42.html">loop$</a> with x = lst
+         do
+         (return
+          (<a href="ACL2____LOOP_42.html">loop$</a> with temp = '(1 2 3)
+                 with x = x
+                 do
+                 (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____ENDP.html">endp</a> temp)
+                        (return (<a href="ACL2____PAIRLIS_42.html">pairlis$</a> x x)))
+                       (t (<a href="COMMON-LISP____PROGN.html">progn</a> (setq x (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CAR.html">car</a> temp) x))
+                                 (setq temp (<a href="COMMON-LISP____CDR.html">cdr</a> temp)))))))))</pre> 
+ 
+ <p>Every <span class="v">return</span> expression in the DO body and (if present) <span class="v">FINALLY</span> 
+ clause must return a value or <a href="ACL2____MULTIPLE-VALUE.html">multiple-value</a>s consistent with what is 
+ specified by the <span class="v">:VALUES</span> keyword (by default, a single ordinary value). 
+ Note that this requirement does not tolerate the replacement of a stobj by a 
+ stobj that is congruent to it.</p> 
+ 
+ <p>It is illegal for a <span class="v">loop$</span> expression to be in the scope of function 
+ bindings of an <span class="tt"><a href="COMMON-LISP____FLET.html">flet</a></span> expression.</p> 
+ 
+ <p>As noted above, the measure, body, and <span class="v">FINALLY</span> clauses of a DO 
+ <span class="v">loop$</span> must be fully <a href="ACL2____BADGE.html">badge</a>d.</p> 
+ 
+ <p>In a function call, it is illegal for a LOOP$ expression to occur in a slot 
+ whose <a href="ACL2____ILK.html">ilk</a> is not <span class="v">nil</span>.</p> 
+ 
+ <h3>SEMANTICS</h3> 
+ 
+ <p>Consider again the initial example in the Informal Introduction above.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____LOOP_42.html">loop$</a> with x = '(a b c)
+              with y = nil
+              do (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____CONSP.html">consp</a> x)
+                        (<a href="COMMON-LISP____PROGN.html">progn</a> (setq y (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CAR.html">car</a> x) y))
+                               (setq x (<a href="COMMON-LISP____CDR.html">cdr</a> x))))
+                       (t (return y))))
+(C B A)
+ACL2 !&gt;</pre> 
+ 
+ <p>We have seen that after initializing variables using <span class="v">WITH</span> clauses, 
+ each iteration of a <span class="v">DO</span> <span class="v">loop$</span> updates those variables by evaluating 
+ the body of the loop (i.e., the term after the <span class="v">DO</span> keyword), until a 
+ <span class="v">return</span> expression is executed to return the current value of a term 
+ — in this case, the current value of the term, <span class="v">y</span>.</p> 
+ 
+ <p>Of course, <span class="v">progn</span> and <span class="v">return</span> are not ACL2 functions!  (Recall that 
+ the word ``applicative'' is part of what ``ACL2'' abbreviates.)  The following 
+ term is essentially what is produced from the <span class="v">loop$</span> expression above.  We 
+ discuss it below.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DO_42.html">DO$</a> ; Measure Function
+     (<a href="ACL2____LAMBDA_42.html">LAMBDA$</a> (ALIST)
+              (<a href="COMMON-LISP____LET.html">LET</a> ((X (<a href="COMMON-LISP____CDR.html">CDR</a> (ASSOC-EQ-SAFE 'X ALIST)))
+                    (Y (<a href="COMMON-LISP____CDR.html">CDR</a> (ASSOC-EQ-SAFE 'Y ALIST))))
+                   (<a href="ACL2____ACL2-COUNT.html">ACL2-COUNT</a> X)))
+     ; Initial Alist
+     (<a href="COMMON-LISP____LIST.html">LIST</a> (<a href="COMMON-LISP____CONS.html">CONS</a> 'X '(A B C))
+           (<a href="COMMON-LISP____CONS.html">CONS</a> 'Y NIL))
+     ; Body Function
+     (<a href="ACL2____LAMBDA_42.html">LAMBDA$</a> (ALIST)
+              (<a href="COMMON-LISP____LET.html">LET</a> ((X (<a href="COMMON-LISP____CDR.html">CDR</a> (ASSOC-EQ-SAFE 'X ALIST)))
+                    (Y (<a href="COMMON-LISP____CDR.html">CDR</a> (ASSOC-EQ-SAFE 'Y ALIST))))
+                   (<a href="COMMON-LISP____IF.html">IF</a> (<a href="COMMON-LISP____CONSP.html">CONSP</a> X)
+                       (<a href="COMMON-LISP____LIST.html">LIST</a> NIL
+                             NIL ; irrelevant
+                             (<a href="COMMON-LISP____LIST.html">LIST</a> (<a href="COMMON-LISP____CONS.html">CONS</a> 'X (<a href="COMMON-LISP____CDR.html">CDR</a> X))
+                                   (<a href="COMMON-LISP____LIST_A2.html">LIST*</a> 'Y (<a href="COMMON-LISP____CAR.html">CAR</a> X) Y)))
+                       (<a href="COMMON-LISP____LIST.html">LIST</a> :RETURN
+                             Y
+                             (<a href="COMMON-LISP____LIST.html">LIST</a> (<a href="COMMON-LISP____CONS.html">CONS</a> 'X X) (<a href="COMMON-LISP____CONS.html">CONS</a> 'Y Y))))))
+     ... ; Other arguments are omitted here.
+)</pre> 
+ 
+ <p>The display above is approximate; in particular, it hides some logically 
+ irrelevant clutter such as <span class="tt"><a href="COMMON-LISP____DECLARE.html">declare</a></span> forms and it shows only arguments 
+ of <span class="v">do$</span> relevant to our discussion of the example above.  Also, the 
+ display employs user-level syntax (i.e., an <i>untranslated term</i>; see 
+ <a href="ACL2____TERM.html">term</a>).</p> 
+ 
+ <p>The definition of <span class="v">do$</span> is given at the end of this topic, for those who 
+ care to explore it, but this discussion is intended to be self-contained. 
+ <span class="v">Do$</span> operates by maintaining an alist that maps variables to values, for 
+ all variables referenced in the <span class="v">loop$</span> expression — though only 
+ variables that are declared in <span class="v">WITH</span> clauses or are stobjs may be 
+ modified.  This alist is updated on each iteration by calling <span class="tt"><a href="ACL2____APPLY_42.html">apply$</a></span> 
+ on the ``Body Function'' above, producing a 3-element list <span class="v">(exit-token val
+ new-alist)</span>.  If <span class="v">exit-token</span> is <span class="v">:RETURN</span> then <span class="v">val</span> is returned. 
+ But if <span class="v">exit-token</span> is <span class="v">nil</span>, then <span class="v">do$</span> is called recursively with 
+ <span class="v">new-alist</span> as its alist argument.</p> 
+ 
+ <p>To see <span class="v">do$</span> in action one can submit the following forms.  Here the 
+ body of <span class="v">f</span> is just the <span class="v">loop$</span> expression shown above.  Notice that 
+ <span class="v">f</span> is not <a href="ACL2____GUARD.html">guard</a>-verified; after submitting <span class="v">(<a href="ACL2____VERIFY-GUARDS.html">verify-guards</a> f)</span> 
+ the <span class="v">loop$</span> expression is evaluated as a Common Lisp <span class="v">loop</span> call rather 
+ than using <span class="v">do$</span>, so there would be no <a href="COMMON-LISP____TRACE.html">trace</a> output.  Don't worry 
+ about having a precise understanding of the fancy calls of <span class="tt"><a href="ACL2____TRACE_12.html">trace!</a></span>; the 
+ comments there should suffice.</p> 
+ 
+ <pre class="code">(<a href="ACL2____INCLUDE-BOOK.html">include-book</a> "projects/apply/top" :dir :system)
+(<a href="COMMON-LISP____DEFUN.html">defun</a> f ()
+  (<a href="ACL2____LOOP_42.html">loop$</a> with x = '(a b c)
+         with y = nil
+         do (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____CONSP.html">consp</a> x)
+                   (<a href="COMMON-LISP____PROGN.html">progn</a> (setq y (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CAR.html">car</a> x) y))
+                          (setq x (<a href="COMMON-LISP____CDR.html">cdr</a> x))))
+                  (t (return y)))))
+; Store the translated body function so that we can access it later
+; with (<a href="ACL2_____04.html">@</a> my-body-fn):
+(<a href="ACL2____TRACE_12.html">trace!</a> (<a href="ACL2____DO_42.html">do$</a> :entry (<a href="ACL2____F-PUT-GLOBAL.html">f-put-global</a> 'my-body-fn (<a href="COMMON-LISP____NTH.html">nth</a> 2 arglist) state)))
+; Run f to store to my-body-fn as commented above.
+(f)
+; Trace do$ calls and trace calls of apply$ on the body function.
+(<a href="ACL2____TRACE_12.html">trace!</a> (<a href="ACL2____DO_42.html">do$</a> :notinline t ; include recursive calls
+             :cond (<a href="COMMON-LISP____EQ.html">eq</a> traced-fn 'do$) ; skip *1* call
+             :entry (<a href="COMMON-LISP____LIST.html">list</a> traced-fn alist))
+        (<a href="ACL2____APPLY_42.html">apply$</a> :cond (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="COMMON-LISP____CAR.html">car</a> arglist) (<a href="ACL2_____04.html">@</a> my-body-fn))
+                :entry (<a href="COMMON-LISP____LIST.html">list</a> traced-fn
+                             (<a href="COMMON-LISP____CADR.html">cadr</a> arglist) ; the alist
+                       )))
+(f)</pre> 
+ 
+ <p>Here is the trace output from the final call of <span class="v">f</span> above; analysis 
+ follows.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(f)
+1&gt; (<a href="ACL2____DO_42.html">DO$</a> ((X A B C) (Y)))
+  2&gt; (<a href="ACL2____APPLY_42.html">APPLY$</a> (((X A B C) (Y))))
+  &lt;2 (<a href="ACL2____APPLY_42.html">APPLY$</a> (NIL NIL ((X B C) (Y A))))
+  2&gt; (<a href="ACL2____DO_42.html">DO$</a> ((X B C) (Y A)))
+    3&gt; (<a href="ACL2____APPLY_42.html">APPLY$</a> (((X B C) (Y A))))
+    &lt;3 (<a href="ACL2____APPLY_42.html">APPLY$</a> (NIL NIL ((X C) (Y B A))))
+    3&gt; (<a href="ACL2____DO_42.html">DO$</a> ((X C) (Y B A)))
+      4&gt; (<a href="ACL2____APPLY_42.html">APPLY$</a> (((X C) (Y B A))))
+      &lt;4 (<a href="ACL2____APPLY_42.html">APPLY$</a> (NIL NIL ((X) (Y C B A))))
+      4&gt; (<a href="ACL2____DO_42.html">DO$</a> ((X) (Y C B A)))
+        5&gt; (<a href="ACL2____APPLY_42.html">APPLY$</a> (((X) (Y C B A))))
+        &lt;5 (<a href="ACL2____APPLY_42.html">APPLY$</a> (:RETURN (C B A) ((X) (Y C B A))))
+      &lt;4 (<a href="ACL2____DO_42.html">DO$</a> (C B A))
+    &lt;3 (<a href="ACL2____DO_42.html">DO$</a> (C B A))
+  &lt;2 (<a href="ACL2____DO_42.html">DO$</a> (C B A))
+&lt;1 (<a href="ACL2____DO_42.html">DO$</a> (C B A))
+(C B A)
+ACL2 !&gt;</pre> 
+ 
+ <p>First consider the calls of <span class="v">do$</span> above.  You can see that <span class="v">X</span> is 
+ initially bound in the alist to <span class="v">(A B C)</span>, but on successive <span class="v">do$</span> 
+ calls, <span class="v">X</span> is bound to successive <span class="v">cdr</span>s of <span class="v">(A B C)</span>.  Meanwhile, 
+ the accumulator variable <span class="v">Y</span> is initially bound to <span class="v">NIL</span> but at each 
+ call of <span class="v">do$</span>, the next <span class="v">car</span> of <span class="v">(A B C)</span> is pushed onto the binding 
+ of <span class="v">Y</span>.  Now consider the calls of <span class="tt"><a href="ACL2____APPLY_42.html">apply$</a></span>.  Up until the last call, 
+ <span class="v">apply$</span>ing the body function results in a triple of the form <span class="v">(<a href="ACL2____MV.html">mv</a> nil
+ nil new-alist)</span>, where <span class="v">new-alist</span> is supplied as the alist argument for 
+ the next <span class="v">do$</span> call.  The last call of <span class="v">apply$</span> on the body function 
+ gives the result <span class="v">(<a href="ACL2____MV.html">mv</a> :RETURN (C B A) new-alist)</span>, where <span class="v">(C B A)</span> is 
+ the value returned by the calls of <span class="v">do$</span>.</p> 
+ 
+ <p>Now consider this variant of the above example, which was given above when 
+ introducing <span class="v">FINALLY</span> clauses.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____LOOP_42.html">loop$</a> with x = '(a b c)
+              with y = nil
+              do (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____CONSP.html">consp</a> x)
+                        (<a href="COMMON-LISP____PROGN.html">progn</a> (setq y (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="COMMON-LISP____CAR.html">car</a> x) y))
+                               (setq x (<a href="COMMON-LISP____CDR.html">cdr</a> x))))
+                       (t (loop-finish)))
+              finally (return y))
+(C B A)
+ACL2 !&gt;</pre> 
+ 
+ <p>The corresponding <span class="v">do$</span> call is similar to that of the preceding 
+ example, but notice <span class="v">:LOOP-FINISH</span> in place of <span class="v">:RETURN</span>, and notice 
+ that we show the fourth argument this time: the function corresponding to the 
+ <span class="v">FINALLY</span> clause.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DO_42.html">DO$</a> ; Measure Function
+     (<a href="ACL2____LAMBDA_42.html">LAMBDA$</a> (ALIST)
+              (<a href="COMMON-LISP____LET.html">LET</a> ((X (<a href="COMMON-LISP____CDR.html">CDR</a> (ASSOC-EQ-SAFE 'X ALIST)))
+                    (Y (<a href="COMMON-LISP____CDR.html">CDR</a> (ASSOC-EQ-SAFE 'Y ALIST))))
+                   (<a href="ACL2____ACL2-COUNT.html">ACL2-COUNT</a> X)))
+     ; Initial Alist
+     (<a href="COMMON-LISP____LIST.html">LIST</a> (<a href="COMMON-LISP____CONS.html">CONS</a> 'X '(A B C))
+           (<a href="COMMON-LISP____CONS.html">CONS</a> 'Y NIL))
+     ; Body Function
+     (<a href="ACL2____LAMBDA_42.html">LAMBDA$</a> (ALIST)
+              (<a href="COMMON-LISP____LET.html">LET</a> ((X (<a href="COMMON-LISP____CDR.html">CDR</a> (ASSOC-EQ-SAFE 'X ALIST)))
+                    (Y (<a href="COMMON-LISP____CDR.html">CDR</a> (ASSOC-EQ-SAFE 'Y ALIST))))
+                   (<a href="COMMON-LISP____IF.html">IF</a> (<a href="COMMON-LISP____CONSP.html">CONSP</a> X)
+                       (<a href="COMMON-LISP____LIST.html">LIST</a> NIL
+                             NIL ; irrelevant
+                             (<a href="COMMON-LISP____LIST.html">LIST</a> (<a href="COMMON-LISP____CONS.html">CONS</a> 'X (<a href="COMMON-LISP____CDR.html">CDR</a> X))
+                                   (<a href="COMMON-LISP____LIST_A2.html">LIST*</a> 'Y (<a href="COMMON-LISP____CAR.html">CAR</a> X) Y)))
+                       (<a href="COMMON-LISP____LIST.html">LIST</a> :LOOP-FINISH
+                             NIL ; irrelevant
+                             (<a href="COMMON-LISP____LIST.html">LIST</a> (<a href="COMMON-LISP____CONS.html">CONS</a> 'X X) (<a href="COMMON-LISP____CONS.html">CONS</a> 'Y Y))))))
+     ; FINALLY function
+     (<a href="ACL2____LAMBDA_42.html">LAMBDA$</a> (ALIST)
+              (<a href="COMMON-LISP____LET.html">LET</a> ((X (<a href="COMMON-LISP____CDR.html">CDR</a> (ASSOC-EQ-SAFE 'X ALIST)))
+                    (Y (<a href="COMMON-LISP____CDR.html">CDR</a> (ASSOC-EQ-SAFE 'Y ALIST))))
+                   (<a href="COMMON-LISP____LIST.html">LIST</a> :RETURN
+                         Y
+                         (<a href="COMMON-LISP____LIST.html">LIST</a> (<a href="COMMON-LISP____CONS.html">CONS</a> 'X X) (<a href="COMMON-LISP____CONS.html">CONS</a> 'Y Y)))))
+     ; Default
+     NIL
+     ... ; Other arguments are omitted here.
+)</pre> 
+ 
+ <p>Above, we also took the opportunity to show the fifth argument of <span class="v">do$</span>, 
+ which is the logical (``Default'') value returned when the measure fails to 
+ decrease at the start of an iteration.  That value is <span class="v">nil</span> if a single 
+ ordinary value is returned, as when the <span class="v">:VALUES</span> keyword is omitted. 
+ Otherwise that default value is the value of the <span class="v">:VALUES</span> keyword.  (Got 
+ that?)  The default value is never relevant to evaluation since an error 
+ occurs when the measure fails to decrease; it can however be relevant when 
+ reasoning about <span class="v">do$</span> calls.</p> 
+ 
+ }) 
+ 
+ <p><b>Function: </b>do$</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
+ do$
+ (measure-fn alist do-fn finally-fn default
+             untrans-measure untrans-do-loop$)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____APPLY_42-GUARD.html">apply$-guard</a> measure-fn '(nil))
+                             (<a href="ACL2____APPLY_42-GUARD.html">apply$-guard</a> do-fn '(nil))
+                             (<a href="ACL2____APPLY_42-GUARD.html">apply$-guard</a> finally-fn '(nil)))))
+ (<a href="COMMON-LISP____LET_A2.html">let*</a>
+  ((triple (<a href="ACL2____TRUE-LIST-FIX.html">true-list-fix</a> (<a href="ACL2____APPLY_42.html">apply$</a> do-fn (<a href="COMMON-LISP____LIST.html">list</a> alist))))
+   (exit-token (<a href="COMMON-LISP____CAR.html">car</a> triple))
+   (val (<a href="COMMON-LISP____CADR.html">cadr</a> triple))
+   (new-alist (<a href="COMMON-LISP____CADDR.html">caddr</a> triple)))
+  (<a href="COMMON-LISP____COND.html">cond</a>
+   ((<a href="COMMON-LISP____EQ.html">eq</a> exit-token :return) val)
+   ((<a href="COMMON-LISP____EQ.html">eq</a> exit-token :loop-finish)
+    (<a href="COMMON-LISP____LET_A2.html">let*</a>
+      ((triple (<a href="ACL2____TRUE-LIST-FIX.html">true-list-fix</a> (<a href="ACL2____APPLY_42.html">apply$</a> finally-fn (<a href="COMMON-LISP____LIST.html">list</a> new-alist))))
+       (exit-token (<a href="COMMON-LISP____CAR.html">car</a> triple))
+       (val (<a href="COMMON-LISP____CADR.html">cadr</a> triple)))
+      (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____EQ.html">eq</a> exit-token :return) val nil)))
+   ((<a href="ACL2____L_C3.html">l&lt;</a> (<a href="ACL2____LEX-FIX.html">lex-fix</a> (<a href="ACL2____APPLY_42.html">apply$</a> measure-fn (<a href="COMMON-LISP____LIST.html">list</a> new-alist)))
+        (<a href="ACL2____LEX-FIX.html">lex-fix</a> (<a href="ACL2____APPLY_42.html">apply$</a> measure-fn (<a href="COMMON-LISP____LIST.html">list</a> alist))))
+    (<a href="ACL2____DO_42.html">do$</a> measure-fn
+         new-alist do-fn finally-fn default
+         untrans-measure untrans-do-loop$))
+   (t
+    (<a href="ACL2____PROG2_42.html">prog2$</a>
+     (<a href="ACL2____ER.html">er</a>
+      hard? 'do$
+      "The measure, ~x0, used in the do loop$ statement~%~Y12~%failed to ~
+            decrease!  In particular, when the incoming alist (an alist of ~
+            dotted pairs specifying the values of all the variables) ~
+            was~%~Y32the alist produced by the do body was~%~Y42and the ~
+            measure went from~%~x5~%to~%~x6.~%Logically, do$ returns ~x7 ~
+            in this situation."
+      untrans-measure
+      untrans-do-loop$ nil alist new-alist
+      (<a href="ACL2____APPLY_42.html">apply$</a> measure-fn (<a href="COMMON-LISP____LIST.html">list</a> alist))
+      (<a href="ACL2____APPLY_42.html">apply$</a> measure-fn (<a href="COMMON-LISP____LIST.html">list</a> new-alist))
+      default)
+     default)))))</pre> 
+ 
+ 
+</body>
+</html>

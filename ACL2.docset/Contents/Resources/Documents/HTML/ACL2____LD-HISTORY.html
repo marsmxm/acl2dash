@@ -1,0 +1,262 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Ld-history</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____LD-HISTORY">Click for Ld-history in the Full Manual</a></h3>
+
+<p>Saving and querying command history</p><p>See <a href="ACL2____LD.html">ld</a> for background on the ACL2 read-eval-print loop.  The 
+ present topic pertains to a history kept for commands issued to that loop, 
+ which we call an ``ld-history'' (pronounced ``ell dee history'').  Here are 
+ some things to keep in mind when reading this topic.</p> 
+ 
+ <ul> 
+ 
+ <li>Each entry in the history includes the input command, the value returned, 
+ and other information, as explained further below.</li> 
+ 
+ <li>This is about commands, not events: that is, we are concerned with forms 
+ that are submitted for evaluation to the top-level loop.  See <a href="ACL2____COMMAND.html">command</a>.</li> 
+ 
+ <li>An entry is saved for every command submitted by the user, even if it 
+ doesn't change the ACL2 <a href="ACL2____WORLD.html">world</a> — e.g., <span class="v">(<a href="COMMON-LISP_____B2.html">+</a> 3 4)</span> — and 
+ even if it undoes commands — e.g., <span class="v">:</span><span class="v">ubt</span>.</li> 
+ 
+ <li>Keyword commands are turned into s-expressions before saving an entry; see 
+ <a href="ACL2____KEYWORD-COMMANDS.html">keyword-commands</a>.  For example, the input <span class="v">:ubt :x</span> is stored in an 
+ entry as the input <span class="v">(<a href="ACL2____UBT.html">ubt</a> ':x)</span>.</li> 
+ 
+ <li>When an entry is saved for a command <span class="v">C</span> that is evaluated in the 
+ context of a call of <span class="tt"><a href="ACL2____LOCAL.html">local</a></span>, where <span class="v">C</span> evaluates to an <a href="ACL2____ERROR-TRIPLE.html">error-triple</a>, then <span class="v">C</span> is stored in the entry as <span class="v">(<a href="ACL2____LOCAL.html">local</a> C)</span> unless 
+ <span class="v">C</span> is already a call of <span class="v">local</span>.  (Technical Aside: This behavior 
+ supports local <a href="ACL2____PORTCULLIS.html">portcullis</a> commands.)</li> 
+ 
+ <li>The ld-history saves entries not only for commands issued in the original 
+ top-level loop, but also for commands issued in (recursive) calls of <span class="tt"><a href="ACL2____LD.html">ld</a></span> — but not during <span class="tt"><a href="ACL2____MAKE-EVENT.html">make-event</a></span> expansion.</li> 
+ 
+ <li>Entries are generally saved even when there are errors.  However, entries 
+ are not saved for commands that exit with raw Lisp errors.</li> 
+ 
+ </ul> 
+ 
+ <p>Also see <a href="ACL2____COMMUNITY-BOOKS.html">community-books</a> file <span class="v">books/demos/ld-history-input.lsp</span> 
+ for examples.  The output from calling <span class="tt"><a href="ACL2____LD.html">ld</a></span> on that file (by calling the 
+ <span class="tt"><a href="ACL2____RUN-SCRIPT.html">run-script</a></span> tool in <span class="v">books/demos/ld-history-book.acl2</span>) is in <a href="ACL2____COMMUNITY-BOOKS.html">community-books</a> file <span class="v">books/demos/ld-history-log.txt</span>.</p> 
+ 
+ <p>The ld-history is a stack, represented as a list with the most recent 
+ commands at the front.  But by default ACL2 is in <i>single-entry mode</i>, 
+ where the list is kept at length 1: an entry is saved in the ld-history only 
+ for the most recent command, and the previous entry is discarded.  We now 
+ describe relevant utilities, including one that can switch to 
+ <i>multiple-entry mode</i>, where all entries are kept until a utility is 
+ called explicitly to discard old entries.  Note that the mode is determined by 
+ the length of the ld-history: single-entry mode when length 1, multiple-entry 
+ mode when length 2 or more.</p> 
+ 
+ <ul> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____LD-HISTORY.html">ld-history</a> state)</span><br> 
+ 
+ This utility returns a list of structures, denoted ``ld-history entries'', 
+ with the most recent one first.  By default, this list has length 1, but that 
+ can be changed; see <span class="v">adjust-ld-history</span> below.  Each entry in the list is 
+ recognized by the following predicate.  <b>NOTE</b>: This query is evaluated 
+ before the ld-history stored in the ACL2 state is updated with a new entry, 
+ based on the current command; so the previous command will be at the top of 
+ the returned stack, not the current command.  (In particular, submitting the 
+ form <span class="v">(<a href="ACL2____LD-HISTORY.html">ld-history</a> state)</span> at the ACL2 prompt does not put that form at the 
+ front of the returned list.)</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____WEAK-LD-HISTORY-ENTRY-P.html">weak-ld-history-entry-p</a> x)</span><br> 
+ 
+ This function returns <span class="v">t</span> if <span class="v">x</span> has the shape of an entry in the 
+ ld-history list, else <span class="v">nil</span>.</li> 
+ 
+ <li>Here are accessors for an ld-history entry, which we think of as returning 
+ its fields.  The formal parameter <span class="v">entry</span> below is an entry in (i.e., 
+ member of) <span class="v">(<a href="ACL2____LD-HISTORY.html">ld-history</a> state)</span>; an example call is thus 
+ <span class="v">(<a href="ACL2____LD-HISTORY-ENTRY-INPUT.html">ld-history-entry-input</a> (<a href="COMMON-LISP____CAR.html">car</a> (<a href="ACL2____LD-HISTORY.html">ld-history</a> state)))</span>.<br> 
+ 
+ <ul> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____LD-HISTORY-ENTRY-INPUT.html">ld-history-entry-input</a> entry)</span><br> 
+ 
+ The user input</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____LD-HISTORY-ENTRY-ERROR-FLG.html">ld-history-entry-error-flg</a> entry)</span><br> 
+ 
+ Non-<span class="v">nil</span> when there was an error translating the user input</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____LD-HISTORY-ENTRY-STOBJS-OUT_F2VALUE.html">ld-history-entry-stobjs-out/value</a> entry)</span><br> 
+ 
+ When <span class="v">(<a href="ACL2____LD-HISTORY-ENTRY-ERROR-FLG.html">ld-history-entry-error-flg</a> entry)</span> is <span class="v">nil</span>, this is a cons whose 
+ <span class="v">car</span> is is the <a href="ACL2____STOBJS-OUT.html">stobjs-out</a> — a list whose length is the number 
+ of values returned, with <span class="v">nil</span> in each position except when occupied by a 
+ symbol indicating a returned <a href="ACL2____STOBJ.html">stobj</a> for that position — and whose 
+ <span class="v">cdr</span> is the returned value in the single-value case, but is the list of 
+ returned values in the <a href="ACL2____MULTIPLE-VALUE.html">multiple-value</a> case.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____LD-HISTORY-ENTRY-STOBJS-OUT.html">ld-history-entry-stobjs-out</a> entry)</span><br> 
+ 
+ When <span class="v">(<a href="ACL2____LD-HISTORY-ENTRY-ERROR-FLG.html">ld-history-entry-error-flg</a> entry)</span> is <span class="v">nil</span>, this is the 
+ stobjs-out as described above; otherwise this is <span class="v">nil</span>.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____LD-HISTORY-ENTRY-VALUE.html">ld-history-entry-value</a> entry)</span><br> 
+ 
+ When <span class="v">(<a href="ACL2____LD-HISTORY-ENTRY-ERROR-FLG.html">ld-history-entry-error-flg</a> entry)</span> is <span class="v">nil</span>, this is the value or 
+ values as described above; otherwise this is <span class="v">nil</span>.</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____LD-HISTORY-ENTRY-USER-DATA.html">ld-history-entry-user-data</a> entry)</span><br> 
+ 
+ This is <span class="v">nil</span> by default.  However, code can be provided to compute this 
+ field, as discussed below.</li> 
+ 
+ </ul>
+</li> 
+ 
+ <li>
+<span class="v">(<a href="ACL2____ADJUST-LD-HISTORY.html">adjust-ld-history</a> x state)</span><br> 
+ 
+ <span class="v">X</span> is <span class="v">t</span>, <span class="v">nil</span>, or an integer.  The result is an <a href="ACL2____ERROR-TRIPLE.html">error-triple</a> <span class="v">(<a href="ACL2____MV.html">mv</a> nil value state)</span>, where <span class="v">value</span> and the effect are 
+ as follows, and where if there is no change (i.e., the effect is a no-op) then 
+ <span class="v">value</span> is <span class="v">(:no-change :length N)</span> where <span class="v">N</span> is the current length 
+ of the ld-history. 
+ 
+ <ul> 
+ 
+ <li>
+<span class="v">T</span>:<br> 
+ 
+ Change to multiple-entry mode, where an entry is saved for every command, not 
+ just the most recent command.  There is no change if already in multiple-entry 
+ mode; otherwise the returned <span class="v">value</span> is <span class="v">(:saving-ld-history t)</span>.</li> 
+ 
+ <li>
+<span class="v">NIL</span>:<br> 
+ 
+ Change to single-entry mode, where an entry is saved only for the most recent 
+ command.  There is no change if already in single-entry mode; otherwise the 
+ returned <span class="v">value</span> is <span class="v">(:saving-ld-history nil)</span>, and all old entries will 
+ be discarded (to produce a single-element ld-history).</li> 
+ 
+ <li>Positive integer <span class="v">k</span>:<br> 
+ 
+ Replace the current ld-history by its first <span class="v">k</span> entries, except there is no 
+ change if in single-entry mode or if <span class="v">k</span> is not less than the length of the 
+ current ld-history.  Note that by ``current ld-history'' we refer to the 
+ ld-history in effect at the time <span class="v">adjust-ld-history</span> is invoked, which does 
+ not include the current command being evaluated.  (Thus, even if <span class="v">k</span> is 1, 
+ multiple-entry mode will be preserved: the ld-history will have 2 entries 
+ immediately after the current command completes.)  The returned <span class="v">value</span> is 
+ <span class="v">(:ld-history-truncated :old-length LEN :new-length k)</span>, where <span class="v">LEN</span> is 
+ the length of the current ld-history before the change.</li> 
+ 
+ <li>Negative integer <span class="v">-k</span>:<br> 
+ 
+ This is intended to specify removal of the oldest <span class="v">k</span> entries from the 
+ current ld-history.  Thus, it is treated identically to argument <span class="v">k2</span> where 
+ <span class="v">k2</span> is the sum of <span class="v">-k</span> and the length of the current ld-history, but 
+ only if that sum is positive; else there is no change.  For example, suppose 
+ that <span class="v">-k</span> is -3.  If the current ld-history, <span class="v">h</span>, has length 2 or 3, 
+ then there is no change; but if <span class="v">h</span> has length 10, then it is to be 
+ replaced by <span class="v">(<a href="ACL2____TAKE.html">take</a> 7 h)</span> and the length will actually thus be 8 after the 
+ current command completes.</li> 
+ 
+ </ul> 
+ 
+ </li>
+</ul> 
+ 
+ <p>Note that a call of <span class="v">adjust-ld-history</span> is not an <a href="ACL2____EVENT.html">event</a> that can 
+ be placed directly in <a href="ACL2____BOOKS.html">books</a> or <span class="tt"><a href="ACL2____ENCAPSULATE.html">encapsulate</a></span> forms.</p> 
+ 
+ <p>Remark.  If <span class="v">(<a href="ACL2____ADJUST-LD-HISTORY.html">adjust-ld-history</a> n state)</span> is evaluated while in 
+ multiple-entry mode, where n is a positive integer less than the current 
+ length of the ld-history, then the new ld-history after returning to the 
+ prompt will have length <span class="v">n+1</span>.  That's essentially because it will have 
+ length <span class="v">n</span> immediately after that call of <span class="v">adjust-ld-history</span> is 
+ evaluated, and then a new entry for the current command (which could be that 
+ call itself, if that's what was submitted at the prompt) will be pushed onto 
+ the ld-entry just before returning to the prompt.  We say ``essentially'' 
+ because there is a Special Case: when <span class="v">n</span> is 1 then a 2-element list of 
+ entries <span class="v">(e1 e2)</span> is created where <span class="v">e2</span> has fields that are all 
+ <span class="v">nil</span>; then when the new entry <span class="v">e</span> is pushed onto the ld-history, 
+ <span class="v">e2</span> is dropped so that that the new ld-history is <span class="v">(e e1)</span>.  This 
+ special-case trick is also used in multiple-entry mode when <span class="v">n</span> is <span class="v">-k</span> 
+ where <span class="v">k</span> is one less than the length of the current ld-history, since that 
+ is treated the same as <span class="v">(<a href="ACL2____ADJUST-LD-HISTORY.html">adjust-ld-history</a> 1 state)</span>; and this trick is 
+ also used when <span class="v">(<a href="ACL2____ADJUST-LD-HISTORY.html">adjust-ld-history</a> t state)</span> switches from single-entry 
+ mode to multiple-entry mode.  End of Remark.</p> 
+ 
+ <p>Finally we discuss the user-data field of a ld-history entry, which (as 
+ noted above) has default <span class="v">nil</span>.  It is accessed using 
+ <span class="v">(<a href="ACL2____LD-HISTORY-ENTRY-USER-DATA.html">ld-history-entry-user-data</a> entry)</span>.  It is set automatically when 
+ the ld-history is extended with a new entry: the function call 
+ <span class="v">(set-ld-history-entry-user-data input error-flg stobjs-out/value state)</span>, 
+ is executed where the actuals are the other fields of the entry as indicated, 
+ e.g., the first actual is the input field of the new entry 
+ (as returned by the function, <span class="v">ld-history-entry-input</span>).  Although 
+ <span class="v">set-ld-history-entry-user-data</span> returns <span class="v">nil</span> by default, this can be 
+ changed by providing your own function with a <span class="v">:</span><span class="tt"><a href="ACL2____GUARD.html">guard</a></span> of <span class="v">t</span> 
+ and the same formal parameters (which however may be renamed, other than 
+ <span class="v">state</span>).  To make that change, define a function, which here we call 
+ <span class="v">my-user-data</span>, and then attach it to <span class="v">set-ld-history-entry-user-data</span>, 
+ as follows.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> my-set-user-data (input error-flg stobjs-out/value state)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t))
+  ...)
+(<a href="ACL2____DEFATTACH-SYSTEM.html">defattach-system</a> set-ld-history-entry-user-data my-set-user-data)</pre> 
+ 
+ <p>The following example illustrates how to store the length of the ACL2 <a href="ACL2____WORLD.html">world</a> in the user-data.  Note that the <a href="ACL2____WORLD.html">world</a> present in the <a href="ACL2____STATE.html">state</a> at the time the user-data is set, computed as <span class="v">(<a href="ACL2____W.html">w</a> state)</span>, is almost 
+ the final world produced by the command — it is missing just one triple, 
+ a so-called command marker.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> my-world-length (input error-flg stobjs-out/value state)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t :stobjs state)
+           (<a href="COMMON-LISP____IGNORE.html">ignore</a> input error-flg stobjs-out/value))
+  (<a href="ACL2____LEN.html">len</a> (<a href="ACL2____W.html">w</a> state)))
+
+(<a href="ACL2____DEFATTACH-SYSTEM.html">defattach-system</a> set-ld-history-entry-user-data my-world-length)</pre> 
+ 
+ <p>A subsequent inspection of the stored user-data shows the length of the 
+ current world, for example as follows.</p> 
+ 
+ <pre class="code">ACL2 !&gt;(<a href="ACL2____LD-HISTORY-ENTRY-USER-DATA.html">ld-history-entry-user-data</a> (<a href="COMMON-LISP____CAR.html">car</a> (<a href="ACL2____LD-HISTORY.html">ld-history</a> state)))
+125914
+ACL2 !&gt;</pre> 
+ 
+ <p>Notice that we used <span class="tt"><a href="ACL2____LEN.html">len</a></span>, not <span class="tt"><a href="COMMON-LISP____LENGTH.html">length</a></span>, since the <span class="v">:</span><span class="tt"><a href="ACL2____GUARD.html">guard</a></span> specified for our function needs to be <span class="v">t</span>.  Alternative 
+ definitions, which however are less efficienct, are as follows.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> my-world-length (input error-flg stobjs-out/value state)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t :stobjs state)
+           (<a href="COMMON-LISP____IGNORE.html">ignore</a> input error-flg stobjs-out/value))
+  (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____TRUE-LISTP.html">true-listp</a> (<a href="ACL2____W.html">w</a> state))
+       (<a href="COMMON-LISP____LENGTH.html">length</a> (<a href="ACL2____W.html">w</a> state))))
+
+(<a href="COMMON-LISP____DEFUN.html">defun</a> my-world-length (input error-flg stobjs-out/value state)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t :stobjs state)
+           (<a href="COMMON-LISP____IGNORE.html">ignore</a> input error-flg stobjs-out/value))
+  (<a href="ACL2____EC-CALL.html">ec-call</a> (<a href="COMMON-LISP____LENGTH.html">length</a> (<a href="ACL2____W.html">w</a> state))))</pre> 
+ 
+ <p>Here is how to restore the original behavior, i.e., the default where 
+ the user-data is set to <span class="v">nil</span>.</p> 
+ 
+ <pre class="code">(<a href="ACL2____DEFATTACH-SYSTEM.html">defattach-system</a> set-ld-history-entry-user-data
+                  set-ld-history-entry-user-data-default)</pre> 
+ 
+
+</body>
+</html>

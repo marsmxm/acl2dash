@@ -9,7 +9,9 @@
 <h3><a href="../index.html?topic=C____ATC-IMPLEMENTATION">Click for Atc-implementation in the Full Manual</a></h3>
 
 <p>Implementation of <span class="tt"><a href="C____ATC.html">atc</a></span>.</p><p>The implementation functions have arguments, 
-                        as well as results (in the <a href="STD____RETURNS-SPECIFIERS.html"><span class="v">:returns</span> specifiers</a>), consistently named as follows:</p><ul>
+                        as well as results (in the <a href="STD____RETURNS-SPECIFIERS.html"><span class="v">:returns</span> specifiers</a>), consistently named as follows 
+                        (unless otherwise stated, explicitly or implicitly, 
+                        in he functions):</p><ul>
 <li>
 <span class="v">state</span> is the ACL2 <a href="ACL2____STATE.html">state</a>.</li>
 <li>
@@ -17,11 +19,16 @@
 <li>
 <span class="v">ctx</span> is the <a href="ACL2____CTX.html">context</a> used for errors.</li>
 <li>
-<span class="v">fn1...fnp</span> is the list <span class="v">(fn1 ... fnp)</span> of inputs to <span class="tt"><a href="C____ATC.html">atc</a></span>.</li>
+<span class="v">targets</span> is the list <span class="v">(t1 ... tp)</span> of inputs to <span class="tt"><a href="C____ATC.html">atc</a></span>, 
+   or a suffix of it.</li>
 <li>
-<span class="v">fn</span> is one of the symbols in <span class="v">fn1...fnp</span>.</li>
+<span class="v">target</span> is an element in <span class="v">targets</span>.</li>
 <li>
-<span class="v">fns</span> is <span class="v">fn1...fnp</span> or a suffix of it.</li>
+<span class="v">target-fns</span> is the sublist of <span class="v">targets</span> 
+   consisting of all the functions, in the same order; 
+   or it is a suffix of this list of target functions.</li>
+<li>
+<span class="v">fn</span> is one of the function symbols in <span class="v">targets</span>.</li>
 <li>
 <span class="v">inscope</span> is a list of alists from ACL2 variable symbols to C types. 
    These are the variables in scope 
@@ -30,14 +37,29 @@
    This is like a symbol table for ACL2's representation of the C code.</li>
 <li>
 <span class="v">prec-fns</span> is an alist from ACL2 function symbols to function information. 
-   The function symbols are the ones in <span class="v">fn1...fnp</span> that precede, 
+   The function symbols are the ones in <span class="v">targets</span> that precede, 
    in the latter list, 
-   the symbol <span class="v">fn</span> in <span class="v">fn1...fnp</span> for which code is being generated; 
-   <span class="v">fn</span> is often also a parameter of 
-   the ATC function that has <span class="v">prec-fns</span> as parameter. 
-   According to the restrictions stated in the ATC user documentation, 
-   <span class="v">prec-fns</span> consists of (information about) the target function symbols 
-   that <span class="v">fn</span> is allowed to call.</li>
+   the target in <span class="v">targets</span> for which C code is being generated.</li>
+<li>
+<span class="v">prec-tags</span> is an alist 
+   from ACL2 <span class="tt"><a href="C____DEFSTRUCT.html">defstruct</a></span> symbols to their associated information. 
+   The <span class="tt"><a href="C____DEFSTRUCT.html">defstruct</a></span> symbols are the ones in <span class="v">targets</span> that precede, 
+   in the latter list, 
+   the target in <span class="v">targets</span> for which C code is being generated. 
+   The <span class="v">prec-tags</span> alist is always a subset of the </li>
+<li><a href="C____DEFSTRUCT-TABLE-DEFINITION.html"><span class="tt"><a href="C____DEFSTRUCT.html">defstruct</a></span> table</a></li>
+<li> that is constructed by <span class="tt"><a href="C____DEFSTRUCT.html">defstruct</a></span> calls 
+   and that is part of the ACL2 world prior to calling ATC: 
+   the <span class="v">prec-tags</span> is initially empty, 
+   gets extended as targets that are <span class="tt"><a href="C____DEFSTRUCT.html">defstruct</a></span> names are processed, 
+   and eventually contains all the <span class="tt"><a href="C____DEFSTRUCT.html">defstruct</a></span> table information 
+   for the <span class="tt"><a href="C____DEFSTRUCT.html">defstruct</a></span> targets passed to ATC. 
+   The reason for using the <span class="v">prec-tags</span> alist this way, 
+   instead of using the <span class="tt"><a href="C____DEFSTRUCT.html">defstruct</a></span> table directly, 
+   is so that we can ensure that all the targets are supplied to ATC, 
+   and in the right order; 
+   furthermore, it makes it easier and more efficient 
+   to retrieve information about all the target <span class="tt"><a href="C____DEFSTRUCT.html">defstruct</a></span>s of interest.</li>
 <li>
 <span class="v">output-file</span> is the homonymous input to the event macro.</li>
 <li>
@@ -50,7 +72,7 @@
 <span class="v">call</span> is the call of the event macro.</li>
 <li>
 <span class="v">fn-appconds</span> is an alist 
-   from the recursive functions among <span class="v">fn1</span>, ..., <span class="v">fnp</span> 
+   from the recursive functions among <span class="v">t</span>, ..., <span class="v">tp</span> 
    to the names (keywords) of the corresponding applicability conditions.</li>
 <li>
 <span class="v">prog-const</span> is the symbol specified by <span class="v">const-name</span>. 
@@ -59,14 +81,18 @@
 <span class="v">wf-thm</span> is the name of the generated program well-formedness theorem. 
    This is <span class="v">nil</span> if <span class="v">proofs</span> is <span class="v">nil</span>.</li>
 <li>
-<span class="v">fn-thms</span> is an alist from <span class="v">fn1</span>, ..., <span class="v">fnp</span> 
+<span class="v">fn-thms</span> is an alist from <span class="v">t1</span>, ..., <span class="v">tp</span> 
    to the names of the generated respective correctness theorems. 
    This is <span class="v">nil</span> if <span class="v">proofs</span> is <span class="v">nil</span>.</li>
 <li>
 <span class="v">typed-formals</span> is an alist 
-   from the formal parameters of one of <span class="v">fn1</span>, ..., <span class="v">fnp</span> 
+   from the formal parameters of one of the functions in <span class="v">t1</span>, ..., <span class="v">tp</span> 
    to their C types. 
    The keys are unique and in the same order as the formal parameters.</li>
+<li>
+<span class="v">affect</span> is a list of symbols consisting of 
+   the variables of array or structure type affected by 
+   one of the functions in <span class="v">t1</span>, ..., <span class="v">tp</span>.</li>
 <li>
 <span class="v">names-to-avoid</span> is a cumulative list of names of generated events, 
      used to ensure the absence of name clashes in the generated events.</li>

@@ -8,11 +8,17 @@
 
 <h3><a href="../index.html?topic=C____ATC-PROCESS-FUNCTION">Click for Atc-process-function in the Full Manual</a></h3>
 
-<p>Process a target function <span class="v">fni</span> among <span class="v">fn1</span>, ..., <span class="v">fnp</span>.</p><div class="box"><dl> 
+<p>Process a target function <span class="v">fn</span> among <span class="v">t1</span>, ..., <span class="v">tp</span>.</p><div class="box"><dl> 
   <dt>Signature</dt>
-<dt><pre class="code">(atc-process-function fn uncalled-fns ctx state) 
+<dt><pre class="code">(atc-process-function fn previous-fns uncalled-fns ctx state) 
   → 
-(mv erp new-uncalled-fns state)</pre></dt>  <dt>Arguments</dt>  <dd>
+(mv erp val state)</pre></dt>  <dt>Arguments</dt>  <dd>
+<span class="tt">fn</span> — <font color="#606060">Guard <span class="v">(<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> fn)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">previous-fns</span> — <font color="#606060">Guard <span class="v">(<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> previous-fns)</span>.</font>
+</dd> 
+  <dd>
 <span class="tt">uncalled-fns</span> — <font color="#606060">Guard <span class="v">(<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> uncalled-fns)</span>.</font>
 </dd> 
   <dd>
@@ -20,7 +26,13 @@
 </dd> 
 <dt>Returns</dt>
 <dd>
-<span class="tt">new-uncalled-fns</span> — <font color="#606060">Type <span class="v">(<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> new-uncalled-fns)</span>, given <span class="v">(<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> fn) (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> uncalled-fns))</span>.</font>
+<span class="tt">val</span> — <font color="#606060">Type <span class="v">(tuple (new-previous-fns symbol-listp)
+       (new-uncalled-fns symbol-listp)
+       val)
+</span>, given <span class="v">(<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> fn)
+     (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> previous-fns)
+     (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> uncalled-fns))
+</span>.</font>
 </dd> 
  
 </dl></div> 
@@ -28,55 +40,68 @@
      namely the ones that are easy to perform 
      without analyzing the body of the function in detail. 
      The remaining checks are performed during code generation, 
-     where it is more natural to make them, 
-     as the functions' bodies are analyzed to translate them to C.</p><p>The <span class="v">uncalled-fns</span> parameter lists the symbols of 
+     where it is more natural to perform them, 
+     as the functions' bodies are analyzed and translated to C.</p><p>The <span class="v">previous-fns</span> parameter lists the symbols of 
+     all the target functions 
+     that precede <span class="v">fn</span> in <span class="v">(t1 ... tp)</span>. 
+     This list is used to ensure that 
+     there are no duplicate target functions.</p><p>The <span class="v">uncalled-fns</span> parameter lists the symbols of 
      all the recursive target functions 
-     that precede <span class="v">fn</span> in <span class="v">(fn1 ... fnp)</span> 
+     that precede <span class="v">fn</span> in <span class="v">(t1 ... tp)</span> 
      and that are not called by any of the functions 
-     that precede <span class="v">fn</span> in <span class="v">(fn1 ... fnp)</span>. 
+     that precede <span class="v">fn</span> in <span class="v">(t1 ... tp)</span>. 
      This list is used to ensure that all the recursive target functions, 
      which represent C loops, 
      are called by some other target functions (that follow them). 
-     The reason for checking this is that C loops 
-     may only occur in C functions; 
+     The reason for checking this is that C loops may only occur in C functions; 
      if this check were not satisfied, 
      there would be some C loop, represented by a recursive target function, 
      that does not appear in the generated C code. 
      As we process <span class="v">fn</span>, 
      we remove from <span class="v">uncalled-fns</span> all the functions called by <span class="v">fn</span>. 
      If <span class="v">fn</span> is recursive, we add it to <span class="v">uncalled-fns</span>. 
-     We return the updated list of uncalled functions.</p> 
+     We return the updated list of uncalled functions.</p><p>When this input processing function is called, 
+     <span class="v">fn</span> is already known to be a function name. 
+     See <span class="tt"><a href="C____ATC-PROCESS-TARGET.html">atc-process-target</a></span>.</p> 
  
 <h3>Definitions and Theorems</h3><p><b>Function: </b>atc-process-function</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
  atc-process-function
- (fn uncalled-fns ctx state)
+ (fn previous-fns uncalled-fns ctx state)
  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (<a href="ACL2____STATE.html">state</a>)))
- (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> uncalled-fns)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> fn)
+                             (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> previous-fns)
+                             (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> uncalled-fns)
                              (<a href="ACL2____CTXP.html">ctxp</a> ctx))))
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____FUNCTION-SYMBOLP.html">function-symbolp</a> fn (<a href="ACL2____W.html">w</a> state))))
  (<a href="COMMON-LISP____LET.html">let</a>
   ((__function__ 'atc-process-function))
   (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
   (<a href="ACL2____B_A2.html">b*</a>
-   ((desc (<a href="ACL2____MSG.html">msg</a> "The target ~x0 input" fn))
-    ((<a href="ACL2____ER.html">er</a> &amp;)
-     (<a href="ACL2____ENSURE-VALUE-IS-FUNCTION-NAME_42.html">ensure-value-is-function-name$</a> fn desc t nil))
+   ((irrelevant (<a href="COMMON-LISP____LIST.html">list</a> nil nil))
+    ((when (<a href="ACL2____MEMBER-EQ.html">member-eq</a> fn previous-fns))
+     (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
+      ctx t irrelevant
+      "The target function ~x0 appears more than once ~
+                   in the list of targets."
+      fn))
+    (previous-fns (<a href="COMMON-LISP____CONS.html">cons</a> fn previous-fns))
     (desc (<a href="ACL2____MSG.html">msg</a> "The target function ~x0" fn))
     ((<a href="ACL2____ER.html">er</a> &amp;)
-     (<a href="ACL2____ENSURE-FUNCTION-IS-LOGIC-MODE_42.html">ensure-function-is-logic-mode$</a> fn desc t nil))
+     (<a href="ACL2____ENSURE-FUNCTION-IS-LOGIC-MODE_42.html">ensure-function-is-logic-mode$</a> fn desc t irrelevant))
     ((<a href="ACL2____ER.html">er</a> &amp;)
-     (<a href="ACL2____ENSURE-FUNCTION-IS-GUARD-VERIFIED_42.html">ensure-function-is-guard-verified$</a> fn desc t nil))
+     (<a href="ACL2____ENSURE-FUNCTION-IS-GUARD-VERIFIED_42.html">ensure-function-is-guard-verified$</a> fn desc t irrelevant))
     ((<a href="ACL2____ER.html">er</a> &amp;)
-     (<a href="ACL2____ENSURE-FUNCTION-IS-DEFINED_42.html">ensure-function-is-defined$</a> fn desc t nil))
+     (<a href="ACL2____ENSURE-FUNCTION-IS-DEFINED_42.html">ensure-function-is-defined$</a> fn desc t irrelevant))
     ((when (<a href="ACL2____FFNNAMEP.html">ffnnamep</a> fn (<a href="ACL2____UGUARD_B2.html">uguard+</a> fn (<a href="ACL2____W.html">w</a> state))))
      (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
-      ctx t nil
+      ctx t irrelevant
       "The target function ~x0 is used in its own guard. ~
                    This is currently not supported in ATC."
       fn))
     (rec (<a href="ACL2____IRECURSIVEP_B2.html">irecursivep+</a> fn (<a href="ACL2____W.html">w</a> state)))
     ((when (<a href="COMMON-LISP____AND.html">and</a> rec (<a href="COMMON-LISP_____E3.html">&gt;</a> (<a href="ACL2____LEN.html">len</a> rec) 1)))
      (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
-      ctx t nil
+      ctx t irrelevant
       "The recursive target function ~x0 ~
                    must be singly recursive, ~
                    but it is mutually recursive with ~x1 instead."
@@ -85,7 +110,7 @@
                 (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____WELL-FOUNDED-RELATION_B2.html">well-founded-relation+</a> fn (<a href="ACL2____W.html">w</a> state))
                             'o&lt;))))
      (<a href="ACL2____ER-SOFT_B2.html">er-soft+</a>
-      ctx t nil
+      ctx t irrelevant
       "The well-founded relation ~
                    of the recursive target function ~x0 ~
                    must be O&lt;, but it ~x1 instead. ~
@@ -97,25 +122,47 @@
          (<a href="C____ATC-REMOVE-CALLED-FNS.html">atc-remove-called-fns</a> uncalled-fns (<a href="ACL2____UBODY_B2.html">ubody+</a> fn (<a href="ACL2____W.html">w</a> state))))
     (uncalled-fns (<a href="COMMON-LISP____IF.html">if</a> rec (<a href="COMMON-LISP____CONS.html">cons</a> fn uncalled-fns)
                       uncalled-fns)))
-   (<a href="ACL2____VALUE.html">acl2::value</a> uncalled-fns))))</pre> 
-<p><b>Theorem: </b>symbol-listp-of-atc-process-function.new-uncalled-fns</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
-   symbol-listp-of-atc-process-function.new-uncalled-fns
-   (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> fn)
-                 (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> uncalled-fns))
-            (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?erp ?new-uncalled-fns acl2::?state)
-                  (<a href="C____ATC-PROCESS-FUNCTION.html">atc-process-function</a> fn uncalled-fns ctx state)))
-                (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> new-uncalled-fns)))
-   :rule-classes :rewrite)</pre> 
-<p><b>Theorem: </b>null-of-atc-process-function-when-erp</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> null-of-atc-process-function-when-erp
-        (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?erp ?new-uncalled-fns acl2::?state)
-              (<a href="C____ATC-PROCESS-FUNCTION.html">atc-process-function</a> fn uncalled-fns ctx state)))
-            (<a href="ACL2____IMPLIES.html">implies</a> erp (<a href="COMMON-LISP____NULL.html">null</a> new-uncalled-fns))))</pre> 
-<p><b>Theorem: </b>symbolp-of-fn-when-atc-process-function-not-erp</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
- symbolp-of-fn-when-atc-process-function-not-erp
+   (<a href="ACL2____VALUE.html">acl2::value</a> (<a href="COMMON-LISP____LIST.html">list</a> previous-fns uncalled-fns)))))</pre> 
+<p><b>Theorem: </b>return-type-of-atc-process-function.val</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ return-type-of-atc-process-function.val
  (<a href="ACL2____IMPLIES.html">implies</a>
-     (<a href="COMMON-LISP____NOT.html">not</a> (<a href="ACL2____MV-NTH.html">mv-nth</a> 0
-                  (<a href="C____ATC-PROCESS-FUNCTION.html">atc-process-function</a> fn uncalled-fns ctx state)))
-     (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> fn)))</pre> 
+  (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> fn)
+       (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> previous-fns)
+       (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> uncalled-fns))
+  (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?erp ?val acl2::?state)
+        (<a href="C____ATC-PROCESS-FUNCTION.html">atc-process-function</a> fn
+                              previous-fns uncalled-fns ctx state)))
+      (tuple (new-previous-fns symbol-listp)
+             (new-uncalled-fns symbol-listp)
+             val)))
+ :rule-classes :rewrite)</pre> 
+<p><b>Theorem: </b>true-listp-of-atc-process-function.val</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+  true-listp-of-atc-process-function.val
+  (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?erp ?val acl2::?state)
+        (<a href="C____ATC-PROCESS-FUNCTION.html">atc-process-function</a> fn
+                              previous-fns uncalled-fns ctx state)))
+      (<a href="ACL2____TRUE-LISTP.html">true-listp</a> val))
+  :rule-classes :type-prescription)</pre> 
+<p><b>Theorem: </b>true-listp-of-atc-process-function.new-previous-fns</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ true-listp-of-atc-process-function.new-previous-fns
+ (<a href="ACL2____IMPLIES.html">implies</a>
+  (<a href="ACL2____TRUE-LISTP.html">true-listp</a> previous-fns)
+  (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?erp ?val acl2::?state)
+        (<a href="C____ATC-PROCESS-FUNCTION.html">atc-process-function</a> fn
+                              previous-fns uncalled-fns ctx state)))
+      (<a href="ACL2____B_A2.html">b*</a> (((<a href="COMMON-LISP____LIST.html">list</a> new-previous-fns &amp;) val))
+          (<a href="ACL2____TRUE-LISTP.html">true-listp</a> new-previous-fns))))
+ :rule-classes :type-prescription)</pre> 
+<p><b>Theorem: </b>true-listp-of-atc-process-function.new-uncalled-fns</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
+ true-listp-of-atc-process-function.new-uncalled-fns
+ (<a href="ACL2____IMPLIES.html">implies</a>
+  (<a href="ACL2____TRUE-LISTP.html">true-listp</a> uncalled-fns)
+  (<a href="ACL2____B_A2.html">b*</a> (((<a href="ACL2____MV.html">mv</a> ?erp ?val acl2::?state)
+        (<a href="C____ATC-PROCESS-FUNCTION.html">atc-process-function</a> fn
+                              previous-fns uncalled-fns ctx state)))
+      (<a href="ACL2____B_A2.html">b*</a> (((<a href="COMMON-LISP____LIST.html">list</a> &amp; new-uncalled-fns) val))
+          (<a href="ACL2____TRUE-LISTP.html">true-listp</a> new-uncalled-fns))))
+ :rule-classes :type-prescription)</pre> 
 
 </body>
 </html>

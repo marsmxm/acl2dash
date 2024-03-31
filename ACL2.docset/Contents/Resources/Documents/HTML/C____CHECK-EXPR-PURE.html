@@ -10,31 +10,113 @@
 
 <p>Check a pure expression.</p><div class="box"><dl> 
   <dt>Signature</dt>
-<dt><pre class="code">(check-expr-pure e vartab) → type</pre></dt>  <dt>Arguments</dt>  <dd>
+<dt><pre class="code">(check-expr-pure e vartab tagenv) → etype</pre></dt>  <dt>Arguments</dt>  <dd>
 <span class="tt">e</span> — <font color="#606060">Guard <span class="v">(<a href="C____EXPRP.html">exprp</a> e)</span>.</font>
 </dd> 
   <dd>
 <span class="tt">vartab</span> — <font color="#606060">Guard <span class="v">(<a href="C____VAR-TABLEP.html">var-tablep</a> vartab)</span>.</font>
 </dd> 
+  <dd>
+<span class="tt">tagenv</span> — <font color="#606060">Guard <span class="v">(<a href="C____TAG-ENVP.html">tag-envp</a> tagenv)</span>.</font>
+</dd> 
 <dt>Returns</dt>
 <dd>
-<span class="tt">type</span> — <font color="#606060">Type <span class="v">(<a href="C____TYPE-RESULTP.html">type-resultp</a> type)</span>.</font>
+<span class="tt">etype</span> — <font color="#606060">Type <span class="v">(<a href="C____EXPR-TYPE-RESULTP.html">expr-type-resultp</a> etype)</span>.</font>
 </dd> 
  
 </dl></div> 
 <p>More precisely, we check whether an expression is pure and well-formed. 
-     If all the checks are satisfied, we return the type of the expression.</p><p>An identifier must be in the variable table. 
-     Its type is looked up there.</p><p>A cast is allowed between scalar types. 
+     If all the checks are satisfied, 
+     we return the expression type of the expression 
+     (see <span class="tt"><a href="C____EXPR-TYPE.html">expr-type</a></span>).</p><p>We disallow function calls and pre/post-increment/decrement, 
+     since they are not pure.</p><p>An identifier must be in the variable table. 
+     Its type is looked up there. 
+     An identifier is always an lvalue.</p><p>A constant is never an lvalue.</p><p>For an array subscripting expression, 
+     we do lvalue conversion for both operands, 
+     via <span class="tt"><a href="C____EXPR-TYPE-_E3TYPE.html">expr-type-&gt;type</a></span>. 
+     According to [C:6.3.2/2], 
+     we should not do this for the first operand, 
+     if it has an array type; 
+     however, according to [C:6.3.2/3], 
+     we should convert the array to a pointer 
+     (which we do via <span class="tt"><a href="C____APCONVERT-TYPE.html">apconvert-type</a></span>), 
+     and thus in the end the result is the same: 
+     we have a pointer type, which we pass to <span class="tt"><a href="C____CHECK-ARRSUB.html">check-arrsub</a></span>. 
+     In fact, we use <span class="tt"><a href="C____APCONVERT-TYPE.html">apconvert-type</a></span> on both operands, 
+     because the roles of the array and index may be swapped, 
+     as noted in <span class="tt"><a href="C____CHECK-ARRSUB.html">check-arrsub</a></span>, 
+     even though we do not handle the swapping in that function for now. 
+     If an operand is an integer, <span class="tt"><a href="C____APCONVERT-TYPE.html">apconvert-type</a></span> has no effect. 
+     An array subscripting expression is always an lvalue; 
+     recall that it is like a form of the <span class="v">*</span> dereferencing expression.</p><p>For unary operators, 
+     we do not perform any lvalue or array-to-pointer conversion here, 
+     because that is done in <span class="tt"><a href="C____CHECK-UNARY.html">check-unary</a></span>. 
+     We check the argument, 
+     pass the expression type to <span class="tt"><a href="C____CHECK-UNARY.html">check-unary</a></span>, 
+     and forward the returned expression type (or error).</p><p>For binary operators, we apply 
+     both lvalue conversion and array-to-pointer conversion to the operand(s). 
+     The latter is needed because some operators work on scalars, 
+     and array-to-pointer conversion may produce a scalar. 
+     Unary and binary expressions are never lvalues; 
+     this is the case for the unary operators that we currently cover.</p><p>A cast is allowed between scalar types. 
+     Since we check that the type name denotes a scalar type, 
+     we do not need to check its well-formedness against the tag environment. 
      The result has the type indicated in the cast. 
      See [C:6.5.4]; note that the additional requirements on the type 
-     do not apply to our currently simplified model of C types.</p><p>The test of a conditional expression must be scalar. 
-     For now we require the two branches to have arithmetic types; 
-     the result has the type resulting from the usual arithmetic conversions. 
-     See [C:6.5.15/3].</p> 
+     do not apply to our currently simplified model of C types. 
+     We apply lvalue conversion to the operand. 
+     We also apply array-to-pointer conversion, 
+     which could turn an array into a pointer (and thus scalar) type. 
+     A cast expression is never an lvalue.</p><p>The test of a conditional expression must be scalar. 
+     For now we require the two branches to have arithmetic types. 
+     According to [C:6.5.15/3], 
+     in this case the type of the conditional expression 
+     is the one resulting from the usual arithmetic conversions [C:6.5.15/5]. 
+     This means that, at run time, in our dynamic semantics of C, 
+     we need to convert the branch that is executed to that type; 
+     but at run time we do not have information about 
+     the type of the other branch (the one that is not executed). 
+     Thus, in order to handle the execution properly, 
+     the static semantics should add information to the abstract syntax 
+     about the resulting type of the conditional expression, 
+     so that the dynamic semantics can perform the conversion 
+     while evaluating just one branch. 
+     (Presumably, C compilers would generate code that performs the conversion, 
+     if needed, for both branches of the conditional expression.) 
+     To avoid this complication, 
+     for now we make our static semantics more restrictive: 
+     we require the two branches to have the same promoted type. 
+     This means that that promoted type is also 
+     the type resulting from the usual arithmetic conversions, 
+     as can be easily seen in <span class="tt"><a href="C____UACONVERT-TYPES.html">uaconvert-types</a></span>. 
+     We may relax the treatment eventually, 
+     but note that we would have to restructure the static semantics 
+     to return possibly modified abstract syntax. 
+     This is not surprising, as it is a used approach for compiler-like tools, 
+     namely annotating abstract syntax trees with additional information. 
+     We apply both lvalue conversion and array-to-pointer conversion. 
+     A conditional expression is never an lvalue.</p><p>For a member expression with <span class="v">.</span> [C:6.5.2.3], 
+     we first check the target, ensuring it has a structure type. 
+     We do not do need to do array-to-pointer conversion, 
+     because we require the type to be a structure type, 
+     which rejects both array and pointer types. 
+     We look up the structure type and its member. 
+     We return its type, and we preserve the lvalue status: 
+     if the target is an lvalue, so is the member; 
+     if the target is not an lvalue, neither is the member.</p><p>For a member expression with <span class="v">-&gt;</span> [C:6.5.2.3], 
+     we first check the target, 
+     ensuring it has a pointer type to a structure type. 
+     We perform array-to-pointer conversion on this type, 
+     prior to ensuring it is a pointer to structure, 
+     as an array type would become a pointer type via that conversion. 
+     We look up the structure type and its member. 
+     We return the member type, with the lvalue flag set.</p> 
  
 <h3>Definitions and Theorems</h3><p><b>Function: </b>check-expr-pure</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
- check-expr-pure (e vartab)
- (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="C____EXPRP.html">exprp</a> e) (<a href="C____VAR-TABLEP.html">var-tablep</a> vartab))))
+ check-expr-pure (e vartab tagenv)
+ (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="C____EXPRP.html">exprp</a> e)
+                             (<a href="C____VAR-TABLEP.html">var-tablep</a> vartab)
+                             (<a href="C____TAG-ENVP.html">tag-envp</a> tagenv))))
  (<a href="COMMON-LISP____LET.html">let</a>
   ((__function__ 'check-expr-pure))
   (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
@@ -45,90 +127,155 @@
     :ident (<a href="ACL2____B_A2.html">b*</a> ((<a href="C____TYPE.html">type</a> (<a href="C____VAR-TABLE-LOOKUP.html">var-table-lookup</a> e.get vartab))
                 ((unless type)
                  (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :var-not-found e.get))))
-               type)
-    :const (<a href="C____CHECK-CONST.html">check-const</a> e.get)
-    :arrsub (<a href="ACL2____B_A2.html">b*</a> ((arr-type (<a href="C____CHECK-EXPR-PURE.html">check-expr-pure</a> e.arr vartab))
-                 ((when (<a href="C____ERRORP.html">errorp</a> arr-type))
-                  (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :arrsub e arr-type)))
-                 (sub-type (<a href="C____CHECK-EXPR-PURE.html">check-expr-pure</a> e.sub vartab))
-                 ((when (<a href="C____ERRORP.html">errorp</a> sub-type))
-                  (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :arrsub e sub-type))))
-                (<a href="C____CHECK-ARRSUB.html">check-arrsub</a> e.arr arr-type e.sub sub-type))
+               (<a href="C____MAKE-EXPR-TYPE.html">make-expr-type</a> :type type :lvalue t))
+    :const (<a href="ACL2____B_A2.html">b*</a> ((<a href="C____TYPE.html">type</a> (<a href="C____CHECK-CONST.html">check-const</a> e.get))
+                ((when (<a href="C____ERRORP.html">errorp</a> type)) type))
+               (<a href="C____MAKE-EXPR-TYPE.html">make-expr-type</a> :type type :lvalue nil))
+    :arrsub (<a href="ACL2____B_A2.html">b*</a> ((arr-etype (<a href="C____CHECK-EXPR-PURE.html">check-expr-pure</a> e.arr vartab tagenv))
+                 ((when (<a href="C____ERRORP.html">errorp</a> arr-etype))
+                  (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :arrsub e arr-etype)))
+                 (arr-type (<a href="C____EXPR-TYPE-_E3TYPE.html">expr-type-&gt;type</a> arr-etype))
+                 (arr-type (<a href="C____APCONVERT-TYPE.html">apconvert-type</a> arr-type))
+                 (sub-etype (<a href="C____CHECK-EXPR-PURE.html">check-expr-pure</a> e.sub vartab tagenv))
+                 ((when (<a href="C____ERRORP.html">errorp</a> sub-etype))
+                  (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :arrsub e sub-etype)))
+                 (sub-type (<a href="C____EXPR-TYPE-_E3TYPE.html">expr-type-&gt;type</a> sub-etype))
+                 (sub-type (<a href="C____APCONVERT-TYPE.html">apconvert-type</a> sub-type))
+                 (<a href="C____TYPE.html">type</a> (<a href="C____CHECK-ARRSUB.html">check-arrsub</a> e.arr arr-type e.sub sub-type))
+                 ((when (<a href="C____ERRORP.html">errorp</a> type)) type))
+                (<a href="C____MAKE-EXPR-TYPE.html">make-expr-type</a> :type type :lvalue t))
     :call (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :expr-non-pure e))
-    :member (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :not-supported-yet e))
-    :memberp (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :not-supported-yet e))
+    :member (<a href="ACL2____B_A2.html">b*</a> ((etype (<a href="C____CHECK-EXPR-PURE.html">check-expr-pure</a> e.target vartab tagenv))
+                 ((when (<a href="C____ERRORP.html">errorp</a> etype)) etype)
+                 (<a href="C____TYPE.html">type</a> (<a href="C____EXPR-TYPE-_E3TYPE.html">expr-type-&gt;type</a> etype))
+                 (lvalue (<a href="C____EXPR-TYPE-_E3LVALUE.html">expr-type-&gt;lvalue</a> etype))
+                 ((unless (<a href="C____TYPE-CASE.html">type-case</a> type :struct))
+                  (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :dot-target-not-struct e)))
+                 (<a href="ACL2____TAG.html">tag</a> (<a href="C____TYPE-STRUCT-_E3TAG.html">type-struct-&gt;tag</a> type))
+                 (memtype (<a href="C____STRUCT-MEMBER-LOOKUP.html">struct-member-lookup</a> tag e.name tagenv))
+                 ((when (<a href="C____ERRORP.html">errorp</a> memtype)) memtype))
+                (<a href="C____MAKE-EXPR-TYPE.html">make-expr-type</a> :type memtype
+                                :lvalue lvalue))
+    :memberp
+    (<a href="ACL2____B_A2.html">b*</a> ((etype (<a href="C____CHECK-EXPR-PURE.html">check-expr-pure</a> e.target vartab tagenv))
+         ((when (<a href="C____ERRORP.html">errorp</a> etype)) etype)
+         (<a href="C____TYPE.html">type</a> (<a href="C____EXPR-TYPE-_E3TYPE.html">expr-type-&gt;type</a> etype))
+         (<a href="C____TYPE.html">type</a> (<a href="C____APCONVERT-TYPE.html">apconvert-type</a> type))
+         ((unless (<a href="C____TYPE-CASE.html">type-case</a> type :pointer))
+          (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :arrow-operator-not-pointer e)))
+         (<a href="C____TYPE.html">type</a> (<a href="C____TYPE-POINTER-_E3TO.html">type-pointer-&gt;to</a> type))
+         ((unless (<a href="C____TYPE-CASE.html">type-case</a> type :struct))
+          (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :arrow-operator-not-pointer-to-struct e)))
+         (<a href="ACL2____TAG.html">tag</a> (<a href="C____TYPE-STRUCT-_E3TAG.html">type-struct-&gt;tag</a> type))
+         (memtype (<a href="C____STRUCT-MEMBER-LOOKUP.html">struct-member-lookup</a> tag e.name tagenv))
+         ((when (<a href="C____ERRORP.html">errorp</a> memtype)) memtype))
+        (<a href="C____MAKE-EXPR-TYPE.html">make-expr-type</a> :type memtype
+                        :lvalue t))
     :postinc (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :expr-non-pure e))
     :postdec (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :expr-non-pure e))
     :preinc (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :expr-non-pure e))
     :predec (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :expr-non-pure e))
-    :unary (<a href="ACL2____B_A2.html">b*</a> ((arg-type (<a href="C____CHECK-EXPR-PURE.html">check-expr-pure</a> e.arg vartab))
-                ((when (<a href="C____ERRORP.html">errorp</a> arg-type))
-                 (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :unary-error arg-type))))
-               (<a href="C____CHECK-UNARY.html">check-unary</a> e.op e.arg arg-type))
-    :cast (<a href="ACL2____B_A2.html">b*</a> ((arg-type (<a href="C____CHECK-EXPR-PURE.html">check-expr-pure</a> e.arg vartab))
-               ((when (<a href="C____ERRORP.html">errorp</a> arg-type))
-                (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :cast-error arg-type)))
+    :unary (<a href="ACL2____B_A2.html">b*</a> ((arg-etype (<a href="C____CHECK-EXPR-PURE.html">check-expr-pure</a> e.arg vartab tagenv))
+                ((when (<a href="C____ERRORP.html">errorp</a> arg-etype))
+                 (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :unary-error arg-etype))))
+               (<a href="C____CHECK-UNARY.html">check-unary</a> e.op e.arg arg-etype))
+    :cast (<a href="ACL2____B_A2.html">b*</a> ((arg-etype (<a href="C____CHECK-EXPR-PURE.html">check-expr-pure</a> e.arg vartab tagenv))
+               ((when (<a href="C____ERRORP.html">errorp</a> arg-etype))
+                (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :cast-error arg-etype)))
+               (arg-type (<a href="C____EXPR-TYPE-_E3TYPE.html">expr-type-&gt;type</a> arg-etype))
+               (arg-type (<a href="C____APCONVERT-TYPE.html">apconvert-type</a> arg-type))
                ((unless (<a href="C____TYPE-SCALARP.html">type-scalarp</a> arg-type))
                 (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :cast-mistype-operand e
                              :required :scalar
                              :supplied arg-type)))
-               (<a href="C____TYPE.html">type</a> (<a href="C____TYPE-NAME-TO-TYPE.html">type-name-to-type</a> e.type))
+               (<a href="C____TYPE.html">type</a> (<a href="C____TYNAME-TO-TYPE.html">tyname-to-type</a> e.type))
                ((unless (<a href="C____TYPE-SCALARP.html">type-scalarp</a> type))
                 (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :cast-mistype-type e
                              :required :scalar
                              :supplied type))))
-              type)
+              (<a href="C____MAKE-EXPR-TYPE.html">make-expr-type</a> :type type :lvalue nil))
     :binary
-    (<a href="ACL2____B_A2.html">b*</a> (((unless (<a href="C____BINOP-PUREP.html">binop-purep</a> e.op))
-          (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :binary-non-pure e)))
-         (arg1-type (<a href="C____CHECK-EXPR-PURE.html">check-expr-pure</a> e.arg1 vartab))
-         ((when (<a href="C____ERRORP.html">errorp</a> arg1-type))
-          (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :binary-left-error arg1-type)))
-         (arg2-type (<a href="C____CHECK-EXPR-PURE.html">check-expr-pure</a> e.arg2 vartab))
-         ((when (<a href="C____ERRORP.html">errorp</a> arg2-type))
-          (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :binary-right-error arg2-type))))
-        (<a href="C____CHECK-BINARY-PURE.html">check-binary-pure</a> e.op e.arg1 arg1-type e.arg2 arg2-type))
-    :cond (<a href="ACL2____B_A2.html">b*</a> ((test-type (<a href="C____CHECK-EXPR-PURE.html">check-expr-pure</a> e.test vartab))
-               ((when (<a href="C____ERRORP.html">errorp</a> test-type))
-                (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :cond-test-error test-type)))
+    (<a href="ACL2____B_A2.html">b*</a>
+     (((unless (<a href="C____BINOP-PUREP.html">binop-purep</a> e.op))
+       (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :binary-non-pure e)))
+      (arg1-etype (<a href="C____CHECK-EXPR-PURE.html">check-expr-pure</a> e.arg1 vartab tagenv))
+      ((when (<a href="C____ERRORP.html">errorp</a> arg1-etype))
+       (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :binary-left-error arg1-etype)))
+      (arg1-type (<a href="C____EXPR-TYPE-_E3TYPE.html">expr-type-&gt;type</a> arg1-etype))
+      (arg1-type (<a href="C____APCONVERT-TYPE.html">apconvert-type</a> arg1-type))
+      (arg2-etype (<a href="C____CHECK-EXPR-PURE.html">check-expr-pure</a> e.arg2 vartab tagenv))
+      ((when (<a href="C____ERRORP.html">errorp</a> arg2-etype))
+       (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :binary-right-error arg2-etype)))
+      (arg2-type (<a href="C____EXPR-TYPE-_E3TYPE.html">expr-type-&gt;type</a> arg2-etype))
+      (arg2-type (<a href="C____APCONVERT-TYPE.html">apconvert-type</a> arg2-type))
+      (<a href="C____TYPE.html">type</a>
+         (<a href="C____CHECK-BINARY-PURE.html">check-binary-pure</a> e.op e.arg1 arg1-type e.arg2 arg2-type))
+      ((when (<a href="C____ERRORP.html">errorp</a> type)) type))
+     (<a href="C____MAKE-EXPR-TYPE.html">make-expr-type</a> :type type :lvalue nil))
+    :cond (<a href="ACL2____B_A2.html">b*</a> ((test-etype (<a href="C____CHECK-EXPR-PURE.html">check-expr-pure</a> e.test vartab tagenv))
+               ((when (<a href="C____ERRORP.html">errorp</a> test-etype))
+                (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :cond-test-error test-etype)))
+               (test-type (<a href="C____EXPR-TYPE-_E3TYPE.html">expr-type-&gt;type</a> test-etype))
+               (test-type (<a href="C____APCONVERT-TYPE.html">apconvert-type</a> test-type))
                ((unless (<a href="C____TYPE-SCALARP.html">type-scalarp</a> test-type))
                 (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :cond-mistype-test e.test e.then e.else
                              :required :scalar
                              :supplied test-type)))
-               (then-type (<a href="C____CHECK-EXPR-PURE.html">check-expr-pure</a> e.then vartab))
-               ((when (<a href="C____ERRORP.html">errorp</a> then-type))
-                (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :cond-then-error then-type)))
+               (then-etype (<a href="C____CHECK-EXPR-PURE.html">check-expr-pure</a> e.then vartab tagenv))
+               ((when (<a href="C____ERRORP.html">errorp</a> then-etype))
+                (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :cond-then-error then-etype)))
+               (then-type (<a href="C____EXPR-TYPE-_E3TYPE.html">expr-type-&gt;type</a> then-etype))
+               (then-type (<a href="C____APCONVERT-TYPE.html">apconvert-type</a> then-type))
                ((unless (<a href="C____TYPE-ARITHMETICP.html">type-arithmeticp</a> then-type))
                 (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :cond-mistype-then e.test e.then e.else
                              :required :arithmetic
                              :supplied then-type)))
-               (else-type (<a href="C____CHECK-EXPR-PURE.html">check-expr-pure</a> e.else vartab))
-               ((when (<a href="C____ERRORP.html">errorp</a> else-type))
-                (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :cond-else-error else-type)))
+               (else-etype (<a href="C____CHECK-EXPR-PURE.html">check-expr-pure</a> e.else vartab tagenv))
+               ((when (<a href="C____ERRORP.html">errorp</a> else-etype))
+                (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :cond-else-error else-etype)))
+               (else-type (<a href="C____EXPR-TYPE-_E3TYPE.html">expr-type-&gt;type</a> else-etype))
+               (else-type (<a href="C____APCONVERT-TYPE.html">apconvert-type</a> else-type))
                ((unless (<a href="C____TYPE-ARITHMETICP.html">type-arithmeticp</a> else-type))
                 (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :cond-mistype-else e.test e.then e.else
                              :required :arithmetic
-                             :supplied else-type))))
-              (<a href="C____UACONVERT-TYPES.html">uaconvert-types</a> then-type else-type))))))</pre> 
-<p><b>Theorem: </b>type-resultp-of-check-expr-pure</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> type-resultp-of-check-expr-pure
-        (<a href="ACL2____B_A2.html">b*</a> ((<a href="C____TYPE.html">type</a> (<a href="C____CHECK-EXPR-PURE.html">check-expr-pure</a> e vartab)))
-            (<a href="C____TYPE-RESULTP.html">type-resultp</a> type))
+                             :supplied else-type)))
+               (then-type (<a href="C____PROMOTE-TYPE.html">promote-type</a> then-type))
+               (else-type (<a href="C____PROMOTE-TYPE.html">promote-type</a> else-type))
+               ((unless (<a href="COMMON-LISP____EQUAL.html">equal</a> then-type else-type))
+                (<a href="C____ERROR.html">error</a> (<a href="COMMON-LISP____LIST.html">list</a> :diff-promoted-types
+                             then-type else-type)))
+               (<a href="C____TYPE.html">type</a> then-type))
+              (<a href="C____MAKE-EXPR-TYPE.html">make-expr-type</a> :type type
+                              :lvalue nil))))))</pre> 
+<p><b>Theorem: </b>expr-type-resultp-of-check-expr-pure</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> expr-type-resultp-of-check-expr-pure
+        (<a href="ACL2____B_A2.html">b*</a> ((etype (<a href="C____CHECK-EXPR-PURE.html">check-expr-pure</a> e vartab tagenv)))
+            (<a href="C____EXPR-TYPE-RESULTP.html">expr-type-resultp</a> etype))
         :rule-classes :rewrite)</pre> 
 <p><b>Theorem: </b>check-expr-pure-of-expr-fix-e</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> check-expr-pure-of-expr-fix-e
-        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____CHECK-EXPR-PURE.html">check-expr-pure</a> (<a href="C____EXPR-FIX.html">expr-fix</a> e) vartab)
-               (<a href="C____CHECK-EXPR-PURE.html">check-expr-pure</a> e vartab)))</pre> 
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____CHECK-EXPR-PURE.html">check-expr-pure</a> (<a href="C____EXPR-FIX.html">expr-fix</a> e)
+                                vartab tagenv)
+               (<a href="C____CHECK-EXPR-PURE.html">check-expr-pure</a> e vartab tagenv)))</pre> 
 <p><b>Theorem: </b>check-expr-pure-expr-equiv-congruence-on-e</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> check-expr-pure-expr-equiv-congruence-on-e
         (<a href="ACL2____IMPLIES.html">implies</a> (<a href="C____EXPR-EQUIV.html">expr-equiv</a> e e-equiv)
-                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____CHECK-EXPR-PURE.html">check-expr-pure</a> e vartab)
-                        (<a href="C____CHECK-EXPR-PURE.html">check-expr-pure</a> e-equiv vartab)))
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____CHECK-EXPR-PURE.html">check-expr-pure</a> e vartab tagenv)
+                        (<a href="C____CHECK-EXPR-PURE.html">check-expr-pure</a> e-equiv vartab tagenv)))
         :rule-classes :congruence)</pre> 
 <p><b>Theorem: </b>check-expr-pure-of-var-table-fix-vartab</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> check-expr-pure-of-var-table-fix-vartab
-        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____CHECK-EXPR-PURE.html">check-expr-pure</a> e (<a href="C____VAR-TABLE-FIX.html">var-table-fix</a> vartab))
-               (<a href="C____CHECK-EXPR-PURE.html">check-expr-pure</a> e vartab)))</pre> 
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____CHECK-EXPR-PURE.html">check-expr-pure</a> e (<a href="C____VAR-TABLE-FIX.html">var-table-fix</a> vartab)
+                                tagenv)
+               (<a href="C____CHECK-EXPR-PURE.html">check-expr-pure</a> e vartab tagenv)))</pre> 
 <p><b>Theorem: </b>check-expr-pure-var-table-equiv-congruence-on-vartab</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> check-expr-pure-var-table-equiv-congruence-on-vartab
         (<a href="ACL2____IMPLIES.html">implies</a> (<a href="C____VAR-TABLE-EQUIV.html">var-table-equiv</a> vartab vartab-equiv)
-                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____CHECK-EXPR-PURE.html">check-expr-pure</a> e vartab)
-                        (<a href="C____CHECK-EXPR-PURE.html">check-expr-pure</a> e vartab-equiv)))
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____CHECK-EXPR-PURE.html">check-expr-pure</a> e vartab tagenv)
+                        (<a href="C____CHECK-EXPR-PURE.html">check-expr-pure</a> e vartab-equiv tagenv)))
+        :rule-classes :congruence)</pre> 
+<p><b>Theorem: </b>check-expr-pure-of-tag-env-fix-tagenv</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> check-expr-pure-of-tag-env-fix-tagenv
+        (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____CHECK-EXPR-PURE.html">check-expr-pure</a> e vartab (<a href="C____TAG-ENV-FIX.html">tag-env-fix</a> tagenv))
+               (<a href="C____CHECK-EXPR-PURE.html">check-expr-pure</a> e vartab tagenv)))</pre> 
+<p><b>Theorem: </b>check-expr-pure-tag-env-equiv-congruence-on-tagenv</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> check-expr-pure-tag-env-equiv-congruence-on-tagenv
+        (<a href="ACL2____IMPLIES.html">implies</a> (<a href="C____TAG-ENV-EQUIV.html">tag-env-equiv</a> tagenv tagenv-equiv)
+                 (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="C____CHECK-EXPR-PURE.html">check-expr-pure</a> e vartab tagenv)
+                        (<a href="C____CHECK-EXPR-PURE.html">check-expr-pure</a> e vartab tagenv-equiv)))
         :rule-classes :congruence)</pre> 
 
 </body>

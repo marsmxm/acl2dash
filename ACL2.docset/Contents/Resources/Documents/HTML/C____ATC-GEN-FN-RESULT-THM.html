@@ -11,7 +11,7 @@
 <p>Generate the theorem about the result(s) of <span class="v">fn</span>.</p><div class="box"><dl> 
   <dt>Signature</dt>
 <dt><pre class="code">(atc-gen-fn-result-thm fn type? affect typed-formals 
-                       prec-fns names-to-avoid wrld) 
+                       prec-fns prec-tags names-to-avoid wrld) 
  
   → 
 (mv events name updated-names-to-avoid)</pre></dt>  <dt>Arguments</dt>  <dd>
@@ -28,6 +28,9 @@
 </dd> 
   <dd>
 <span class="tt">prec-fns</span> — <font color="#606060">Guard <span class="v">(<a href="C____ATC-SYMBOL-FNINFO-ALISTP.html">atc-symbol-fninfo-alistp</a> prec-fns)</span>.</font>
+</dd> 
+  <dd>
+<span class="tt">prec-tags</span> — <font color="#606060">Guard <span class="v">(<a href="C____ATC-STRING-TAGINFO-ALISTP.html">atc-string-taginfo-alistp</a> prec-tags)</span>.</font>
 </dd> 
   <dd>
 <span class="tt">names-to-avoid</span> — <font color="#606060">Guard <span class="v">(<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> names-to-avoid)</span>.</font>
@@ -48,11 +51,13 @@
      ensures that, under the guard, these functions always return C values. 
      This is fairly easy to see, 
      thinking of the different allowed forms of these functions' bodies:</p><ul>
-<li>A formal parameter is constrained to be a value by the guard.</li>
+<li>A formal parameter is constrained to be a C value by the guard.</li>
 <li>Calls of <span class="tt"><a href="C____SINT-DEC-CONST.html">sint-dec-const</a></span>, <span class="tt"><a href="C____ADD-SINT-SINT.html">add-sint-sint</a></span>, etc. 
-      are known to return values.</li>
+      are known to return C values.</li>
+<li>Calls of arrays and structure readers and writers 
+      are known to return C values.</li>
 <li>A <span class="tt"><a href="COMMON-LISP____LET.html">let</a></span> or <span class="tt"><a href="ACL2____MV-LET.html">mv-let</a></span> variable is equal to a term that, 
-      recursively, always returns a value.</li>
+      recursively, always returns a C value.</li>
 <li>A call of a preceding function returns (a) C value(s), 
       as proved by the same theorems for the preceding functions.</li>
 <li>An <span class="tt"><a href="COMMON-LISP____IF.html">if</a></span> returns the same as its branches, 
@@ -64,13 +69,17 @@
       because either they are parameters or bound variables, 
       or terms that recursively return C values 
       (the latter case is for non-recursive functions 
-      that return a non-<span class="v">void</span> result and also affect arrays).</li>
+      that return a non-<span class="v">void</span> result 
+      and also affect arrays and structures).</li>
 </ul><p>This suggests a coarse but adequate proof strategy: 
      We use the theory consisting of 
      the definition of <span class="v">fn</span>, 
      the return type theorems of <span class="tt"><a href="C____SINT-DEC-CONST.html">sint-dec-const</a></span> and related functions, 
+     the return type theorems for array and structure readers and writers, 
      and the theorems about the preceding functions; 
-     we also add a <span class="v">:use</span> hint for the guard theorem of <span class="v">fn</span>.</p><p>In the absence of <span class="tt"><a href="ACL2____MBT.html">mbt</a></span> or <span class="tt"><a href="ACL2____MBT_42.html">mbt$</a></span>, 
+     we also add a <span class="v">:use</span> hint for the guard theorem of <span class="v">fn</span>. 
+     The theorems about structure readers and writers 
+     are taken from the alist of the preceding structure tags.</p><p>In the absence of <span class="tt"><a href="ACL2____MBT.html">mbt</a></span> or <span class="tt"><a href="ACL2____MBT_42.html">mbt$</a></span>, 
      we would not need all of the guard as hypothesis, 
      but only the part that constrains the formal parameters to be C values. 
      These hypotheses are needed when the function returns them; 
@@ -84,13 +93,14 @@
      we need the guard to exclude the `else' branches, 
      which are otherwise unconstrained.</p><p>As explained in the user documentation, 
      an ACL2 function may return a combination of 
-     an optional C result and zero or more affected variables or arrays. 
+     an optional C result 
+     and zero or more affected variables or arrays or structures. 
      We collect all of them. 
      The C result is determined from the optional C type of the function, 
      which is <span class="v">nil</span> for recursive functions, 
      and may or may not be <span class="v">void</span> for non-recursive functions. 
      The affected variables are also considered as results. 
-     We concatenate zero or one type from <span class="v">type?</span> 
+     We concatenate zero or one types from <span class="v">type?</span> 
      with zero or more types from <span class="v">affect</span> and <span class="v">typed-formals</span>. 
      More precisely, we make an alist instead of a list, 
      whose values are the types in question 
@@ -129,7 +139,7 @@
      the example theorems mentioned above still fail. 
      To prove these non-<span class="v">nil</span> theorems, 
      it seems sufficient to enable 
-     the executable counterparts of the integer value recognizers; 
+     the executable counterparts of the type recognizers; 
      the subgoals that arise without them have the form 
      <span class="v">(&lt;recognizer&gt; nil)</span>.</p><p>We also generate assertions saying that 
      each array returned by the function 
@@ -167,10 +177,11 @@
  :rule-classes :rewrite)</pre> 
 <p><b>Function: </b>atc-gen-fn-result-thm-aux2</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
  atc-gen-fn-result-thm-aux2
- (results index? fn-call)
+ (results index? fn-call wrld)
  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="C____ATC-SYMBOL-TYPE-ALISTP.html">atc-symbol-type-alistp</a> results)
                              (<a href="ACL2____MAYBE-NATP.html">maybe-natp</a> index?)
-                             (<a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a> fn-call))))
+                             (<a href="ACL2____PSEUDO-TERMP.html">pseudo-termp</a> fn-call)
+                             (<a href="ACL2____PLIST-WORLDP.html">plist-worldp</a> wrld))))
  (<a href="COMMON-LISP____LET.html">let</a>
   ((__function__ 'atc-gen-fn-result-thm-aux2))
   (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
@@ -181,19 +192,16 @@
                          (<a href="COMMON-LISP____CONS.html">cons</a> index? (<a href="COMMON-LISP____CONS.html">cons</a> fn-call 'nil)))
                    fn-call))
     ((<a href="COMMON-LISP____CONS.html">cons</a> name type) (<a href="COMMON-LISP____CAR.html">car</a> results))
-    (type-conjunct (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="C____ATC-TYPE-PREDICATE.html">atc-type-predicate</a> type)
+    (type-conjunct (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="C____ATC-TYPE-TO-RECOGNIZER.html">atc-type-to-recognizer</a> type wrld)
                          (<a href="COMMON-LISP____CONS.html">cons</a> theresult 'nil)))
     (nonnil-conjunct? (<a href="COMMON-LISP____AND.html">and</a> index? (<a href="COMMON-LISP____LIST.html">list</a> theresult)))
     (arraylength-conjunct?
      (<a href="ACL2____B_A2.html">b*</a>
       (((unless (<a href="C____TYPE-CASE.html">type-case</a> type :pointer)) nil)
-       (reftype (<a href="C____TYPE-POINTER-_E3REFERENCED.html">type-pointer-&gt;referenced</a> type))
-       ((unless (<a href="C____TYPE-INTEGERP.html">type-integerp</a> reftype))
-        (<a href="ACL2____RAISE.html">raise</a> "Internal error: pointer type ~x0 for ~x1."
-               type name))
-       (reftype-array-length
-            (<a href="C____PACK.html">pack</a> (<a href="C____ATC-INTEGER-TYPE-FIXTYPE.html">atc-integer-type-fixtype</a> reftype)
-                  '-array-length)))
+       (reftype (<a href="C____TYPE-POINTER-_E3TO.html">type-pointer-&gt;to</a> type))
+       ((unless (<a href="C____TYPE-INTEGERP.html">type-integerp</a> reftype)) nil)
+       (reftype-array-length (<a href="C____PACK.html">pack</a> (<a href="C____INTEGER-TYPE-TO-FIXTYPE.html">integer-type-to-fixtype</a> reftype)
+                                   '-array-length)))
       (<a href="COMMON-LISP____LIST.html">list</a>
        (<a href="COMMON-LISP____CONS.html">cons</a>
             'equal
@@ -205,16 +213,17 @@
            nonnil-conjunct? arraylength-conjunct?
            (atc-gen-fn-result-thm-aux2 (<a href="COMMON-LISP____CDR.html">cdr</a> results)
                                        (<a href="COMMON-LISP____AND.html">and</a> index? (<a href="COMMON-LISP____1_B2.html">1+</a> index?))
-                                       fn-call)))))</pre> 
+                                       fn-call wrld)))))</pre> 
 <p><b>Function: </b>atc-gen-fn-result-thm</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
  atc-gen-fn-result-thm
  (fn type? affect typed-formals
-     prec-fns names-to-avoid wrld)
+     prec-fns prec-tags names-to-avoid wrld)
  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____SYMBOLP.html">symbolp</a> fn)
                              (<a href="C____TYPE-OPTIONP.html">type-optionp</a> type?)
                              (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> affect)
                              (<a href="C____ATC-SYMBOL-TYPE-ALISTP.html">atc-symbol-type-alistp</a> typed-formals)
                              (<a href="C____ATC-SYMBOL-FNINFO-ALISTP.html">atc-symbol-fninfo-alistp</a> prec-fns)
+                             (<a href="C____ATC-STRING-TAGINFO-ALISTP.html">atc-string-taginfo-alistp</a> prec-tags)
                              (<a href="ACL2____SYMBOL-LISTP.html">symbol-listp</a> names-to-avoid)
                              (<a href="ACL2____PLIST-WORLDP.html">plist-worldp</a> wrld))))
  (<a href="COMMON-LISP____LET.html">let</a>
@@ -233,7 +242,7 @@
     (fn-call (<a href="COMMON-LISP____CONS.html">cons</a> fn formals))
     (conjuncts (atc-gen-fn-result-thm-aux2
                     results (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____CONSP.html">consp</a> (<a href="COMMON-LISP____CDR.html">cdr</a> results)) 0 nil)
-                    fn-call))
+                    fn-call wrld))
     (conclusion (<a href="COMMON-LISP____IF.html">if</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____CONSP.html">consp</a> conjuncts)
                          (<a href="COMMON-LISP____NOT.html">not</a> (<a href="COMMON-LISP____CONSP.html">consp</a> (<a href="COMMON-LISP____CDR.html">cdr</a> conjuncts))))
                     (<a href="COMMON-LISP____CAR.html">car</a> conjuncts)
@@ -272,172 +281,144 @@
                 (<a href="COMMON-LISP____CONS.html">cons</a>
                  '*atc-array-length-write-rules*
                  (<a href="COMMON-LISP____CONS.html">cons</a>
+                  (<a href="COMMON-LISP____CONS.html">cons</a> 'quote
+                        (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="C____ATC-STRING-TAGINFO-ALIST-TO-READER-RETURN-THMS.html">atc-string-taginfo-alist-to-reader-return-thms</a>
+                                   prec-tags)
+                              'nil))
                   (<a href="COMMON-LISP____CONS.html">cons</a>
-                   'quote
+                   (<a href="COMMON-LISP____CONS.html">cons</a> 'quote
+                         (<a href="COMMON-LISP____CONS.html">cons</a> (<a href="C____ATC-STRING-TAGINFO-ALIST-TO-WRITER-RETURN-THMS.html">atc-string-taginfo-alist-to-writer-return-thms</a>
+                                    prec-tags)
+                               'nil))
                    (<a href="COMMON-LISP____CONS.html">cons</a>
                     (<a href="COMMON-LISP____CONS.html">cons</a>
-                     fn
-                     (<a href="COMMON-LISP____APPEND.html">append</a>
-                      (<a href="C____ATC-SYMBOL-FNINFO-ALIST-TO-RESULT-THMS.html">atc-symbol-fninfo-alist-to-result-thms</a>
-                           prec-fns (<a href="ACL2____ALL-FNNAMES.html">all-fnnames</a> (<a href="ACL2____UBODY_B2.html">ubody+</a> fn wrld)))
+                     'quote
+                     (<a href="COMMON-LISP____CONS.html">cons</a>
                       (<a href="COMMON-LISP____CONS.html">cons</a>
-                       'sintp-of-sint-dec-const
-                       (<a href="COMMON-LISP____CONS.html">cons</a>
-                        'sintp-of-sint-oct-const
+                       fn
+                       (<a href="COMMON-LISP____APPEND.html">append</a>
+                        (<a href="C____ATC-SYMBOL-FNINFO-ALIST-TO-RESULT-THMS.html">atc-symbol-fninfo-alist-to-result-thms</a>
+                            prec-fns (<a href="ACL2____ALL-FNNAMES.html">all-fnnames</a> (<a href="ACL2____UBODY_B2.html">ubody+</a> fn wrld)))
                         (<a href="COMMON-LISP____CONS.html">cons</a>
-                         'sintp-of-sint-hex-const
+                         'sintp-of-sint-dec-const
                          (<a href="COMMON-LISP____CONS.html">cons</a>
-                          'uintp-of-uint-dec-const
+                          'sintp-of-sint-oct-const
                           (<a href="COMMON-LISP____CONS.html">cons</a>
-                           'uintp-of-uint-oct-const
+                           'sintp-of-sint-hex-const
                            (<a href="COMMON-LISP____CONS.html">cons</a>
-                            'uintp-of-uint-hex-const
+                            'uintp-of-uint-dec-const
                             (<a href="COMMON-LISP____CONS.html">cons</a>
-                             'slongp-of-slong-dec-const
+                             'uintp-of-uint-oct-const
                              (<a href="COMMON-LISP____CONS.html">cons</a>
-                              'slongp-of-slong-oct-const
+                              'uintp-of-uint-hex-const
                               (<a href="COMMON-LISP____CONS.html">cons</a>
-                               'slongp-of-slong-hex-const
+                               'slongp-of-slong-dec-const
                                (<a href="COMMON-LISP____CONS.html">cons</a>
-                                'ulongp-of-ulong-dec-const
+                                'slongp-of-slong-oct-const
                                 (<a href="COMMON-LISP____CONS.html">cons</a>
-                                 'ulongp-of-ulong-oct-const
+                                 'slongp-of-slong-hex-const
                                  (<a href="COMMON-LISP____CONS.html">cons</a>
-                                  'ulongp-of-ulong-hex-const
+                                  'ulongp-of-ulong-dec-const
                                   (<a href="COMMON-LISP____CONS.html">cons</a>
-                                   'sllongp-of-sllong-dec-const
+                                   'ulongp-of-ulong-oct-const
                                    (<a href="COMMON-LISP____CONS.html">cons</a>
-                                    'sllongp-of-sllong-oct-const
+                                    'ulongp-of-ulong-hex-const
                                     (<a href="COMMON-LISP____CONS.html">cons</a>
-                                     'sllongp-of-sllong-hex-const
+                                     'sllongp-of-sllong-dec-const
                                      (<a href="COMMON-LISP____CONS.html">cons</a>
-                                      'ullongp-of-ullong-dec-const
+                                      'sllongp-of-sllong-oct-const
                                       (<a href="COMMON-LISP____CONS.html">cons</a>
-                                       'ullongp-of-ullong-oct-const
+                                       'sllongp-of-sllong-hex-const
                                        (<a href="COMMON-LISP____CONS.html">cons</a>
-                                        'ullongp-of-ullong-hex-const
+                                        'ullongp-of-ullong-dec-const
                                         (<a href="COMMON-LISP____CONS.html">cons</a>
-                                         'sintp-of-sint-from-boolean
+                                         'ullongp-of-ullong-oct-const
                                          (<a href="COMMON-LISP____CONS.html">cons</a>
-                                          'declar
+                                          'ullongp-of-ullong-hex-const
                                           (<a href="COMMON-LISP____CONS.html">cons</a>
-                                           'assign
+                                           'sintp-of-sint-from-boolean
                                            (<a href="COMMON-LISP____CONS.html">cons</a>
-                                            'mv-nth-of-cons
+                                            'condexpr
                                             (<a href="COMMON-LISP____CONS.html">cons</a>
-                                             (<a href="COMMON-LISP____CONS.html">cons</a> ':e
-                                                   (<a href="COMMON-LISP____CONS.html">cons</a> 'zp 'nil))
+                                             'declar
                                              (<a href="COMMON-LISP____CONS.html">cons</a>
+                                              'assign
                                               (<a href="COMMON-LISP____CONS.html">cons</a>
-                                                ':e
-                                                (<a href="COMMON-LISP____CONS.html">cons</a> 'ucharp 'nil))
-                                              (<a href="COMMON-LISP____CONS.html">cons</a>
+                                               'mv-nth-of-cons
                                                (<a href="COMMON-LISP____CONS.html">cons</a>
-                                                ':e
-                                                (<a href="COMMON-LISP____CONS.html">cons</a> 'scharp 'nil))
-                                               (<a href="COMMON-LISP____CONS.html">cons</a>
-                                                (<a href="COMMON-LISP____CONS.html">cons</a> ':e
-                                                      (<a href="COMMON-LISP____CONS.html">cons</a> 'ushortp
-                                                            'nil))
+                                                '(:e zp)
                                                 (<a href="COMMON-LISP____CONS.html">cons</a>
+                                                 '(:e ucharp)
                                                  (<a href="COMMON-LISP____CONS.html">cons</a>
-                                                      ':e
-                                                      (<a href="COMMON-LISP____CONS.html">cons</a> 'sshortp
-                                                            'nil))
-                                                 (<a href="COMMON-LISP____CONS.html">cons</a>
-                                                  (<a href="COMMON-LISP____CONS.html">cons</a> ':e
-                                                        (<a href="COMMON-LISP____CONS.html">cons</a> 'uintp
-                                                              'nil))
+                                                  '(:e scharp)
                                                   (<a href="COMMON-LISP____CONS.html">cons</a>
+                                                   '(:e ushortp)
                                                    (<a href="COMMON-LISP____CONS.html">cons</a>
-                                                        ':e
-                                                        (<a href="COMMON-LISP____CONS.html">cons</a> 'sintp
-                                                              'nil))
-                                                   (<a href="COMMON-LISP____CONS.html">cons</a>
+                                                    '(:e sshortp)
                                                     (<a href="COMMON-LISP____CONS.html">cons</a>
-                                                       ':e
-                                                       (<a href="COMMON-LISP____CONS.html">cons</a> 'ulongp
-                                                             'nil))
-                                                    (<a href="COMMON-LISP____CONS.html">cons</a>
+                                                     '(:e uintp)
                                                      (<a href="COMMON-LISP____CONS.html">cons</a>
-                                                       ':e
-                                                       (<a href="COMMON-LISP____CONS.html">cons</a> 'slongp
-                                                             'nil))
-                                                     (<a href="COMMON-LISP____CONS.html">cons</a>
+                                                      '(:e sintp)
                                                       (<a href="COMMON-LISP____CONS.html">cons</a>
-                                                       ':e
+                                                       '(:e ulongp)
                                                        (<a href="COMMON-LISP____CONS.html">cons</a>
-                                                            'ullongp
-                                                            'nil))
-                                                      (<a href="COMMON-LISP____CONS.html">cons</a>
-                                                       (<a href="COMMON-LISP____CONS.html">cons</a>
-                                                        ':e
+                                                        '(:e slongp)
                                                         (<a href="COMMON-LISP____CONS.html">cons</a>
-                                                            'sllongp
-                                                            'nil))
-                                                       (<a href="COMMON-LISP____CONS.html">cons</a>
-                                                        (<a href="COMMON-LISP____CONS.html">cons</a>
-                                                         ':e
+                                                         '(:e
+                                                            ullongp)
                                                          (<a href="COMMON-LISP____CONS.html">cons</a>
-                                                          'uchar-arrayp
-                                                          'nil))
-                                                        (<a href="COMMON-LISP____CONS.html">cons</a>
-                                                         (<a href="COMMON-LISP____CONS.html">cons</a>
-                                                          ':e
+                                                          '(:e
+                                                            sllongp)
                                                           (<a href="COMMON-LISP____CONS.html">cons</a>
-                                                           'schar-arrayp
-                                                           'nil))
-                                                         (<a href="COMMON-LISP____CONS.html">cons</a>
-                                                          (<a href="COMMON-LISP____CONS.html">cons</a>
-                                                           ':e
+                                                           '(:e
+                                                             uchar-arrayp)
                                                            (<a href="COMMON-LISP____CONS.html">cons</a>
-                                                            'ushort-arrayp
-                                                            'nil))
-                                                          (<a href="COMMON-LISP____CONS.html">cons</a>
-                                                           (<a href="COMMON-LISP____CONS.html">cons</a>
-                                                            ':e
+                                                            '(:e
+                                                              schar-arrayp)
                                                             (<a href="COMMON-LISP____CONS.html">cons</a>
-                                                             'sshort-arrayp
-                                                             'nil))
-                                                           (<a href="COMMON-LISP____CONS.html">cons</a>
-                                                            (<a href="COMMON-LISP____CONS.html">cons</a>
-                                                             ':e
+                                                             '(:e
+                                                               ushort-arrayp)
                                                              (<a href="COMMON-LISP____CONS.html">cons</a>
-                                                              'uint-arrayp
-                                                              'nil))
-                                                            (<a href="COMMON-LISP____CONS.html">cons</a>
-                                                             (<a href="COMMON-LISP____CONS.html">cons</a>
-                                                              ':e
+                                                              '(:e
+                                                                sshort-arrayp)
                                                               (<a href="COMMON-LISP____CONS.html">cons</a>
-                                                               'sint-arrayp
-                                                               'nil))
-                                                             (<a href="COMMON-LISP____CONS.html">cons</a>
-                                                              (<a href="COMMON-LISP____CONS.html">cons</a>
-                                                               ':e
+                                                               '(:e
+                                                                 uint-arrayp)
                                                                (<a href="COMMON-LISP____CONS.html">cons</a>
-                                                                'ulong-arrayp
-                                                                'nil))
-                                                              (<a href="COMMON-LISP____CONS.html">cons</a>
-                                                               (<a href="COMMON-LISP____CONS.html">cons</a>
-                                                                ':e
+                                                                '(:e
+                                                                  sint-arrayp)
                                                                 (<a href="COMMON-LISP____CONS.html">cons</a>
-                                                                 'slong-arrayp
-                                                                 'nil))
-                                                               (<a href="COMMON-LISP____CONS.html">cons</a>
-                                                                (<a href="COMMON-LISP____CONS.html">cons</a>
-                                                                 ':e
+                                                                 '(:e
+                                                                   ulong-arrayp)
                                                                  (<a href="COMMON-LISP____CONS.html">cons</a>
-                                                                  'ullong-arrayp
-                                                                  'nil))
-                                                                (<a href="COMMON-LISP____CONS.html">cons</a>
-                                                                 (<a href="COMMON-LISP____CONS.html">cons</a>
-                                                                  ':e
+                                                                  '(:e
+                                                                    slong-arrayp)
                                                                   (<a href="COMMON-LISP____CONS.html">cons</a>
-                                                                   'sllong-arrayp
-                                                                   'nil))
-                                                                 'nil)))))))))))))))))))))))))))))))))))))))))))))
-                    'nil))
-                  'nil))))))))
+                                                                   '(:e
+                                                                     ullong-arrayp)
+                                                                   (<a href="COMMON-LISP____CONS.html">cons</a>
+                                                                    '(:e
+                                                                     
+ sllong-arrayp)
+                                                                    (<a href="ACL2____LOOP_42.html">loop$</a>
+                                                                     for
+                                                                     recog
+                                                                     in
+                                                                     (<a href="C____ATC-STRING-TAGINFO-ALIST-TO-RECOGNIZERS.html">atc-string-taginfo-alist-to-recognizers</a>
+                                                                     
+ prec-tags)
+                                                                     collect
+                                                                     (<a href="COMMON-LISP____CONS.html">cons</a>
+                                                                     
+ ':e
+                                                                     
+ (<a href="COMMON-LISP____CONS.html">cons</a>
+                                                                     
+  recog
+                                                                     
+  'nil)))))))))))))))))))))))))))))))))))))))))))))))))
+                      'nil))
+                    'nil))))))))))
           'nil))))
       (<a href="COMMON-LISP____CONS.html">cons</a>
        (<a href="COMMON-LISP____CONS.html">cons</a> 'quote

@@ -1,0 +1,204 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Def-svtv-overrides-crux</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=SV____DEF-SVTV-OVERRIDES-CRUX">Click for Def-svtv-overrides-crux in the Full Manual</a></h3>
+
+<p>Macro to prove a theorem showing that an SVTV's conditional overrides are "correct", i.e. can be eliminated.</p> 
+<p>Usage:</p> 
+<pre class="code">(<a href="SV____DEF-SVTV-OVERRIDES-CRUX.html">def-svtv-overrides-crux</a> &lt;svtv-name&gt; &lt;export-name&gt;)</pre> 
+ 
+<p>Prerequisite: The SVTV must be defined with <a href="SV____DEFSVTV_42.html">defsvtv$</a> or <a href="SV____DEFSVTV_42-PHASEWISE.html">defsvtv$-phasewise</a> (or otherwise result from populating a <a href="SV____SVTV-DATA.html">svtv-data</a> 
+stobj), and the contents of the stobj thus populated must be exported into a 
+regular object <span class="v">&lt;export-name&gt;</span> using <span class="v">def-svtv-data-export</span>.</p> 
+ 
+<p>This proves a theorem <span class="v">&lt;svtv-name&gt;-overrides-crux</span> showing that the 
+conditional overrides of the SVTV are correct, for cases where each conditional 
+override also corresponds to an output signal. E.g., if an SVTV has the 
+following outputs and overrides in some phase:</p> 
+ 
+<pre class="code">:outputs (("foo" foo-ref))
+:overrides (("foo" (foo-ovr-val foo-ovr-test)))</pre> 
+ 
+<p>then this theorem says (more or less) if the SVTV is run with any setting of 
+<span class="v">foo-ovr-test</span> and with <span class="v">foo-ovr-val</span> set to the same value that the 
+<span class="v">foo-ref</span> output produces, then this produces the same outputs of the SVTV 
+as if <span class="v">foo-ovr-test</span> were set to 0 (or X, or any value containing no 1-bits) 
+with any setting of <span class="v">foo-ovr-val</span>.  That is, if you override a wire to its 
+own value, then it's just like not overriding it at all.</p> 
+ 
+<p>The overrides-crux theorem is stated in terms of a set of triples 
+relating the corresponding override test, override value, and reference 
+variable names, such as (in the above example) <span class="v">foo-ovr-test</span>, 
+<span class="v">foo-ovr-val</span>, <span class="v">foo-ref</span>.  This is defined automatically by this macro, 
+exported as a 0-ary function named <span class="v">&lt;svtv-name&gt;-pipeline-override-triples</span>. 
+The theorem says that if the following conditions are satisfied, then a run of 
+the SVTV on <span class="v">override-env</span> is equivalent to a run of the SVTV on <span class="v">spec-env</span>:</p> 
+ 
+<ol> 
+ 
+<li>In <span class="v">spec-env</span>, all the override-test variables of the triples are bound 
+to values containing no 1s (i.e., spec-env doesn't do any overrides).</li> 
+ 
+<li>
+<span class="v">spec-env</span> and <span class="v">override-env</span> agree on all variables except the 
+override-value and override-test variables of the triples (i.e. a lookup of any 
+other variable yields the same value in either env).</li> 
+ 
+<li>For each override triple, <span class="v">override-env</span> binds the triple's 
+override-value variable to the value of the triple's reference variable in the 
+the svtv-run on <span class="v">spec-env</span>.  (Important distinction: its value in the 
+svtv-run on <span class="v">spec-env</span>, not its value in <span class="v">spec-env</span> itself.)</li> 
+ 
+</ol> 
+ 
+<p>Practically speaking, we want this theorem in order to generalize proofs 
+done using FGL with overrides. This requires a few further steps.  See <a href="SV____DEF-SVTV-OVERRIDES-CORRECT.html">def-svtv-overrides-correct</a> for a macro that helps with this.</p> 
+ 
+<h3>Notes on reasoning about overrides -- not necessary reading for most.</h3> 
+ 
+<p>In particular, a lot of this is described more simply here: <a href="SV____DEF-SVTV-OVERRIDES-CORRECT.html">def-svtv-overrides-correct</a>.</p> 
+ 
+<p>For example, suppose we have proved the following lemma, where 
+<span class="v">opcode</span> is an input signal and <span class="v">partial-products</span> is a conditional 
+override with an output signal of the same name and test variable 
+<span class="v">override-partial-products</span>:</p> 
+ 
+<pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="COMMON-LISP____EQUAL.html">equal</a> opcode *mul-opcode*)
+              (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 128 partial-products))
+         (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SV____SVEX-ENV-LOOKUP.html">svex-env-lookup</a> 'product (<a href="ACL2____SVTV-RUN.html">svtv-run</a> (multipler-svtv)
+                                                    `((override-partial-products . -1)
+                                                      (partial-products . ,partial-products)
+                                                      (opcode . ,opcode))))
+                (sum-partial-products partial-products)))</pre> 
+ 
+<p>We'd like to generalize this to:</p> 
+ 
+<pre class="code">(<a href="COMMON-LISP____LET_A2.html">let*</a> ((spec-run (<a href="ACL2____SVTV-RUN.html">svtv-run</a> (multipler-svtv) spec-env))
+       (partial-products (<a href="SV____SVEX-ENV-LOOKUP.html">svex-env-lookup</a> 'partial-products spec-run)))
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (no-override-tests-set spec-env)
+                (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SV____SVEX-ENV-LOOKUP.html">svex-env-lookup</a> 'opcode spec-env) *mul-opcode*)
+                (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 128 partial-products))
+           (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="SV____SVEX-ENV-LOOKUP.html">svex-env-lookup</a> 'product spec-run)
+                  (sum-partial-products partial-products))))</pre> 
+ 
+<p>We'd like to be able to use the overrides-crux theorem, setting 
+<span class="v">overrides-env</span> to the env used in the lemma.  But there are two potential 
+problems.</p> 
+ 
+<p>First, per hypothesis 2 of the 
+overrides-crux theorem, the two envs have to agree on all variables except 
+the override variables.  But in this case, variables that have nothing to do 
+with the theorem at hand are unbound (therefore X) in the override-env and 
+unspecified in the spec-env. (We don't want to assume them to be X in the 
+spec-env.  Why? Suppose partial-products is a function of inputs <span class="v">a</span>, 
+<span class="v">b</span>, and will be X if <span class="v">a</span> and <span class="v">b</span> are X -- then this would contradict 
+our assumption <span class="v">(<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> 128 partial-products)</span>, making our theorem 
+vacuous.)</p> 
+ 
+<p>Second, per hypothesis 3 of the overrides-crux theorem, the override-env 
+should bind each override value variable to the corresponding reference 
+variable's result from the spec run.  This is fine for 
+<span class="v">partial-products</span> (we can instantiate the lemma with partial-products set 
+to that value).  But if there are any other override triples besides the 
+partial-products one, they are not set in the env of the lemma.</p> 
+ 
+<p>Both of these can be fixed by appealing to the partial monotonicity of the 
+SVTV.  Generally, SVTVs created by the svtv-data process are known to be 
+monotonic in all variables except for override-tests, as long as the 
+<span class="v">monotonify</span> configuration option was set to <span class="v">t</span> (the default) in the 
+<span class="v">flatnorm</span> step. The <a href="SV____DEF-SVTV-PARTIAL-MONOTONIC.html">def-svtv-partial-monotonic</a> event can prove this 
+to be true for a given svtv.  This allows us to conclude:</p> 
+ 
+<pre class="code">(<a href="ACL2____IMPLIES.html">implies</a> (<a href="COMMON-LISP____AND.html">and</a> (<a href="SV____SVEX-ENV-_C3_C3_D3.html">svex-env-&lt;&lt;=</a> env1 env2)
+              (svex-envs-agree (my-svtv-override-test-signals) env1 env2))
+         (<a href="SV____SVEX-ENV-_C3_C3_D3.html">svex-env-&lt;&lt;=</a> (<a href="ACL2____SVTV-RUN.html">svtv-run</a> (my-svtv) env1)
+                       (<a href="ACL2____SVTV-RUN.html">svtv-run</a> (my-svtv) env2)))</pre> 
+ 
+<p>The condition <span class="v">(<a href="SV____SVEX-ENV-_C3_C3_D3.html">svex-env-&lt;&lt;=</a> a b)</span> means the value bound to a given 
+variable in <span class="v">a</span> is <span class="v">4vec-&lt;&lt;=</span> its value in <span class="v">b</span>, and <span class="v">(<a href="SV____4VEC-_C3_C3_D3.html">4vec-&lt;&lt;=</a> v
+w)</span> means that for every bit of <span class="v">v</span> that is non-X, the corresponding bit of 
+<span class="v">w</span> must have the same value. In particular, this means that if <span class="v">a</span> is a 
+2vec (integer) and <span class="v">(<a href="SV____4VEC-_C3_C3_D3.html">4vec-&lt;&lt;=</a> a b)</span>, then <span class="v">b</span> equals <span class="v">a</span>.  Since our 
+lemma says that the lookup of <span class="v">product</span> in our svtv-run is equal to 
+<span class="v">sum-partial-products</span> (an integer), this means if we look up <span class="v">product</span> 
+in a greater env we get the same value.  We can use this to construct an 
+<span class="v">override-env</span> that satisfies hypotheses 2 and 3 of the overrides-crux 
+theorem.</p> 
+ 
+<p>Note, however, the partial monotonicity theorem may specify a somewhat 
+different set of override test signals than the override-correct theorem. 
+Specifically, there could be conditional overrides that don't correspond to 
+reference outputs and therefore aren't among the triples referenced in 
+override-correct. Override-tests not in the triples will need to be restricted 
+to be the same in the envs used in the lemma and the generalized theorem.</p> 
+ 
+<p>So as an intermediate step in our generalization proof, we use partial 
+monotonicity of the SVTV to show that the lemma holds of an env 
+<span class="v">override-env</span> with the following properties relative to <span class="v">spec-env</span>, 
+<span class="v">spec-run</span> (the result of the svtv-run on <span class="v">spec-env</span>, and <span class="v">lemma-env</span> 
+-- the env from an instantiation of the lemma with all override value variables 
+set to their reference variables' values from spec-env:</p> 
+ 
+<ul> 
+<li>All override test variables are bound to the same values in <span class="v">override-env</span> as in <span class="v">lemma-env</span>
+</li> 
+<li>All override value variables are bound in <span class="v">override-env</span> to their corresponding reference variables' values from <span class="v">spec-run</span>
+</li> 
+<li>All other variables are bound in <span class="v">override-env</span> to the same values as in <span class="v">spec-env</span>.</li> 
+</ul> 
+ 
+<p>Important facts about <span class="v">override-env</span>:</p> 
+ 
+<ul> 
+ 
+<li>
+<span class="v">(<a href="SV____SVEX-ENV-_C3_C3_D3.html">svex-env-&lt;&lt;=</a> lemma-env override-env)</span> and they agree on the override 
+test signals, satisfying the hyps of the partial monotonicity theorem. 
+Therefore, the <span class="v">svtv-run</span> of <span class="v">lemma-env</span> is is <span class="v">&lt;&lt;=</span> the <span class="v">svtv-run</span> 
+of <span class="v">override-env</span>.</li> 
+ 
+<li>It satisfies hyps 2 and 3 of override-correct by construction (it agrees 
+with spec-env on all variables except the override-tests and override-values, 
+and sets override-values to the reference variable values from <span class="v">spec-run</span>). 
+Therefore, we can apply <span class="v">override-correct</span> to show that its <span class="v">svtv-run</span> 
+equals <span class="v">spec-run</span>.</li> 
+</ul> 
+ 
+<p>The above reasoning is formalized by the function 
+<span class="v">intermediate-override-env</span>.  This function satisfies all the requirements 
+above provided the following technicalities are satisfied:</p> 
+ 
+<ul> 
+ 
+<li>The <span class="v">lemma-env</span>, omitting the override variable bindings, is 
+<span class="v">svex-env-&lt;&lt;=</span> the <span class="v">spec-env</span>.  Effectively this means that at least 
+those input variables bound in the lemma-env are replicated in the 
+spec-env.</li> 
+ 
+<li>The reference variables of the override triples are a subset of the output 
+variables bound in <span class="v">spec-run</span>.</li> 
+ 
+<li>The override value variable bindings of the <span class="v">lemma-env</span> are <span class="v">&lt;&lt;=</span> the 
+bindings of the respective reference vars in the <span class="v">spec-run</span>.</li> 
+ 
+<li>The override-test variables referenced in the partial monotonicity theorem are a 
+superset of the test variables of the override triples referenced in the 
+override-correct theorem.</li> 
+ 
+<li>For any override-test variables from the monotonicity theorem that are not 
+test variables of the override triples, their bindings in <span class="v">lemma-env</span> and 
+<span class="v">spec-env</span> must be equal.</li> 
+ 
+<li>The override-test variables of the monotonicity theorem do not intersect 
+the override value variables of the triples.</li> 
+ 
+</ul> 
+ 
+
+</body>
+</html>

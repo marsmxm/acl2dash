@@ -27,9 +27,6 @@
  
   <li>
 <span class="v">width</span>: width of the flag field of the output register</li> 
- 
-  <li>
-<span class="v">x86</span>: the x86 state </li> 
  </ol> 
  
  <p>The only constraint about the return value of this function is 
@@ -45,27 +42,58 @@
  <p>We also provide macros the following macros to access CPUID feature flags 
  conveniently.</p> 
  
+ <p>This constrained function used to take the x86 state as additional argument. 
+ This allowed the CPUID features to depend on the state, 
+ and potentially to change during execution. 
+ However, this was causing the generation of proof goals 
+ involving potentially different CPUID feature values 
+ before and after any operation on the x86 state, 
+ because even innocuous operations like writing to a register 
+ give different x86 states and thus potentially different CPUID features. 
+ It seems clear that most, if not all, CPUID features 
+ should be independent from the x86 state; 
+ it is yet unclear whether a few of them might depend on the state. 
+ However, if they may change from one state to the other, 
+ it seems reasonable for that to happen via particular explicit operations. 
+ Since none of the state transitions covered by our formal model 
+ causes any changes to CPUID features 
+ (not because we ignore the potential change in our modeling, 
+ but because the parts of the Intel and AMD documentation 
+ that our modeled state transitions are based on 
+ neither say nor imply anything about CPUID feature changes), 
+ it seemed safe to remove the x86 state from this function's arguments. 
+ An oddity of having the x86 state as an argument is that 
+ the x86 state argument may have its own values in EAX, ECX, etc., 
+ which may differ from the corresponding values passed to the function, 
+ which has explicit parameters for those; 
+ there is nothing really wrong with this, 
+ but it is a sort of redundancy in the inputs of these function 
+ and a potential inconsistency between their values as arguments 
+ and the corresponding values in the x86 state, 
+ and therefore not fully satisfactory. 
+ If we ever find that some CPUID features may change during execution, 
+ we will extend the model of the x86 state with 
+ information about the current values of those features, 
+ and we will amend this constrained function to read them from the state.</p> 
+ 
  <span class="tt">(cpuid-flag eax &amp;key (ecx '0) 
             (reg '0) 
             (bit '0) 
-            (width '1) 
-            (x86 'x86))</span> 
+            (width '1))</span> 
  
- <span class="tt">(feature-flag feature-flag x86)</span> 
+ <span class="tt">(feature-flag feature-flag)</span> 
  
 <h3>Definitions and Theorems</h3><p><b>Theorem: </b>natp-cpuid-flag-fn</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> natp-cpuid-flag-fn
-        (<a href="ACL2____NATP.html">natp</a> (cpuid-flag-fn eax ecx reg bit width x86))
+        (<a href="ACL2____NATP.html">natp</a> (cpuid-flag-fn eax ecx reg bit width))
         :rule-classes (:type-prescription))</pre> 
 <p><b>Theorem: </b>unsigned-byte-width-of-cpuid-flag-fn</p><pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a>
   unsigned-byte-width-of-cpuid-flag-fn
-  (<a href="ACL2____IMPLIES.html">implies</a>
-       (<a href="ACL2____POSP.html">posp</a> width)
-       (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> width
-                        (cpuid-flag-fn eax ecx reg bit width x86))))</pre> 
+  (<a href="ACL2____IMPLIES.html">implies</a> (<a href="ACL2____POSP.html">posp</a> width)
+           (<a href="ACL2____UNSIGNED-BYTE-P.html">unsigned-byte-p</a> width
+                            (cpuid-flag-fn eax ecx reg bit width))))</pre> 
 <p><b>Function: </b>default-cpuid-flag-fn</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
  default-cpuid-flag-fn
- (eax ecx reg bit width x86)
- (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (x86)))
+ (eax ecx reg bit width)
  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____TYPE.html">type</a> (unsigned-byte 32) eax)
           (<a href="COMMON-LISP____TYPE.html">type</a> (unsigned-byte 32) ecx)
           (<a href="COMMON-LISP____TYPE.html">type</a> (integer 0 63) bit)
@@ -85,8 +113,7 @@
                           (t 1)))
         (t 1))))</pre> 
 <p><b>Function: </b>feature-flag</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
- feature-flag (<a href="X86ISA____FEATURE-FLAG.html">feature-flag</a> x86)
- (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (x86)))
+ feature-flag (<a href="X86ISA____FEATURE-FLAG.html">feature-flag</a>)
  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____MEMBER-EQUAL.html">member-equal</a> feature-flag
                                       *supported-feature-flags*)))
  (<a href="COMMON-LISP____LET.html">let</a>
@@ -240,17 +267,15 @@
                                     :width 8))
            (otherwise 0))))</pre> 
 <p><b>Function: </b>feature-flags</p><pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a>
- feature-flags (features x86)
- (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs (x86)))
+ feature-flags (features)
  (<a href="COMMON-LISP____DECLARE.html">declare</a>
    (<a href="ACL2____XARGS.html">xargs</a> :guard (subset-equal features *supported-feature-flags*)))
  (<a href="COMMON-LISP____LET.html">let</a> ((__function__ 'feature-flags))
       (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="COMMON-LISP____IGNORABLE.html">ignorable</a> __function__))
       (<a href="COMMON-LISP____COND.html">cond</a> ((<a href="COMMON-LISP____ATOM.html">atom</a> features) 1)
-            ((<a href="COMMON-LISP____EQL.html">eql</a> (<a href="X86ISA____FEATURE-FLAG.html">feature-flag</a> (<a href="COMMON-LISP____FIRST.html">first</a> features) x86)
-                  0)
+            ((<a href="COMMON-LISP____EQL.html">eql</a> (<a href="X86ISA____FEATURE-FLAG.html">feature-flag</a> (<a href="COMMON-LISP____FIRST.html">first</a> features)) 0)
              0)
-            (t (<a href="X86ISA____FEATURE-FLAGS.html">feature-flags</a> (<a href="COMMON-LISP____REST.html">rest</a> features) x86)))))</pre> 
+            (t (<a href="X86ISA____FEATURE-FLAGS.html">feature-flags</a> (<a href="COMMON-LISP____REST.html">rest</a> features))))))</pre> 
 
 </body>
 </html>

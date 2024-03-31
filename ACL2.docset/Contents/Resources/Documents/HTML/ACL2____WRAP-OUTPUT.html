@@ -1,0 +1,85 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Wrap-output</title>
+<link rel="stylesheet" type="text/css" href="../style.css"/>
+</head>
+<body>
+
+<h3><a href="../index.html?topic=ACL2____WRAP-OUTPUT">Click for Wrap-output in the Full Manual</a></h3>
+
+<p>Push an external computation into a function (by pushing it 
+through the top-level if-branches of the function).</p><p>Given a function <span class="v">f</span> and a (unary) wrapper function <span class="v">wrapper</span>, the 
+transformation acts on the top level <a href="COMMON-LISP____IF.html">if</a> branches as follows:</p> 
+ 
+<p>If the branch contains no recursive call then <span class="v">wrapper</span> is simply wrapped around the branch. 
+Otherwise, if the branch contains a tail-recursive call then the recursive call is replaced by a recursive call of the transformed 
+function <span class="v">f$1</span>, and if the recursive call is not a tail call then <span class="v">wrapper</span> is wrapped 
+around the original call of <span class="v">f</span>. In particular this means that 
+the resulting function may no longer be recursive. The same rules apply if <span class="v">f</span> 
+lies in a mutual-recursion nest, so that the new functions may no longer be 
+mutually recursive.</p> 
+ 
+<p>If a top-level term is a lambda then the body of the lambda is treated as a branch <b>unless</b> free variables in <span class="v">wrapper</span> become bound in the body (TODO: treat this case).</p> 
+ 
+<p> Note furthermore that this transformation is applied to the untranslated (see <a href="ACL2____TRANS.html">trans</a>) form of the body, so macros are not expanded. The only macros treated separately are <a href="COMMON-LISP____AND.html">and</a>, <a href="COMMON-LISP____OR.html">or</a> (TODO!), <a href="COMMON-LISP____LET.html">let</a>, <a href="COMMON-LISP____LET_A2.html">let*</a>, <a href="ACL2____B_A2.html">b*</a>, (TODO? <a href="ACL2____MV-LET.html">mv-let</a>) and <a href="COMMON-LISP____COND.html">cond</a>.</p> 
+ 
+<p>The transformation produces the equivalence theorem</p> 
+<pre class="code">(<a href="ACL2____DEFTHM.html">defthm</a> f-f$1-connection
+    (<a href="COMMON-LISP____EQUAL.html">equal</a> (<a href="ACL2____W.html">w</a> (f arg-1 ... arg-n))
+           (f$1 arg-1 ... arg-n free-1 ... free-k)))</pre> 
+ 
+<p>where <span class="v">free-1</span>, ..., <span class="v">free-k</span> are free variables possibly introduced in <span class="v">wrapper</span> if it is a lambda term.</p> 
+ 
+<h3>Example Scenarios</h3> 
+ 
+<ul> 
+<li>Suppose <span class="v">foo</span> is defined as follows 
+<pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> foo (x)
+     (<a href="COMMON-LISP____COND.html">cond</a> ((&lt;test-1&gt;)
+            (bar x))          ;; non-recursive
+           ((&lt;test-2&gt;)
+            (foo (bar x)))    ;; tail-recursive
+           ((&lt;test-3&gt;)
+            (bar (foo x)))    ;; recursive but not tail-recursive
+           ((&lt;test-4&gt;)
+            ((<a href="COMMON-LISP____LAMBDA.html">lambda</a> (y) (foo y)) (foo x)))) ;; lambda</pre> 
+then if <span class="v">wrapper</span> is a wrapper function then <span class="v">foo</span> is transformed to the function 
+<pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> foo$1 (x)
+     (<a href="COMMON-LISP____COND.html">cond</a> ((&lt;test-1&gt;)
+            (wrapper (bar x)))
+           ((&lt;test-2&gt;)
+            (foo$1 (bar x)))
+           ((&lt;test-3&gt;)
+            (wrapper (bar (foo x))))
+           ((&lt;test-4&gt;)
+            ((<a href="COMMON-LISP____LAMBDA.html">lambda</a> (y) (foo$1 y)) (foo x))))) ;; the argument is unchanged</pre>
+</li> 
+ 
+<li>If the term <span class="v">(<a href="COMMON-LISP____LAMBDA.html">lambda</a> (x) (<a href="COMMON-LISP____NTH.html">nth</a> '2 x))</span> is wrapped around a function that returns <span class="v">(<a href="COMMON-LISP____LIST.html">list</a> x y z)</span>, then the new functions simply returns <span class="v">z</span>.  (This is useful for 
+functions that axe has lifted).</li> 
+</ul> 
+ 
+ 
+ 
+<h3>Usage</h3> 
+ 
+<pre class="code">(<a href="ACL2____WRAP-OUTPUT.html">wrap-output</a> fn                        ;; Function to refine
+             wrapper                   ;; A unary function or unary lambda, where free variables are added as arguments
+             [:theorem-disabled bool]  ;; Whether to disable the theorem(<a href="ACL2____S.html">s</a>) that replace the old function with the new, Default: nil
+             [:function-disabled bool] ;; Whether to disable the new function, Default: nil
+                                       ;; In a mutual-recursion nest this applies to all functions
+             [:new-name map]           ;; New name to use for the function (<a href="COMMON-LISP____IF.html">if</a> :auto, the transformation generates a name)
+             [:guard map]              ;; Apply a guard to the generated function
+             [:guard-hints hints]      ;; Hints for the guard proof, Default: nil
+             [:show-only bool]         ;; Show event without execution
+             [:print print-specifier]  ;; Specifies how output is printed (see @(see print-specifier))
+             )
+;; If a function is in a mutual-recursion nest then the parameters :new-name and :guard
+;; can be applied separately through a list of doublets of the form
+(:map (name-1 val-1) ... (name-k val-k))</pre> 
+ 
+ 
+<p>TODO: Add check: For now, the wrapper should only be over one variable.</p>
+</body>
+</html>

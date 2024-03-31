@@ -8,17 +8,23 @@
 
 <h3><a href="../index.html?topic=ACL2____PROGRAM-WRAPPER">Click for Program-wrapper in the Full Manual</a></h3>
 
-<p>Avoiding expensive guard checks using <a href="ACL2____PROGRAM.html">program</a>-mode functions</p><p>Application programs can benefit from the avoidance of expensive 
- <a href="ACL2____GUARD.html">guard</a> checks, as illustrated by the following contrived example.  In 
- this example, imagine that <span class="v">expensive-guard</span> is a <a href="ACL2____GUARD.html">guard</a> that is 
- expensive to evaluate, and that <span class="v">expensive-update</span> is a function that you 
- want to run in a context where you know the guard is true, so you want to 
- avoid the expense of evaluating that guard.  Then when you call 
- <span class="v">expensive-update-wrapper</span>, the call will be evaluated directly in raw 
- Lisp, hence without any subsidiary guard-checking for the function 
- <span class="v">expensive-update</span>.</p> 
+<p>Avoiding expensive <a href="ACL2____GUARD.html">guard</a> checks using <a href="ACL2____PROGRAM.html">program</a>-mode functions</p><p>Application programs can benefit from avoiding expensive <a href="ACL2____GUARD.html">guard</a> checks.  Imagine that <span class="v">expensive-guard-fn</span> is a function whose calls 
+ may be slow to evaluate, and that <span class="v">expensive-fn</span> is a function whose guard 
+ calls <span class="v">expensive-guard-fn</span>.  So, when you call <span class="v">expensive-fn</span> at the top 
+ level, whether directly in the ACL2 read-eval-print loop or during <span class="tt"><a href="ACL2____MAKE-EVENT.html">make-event</a></span> expansion, the guard check may be slow.  If you are confident that 
+ the guard check will pass, you may thus prefer to avoid it.</p> 
  
- <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> fib (n)
+ <p>The following contrived example shows how to avoid that guard check by 
+ using a <i>program-mode wrapper</i>: a function in <a href="ACL2____PROGRAM.html">program</a> mode that 
+ calls the intended function directly.  The example below illustrates that idea 
+ by defining <span class="v">expensive-fn-wrapper</span> as a program-mode wrapper for 
+ <span class="v">expensive-fn</span>.  That wrapper has a computationally inexpensive guard, 
+ typically <span class="v">t</span>, which avoids any expensive guard check: after the 
+ inexpensive guard check, the remaining computation takes place using raw Lisp 
+ computation, which doesn't do any guard checking.  (See <a href="ACL2____EVALUATION.html">evaluation</a> for 
+ relevant background.)</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> fib (n) ; Fibonacci function, just for an example of slow computation
   (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____NATP.html">natp</a> n)))
   (<a href="COMMON-LISP____IF.html">if</a> (<a href="ACL2____ZP.html">zp</a> n)
       0
@@ -27,26 +33,53 @@
       (<a href="COMMON-LISP_____B2.html">+</a> (fib (<a href="COMMON-LISP____-.html">-</a> n 1))
          (fib (<a href="COMMON-LISP____-.html">-</a> n 2))))))
 
-(<a href="COMMON-LISP____DEFUN.html">defun</a> expensive-guard (n)
+(<a href="COMMON-LISP____DEFUN.html">defun</a> expensive-guard-fn (n)
   (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard t))
   (<a href="COMMON-LISP____AND.html">and</a> (<a href="ACL2____NATP.html">natp</a> n)
        (<a href="ACL2____NATP.html">natp</a> (fib n))))
 
-(<a href="ACL2____DEFSTOBJ.html">defstobj</a> st (fld :type integer :initially 0))
+(<a href="COMMON-LISP____DEFUN.html">defun</a> expensive-fn (n)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (expensive-guard-fn n)))
+  (<a href="COMMON-LISP_____A2.html">*</a> 2 n))
 
-(<a href="COMMON-LISP____DEFUN.html">defun</a> expensive-update (n st)
-  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs st
-                  :guard (expensive-guard n)))
-  (update-fld n st))
+; The following may take about a second, virtually all in the guard check.
+(<a href="ACL2____TIME_42.html">time$</a> (expensive-fn 40))
 
-(<a href="COMMON-LISP____DEFUN.html">defun</a> expensive-update-wrapper (n st)
-  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :stobjs st :mode :program))
-  (expensive-update n st))</pre> 
+(<a href="COMMON-LISP____DEFUN.html">defun</a> expensive-fn-wrapper (n)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :mode :program))
+  (expensive-fn n))
+
+; The following is virtually instantaneous.
+(<a href="ACL2____TIME_42.html">time$</a> (expensive-fn-wrapper 40))</pre> 
  
- <p>Remark.  The example was chosen to illustrates an additional point: if you 
- evaluate (for example) the form <span class="v">(expensive-update-wrapper 3 st)</span>, you will 
- see an <span class="v">"Invariant-risk"</span> warning, which could indicate extra checks that 
- slow down evaluation.  This might not be a significant issue in practice.  See 
- <a href="ACL2____INVARIANT-RISK.html">invariant-risk</a>.</p>
+ <p>This trick isn't necessary if your function call is made on behalf of a 
+ superior call of a function that is guard-verified (or in program mode, since 
+ that essentially brings us back to the wrapper situation).  Consider the 
+ following definition, building on the example above.</p> 
+ 
+ <pre class="code">(<a href="COMMON-LISP____DEFUN.html">defun</a> f (n)
+  (<a href="COMMON-LISP____DECLARE.html">declare</a> (<a href="ACL2____XARGS.html">xargs</a> :guard (<a href="ACL2____NATP.html">natp</a> n)))
+  (expensive-fn n))
+
+; The following is virtually instantaneous.
+(<a href="ACL2____TIME_42.html">time$</a> (f 40))</pre> 
+ 
+ <p>Then evaluation of <span class="v">(f 40)</span> is virtually instantaneous, for the same 
+ reason that evaluation of <span class="v">(expensive-fn-wrapper 40)</span> is virtually 
+ instantaneous: after the top-level guard check passes, the rest of the 
+ computation takes place without guard checks.  Note however that if we change 
+ the definition by removing guard verification, then the trick is once again 
+ helpful, as shown by continuing the examples above.</p> 
+ 
+ <pre class="code">; Define a logic-mode function that is not guard-verified:
+(<a href="COMMON-LISP____DEFUN.html">defun</a> g (n)
+  (expensive-fn n))
+
+; The following may take about a second, virtually all in the guard check.
+(<a href="ACL2____TIME_42.html">time$</a> (<a href="ACL2____G.html">g</a> 40))</pre> 
+ 
+ <p>Remark.  This trick may be less effective if you see an 
+ <span class="v">"Invariant-risk"</span> warning, which prevents computation from taking place 
+ within raw Lisp, thus avoiding guard checks; see <a href="ACL2____INVARIANT-RISK.html">invariant-risk</a>.</p>
 </body>
 </html>
